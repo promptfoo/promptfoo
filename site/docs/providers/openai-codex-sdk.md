@@ -47,7 +47,7 @@ The OpenAI Codex SDK provider requires the `@openai/codex-sdk` package to be ins
 npm install @openai/codex-sdk@^0.144.0
 ```
 
-Use Node.js `^20.20.0` or `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
+Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
 
 :::note
 
@@ -279,11 +279,15 @@ Supported models include:
 - **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
 - **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
 - **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
-- **GPT-5.3 Codex** - Latest codex generation (`gpt-5.3-codex`, `gpt-5.3-codex-spark`)
+- **GPT-5.3 Codex** - GPT-5.3 coding generation (`gpt-5.3-codex`). `gpt-5.3-codex-spark` is available through eligible ChatGPT Pro/Codex authentication, not the public Responses API.
 - **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
+
+`gpt-5-codex-mini` is also OpenAI's documented Responses API replacement for the retired
+`codex-mini-latest` model. Use `openai:responses:gpt-5-codex-mini` when migrating existing API
+evals, or configure it here when running through the Codex SDK.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
@@ -452,7 +456,7 @@ batched into one LLM round-trip.
 
 ### Deep Tracing
 
-To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK supports them, enable `deep_tracing`:
+To propagate OTEL context into the Codex CLI process and capture CLI-side spans, enable `deep_tracing`:
 
 ```yaml
 providers:
@@ -462,7 +466,9 @@ providers:
       enable_streaming: true
 ```
 
-Codex configures its log exporter through the `config.toml` in `CODEX_HOME`. Point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
+Promptfoo configures Codex's trace exporter automatically, pointing it at the active OTLP receiver unless you have already configured a different exporter. HTTP JSON, HTTP protobuf, and gRPC collector settings are supported.
+
+Codex configures its optional log exporter separately through the `config.toml` in `CODEX_HOME`. To also capture logs, point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
 
 ```toml title="$CODEX_HOME/config.toml"
 [otel]
@@ -472,7 +478,7 @@ exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol 
 
 If you override `cli_env.CODEX_HOME`, put this configuration in that directory. The endpoint is the complete logs URL, not merely the OTLP host and port.
 
-Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so log records remain linked even when Codex does not attach inline trace context. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span. Standard OpenTelemetry environment variables are also injected, but they do not replace Codex's `[otel]` exporter configuration.
+Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so spans and log records remain linked to the correct request. Promptfoo uses a fresh SDK client and thread per call in this mode. The trace exporter is configured automatically; any optional log exporter still needs its own Codex `[otel]` configuration.
 
 :::warning
 

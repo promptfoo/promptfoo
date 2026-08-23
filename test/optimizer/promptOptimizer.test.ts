@@ -832,21 +832,24 @@ describe('prompt optimizer', () => {
   it.each([
     ['alone', {}],
     ['with variables', { vars: { name: 'Alice' } }],
-  ])('rejects a defaultTest-only scoring function %s when it has no assertions', async (_, rest) => {
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      defaultTest: {
-        ...rest,
-        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
-      },
-    };
+  ])(
+    'rejects a defaultTest-only scoring function %s when it has no assertions',
+    async (_, rest) => {
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        defaultTest: {
+          ...rest,
+          assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+        },
+      };
 
-    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
-      'Prompt optimization requires at least one configured test or scenario.',
-    );
-    expect(evaluate).not.toHaveBeenCalled();
-  });
+      await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+        'Prompt optimization requires at least one configured test or scenario.',
+      );
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
     const provider = createMockProvider({

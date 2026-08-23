@@ -5,8 +5,9 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { accumulateGradingRequest, createEmptyAssertions } from '../../src/util/tokenUsageUtils';
 
-import type { AssertionSet, GradingResult } from '../../src/types/index';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
 vi.mock('../../src/envars');
 
@@ -78,6 +79,52 @@ describe('AssertionsResult', () => {
       });
 
       expect(assertionsResult['failedReason']).toBe('Test failed');
+    });
+
+    it('preserves detailed token accounting across multiple assertion results', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'First grade passed',
+          tokensUsed: {
+            total: 20,
+            prompt: 12,
+            completion: 8,
+            numRequests: 2,
+            completionDetails: { reasoning: 5, cacheReadInputTokens: 7 },
+          },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Second grade failed',
+          tokensUsed: {
+            total: 11,
+            prompt: 6,
+            completion: 5,
+            numRequests: 1,
+            completionDetails: { reasoning: 3, cacheCreationInputTokens: 4 },
+          },
+        },
+      });
+
+      expect((await assertionsResult.testResult()).tokensUsed).toMatchObject({
+        total: 31,
+        prompt: 18,
+        completion: 13,
+        numRequests: 3,
+        completionDetails: {
+          reasoning: 8,
+          cacheReadInputTokens: 7,
+          cacheCreationInputTokens: 4,
+        },
+      });
     });
 
     it('should throw error if short circuit enabled', () => {
@@ -341,6 +388,96 @@ describe('AssertionsResult', () => {
   });
 
   describe('testResult', () => {
+    it('preserves cache provenance when every grading response was reused', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.tokensUsed).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+      expect(result.metadata).toEqual({ cachedResponse: true });
+      expect(usage.numRequests).toBe(0);
+    });
+
+    it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { renderedGradingPrompt: 'Grade this response' },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage.numRequests).toBe(1);
+    });
+
+    it('counts fresh matcher calls when avoided cached tokens exceed fresh token usage', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh local grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 0 },
+          metadata: { renderedGradingPrompt: 'Grade this response' },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(usage).toMatchObject({ total: 50, cached: 97, numRequests: 1 });
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 
@@ -516,6 +653,225 @@ describe('AssertionsResult', () => {
           tokensUsed: DEFAULT_TOKENS_USED,
         },
       );
+    });
+
+    it('exposes completion details to typed scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading passed',
+          tokensUsed: {
+            total: 12,
+            prompt: 5,
+            completion: 7,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: context?.tokensUsed?.completionDetails?.reasoning ?? 0,
+        reason: 'Reasoning tokens are available',
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).score).toBe(7);
+    });
+
+    it('clears cached provenance when a custom scoring function performs fresh grading', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached component grade',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      const scoringFunction: ScoringFunction = () => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Fresh custom grading',
+        tokensUsed: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage).toMatchObject({
+        total: 23,
+        prompt: 15,
+        completion: 8,
+        cached: 97,
+        numRequests: 1,
+      });
+    });
+
+    it.each([
+      {
+        label: 'fresh components and fresh scoring',
+        componentCached: false,
+        scorerCached: false,
+        expected: { total: 73, prompt: 45, completion: 28, cached: 0, numRequests: 2 },
+      },
+      {
+        label: 'fresh components and cached scoring',
+        componentCached: false,
+        scorerCached: true,
+        expected: { total: 50, prompt: 30, completion: 20, cached: 37, numRequests: 1 },
+      },
+      {
+        label: 'cached components and fresh scoring',
+        componentCached: true,
+        scorerCached: false,
+        expected: { total: 23, prompt: 15, completion: 8, cached: 97, numRequests: 1 },
+      },
+      {
+        label: 'cached components and cached scoring',
+        componentCached: true,
+        scorerCached: true,
+        expected: { total: 0, prompt: 0, completion: 0, cached: 134, numRequests: 0 },
+      },
+    ])('accounts for $label without losing or double-counting usage', async (scenario) => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: scenario.componentCached
+            ? { total: 97, prompt: 61, completion: 36, numRequests: 1 }
+            : { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+          ...(scenario.componentCached && { metadata: { cachedResponse: true } }),
+        },
+      });
+      const scoringFunction: ScoringFunction = () => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom scoring result',
+        tokensUsed: scenario.scorerCached
+          ? { total: 37, prompt: 22, completion: 15, numRequests: 1 }
+          : { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+        ...(scenario.scorerCached && { metadata: { cachedResponse: true } }),
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse,
+      });
+
+      expect(usage).toMatchObject(scenario.expected);
+      expect(result.metadata?.cachedResponse).toBe(
+        scenario.componentCached && scenario.scorerCached ? true : undefined,
+      );
+    });
+
+    it('does not double-count component usage returned unchanged by custom scoring', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom score without additional grading',
+        tokensUsed: context?.tokensUsed,
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it.each([
+      {
+        label: 'a shallow copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) => ({ ...usage }),
+      },
+      {
+        label: 'a serialized copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) =>
+          JSON.parse(JSON.stringify(usage)) as NonNullable<GradingResult['tokensUsed']>,
+      },
+    ])('does not double-count $label of existing custom-scoring usage', async ({ copy }) => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: {
+            total: 50,
+            prompt: 30,
+            completion: 20,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom score without additional grading',
+        ...(context?.tokensUsed && { tokensUsed: copy(context.tokensUsed) }),
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      });
+    });
+
+    it('counts independently graded scoring usage even when token counts match components', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Independent grading happened to use the same token counts',
+        ...(context?.tokensUsed && { tokensUsed: { ...context.tokensUsed } }),
+        metadata: { renderedGradingPrompt: 'Grade the component scores' },
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+      });
     });
 
     it('should handle scoring function errors', async () => {

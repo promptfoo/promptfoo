@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
+  accumulateAttackerTokenUsage,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyAssertions,
@@ -308,8 +311,145 @@ describe('tokenUsageUtils', () => {
     });
   });
 
+  describe('accumulateAttackerTokenUsage', () => {
+    it('keeps attacker tokens and requests separate from target usage', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
+      });
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+      });
+      accumulateAttackerTokenUsage(target, { tokenUsage: { total: 7, prompt: 5, completion: 2 } });
+
+      expect(target).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        attacker: { total: 19, prompt: 13, completion: 6, numRequests: 2 },
+      });
+    });
+
+    it('preserves attacker usage when aggregating results', () => {
+      const target = createEmptyTokenUsage();
+      accumulateTokenUsage(target, {
+        total: 10,
+        attacker: { total: 20, prompt: 15, completion: 5, numRequests: 2 },
+      });
+      expect(target).toMatchObject({
+        total: 10,
+        attacker: { total: 20, prompt: 15, completion: 5, numRequests: 2 },
+      });
+    });
+
+    it('does not add historical usage from fully cached attacker responses', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        cached: true,
+        tokenUsage: { total: 32, prompt: 20, completion: 12, numRequests: 1 },
+      });
+
+      expect(target.attacker).toBeUndefined();
+      expect(target.numRequests).toBe(0);
+    });
+
+    it('routes grading-model work nested in an attack task into the grading bucket', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          assertions: {
+            total: 25,
+            prompt: 18,
+            completion: 7,
+            numRequests: 0,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        assertions: {
+          total: 25,
+          prompt: 18,
+          completion: 7,
+          numRequests: 0,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      expect(target.attacker).not.toHaveProperty('assertions');
+    });
+  });
+
+  describe('accumulateGradingResponseTokenUsage', () => {
+    it('counts grading tasks once even when a task reports multiple model calls', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
+      });
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: {
+          total: 12,
+          prompt: 8,
+          completion: 4,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+      accumulateGradingResponseTokenUsage(target, { tokenUsage: { total: 7, prompt: 5 } });
+      accumulateGradingResponseTokenUsage(target, {});
+
+      expect(target).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        assertions: {
+          total: 19,
+          prompt: 13,
+          completion: 4,
+          numRequests: 3,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
+
+    it('does not count fully cached strategy grading responses as new requests', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { total: 40, cached: 40, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({ total: 0, cached: 40, numRequests: 0 });
+    });
+
+    it('does not count explicitly cached strategy responses with missing usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, { cached: true });
+
+      expect(target.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
+    it('counts fresh strategy grading tasks normalized to zero requests', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { total: 25, cached: 10, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({ total: 25, cached: 10, numRequests: 1 });
+    });
+  });
+
   describe('accumulateGenerationTokenUsage', () => {
-    it('adds generation totals without inflating target request counts', () => {
+    it('keeps generation usage separate from target tokens and request counts', () => {
       const target = createEmptyTokenUsage();
       target.numRequests = 2;
 
@@ -324,11 +464,12 @@ describe('tokenUsageUtils', () => {
       ).toBe(true);
 
       expect(target).toMatchObject({
-        total: 15,
-        prompt: 9,
-        completion: 6,
+        total: 0,
+        prompt: 0,
+        completion: 0,
         numRequests: 2,
         assertions: { total: 0, numRequests: 0 },
+        generation: { total: 15, prompt: 9, completion: 6, numRequests: 3 },
       });
     });
 
@@ -336,8 +477,16 @@ describe('tokenUsageUtils', () => {
       const target = createEmptyTokenUsage();
 
       expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
-      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, {})).toBe(false);
       expect(target.total).toBe(0);
+    });
+
+    it('preserves generation request counts when a provider reports no token totals', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(true);
+      expect(target.generation).toMatchObject({ total: 0, numRequests: 3 });
+      expect(target.numRequests).toBe(0);
     });
   });
 
@@ -350,14 +499,136 @@ describe('tokenUsageUtils', () => {
       expect(assertions.total).toBe(0);
     });
 
-    it('counts the request and folds in reported assertion token usage', () => {
+    it('preserves every request represented by cumulative assertion token usage', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
 
-      expect(assertions.numRequests).toBe(1);
+      expect(assertions.numRequests).toBe(3);
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);
+    });
+
+    it('counts legacy grading usage without an explicit request count once', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+
+    it('counts fresh matcher usage when normalization replaced its missing request count with zero', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, {
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        cached: 0,
+        numRequests: 0,
+      });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+
+    it('counts fresh grading tasks when the provider reports no tokens or request count', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(
+        assertions,
+        {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 0,
+        },
+        { fresh: true },
+      );
+
+      expect(assertions).toMatchObject({ total: 0, cached: 0, numRequests: 1 });
+    });
+
+    it('does not count cached grading responses when no token usage was reported', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(
+        assertions,
+        { total: 0, cached: 0, numRequests: 0 },
+        { cached: true },
+      );
+
+      expect(assertions).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+    });
+
+    it('does not count cached grading responses without a usage object', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, undefined, { cached: true });
+
+      expect(assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
+    it('does not create grading requests for deterministic assertion usage', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(
+        assertions,
+        { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        { cached: false },
+      );
+
+      expect(assertions).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+    });
+
+    it('counts fresh grading beside a larger avoided cached-token total', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(
+        assertions,
+        { total: 50, prompt: 30, completion: 20, cached: 97, numRequests: 0 },
+        { cached: false },
+      );
+
+      expect(assertions).toMatchObject({ total: 50, cached: 97, numRequests: 1 });
+    });
+
+    it('counts partially cached grading usage as one fresh request', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 3, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 3, numRequests: 1 });
+    });
+
+    it('preserves an explicit zero request count from cached grading usage', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 9, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 9, numRequests: 0 });
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('preserves cumulative grader requests and reasoning details', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateAssertionTokenUsage(assertions, {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
+
+      expect(assertions).toMatchObject({
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
     });
   });
 
@@ -447,6 +718,23 @@ describe('tokenUsageUtils', () => {
       expect(result.assertions.total).toBe(20);
       expect(result.assertions.prompt).toBe(10);
       expect(result.assertions.completion).toBe(10);
+    });
+
+    it('preserves attacker tokens, internal request counts, and completion details', () => {
+      const attacker = {
+        total: 90,
+        prompt: 55,
+        completion: 35,
+        cached: 7,
+        numRequests: 4,
+        completionDetails: { reasoning: 12 },
+      };
+
+      const result = normalizeTokenUsage({ total: 25, numRequests: 1, attacker });
+
+      expect(result.total).toBe(25);
+      expect(result.numRequests).toBe(1);
+      expect(result.attacker).toEqual(attacker);
     });
 
     it('should handle empty object', () => {

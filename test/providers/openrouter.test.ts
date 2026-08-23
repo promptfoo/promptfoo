@@ -237,6 +237,65 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        // A 200 response with an empty `choices` array (soft moderation block,
+        // upstream hiccup, or n>1 edge cases). Before the fix this made
+        // `data.choices[0]` undefined and `.message` threw an opaque TypeError.
+        const response = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.output).toBeUndefined();
+        // The malformed-response return must carry the cache-hit status so
+        // downstream doesn't treat a cached failure as a live provider call.
+        expect(result.cached).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('returns a clean error instead of crashing when the response has no choices field', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.cached).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Thinking tokens handling', () => {
       beforeEach(() => {
         mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });

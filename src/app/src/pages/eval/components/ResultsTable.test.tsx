@@ -3236,7 +3236,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
     const filteredCostElement = screen.getByText('($0.6173 filtered)');
     expect(filteredCostElement).toBeInTheDocument();
-    expect(filteredCostElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredCostElement.style.fontSize).toBe('0.9em');
     expect(filteredCostElement).toHaveStyle('color: #666');
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
@@ -3245,7 +3245,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
     const filteredTokensElement = screen.getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
-    expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredTokensElement.style.fontSize).toBe('0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
 
@@ -3254,7 +3254,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
-    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredLatencyElement.style.fontSize).toBe('0.9em');
   });
 });
 

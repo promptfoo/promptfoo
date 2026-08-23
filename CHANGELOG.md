@@ -4,6 +4,113 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.122.0](https://github.com/promptfoo/promptfoo/compare/0.121.20...0.122.0) (2026-08-04)
+
+### ⚠ BREAKING CHANGES
+
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260))
+
+### Bug Fixes
+
+- **deps:** keep the Shai-Hulud compromised versions unreachable ([#10301](https://github.com/promptfoo/promptfoo/issues/10301)) ([db2a066](https://github.com/promptfoo/promptfoo/commit/db2a0665648b49dde742c4d027bef92f221930f4))
+- **deps:** patch undici in code-scan-action and guard both lockfiles ([#10278](https://github.com/promptfoo/promptfoo/issues/10278)) ([15bf41f](https://github.com/promptfoo/promptfoo/commit/15bf41f2dcb7187fc6ed40cddea96b609b2610a9))
+- **deps:** pin socket.io-parser above the packet-decoder DoS ([#10279](https://github.com/promptfoo/promptfoo/issues/10279)) ([d0f2a83](https://github.com/promptfoo/promptfoo/commit/d0f2a83d8b72f3c0ad71950e2822d9350b7a48ed))
+- **deps:** repair Biome and undici upgrade regressions ([#10292](https://github.com/promptfoo/promptfoo/issues/10292)) ([3565a3c](https://github.com/promptfoo/promptfoo/commit/3565a3c1ffc16fd9f9a8d65ae93e4a6885c4b5c1))
+- **deps:** restore XML entity decoding for xlsx test files ([#10249](https://github.com/promptfoo/promptfoo/issues/10249)) ([00cdeb9](https://github.com/promptfoo/promptfoo/commit/00cdeb9a857ab019f61789b69ef75c3c852ce283))
+- **deps:** update anthropic packages ([#10234](https://github.com/promptfoo/promptfoo/issues/10234)) ([6279230](https://github.com/promptfoo/promptfoo/commit/6279230cae992d0ad4d6a823728b4a06d2553d73))
+- **deps:** update anthropic packages ([#10277](https://github.com/promptfoo/promptfoo/issues/10277)) ([f8609a6](https://github.com/promptfoo/promptfoo/commit/f8609a6b70a0c155f84c6921d111d3b30968e952))
+- **deps:** update dependency execa to v10 ([#10227](https://github.com/promptfoo/promptfoo/issues/10227)) ([bab74b8](https://github.com/promptfoo/promptfoo/commit/bab74b8623bb44182843de01b95890ae10c1cfcb))
+- **deps:** update opentelemetry ([#10290](https://github.com/promptfoo/promptfoo/issues/10290)) ([5638797](https://github.com/promptfoo/promptfoo/commit/5638797888b50e38ac263463ef2c7bd7d1ae2a6c))
+- **providers:** correct Nscale model identifiers ([#10259](https://github.com/promptfoo/promptfoo/issues/10259)) ([249b125](https://github.com/promptfoo/promptfoo/commit/249b125277d5c6fdeaaf610c253ddbbb1c460685))
+- **providers:** stop leaking Nscale provider settings into the request body ([#10258](https://github.com/promptfoo/promptfoo/issues/10258)) ([d23f86a](https://github.com/promptfoo/promptfoo/commit/d23f86a3907946f02c962a190e66edb0a642efe1))
+- **providers:** stop WebSocket evals from hanging when a stream stalls ([#10266](https://github.com/promptfoo/promptfoo/issues/10266)) ([60898c7](https://github.com/promptfoo/promptfoo/commit/60898c7faedbfa6bedf4832feffffcd5d6ecaef0))
+
+### Miscellaneous Chores
+
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260)) ([26b725b](https://github.com/promptfoo/promptfoo/commit/26b725bd9496351ef269380c9fd83b9c2c338a0e))
+
+## [0.121.20](https://github.com/promptfoo/promptfoo/compare/0.121.19...0.121.20) (2026-07-30)
+
+### Features
+
+- **providers:** add Claude Opus 5 support ([#10210](https://github.com/promptfoo/promptfoo/issues/10210)) ([ff84f13](https://github.com/promptfoo/promptfoo/commit/ff84f13605c09cac0c3c591d9590622f864cc2f7))
+- **providers:** add current Azure, Claude, and Gemini models ([#10128](https://github.com/promptfoo/promptfoo/issues/10128)) ([5c216a1](https://github.com/promptfoo/promptfoo/commit/5c216a1bc33104bb507a9e57952b81a0fb27d06f))
+- **providers:** add Kimi K3 support to Moonshot provider ([#10132](https://github.com/promptfoo/promptfoo/issues/10132)) ([a1168b6](https://github.com/promptfoo/promptfoo/commit/a1168b62ef31a6c061f16ecdf2bfd76514e2a852))
+- **websocket:** support URL templating ([#10171](https://github.com/promptfoo/promptfoo/issues/10171)) ([a9aaced](https://github.com/promptfoo/promptfoo/commit/a9aacede5c3f84150d999bfbeadbbf39834370ea))
+
+### Bug Fixes
+
+- **assertions:** default conversation-relevance threshold to 0.5 ([#10142](https://github.com/promptfoo/promptfoo/issues/10142)) ([2812d76](https://github.com/promptfoo/promptfoo/commit/2812d7622b2e14f59753ac04e28b1ca63257263b))
+- **azure:** avoid crash on empty completion choices ([#10124](https://github.com/promptfoo/promptfoo/issues/10124)) ([17d8d03](https://github.com/promptfoo/promptfoo/commit/17d8d036420a63e4a9205084f096b82591b3b608))
+- **deps:** align Renovate npm registry ([#10115](https://github.com/promptfoo/promptfoo/issues/10115)) ([688a905](https://github.com/promptfoo/promptfoo/commit/688a90561180a6045ce3c8e8805d04bc23811bd7))
+- **deps:** update anthropic packages ([#10146](https://github.com/promptfoo/promptfoo/issues/10146)) ([cfa9bee](https://github.com/promptfoo/promptfoo/commit/cfa9bee146bd38fcabc1c4241ede8889fa95e302))
+- **deps:** update anthropic packages ([#10199](https://github.com/promptfoo/promptfoo/issues/10199)) ([2d3f3f1](https://github.com/promptfoo/promptfoo/commit/2d3f3f16154e04e3bbac8e672f90434fa85997ef))
+- **deps:** update anthropic packages ([#10229](https://github.com/promptfoo/promptfoo/issues/10229)) ([2834215](https://github.com/promptfoo/promptfoo/commit/28342153f2f5bdaaf30695f21ada70e311de421e))
+- **deps:** update dependency js-yaml to v5.2.2 [security] ([#10218](https://github.com/promptfoo/promptfoo/issues/10218)) ([18ea879](https://github.com/promptfoo/promptfoo/commit/18ea87909489b56e424513e5425ca13dcf702bd0))
+- **eval:** avoid prompt index collisions for duplicate providers ([#10208](https://github.com/promptfoo/promptfoo/issues/10208)) ([5aa0958](https://github.com/promptfoo/promptfoo/commit/5aa09586752c906763135ddb867b203b4ecd14e0))
+- **eval:** isolate conversation history by result column ([#10212](https://github.com/promptfoo/promptfoo/issues/10212)) ([a377bb7](https://github.com/promptfoo/promptfoo/commit/a377bb71d3e33b0e262a82a2eb3d36a05e371e29))
+- **integrations:** migrate Langfuse prompts to SDK v5 ([#10131](https://github.com/promptfoo/promptfoo/issues/10131)) ([08b3f50](https://github.com/promptfoo/promptfoo/commit/08b3f5084d5cd36e9187ac3c79e3fda03d6eefd7))
+- **providers:** align OpenAI models and capabilities ([#10125](https://github.com/promptfoo/promptfoo/issues/10125)) ([e17ce87](https://github.com/promptfoo/promptfoo/commit/e17ce87b380d7c5e807a622d86c859206e1e1ffb))
+- **providers:** preserve WebSocket retries for certificate-like URLs ([#10197](https://github.com/promptfoo/promptfoo/issues/10197)) ([85e0710](https://github.com/promptfoo/promptfoo/commit/85e07103ae7f47462d70e3e02154c1fafaeef2f1))
+- **providers:** reject Vertex Omni passthrough follow-ups ([#10135](https://github.com/promptfoo/promptfoo/issues/10135)) ([8482570](https://github.com/promptfoo/promptfoo/commit/84825702e935332e236426f29fb0dc99c3c162f8))
+- **providers:** restore secret-safe WebSocket retries ([#10176](https://github.com/promptfoo/promptfoo/issues/10176)) ([6d89cbb](https://github.com/promptfoo/promptfoo/commit/6d89cbbd609895fb31062a1fbbe94db8b08260f3))
+- **python:** keep worker control markers on their own line ([#10097](https://github.com/promptfoo/promptfoo/issues/10097)) ([6bc2b95](https://github.com/promptfoo/promptfoo/commit/6bc2b95da1c75ce81ff9047ae599af90222ac676))
+- **redteam:** harden risk reports and WebSocket timeout tests ([#10211](https://github.com/promptfoo/promptfoo/issues/10211)) ([9ab178e](https://github.com/promptfoo/promptfoo/commit/9ab178ec2772d72bacd533f2dc11ba66208606a5))
+- **redteam:** improve risk-category report row accessibility ([b163738](https://github.com/promptfoo/promptfoo/commit/b16373873b095ab5abb00dbd57fd10e864d3f6fe))
+- **redteam:** preserve generation provider selection ([#10133](https://github.com/promptfoo/promptfoo/issues/10133)) ([ac8971f](https://github.com/promptfoo/promptfoo/commit/ac8971fcfa961fa5fa96bcc4f527f5309b504997))
+- **site:** repair stale event pages, dead links, and hydration mismatches ([#10215](https://github.com/promptfoo/promptfoo/issues/10215)) ([b0e3c25](https://github.com/promptfoo/promptfoo/commit/b0e3c2567f504c30094b2d3863bcc51e916d0070))
+
+## [0.121.19](https://github.com/promptfoo/promptfoo/compare/0.121.18...0.121.19) (2026-07-14)
+
+### Features
+
+- **providers:** add Bedrock GPT-5.6 frontier support ([#10081](https://github.com/promptfoo/promptfoo/issues/10081)) ([a97c8eb](https://github.com/promptfoo/promptfoo/commit/a97c8ebf1d005d035c75692c9aa1518a3b75a4b6))
+- **providers:** add Meta Model API (Muse Spark) provider ([#10041](https://github.com/promptfoo/promptfoo/issues/10041)) ([e6f06da](https://github.com/promptfoo/promptfoo/commit/e6f06da06093552eee2d09d0210fb3a960cf0304))
+- **providers:** add Open Interpreter provider ([#10079](https://github.com/promptfoo/promptfoo/issues/10079)) ([c4d9028](https://github.com/promptfoo/promptfoo/commit/c4d9028792fdfcbdc93350921f640cdeb1114c8d))
+- **providers:** add xAI Grok 4.5 support ([#10032](https://github.com/promptfoo/promptfoo/issues/10032)) ([83cedf0](https://github.com/promptfoo/promptfoo/commit/83cedf0f4cf096c3908d4abacae6dca511455d6f))
+- **providers:** honor CLAUDE_CONFIG_DIR for Claude Code creds ([#9980](https://github.com/promptfoo/promptfoo/issues/9980)) ([a643f8b](https://github.com/promptfoo/promptfoo/commit/a643f8b8e13a93e89f1da229e3b77db3927bdf55))
+- **providers:** support GPT-5.6 GA ([#10040](https://github.com/promptfoo/promptfoo/issues/10040)) ([3280625](https://github.com/promptfoo/promptfoo/commit/32806255bfb2685ea8e01a72bca8420746ba341c))
+- **redteam:** account for generation-phase token usage ([#9967](https://github.com/promptfoo/promptfoo/issues/9967)) ([e0d1698](https://github.com/promptfoo/promptfoo/commit/e0d16984a3d627c252a4f1dce4ae9b5ffdd250f6))
+- **redteam:** add goblin strategy ([#10057](https://github.com/promptfoo/promptfoo/issues/10057)) ([c0c86f1](https://github.com/promptfoo/promptfoo/commit/c0c86f1b2e9a94e7c3e60aa93deaad1e63fc6512))
+- **types:** optional token-usage fields on public types/schemas ([#9962](https://github.com/promptfoo/promptfoo/issues/9962)) ([7365c32](https://github.com/promptfoo/promptfoo/commit/7365c32c7acfc5fbd88c070ba38f4bdb91910bb4))
+- **util:** add token-usage helpers (error/generation accumulation) ([#9969](https://github.com/promptfoo/promptfoo/issues/9969)) ([79ebc2d](https://github.com/promptfoo/promptfoo/commit/79ebc2df50aaaeeba2f1c6add182351d6f0e0b73))
+
+### Bug Fixes
+
+- **assertions:** allow numeric 0 as contains/icontains value ([#10012](https://github.com/promptfoo/promptfoo/issues/10012)) ([06d8105](https://github.com/promptfoo/promptfoo/commit/06d8105dcaa27df9327dc30f9f77e5c53510ddf1))
+- **assertions:** return pass:false for tool calls missing a function object ([#10076](https://github.com/promptfoo/promptfoo/issues/10076)) ([ffd8922](https://github.com/promptfoo/promptfoo/commit/ffd8922926445671e2d62b2b4eb7f8dd8a97751a))
+- **azure:** avoid crash on empty choices array when reading logprobs ([#9867](https://github.com/promptfoo/promptfoo/issues/9867)) ([f189f84](https://github.com/promptfoo/promptfoo/commit/f189f84c344527635d76e478bcf9cd5508d963f7))
+- **code-scan:** harden action supply chain ([#9991](https://github.com/promptfoo/promptfoo/issues/9991)) ([17e90eb](https://github.com/promptfoo/promptfoo/commit/17e90eb9641f935aebb34663560fcee1b90c62bc))
+- **db:** protect user database from test runners ([#9590](https://github.com/promptfoo/promptfoo/issues/9590)) ([aabb699](https://github.com/promptfoo/promptfoo/commit/aabb69901b28b49eef8618ceb07b3a6d3dec4744))
+- **deps:** update anthropic packages ([#10037](https://github.com/promptfoo/promptfoo/issues/10037)) ([fed1d2a](https://github.com/promptfoo/promptfoo/commit/fed1d2accd8d6fffd2ceedaa6cf8ab7700290dcf))
+- **deps:** update anthropic packages ([#10066](https://github.com/promptfoo/promptfoo/issues/10066)) ([24a3ef1](https://github.com/promptfoo/promptfoo/commit/24a3ef1664de3431b3d00110b47ad509837649e4))
+- **deps:** update dependency js-yaml to v5.2.1 ([#10052](https://github.com/promptfoo/promptfoo/issues/10052)) ([fe22aa7](https://github.com/promptfoo/promptfoo/commit/fe22aa7a37b74b63987aa59b24dbfae4ee74f0b5))
+- **deps:** update opentelemetry ([#10067](https://github.com/promptfoo/promptfoo/issues/10067)) ([03e3f2a](https://github.com/promptfoo/promptfoo/commit/03e3f2a744c32da61c18a2f26d1b9adfca7dd705))
+- **eval:** combineFilterConditions doesn't recognize lowercase 'or' ([#10087](https://github.com/promptfoo/promptfoo/issues/10087)) ([25fedb6](https://github.com/promptfoo/promptfoo/commit/25fedb61c2168c5a86e45e59fd2a001a2a043cf4))
+- **matchers:** count missing faithfulness verdicts as unsupported ([#9984](https://github.com/promptfoo/promptfoo/issues/9984)) ([ce4a3d3](https://github.com/promptfoo/promptfoo/commit/ce4a3d38c24b3bd3af4b1d134a6962dd06ced2b3))
+- **matchers:** preserve reserved grader vars in model-graded matchers ([#10042](https://github.com/promptfoo/promptfoo/issues/10042)) ([9f6afcc](https://github.com/promptfoo/promptfoo/commit/9f6afcc9ab139f91f6e7991c77f282eb3aa38343))
+- **matchers:** preserve reserved rag grader vars ([#9994](https://github.com/promptfoo/promptfoo/issues/9994)) ([6e9e2ee](https://github.com/promptfoo/promptfoo/commit/6e9e2ee6471415deff58d6ed22fb5010ef4d10a1))
+- **providers:** address xAI response edge cases ([#10072](https://github.com/promptfoo/promptfoo/issues/10072)) ([0300eb0](https://github.com/promptfoo/promptfoo/commit/0300eb0fd11aec09cb5e93e51ae1e06c9460c959))
+- **providers:** avoid app-server config recursion ([#10078](https://github.com/promptfoo/promptfoo/issues/10078)) ([61a043f](https://github.com/promptfoo/promptfoo/commit/61a043f4e560a44fa78e0089e7df29d50939b7f7))
+- **providers:** bill GPT-5.6 image input tokens ([#10050](https://github.com/promptfoo/promptfoo/issues/10050)) ([ab52ee0](https://github.com/promptfoo/promptfoo/commit/ab52ee079c4558dad731a3165b0741cd64a34344))
+- **providers:** clamp DeepSeek cached tokens in cost calc ([#9908](https://github.com/promptfoo/promptfoo/issues/9908)) ([eca0cdc](https://github.com/promptfoo/promptfoo/commit/eca0cdc70b72a12e7421e55516407845ae621118))
+- **providers:** correct Codex SDK provider config handling ([#9963](https://github.com/promptfoo/promptfoo/issues/9963)) ([a311483](https://github.com/promptfoo/promptfoo/commit/a3114835a073fe14427d648fe11be094aae06fbe))
+- **providers:** guard array access in Bedrock Titan and Cohere output handlers ([#9897](https://github.com/promptfoo/promptfoo/issues/9897)) ([9a2aa85](https://github.com/promptfoo/promptfoo/commit/9a2aa85d13120a4d0aba6e064d3c88acd486a47c))
+- **providers:** handle TrueFoundry guardrail blocks ([#10021](https://github.com/promptfoo/promptfoo/issues/10021)) ([a9cfc86](https://github.com/promptfoo/promptfoo/commit/a9cfc86ad2dd7807e10e9858d961855c70fd705c))
+- **providers:** preserve TrueFoundry filter errors ([#10027](https://github.com/promptfoo/promptfoo/issues/10027)) ([051914a](https://github.com/promptfoo/promptfoo/commit/051914a620c26059befb0712ad23de87d30052c1))
+- **providers:** report cached request counts in token usage ([#9970](https://github.com/promptfoo/promptfoo/issues/9970)) ([2392ce3](https://github.com/promptfoo/promptfoo/commit/2392ce3b6e8b536d923cc245653a720dd62730bb))
+- **providers:** stringify simulated user provider outputs ([#10019](https://github.com/promptfoo/promptfoo/issues/10019)) ([46ee400](https://github.com/promptfoo/promptfoo/commit/46ee40056fa09c774ef4feedfdde3fb41c0d1afc))
+- **redteam:** add missing lowercase f to homoglyph map ([#10071](https://github.com/promptfoo/promptfoo/issues/10071)) ([fe3151e](https://github.com/promptfoo/promptfoo/commit/fe3151e86e6899309648588058d55ad99c74eb35))
+- **redteam:** clean up Hydra and Hex handling ([#10077](https://github.com/promptfoo/promptfoo/issues/10077)) ([ef61281](https://github.com/promptfoo/promptfoo/commit/ef61281e04ddd19490aaad50ac6f06d736494e6f))
+- **redteam:** encode hex strategy payloads as UTF-8 bytes ([#10073](https://github.com/promptfoo/promptfoo/issues/10073)) ([080dc99](https://github.com/promptfoo/promptfoo/commit/080dc9936cedd58aecbd16cb307c6c3c54e252f0))
+- **redteam:** match cross-session leaks case-insensitively ([#10074](https://github.com/promptfoo/promptfoo/issues/10074)) ([53d7586](https://github.com/promptfoo/promptfoo/commit/53d75866070c7fac6c1cb96711da7fbb8f9926cb))
+- **redteam:** pass target output to structured graders ([#10068](https://github.com/promptfoo/promptfoo/issues/10068)) ([c5f205d](https://github.com/promptfoo/promptfoo/commit/c5f205d4730c37942abf3b40f1284116c7b0ad72))
+- **redteam:** preserve punctuation in Pig Latin encoding ([#10025](https://github.com/promptfoo/promptfoo/issues/10025)) ([fe6bf3a](https://github.com/promptfoo/promptfoo/commit/fe6bf3a18a1f61194937c92d78dd097721ec73aa))
+- **redteam:** stop empty prompts at metadata boundaries ([#10015](https://github.com/promptfoo/promptfoo/issues/10015)) ([3957d90](https://github.com/promptfoo/promptfoo/commit/3957d9029fa87ef70ab7670da819c55004a41973))
+- **util:** handle even backslashes before slash comments ([#10030](https://github.com/promptfoo/promptfoo/issues/10030)) ([fd607d1](https://github.com/promptfoo/promptfoo/commit/fd607d1f00e41c7110d487ad8f20ba70f93686f0))
+- **util:** handle single-quoted escaped paths ([#10080](https://github.com/promptfoo/promptfoo/issues/10080)) ([01694e7](https://github.com/promptfoo/promptfoo/commit/01694e786edd16e7d5bf24594f5ec0497186888f))
+- **util:** remove unused NormalizedTokenUsage export ([#10065](https://github.com/promptfoo/promptfoo/issues/10065)) ([402a84d](https://github.com/promptfoo/promptfoo/commit/402a84d73d5317f046089256cf9b35cec38ae8db))
+
 ## [0.121.18](https://github.com/promptfoo/promptfoo/compare/0.121.17...0.121.18) (2026-07-07)
 
 ### Features

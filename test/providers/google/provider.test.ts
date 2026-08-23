@@ -313,6 +313,47 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should normalize Gemini TTS audio and default its generation config', async () => {
+      const ttsProvider = new GoogleProvider('gemini-2.5-pro-preview-tts', {
+        config: { apiKey: 'test-key' },
+      });
+      const pcm = Buffer.from([1, 2, 3, 4]);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/L16;codec=pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await ttsProvider.callApi('Say hello.');
+
+      expect(result.audio).toMatchObject({ format: 'wav', sampleRate: 24_000, channels: 1 });
+      expect(Buffer.from(result.audio?.data ?? '', 'base64').subarray(44)).toEqual(pcm);
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.generationConfig).toMatchObject({
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+      });
+    });
+
     it('should handle safety blocked response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -1036,6 +1077,72 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.0007655, 10);
     });
 
+    it('should price cached and audio usage for the standard Gemini provider', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_500,
+            cachedContentTokenCount: 500,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 600 },
+              { modality: 'AUDIO', tokenCount: 400 },
+            ],
+            cacheTokensDetails: [
+              { modality: 'TEXT', tokenCount: 200 },
+              { modality: 'AUDIO', tokenCount: 300 },
+            ],
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
+      expect(result.cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.serviceTier).toBe('priority');
+      expect(requestBody.service_tier).toBeUndefined();
+    });
+
+    it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            toolUsePromptTokenCount: 400,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_900,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_400, completion: 500, total: 1_900 });
+      expect(result.cost).toBeCloseTo((1_400 * 0.3 + 500 * 2.5) / 1e6, 12);
+    });
+
     it('should not double-count when thoughtsTokenCount is zero', async () => {
       const provider = new GoogleProvider('gemini-2.5-flash', {
         config: { apiKey: 'test-key' },
@@ -1081,6 +1188,7 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: { tools: [{ googleSearch: {} }] },
         },
       });
 
@@ -1100,6 +1208,7 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.tools).toBeDefined();
       expect(body.tools[0].functionDeclarations[0].name).toBe('test_function');
+      expect(body.tools[1]).toEqual({ googleSearch: {} });
     });
 
     it('should include toolConfig in request body', async () => {
@@ -1151,6 +1260,13 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: {
+            tools: [
+              { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
+              { googleSearch: {} },
+            ],
+          },
           functionToolCallbacks: { test_function: callback },
           ...toolDisableConfig,
         } as any,
@@ -1183,7 +1299,7 @@ describe('GoogleProvider', () => {
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      expect(body.tools).toBeUndefined();
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
       expect(callback).not.toHaveBeenCalled();
       expect(result.output).toBe(
         JSON.stringify({ functionCall: { name: 'test_function', args: {} } }),
@@ -1252,6 +1368,38 @@ describe('GoogleProvider', () => {
 
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          passthrough: {
+            tools: {
+              function_declarations: [{ name: 'passthrough_snake_case_function' }],
+              googleSearch: {},
+            },
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
