@@ -151,6 +151,17 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
   createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
   {
+    test: (providerPath: string) => providerPath === 'acp',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const { createAcpProvider } = await import('./acp');
+      return createAcpProvider(providerPath, providerOptions);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('abliteration:'),
     create: async (
       providerPath: string,
