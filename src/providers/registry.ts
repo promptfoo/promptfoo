@@ -66,6 +66,7 @@ import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { createMetaProvider } from './meta';
 import { createMiniMaxProvider } from './minimax';
+import { createMiniMaxVideoProvider } from './minimax/video';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createMoonshotProvider } from './moonshot';
@@ -815,6 +816,19 @@ export const providerMap: ProviderFactory[] = [
       return createMetaProvider(providerPath, {
         ...providerOptions,
         env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('minimax:video:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMiniMaxVideoProvider(providerPath, {
+        config: providerOptions as any,
+        env: context.env,
       });
     },
   },
