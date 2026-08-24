@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useStore as useEvalConfigStore } from '@app/stores/evalConfig';
+import nunjucks from 'nunjucks';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
@@ -41,6 +43,234 @@ const shouldRemoveMcpConfig = (
 const containsNunjucksTemplate = (value: string): boolean =>
   /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
 
+type NunjucksAstNode = {
+  typename: string;
+  value?: unknown;
+  children?: NunjucksAstNode[];
+  body?: NunjucksAstNode;
+  else_?: NunjucksAstNode;
+  args?: NunjucksAstNode;
+  name?: NunjucksAstNode;
+  left?: NunjucksAstNode;
+  right?: NunjucksAstNode;
+  target?: NunjucksAstNode;
+  cond?: NunjucksAstNode;
+};
+
+type NunjucksUrlCandidate = {
+  value: string;
+  expressions: NunjucksAstNode[];
+};
+
+type NunjucksConstantValue = string | number | boolean | null;
+
+const TEMPLATE_PLACEHOLDER = '\0';
+const SCHEME_TEMPLATE_REPLACEMENTS = ['ws://', 'wss://'].flatMap((protocol) => [
+  `${protocol}1`,
+  ...Array.from({ length: protocol.length + 1 }, (_, index) => protocol.slice(index)),
+]);
+let nunjucksFilterEnvironment: nunjucks.Environment | undefined;
+
+const isValidWebSocketUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return ['ws:', 'wss:'].includes(url.protocol) && !url.hash;
+  } catch {
+    return false;
+  }
+};
+
+const getConstantNunjucksExpression = (
+  node: NunjucksAstNode,
+  overriddenFilters: ReadonlySet<string>,
+): NunjucksConstantValue | undefined => {
+  if (node.typename === 'Literal') {
+    return node.value === null ||
+      typeof node.value === 'string' ||
+      typeof node.value === 'number' ||
+      typeof node.value === 'boolean'
+      ? node.value
+      : undefined;
+  }
+
+  if (node.typename === 'Concat' || node.typename === 'Add') {
+    if (!node.left || !node.right) {
+      return undefined;
+    }
+
+    const left = getConstantNunjucksExpression(node.left, overriddenFilters);
+    const right = getConstantNunjucksExpression(node.right, overriddenFilters);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+
+    return node.typename === 'Add' && typeof left === 'number' && typeof right === 'number'
+      ? left + right
+      : `${left ?? ''}${right ?? ''}`;
+  }
+
+  if (
+    node.typename !== 'Filter' ||
+    typeof node.name?.value !== 'string' ||
+    overriddenFilters.has(node.name.value)
+  ) {
+    return undefined;
+  }
+
+  const values: NunjucksConstantValue[] = [];
+  for (const argument of node.args?.children ?? []) {
+    const value = getConstantNunjucksExpression(argument, overriddenFilters);
+    if (value === undefined) {
+      return undefined;
+    }
+    values.push(value);
+  }
+
+  try {
+    nunjucksFilterEnvironment ??= new nunjucks.Environment([], { autoescape: false });
+    const value = nunjucksFilterEnvironment.getFilter(node.name.value)(...values);
+    return value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const getNunjucksUrlCandidates = (
+  node: NunjucksAstNode,
+  budget: { remaining: number },
+  overriddenFilters: ReadonlySet<string>,
+  isOutputExpression = false,
+): NunjucksUrlCandidate[] | null => {
+  if (node.typename === 'TemplateData' || node.typename === 'Literal') {
+    return [{ value: String(node.value ?? ''), expressions: [] }];
+  }
+
+  if (node.typename === 'If') {
+    const truthyCandidates = node.body
+      ? getNunjucksUrlCandidates(node.body, budget, overriddenFilters)
+      : null;
+    const falsyCandidates = node.else_
+      ? getNunjucksUrlCandidates(node.else_, budget, overriddenFilters)
+      : [{ value: '', expressions: [] }];
+    if (!truthyCandidates || !falsyCandidates) {
+      return null;
+    }
+
+    const candidates = [...truthyCandidates, ...falsyCandidates];
+    budget.remaining -= candidates.length - 1;
+    return budget.remaining < 0 ? null : candidates;
+  }
+
+  if (node.typename === 'Root' || node.typename === 'NodeList' || node.typename === 'Output') {
+    let candidates: NunjucksUrlCandidate[] = [{ value: '', expressions: [] }];
+
+    for (const child of node.children ?? []) {
+      const nextCandidates = getNunjucksUrlCandidates(
+        child,
+        budget,
+        overriddenFilters,
+        node.typename === 'Output',
+      );
+      if (!nextCandidates) {
+        return null;
+      }
+
+      const combinations = candidates.flatMap((candidate) =>
+        nextCandidates.map((nextCandidate) => ({
+          value: candidate.value + nextCandidate.value,
+          expressions: [...candidate.expressions, ...nextCandidate.expressions],
+        })),
+      );
+
+      budget.remaining -= combinations.length - candidates.length;
+      if (budget.remaining < 0) {
+        return null;
+      }
+      candidates = combinations;
+    }
+
+    return candidates;
+  }
+
+  if (!isOutputExpression) {
+    return null;
+  }
+
+  const constantExpression = getConstantNunjucksExpression(node, overriddenFilters);
+  if (constantExpression !== undefined) {
+    return [{ value: String(constantExpression ?? ''), expressions: [] }];
+  }
+
+  return [{ value: TEMPLATE_PLACEHOLDER, expressions: [node] }];
+};
+
+const getExpressionSymbol = (node?: NunjucksAstNode): string | undefined => {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  return node.typename === 'Filter' ? getExpressionSymbol(node.args?.children?.[0]) : undefined;
+};
+
+const matchesTemplatedScheme = (scheme: string, protocol: string): boolean => {
+  const parts = scheme.toLowerCase().split(TEMPLATE_PLACEHOLDER);
+  const normalizedProtocol = protocol.toLowerCase();
+  let offset = 0;
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+
+    if (index === 0) {
+      if (!normalizedProtocol.startsWith(part)) {
+        return false;
+      }
+      offset = part.length;
+      continue;
+    }
+
+    if (index === parts.length - 1) {
+      return normalizedProtocol.slice(offset).endsWith(part);
+    }
+
+    const nextOffset = normalizedProtocol.indexOf(part, offset);
+    if (nextOffset === -1) {
+      return false;
+    }
+    offset = nextOffset + part.length;
+  }
+
+  return offset === normalizedProtocol.length;
+};
+
+const isValidSchemePrefixCandidate = (candidate: NunjucksUrlCandidate): boolean => {
+  const expressionSymbol = getExpressionSymbol(candidate.expressions[0]);
+  if (
+    candidate.value.startsWith(TEMPLATE_PLACEHOLDER) &&
+    expressionSymbol &&
+    /^(?:host(?:name)?|domain|port)$/i.test(expressionSymbol)
+  ) {
+    return false;
+  }
+
+  return SCHEME_TEMPLATE_REPLACEMENTS.some((replacement) =>
+    isValidWebSocketUrl(
+      candidate.value
+        .replace(TEMPLATE_PLACEHOLDER, replacement)
+        .split(TEMPLATE_PLACEHOLDER)
+        .join('1'),
+    ),
+  );
+};
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -65,19 +295,91 @@ function ProviderConfigEditor({
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
 
-  const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
-    try {
-      const parsedUrl = new URL(url);
-      if (type === 'http') {
-        return ['http:', 'https:'].includes(parsedUrl.protocol);
-      } else if (type === 'websocket') {
-        return ['ws:', 'wss:'].includes(parsedUrl.protocol);
+  const validateUrl = useCallback(
+    function validateUrl(url: string, type: 'http' | 'websocket' = 'http'): boolean {
+      try {
+        if (type === 'http') {
+          return ['http:', 'https:'].includes(new URL(url).protocol);
+        }
+
+        if (url.includes(TEMPLATE_PLACEHOLDER)) {
+          return false;
+        }
+
+        if (!/{{|{%|{#/.test(url)) {
+          return isValidWebSocketUrl(url);
+        }
+
+        const fixedProtocol = url.match(/^([a-z][a-z\d+.-]*):\/\//i);
+        if (fixedProtocol && !/^wss?$/i.test(fixedProtocol[1])) {
+          return false;
+        }
+
+        const parser = (
+          nunjucks as typeof nunjucks & {
+            parser?: { parse: (template: string) => NunjucksAstNode };
+          }
+        ).parser;
+        if (!parser) {
+          return false;
+        }
+
+        const configuredFilters = isRedTeam
+          ? (useRedTeamConfig.getState().config as { nunjucksFilters?: Record<string, unknown> })
+              .nunjucksFilters
+          : useEvalConfigStore.getState().config.nunjucksFilters;
+        const overriddenFilters = new Set(Object.keys(configuredFilters ?? {}));
+        const candidates = getNunjucksUrlCandidates(
+          parser.parse(url),
+          { remaining: 128 },
+          overriddenFilters,
+        );
+        if (!candidates) {
+          return false;
+        }
+
+        return candidates.some((candidate) => {
+          let urlToValidate = candidate.value;
+          let schemeSeparatorIndex = urlToValidate.indexOf('://');
+          if (urlToValidate.startsWith(TEMPLATE_PLACEHOLDER)) {
+            const suffixBoundary = urlToValidate.slice(TEMPLATE_PLACEHOLDER.length).search(/[/?#]/);
+            if (
+              suffixBoundary !== -1 &&
+              TEMPLATE_PLACEHOLDER.length + suffixBoundary < schemeSeparatorIndex
+            ) {
+              schemeSeparatorIndex = -1;
+            }
+          }
+
+          if (schemeSeparatorIndex === -1 && urlToValidate.includes(TEMPLATE_PLACEHOLDER)) {
+            return isValidSchemePrefixCandidate(candidate);
+          }
+
+          const scheme = urlToValidate.slice(0, schemeSeparatorIndex);
+          if (schemeSeparatorIndex !== -1 && scheme.includes(TEMPLATE_PLACEHOLDER)) {
+            const protocol = ['ws', 'wss'].find((value) => matchesTemplatedScheme(scheme, value));
+
+            if (!protocol) {
+              return false;
+            }
+
+            urlToValidate = `${protocol}${urlToValidate.slice(schemeSeparatorIndex)}`;
+          }
+
+          return isValidWebSocketUrl(
+            urlToValidate
+              .split(`[${TEMPLATE_PLACEHOLDER}]`)
+              .join('[::1]')
+              .split(TEMPLATE_PLACEHOLDER)
+              .join('1'),
+          );
+        });
+      } catch {
+        return false;
       }
-      return false;
-    } catch {
-      return false;
-    }
-  }, []);
+    },
+    [isRedTeam],
+  );
 
   const getA2AShorthandUrl = useCallback((id?: string): string | undefined => {
     if (!id?.startsWith('a2a:')) {
