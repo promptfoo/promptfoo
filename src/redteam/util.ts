@@ -4,10 +4,12 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
-import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
-import { recordGenerationTokenUsage } from './generationTokenUsage';
+import {
+  recordFailedGenerationTokenUsage,
+  recordGenerationTokenUsage,
+} from './generationTokenUsage';
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
@@ -389,18 +391,19 @@ export async function extractGoalFromPrompt(
 
   let responseRecorded = false;
   try {
-    const { cached, data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(requestBody),
-      },
-      getRequestTimeoutMs(),
-    );
+    const { cached, coalesced, data, status, statusText } =
+      await fetchWithCache<ExtractIntentResponse>(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: getRemoteGenerationHeaders(),
+          body: JSON.stringify(requestBody),
+        },
+        getRequestTimeoutMs(),
+      );
 
-    if (provider) {
-      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+    if (provider && data?.tokenUsage && !coalesced) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data.tokenUsage, cached });
       responseRecorded = true;
     }
 
@@ -423,7 +426,7 @@ export async function extractGoalFromPrompt(
     return data.intent;
   } catch (error) {
     if (provider && !responseRecorded) {
-      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+      recordFailedGenerationTokenUsage(provider, error);
     }
     logger.warn(`Error extracting goal: ${error}`);
     return null;

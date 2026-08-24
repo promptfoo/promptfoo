@@ -8,7 +8,6 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
-import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -17,7 +16,10 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { recordGenerationTokenUsage } from '../generationTokenUsage';
+import {
+  recordFailedGenerationTokenUsage,
+  recordGenerationTokenUsage,
+} from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -400,17 +402,18 @@ async function fetchRemoteTestCases(
 
   let responseRecorded = false;
   try {
-    const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body,
-      },
-      getRequestTimeoutMs(),
-    );
-    if (provider) {
-      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+    const { cached, coalesced, data, status, statusText } =
+      await fetchWithCache<PluginGenerationResponse>(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: getRemoteGenerationHeaders(),
+          body,
+        },
+        getRequestTimeoutMs(),
+      );
+    if (provider && data?.tokenUsage && !coalesced) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data.tokenUsage, cached });
       responseRecorded = true;
     }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
@@ -425,7 +428,7 @@ async function fetchRemoteTestCases(
     return ret;
   } catch (err) {
     if (provider && !responseRecorded) {
-      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
+      recordFailedGenerationTokenUsage(provider, err);
     }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];

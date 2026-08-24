@@ -222,7 +222,42 @@ describe('extractGoalFromPrompt', () => {
     expect(usage).toEqual({});
   });
 
-  it('counts failed goal extraction requests without reported token usage', async () => {
+  it('records a coalesced goal extraction request only once', async () => {
+    const response = {
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: {
+        intent: 'shared goal',
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      },
+      deleteFromCache: async () => {},
+    };
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce({ ...response, coalesced: true });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+    const extractGoal = () =>
+      extractGoalFromPrompt(
+        'shared prompt',
+        'test purpose',
+        undefined,
+        undefined,
+        undefined,
+        provider,
+      );
+
+    await Promise.all([extractGoal(), extractGoal()]);
+
+    expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
+  });
+
+  it('does not invent model requests when goal extraction fails without reported usage', async () => {
     vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('goal extraction timed out'));
     const usage = {};
     const provider = trackGenerationTokenUsage(
@@ -240,7 +275,32 @@ describe('extractGoalFromPrompt', () => {
     );
 
     expect(result).toBeNull();
-    expect(usage).toEqual({ numRequests: 1 });
+    expect(usage).toEqual({});
+  });
+
+  it('records usage from a shared failed goal extraction only once', async () => {
+    const error = Object.assign(new Error('shared extraction failed'), {
+      tokenUsage: { total: 17, prompt: 10, completion: 7 },
+    });
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+    const extractGoal = () =>
+      extractGoalFromPrompt(
+        'shared prompt',
+        'test purpose',
+        undefined,
+        undefined,
+        undefined,
+        provider,
+      );
+
+    await Promise.all([extractGoal(), extractGoal()]);
+
+    expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
   });
 
   it('should return null on HTTP error', async () => {
