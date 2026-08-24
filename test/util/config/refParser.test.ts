@@ -48,21 +48,27 @@ describe('dereferenceConfig remote references', () => {
       ) => void;
 
       const RealAgent = parserTransport.Agent;
+      const realFetch = parserTransport.fetch;
       const validatedLookups: Array<string | LookupAddress[]> = [];
       let pinnedLookup: PinnedLookup | undefined;
+      let dispatcher: InstanceType<typeof RealAgent> | undefined;
       vi.spyOn(parserTransport, 'Agent').mockImplementation(function (options) {
         if (!options) {
           throw new Error('Expected the parser to configure its DNS-pinned HTTP transport');
         }
-        const connect = options.connect as { lookup: PinnedLookup };
-        pinnedLookup = connect.lookup;
+        const connect = options.connect as { lookup?: PinnedLookup } | undefined;
+        if (typeof connect?.lookup !== 'function') {
+          throw new Error('Expected the parser to configure a DNS-pinned lookup');
+        }
+        const validatedLookup = connect.lookup;
+        pinnedLookup = validatedLookup;
 
-        return new RealAgent({
+        dispatcher = new RealAgent({
           ...options,
           connect: {
             ...connect,
             lookup: (hostname, lookupOptions, callback) => {
-              connect.lookup(hostname, lookupOptions, (error, address) => {
+              validatedLookup(hostname, lookupOptions, (error, address) => {
                 if (error) {
                   callback(error, '', 0);
                   return;
@@ -78,8 +84,14 @@ describe('dereferenceConfig remote references', () => {
             },
           },
         });
+        return dispatcher;
       });
-      const fetch = vi.spyOn(parserTransport, 'fetch');
+      const fetch = vi.spyOn(parserTransport, 'fetch').mockImplementation((input, options) => {
+        if (!dispatcher || options?.dispatcher !== dispatcher) {
+          throw new Error('Blocked an unpinned outbound HTTP request');
+        }
+        return realFetch(input, options);
+      });
       const { port } = server.address() as AddressInfo;
 
       const result = await dereferenceConfig({
@@ -98,11 +110,16 @@ describe('dereferenceConfig remote references', () => {
         expect.objectContaining({ dispatcher: expect.any(RealAgent), method: 'GET' }),
       );
       expect(validatedLookups).toEqual([[{ address: '93.184.216.34', family: 4 }]]);
+      expect(dispatcher?.destroyed).toBe(true);
 
       // A redirect or DNS rebind must not reuse the already validated connection.
+      const validatedLookup = pinnedLookup;
+      if (!validatedLookup) {
+        throw new Error('The parser did not provide a DNS-pinned lookup');
+      }
       await expect(
         new Promise((resolve, reject) => {
-          pinnedLookup?.('attacker.example.com', { family: 4 }, (error, address, family) => {
+          validatedLookup('attacker.example.com', { family: 4 }, (error, address, family) => {
             if (error) {
               reject(error);
             } else {
@@ -122,10 +139,12 @@ describe('dereferenceConfig remote references', () => {
   it.each([
     { address: '169.254.169.254', family: 4, description: 'cloud metadata' },
     { address: '10.0.0.10', family: 4, description: 'RFC1918 private IPv4' },
-    { address: '172.16.0.10', family: 4, description: 'RFC1918 carrier IPv4' },
+    { address: '172.16.0.10', family: 4, description: 'RFC1918 172/12 private IPv4' },
     { address: '192.168.1.10', family: 4, description: 'RFC1918 local IPv4' },
+    { address: '100.64.0.10', family: 4, description: 'RFC6598 carrier-grade IPv4' },
     { address: '127.0.0.1', family: 4, description: 'IPv4 loopback' },
     { address: '::1', family: 6, description: 'IPv6 loopback' },
+    { address: 'fc00::1', family: 6, description: 'IPv6 fc00 unique-local' },
     { address: 'fd00::1', family: 6, description: 'IPv6 unique-local' },
     { address: 'fe80::1', family: 6, description: 'IPv6 link-local' },
     { address: 'fd00:ec2::254', family: 6, description: 'IPv6 cloud metadata' },
@@ -135,6 +154,9 @@ describe('dereferenceConfig remote references', () => {
       description: 'IPv4-mapped IPv6 cloud metadata',
     },
     { address: '::ffff:127.0.0.1', family: 6, description: 'IPv4-mapped IPv6 loopback' },
+    { address: '::ffff:10.0.0.10', family: 6, description: 'IPv4-mapped RFC1918 10/8' },
+    { address: '::ffff:172.16.0.10', family: 6, description: 'IPv4-mapped RFC1918 172/12' },
+    { address: '::ffff:192.168.1.10', family: 6, description: 'IPv4-mapped RFC1918 192.168/16' },
   ])('refuses a remote reference resolving to $description', async ({ address, family }) => {
     vi.spyOn(dns, 'lookup').mockResolvedValue([{ address, family }] as never);
     syncBuiltinESMExports();
