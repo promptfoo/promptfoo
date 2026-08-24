@@ -1644,8 +1644,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // session's stream before the main agent's terminal `result` arrives.
           // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
           // `origin.kind`: the user-prompted main result is `human` and background
-          // sub-agent completions are `task-notification` followups. Prefer the
-          // last non-task-notification result, falling back to the last result
+          // sub-agent completions are `task-notification` followups. Scheduled
+          // prompts are also task notifications, but SDK >= 0.3.214 identifies
+          // them with `origin.subkind: 'scheduled-trigger'`. Prefer the last
+          // main-agent result, falling back to the last result
           // overall for older SDK servers that don't emit `origin` (in which case
           // the pre-0.2.126 position heuristic still applies — the main agent's
           // result is the last one in the stream). Otherwise we'd return the
@@ -1715,12 +1717,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
-              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
-              // skip task-notification followups from background sub-agents.
-              // Treat absent origin (older SDKs) and any non-task-notification
-              // kind as a candidate for the main result; the position-based
-              // last-wins fallback below preserves prior behavior in that case.
-              if (msg.origin?.kind !== 'task-notification') {
+              // A background sub-agent completion is the one result we must not mistake
+              // for the main-agent answer. Scheduled triggers share the task-notification
+              // kind but are the session's own assigned prompt, so they stay candidates.
+              // The sibling 'peer-send-message' subkind is deliberately not exempted: it
+              // is another session's message, not a result for the prompt we submitted.
+              // Absent origin (older SDKs) and every other kind stay candidates too; the
+              // position-based last-wins fallback below covers them.
+              const isBackgroundTaskResult =
+                msg.origin?.kind === 'task-notification' &&
+                !('subkind' in msg.origin && msg.origin.subkind === 'scheduled-trigger');
+              if (!isBackgroundTaskResult) {
                 lastMainResultMsg = msg;
               }
             }
