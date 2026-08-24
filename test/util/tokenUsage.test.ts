@@ -24,6 +24,23 @@ describe('TokenUsageTracker', () => {
     }
   });
 
+  it('redacts URL credentials when logging response usage', () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    try {
+      TokenUsageTracker.getInstance().trackResponseUsage(
+        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
+        { tokenUsage: { total: 1 } },
+      );
+      const messages = debugSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(messages).toContain('api_key=%5BREDACTED%5D');
+      expect(messages).toContain('(HttpProvider)');
+      expect(messages).not.toContain('sk-12345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+      TokenUsageTracker.getInstance().resetAllUsage();
+    }
+  });
+
   let tracker: TokenUsageTracker;
 
   beforeEach(() => {
@@ -86,6 +103,25 @@ describe('TokenUsageTracker', () => {
     expect(tracker.getProviderUsage('test-provider')).toEqual(
       expect.objectContaining({ numRequests: 1 }),
     );
+  });
+
+  it('should infer one request from a response that omits numRequests', () => {
+    tracker.trackResponseUsage('test-provider', {
+      tokenUsage: {
+        total: 7,
+        prompt: 3,
+        completion: 4,
+        cached: 0,
+      },
+    });
+
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 7,
+      prompt: 3,
+      completion: 4,
+      cached: 0,
+      numRequests: 1,
+    });
   });
 
   it('should merge token usage for the same provider', () => {

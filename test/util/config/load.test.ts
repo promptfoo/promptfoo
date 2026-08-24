@@ -23,6 +23,7 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
+import { sanitizeTracingConfigForPersistence } from '../../../src/util/sanitizer';
 import { readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
@@ -1562,6 +1563,32 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('should include YAML location when an inline test references a missing prompt', async () => {
+    const configText = [
+      'providers:',
+      '  - echo',
+      'prompts:',
+      '  - raw: Hello',
+      '    label: Existing Prompt',
+      'tests:',
+      '  - description: Missing prompt',
+      '    prompts:',
+      '      - Missing Prompt',
+    ].join('\n');
+
+    vi.mocked(fs.readFileSync).mockReturnValue(configText);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello', label: 'Existing Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    await expect(resolveConfigs({ config: ['config.yaml'] }, {})).rejects.toThrow(
+      /config\.yaml:9:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+    );
+  });
+
   it('should return the provider configs selected by a target filter', async () => {
     const providers = [
       { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
@@ -2180,28 +2207,27 @@ describe('readConfig', () => {
     expect(result.commandLineOptions?.filterSampleSeed).toBe(42);
   });
 
-  it.each([
-    'named-seed',
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])('should reject invalid configured filter sample seed %p', async (filterSampleSeed) => {
-    const mockConfig = {
-      providers: ['openai:gpt-4o'],
-      prompts: ['Hello, world!'],
-      commandLineOptions: {
-        filterSampleSeed,
-      },
-    };
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
-    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+  it.each(['named-seed', 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'should reject invalid configured filter sample seed %p',
+    async (filterSampleSeed) => {
+      const mockConfig = {
+        providers: ['openai:gpt-4o'],
+        prompts: ['Hello, world!'],
+        commandLineOptions: {
+          filterSampleSeed,
+        },
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
 
-    await expect(readConfig('config.yaml')).rejects.toMatchObject({
-      name: 'ConfigResolutionError',
-      message: expect.stringContaining(
-        'Invalid commandLineOptions in configuration file config.yaml',
-      ),
-    });
-  });
+      await expect(readConfig('config.yaml')).rejects.toMatchObject({
+        name: 'ConfigResolutionError',
+        message: expect.stringContaining(
+          'Invalid commandLineOptions in configuration file config.yaml',
+        ),
+      });
+    },
+  );
 
   it('should read JavaScript config file', async () => {
     const mockConfig = {
@@ -2719,6 +2745,131 @@ describe('readConfig with environment variable substitution', () => {
 
     expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
   });
+
+  it.each(['.yaml', '.js'])(
+    'preserves trace credential references for persistence after rendering %s configs',
+    async (extension) => {
+      mockProcessEnv({ MY_API_KEY: 'resolved-tempo-runtime-secret' });
+      const mockConfig = {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.MY_API_KEY }}',
+              password: '{{ env.MY_API_KEY | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.MY_API_KEY }}',
+              'X-Api-Key': '{{ env["MY_API_KEY"] }}',
+              'X-Tempo-Reader': '{{ env.MY_API_KEY }}',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+      vi.mocked(path.parse).mockReturnValue({ ext: extension } as unknown as path.ParsedPath);
+      if (extension === '.js') {
+        vi.mocked(importModule).mockResolvedValue(mockConfig);
+      } else {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+      }
+
+      const config = await readConfig(`config${extension}`);
+      const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+      expect(config.tracing?.provider?.auth?.token).toBe('resolved-tempo-runtime-secret');
+      expect(config.tracing?.provider?.headers?.Authorization).toBe(
+        'Bearer resolved-tempo-runtime-secret',
+      );
+      expect(persistedConfig.tracing?.provider).toEqual(mockConfig.tracing.provider);
+      expect(JSON.stringify(persistedConfig.tracing)).not.toContain(
+        'resolved-tempo-runtime-secret',
+      );
+    },
+  );
+
+  it('preserves env references for custom trace headers even when rendered values look harmless', async () => {
+    mockProcessEnv({ TEMPO_READER_TOKEN: 'short' });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello'],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          headers: {
+            'X-Tempo-Reader': '{{ env.TEMPO_READER_TOKEN }}',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
+    };
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+    const config = await readConfig('config.yaml');
+    const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+    expect(config.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe('short');
+    expect(persistedConfig.tracing?.provider?.headers).toEqual({
+      'X-Tempo-Reader': '{{ env.TEMPO_READER_TOKEN }}',
+      'X-Scope-OrgID': 'tenant-a',
+    });
+    expect(JSON.stringify(persistedConfig.tracing)).not.toContain('short');
+  });
+
+  it.each([
+    {
+      name: 'a direct config environment credential',
+      sourceValue: 'short-secret',
+      expectedPersistedEnv: { REGION: 'us-west-2' },
+    },
+    {
+      name: 'an environment-backed config environment credential',
+      sourceValue: '{{ env.TEMPO_SOURCE_SECRET }}',
+      expectedPersistedEnv: {
+        TEMPO_READER: '{{ env.TEMPO_SOURCE_SECRET }}',
+        REGION: 'us-west-2',
+      },
+    },
+  ])(
+    'keeps $name out of persisted config values',
+    async ({ sourceValue, expectedPersistedEnv }) => {
+      mockProcessEnv({ TEMPO_SOURCE_SECRET: 'short-secret' });
+      const mockConfig = {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        env: {
+          TEMPO_READER: sourceValue,
+          REGION: 'us-west-2',
+        },
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: '{{ env.TEMPO_READER }}' },
+            headers: { 'X-Tempo-Reader': '{{ env.TEMPO_READER }}' },
+          },
+        },
+      };
+      vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+      const config = await readConfig('config.yaml');
+      const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+      expect((config.env as Record<string, string>)?.TEMPO_READER).toBe('short-secret');
+      expect(persistedConfig.env).toEqual(expectedPersistedEnv);
+      expect(persistedConfig.tracing?.provider?.auth?.token).toBe('{{ env.TEMPO_READER }}');
+      expect(JSON.stringify(persistedConfig)).not.toContain('short-secret');
+    },
+  );
 
   it('should preserve env templates in static _conversation vars', async () => {
     mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });

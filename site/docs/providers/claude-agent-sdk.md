@@ -146,7 +146,7 @@ prompts:
 | `max_thinking_tokens`                | number           | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number           | Maximum cost budget in USD for the agent execution                                                           | None                     |
 | `task_budget`                        | object           | Token budget for pacing tool use: `{total: N}`                                                               | None                     |
-| `permission_mode`                    | string           | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
+| `permission_mode`                    | string           | Permission modes: `default`/`manual`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`          | `default`                |
 | `allow_dangerously_skip_permissions` | boolean          | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object           | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
 | `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `xhigh` (Opus 4.7+), `max`                                   | `high`                   |
@@ -175,6 +175,8 @@ prompts:
 | `plan_mode_instructions`             | string           | Custom workflow instructions when `permission_mode` is `plan`                                                | None                     |
 | `output_format`                      | object           | Structured output configuration with JSON schema                                                             | None                     |
 | `agents`                             | object           | Programmatic agent definitions for custom subagents                                                          | None                     |
+| `max_subagent_spawn_depth`           | number           | Maximum subagent nesting depth; preserves the pre-0.3.217 SDK default                                        | 5                        |
+| `max_concurrent_subagents`           | number           | Maximum concurrently running subagents                                                                       | 20 (SDK default)         |
 | `hooks`                              | object           | Event hooks for intercepting tool calls and other events                                                     | None                     |
 | `include_partial_messages`           | boolean          | Include partial/streaming messages in response                                                               | false                    |
 | `include_hook_events`                | boolean          | Include hook lifecycle events in output stream                                                               | false                    |
@@ -324,7 +326,8 @@ providers:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      custom_allowed_tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
+      custom_allowed_tools:
+        ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
 
 # Block specific tools
 providers:
@@ -739,25 +742,43 @@ providers:
 
 Available sandbox options:
 
-| Option                        | Type     | Description                                          |
-| ----------------------------- | -------- | ---------------------------------------------------- |
-| `enabled`                     | boolean  | Enable sandboxed execution                           |
-| `autoAllowBashIfSandboxed`    | boolean  | Auto-allow bash commands when sandboxed              |
-| `allowUnsandboxedCommands`    | boolean  | Allow commands that can't be sandboxed               |
-| `enableWeakerNestedSandbox`   | boolean  | Enable weaker sandbox for nested environments        |
-| `excludedCommands`            | string[] | Commands to exclude from sandboxing                  |
-| `failIfUnavailable`           | boolean  | Fail closed when sandbox dependencies are missing    |
-| `ignoreViolations`            | object   | Map of command patterns to violation types to ignore |
-| `network.allowedDomains`      | string[] | Domains allowed for network access                   |
-| `network.allowLocalBinding`   | boolean  | Allow binding to localhost                           |
-| `network.allowUnixSockets`    | string[] | Specific Unix sockets to allow                       |
-| `network.allowAllUnixSockets` | boolean  | Allow all Unix socket connections                    |
-| `network.httpProxyPort`       | number   | HTTP proxy port for network access                   |
-| `network.socksProxyPort`      | number   | SOCKS proxy port for network access                  |
-| `ripgrep.command`             | string   | Path to custom ripgrep executable                    |
-| `ripgrep.args`                | string[] | Additional arguments for ripgrep                     |
+| Option                             | Type     | Description                                          |
+| ---------------------------------- | -------- | ---------------------------------------------------- |
+| `enabled`                          | boolean  | Enable sandboxed execution                           |
+| `autoAllowBashIfSandboxed`         | boolean  | Auto-allow bash commands when sandboxed              |
+| `allowUnsandboxedCommands`         | boolean  | Allow commands that can't be sandboxed               |
+| `enableWeakerNestedSandbox`        | boolean  | Enable weaker sandbox for nested environments        |
+| `excludedCommands`                 | string[] | Commands to exclude from sandboxing                  |
+| `failIfUnavailable`                | boolean  | Fail closed when sandbox dependencies are missing    |
+| `ignoreViolations`                 | object   | Map of command patterns to violation types to ignore |
+| `network.allowedDomains`           | string[] | Domains allowed for network access                   |
+| `network.allowLocalBinding`        | boolean  | Allow binding to localhost                           |
+| `network.allowUnixSockets`         | string[] | Specific Unix sockets to allow                       |
+| `network.allowAllUnixSockets`      | boolean  | Allow all Unix socket connections                    |
+| `network.httpProxyPort`            | number   | HTTP proxy port for network access                   |
+| `network.socksProxyPort`           | number   | SOCKS proxy port for network access                  |
+| `credentials.envVars`              | object[] | Environment variables to deny or mask in the sandbox |
+| `credentials.allowPlaintextInject` | boolean  | Allow masked credentials over plain HTTP (unsafe)    |
+| `ripgrep.command`                  | string   | Path to custom ripgrep executable                    |
+| `ripgrep.args`                     | string[] | Additional arguments for ripgrep                     |
 
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
+
+Use `credentials.envVars` with `mode: mask` to keep a credential out of sandboxed commands while allowing the proxy to inject it only for selected hosts. Each `injectHosts` entry must also be present in `network.allowedDomains`:
+
+```yaml
+sandbox:
+  enabled: true
+  network:
+    allowedDomains: ['api.example.com']
+  credentials:
+    envVars:
+      - name: EXAMPLE_API_KEY
+        mode: mask
+        injectHosts: ['api.example.com']
+```
+
+Leave `credentials.allowPlaintextInject` disabled unless the target is a trusted-network test fixture; plain HTTP cannot verify the upstream identity or protect the credential in transit.
 
 See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 
@@ -902,6 +923,20 @@ providers:
           tools: [Bash, Read]
 ```
 
+### Subagent Limits
+
+Claude Agent SDK 0.3.217 limits concurrent subagents to 20. Promptfoo preserves the previous maximum nesting depth of five; set either limit to a positive integer when your eval needs different behavior:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      max_subagent_spawn_depth: 3
+      max_concurrent_subagents: 40
+```
+
+The options set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` for the SDK subprocess. Explicit typed options take precedence over `config.env` and provider environment overrides; those environment values still apply when the typed options are omitted.
+
 ## Handling AskUserQuestion Tool
 
 The `AskUserQuestion` tool allows Claude to ask the user multiple-choice questions during execution. In automated evaluations, there's no human to answer these questions, so you need to configure how they should be handled.
@@ -914,7 +949,6 @@ The simplest approach is to use the `ask_user_question` configuration:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      append_allowed_tools: ['AskUserQuestion']
       ask_user_question:
         behavior: first_option
 ```
@@ -937,7 +971,6 @@ import { loadApiProvider } from 'promptfoo';
 const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
   options: {
     config: {
-      append_allowed_tools: ['AskUserQuestion'],
       can_use_tool: async (toolName, input) => {
         if (toolName !== 'AskUserQuestion') {
           return { behavior: 'allow', updatedInput: input };
@@ -956,7 +989,7 @@ const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
 });
 ```
 
-The `canUseTool` callback receives the tool name and input, and returns an answer:
+The `canUseTool` callback receives the tool name, input, and request options, and returns an answer. Do not add a bare tool name to `append_allowed_tools` or `custom_allowed_tools` when the callback must handle it: allowed tools are auto-approved before the callback runs. The `ask_user_question` convenience option removes `AskUserQuestion` from the allow list automatically.
 
 ```typescript
 async function canUseTool(toolName, input, options) {
@@ -981,6 +1014,8 @@ async function canUseTool(toolName, input, options) {
 }
 ```
 
+For hosts that send the permission response out-of-band, `options.requestId` identifies the request and the callback can return `null` after the response is sent. Do not return `null` otherwise; the tool will remain blocked.
+
 See the [Claude Agent SDK permissions documentation](https://platform.claude.com/docs/en/agent-sdk/permissions) for more details on `canUseTool`.
 
 :::tip
@@ -989,7 +1024,7 @@ If you're testing scenarios where the agent asks questions, consider what answer
 
 ## Hooks
 
-Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+Promptfoo preserves all configured hooks, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Unless `forward_subagent_text` is enabled, Promptfoo first installs a `TaskOutput` hook that removes raw subagent transcripts before the main agent can read them. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
 
 The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
 
@@ -1003,8 +1038,10 @@ export default {
           matcher: 'Bash',
           hooks: [
             async (input) => ({
-              hookEventName: 'PostToolUse',
-              updatedToolOutput: redact(input.tool_response),
+              hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                updatedToolOutput: redact(input.tool_response),
+              },
             }),
           ],
         },
@@ -1068,7 +1105,7 @@ assert:
 
 For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
-By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
+By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. If `TaskOutput` returns an unsummarized background-subagent transcript, Promptfoo redacts it before the main agent sees the tool result and again from tool metadata, tracing, and cached eval results. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
 
 ```yaml
 providers:
@@ -1097,7 +1134,7 @@ assert:
 
 ## Tracing
 
-When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+When [tracing](/docs/tracing/) is enabled, every provider call emits an `invoke_agent` span using the GenAI semantic conventions (`gen_ai.provider.name`, `gen_ai.agent.name`, and `gen_ai.usage.*`) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, and `tool.is_error`). The `gen_ai.request.model` attribute is included only when a specific model is configured. These spans join the eval trace, where they can inform assertions, grading, and the trace timeline.
 
 The provider also emits a `gen_ai.turn N` marker span per LLM round-trip (one per `assistant` message from the SDK stream). Each tool span is tagged with the `gen_ai.turn.index` of the assistant message that emitted it. This lets you assert on agent batching with [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count):
 
@@ -1110,7 +1147,7 @@ assert:
       max: 3
 ```
 
-Turn spans include `gen_ai.turn.index`, `gen_ai.system`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
+Turn spans include `gen_ai.turn.index`, `gen_ai.provider.name`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
 
 The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
 
@@ -1133,7 +1170,22 @@ tracing:
 
 ### Deep tracing (SDK-internal events)
 
-To also capture Claude Code's internal events — API requests, tool decisions, tool results — set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
+Set `deep_tracing: true` to capture the Claude SDK's own model, tool, and subagent spans. Enable the OTLP HTTP receiver so Promptfoo can ingest native spans, select a supported export format, and avoid duplicating its own turn and tool spans. If no receiver is running, Promptfoo keeps its own spans. Prompt and tool-content logging remains off unless you explicitly enable it.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      deep_tracing: true
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+```
+
+To also capture Claude Code's internal log events, set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
 
 ```yaml
 config:

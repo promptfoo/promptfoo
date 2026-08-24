@@ -269,9 +269,8 @@ For path aliases such as `@/utils`, define the alias in `tsconfig.json`:
 ```json
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   }
 }

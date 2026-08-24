@@ -11,13 +11,6 @@ export interface TestResults {
   failed: number;
 }
 
-export interface PluginTestResult {
-  pluginId: string;
-  severity: Severity;
-  strategy: string;
-  results: TestResults;
-}
-
 export interface RiskScore {
   score: number;
   level: 'critical' | 'high' | 'medium' | 'low' | 'informational';

@@ -9,6 +9,7 @@ import {
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -121,6 +122,72 @@ describe('fetchRemoteGeneration', () => {
       getRequestTimeoutMs(),
       'json',
     );
+  });
+
+  it('records token usage from uncached remote extraction requests', async () => {
+    const tokenUsage = { total: 18, prompt: 12, completion: 6 };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', result: 'Tracked purpose', tokenUsage },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(fetchRemoteGeneration('purpose', ['prompt'], undefined, provider)).resolves.toBe(
+      'Tracked purpose',
+    );
+
+    expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
+  });
+
+  it('does not count cached remote extraction responses', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'entities',
+        result: ['cached entity'],
+        tokenUsage: { total: 18, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: true,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await fetchRemoteGeneration('entities', ['prompt'], undefined, provider);
+
+    expect(generationUsage).toEqual({});
+  });
+
+  it('counts failed remote extraction requests without token usage', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('extraction timed out'));
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(fetchRemoteGeneration('purpose', ['prompt'], undefined, provider)).rejects.toThrow(
+      'extraction timed out',
+    );
+
+    expect(generationUsage).toEqual({ numRequests: 1 });
+  });
+
+  it('does not count an invalid remote extraction response twice', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', tokenUsage: { total: 12 } },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(
+      fetchRemoteGeneration('purpose', ['prompt'], undefined, provider),
+    ).rejects.toThrow();
+
+    expect(generationUsage).toMatchObject({ total: 12, numRequests: 1 });
   });
 
   it('should include the resolved cloud target in the remote generation payload', async () => {

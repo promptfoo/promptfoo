@@ -18,12 +18,13 @@ single-turn model APIs. A coding-agent provider usually has some combination of:
 
 The main providers in this family today are:
 
-| Provider family         | Provider IDs                                          | Runtime boundary                           |
-| ----------------------- | ----------------------------------------------------- | ------------------------------------------ |
-| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                |
-| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process  |
-| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library   |
-| OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server |
+| Provider family         | Provider IDs                                          | Runtime boundary                                |
+| ----------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                     |
+| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process       |
+| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
+| Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
+| OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a

@@ -28,7 +28,7 @@ export async function addGoatTestCases(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/GOAT`,
+        metric: assertion.metric ? `${assertion.metric}/GOAT` : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,

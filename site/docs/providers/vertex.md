@@ -16,9 +16,29 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.7:**
+
+- `vertex:gemini-3.7-flash` - Latest Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
+
+**Gemini 3.6:**
+
+- `vertex:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
+
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash` - Latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash-lite` - Low-latency Gemini 3.5 model for high-volume agentic tasks ($0.30/1M input, $2.50/1M output on the global endpoint)
+
+Use `config.region: global` for Gemini 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite.
+Gemini 3.5 Flash and Flash-Lite also support the `us` and `eu` multi-regions,
+which carry a 10% premium. Gemini 3.7 Flash and 3.6 Flash introductory pricing
+ends December 31, 2026; their published standard rates are $1.50/1M input and
+$7.50/1M output starting January 1, 2027.
+
+These models ignore the deprecated `temperature`, `topP`, and `topK` sampling
+controls, which promptfoo removes automatically. Configure reasoning with
+`generationConfig.thinkingConfig.thinkingLevel`; Gemini 3.7 Flash supports `LOW`,
+`MEDIUM`, and `HIGH`, but not `MINIMAL` or the legacy `thinkingBudget` setting.
 
 **Gemini 3.1:**
 
@@ -45,7 +65,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models — Fable 5, Mythos 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+Claude models — Fable 5, Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,
@@ -70,6 +90,10 @@ and the model ID because Google does not publish one in its public model catalog
 **Claude 4.8:**
 
 - `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+
+**Claude Opus 5:**
+
+- `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
 
 **Claude Sonnet 5:**
 

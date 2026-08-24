@@ -2,6 +2,7 @@ import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeOpus5Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
 } from '../anthropic/util';
@@ -16,6 +17,8 @@ type BedrockPricing = { input: number; output: number };
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
   'anthropic.claude-fable-5': { input: 10, output: 50 },
+  // Claude Opus 5 (same list rates as Opus 4.8; full 1M context bills at the standard rate)
+  'anthropic.claude-opus-5': { input: 5, output: 25 },
   // Claude Opus 4.8
   'anthropic.claude-opus-4-8': { input: 5, output: 25 },
   // Claude Opus 4.7
@@ -26,8 +29,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard
-  // rate — no >200K long-context tier, unlike Sonnet 4.5)
+  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4/4.5
   'anthropic.claude-sonnet-4': { input: 3, output: 15 },
@@ -379,14 +381,7 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  // Only Sonnet 4.5/4.6 carry the >200K long-context tier. Sonnet 5 bills its full
-  // 1M context at the standard rate (Anthropic pricing docs), so it is excluded here.
-  const isLongContextClaudeSonnet =
-    /anthropic\.claude-sonnet-4-(?:5|6)(?!\d)/.test(normalizedModelId) &&
-    promptTokens + cacheReadTokens + cacheWriteTokens > 200_000;
-  const pricing = isLongContextClaudeSonnet
-    ? { input: 6, output: 22.5 }
-    : getBedrockPricing(normalizedModelId, region);
+  const pricing = getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
   }
@@ -418,8 +413,8 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, and Sonnet 5) have verified Runtime rates, so they report
- * cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-sonnet-5`
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
+ * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
  * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
@@ -433,6 +428,7 @@ export function calculateBedrockInvokeModelCost(
   const normalizedModelId = modelId.toLowerCase();
   if (
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {

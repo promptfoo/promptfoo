@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import Editor from '@app/components/ui/code-editor';
 import { HelperText } from '@app/components/ui/helper-text';
@@ -65,9 +65,17 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
+  const formattedProtocols = formatProtocols(selectedTarget.config.protocols);
+  const [protocolsInput, setProtocolsInput] = useState(() => formattedProtocols);
+  const isProtocolsInputFocused = useRef(false);
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
+  useEffect(() => {
+    if (!isProtocolsInputFocused.current) {
+      setProtocolsInput(formattedProtocols);
+    }
+  }, [formattedProtocols]);
   return (
     <div className="mt-4">
       <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
@@ -97,8 +105,18 @@ const WebSocketEndpointConfiguration = ({
           <Label htmlFor="websocket-protocols">WebSocket Subprotocols</Label>
           <Input
             id="websocket-protocols"
-            value={formatProtocols(selectedTarget.config.protocols)}
-            onChange={(e) => updateWebSocketTarget('protocols', parseProtocols(e.target.value))}
+            value={protocolsInput}
+            onChange={(e) => {
+              setProtocolsInput(e.target.value);
+              updateWebSocketTarget('protocols', parseProtocols(e.target.value));
+            }}
+            onFocus={() => {
+              isProtocolsInputFocused.current = true;
+            }}
+            onBlur={() => {
+              isProtocolsInputFocused.current = false;
+              setProtocolsInput(formattedProtocols);
+            }}
             placeholder="json, graphql-transport-ws"
           />
           <p className="text-sm text-muted-foreground">

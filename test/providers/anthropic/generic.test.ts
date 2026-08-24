@@ -181,6 +181,24 @@ describe('AnthropicGenericProvider', () => {
       expect(provider.anthropic.apiKey).toBeNull();
     });
 
+    it('forwards provider-scoped env overrides to the credential lookup', () => {
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
+        accessToken: 'sk-ant-oat-test',
+        expiresAt: Date.now() + 60_000,
+      });
+      claudeCodeAuthMocks.isCredentialExpired.mockReturnValue(false);
+
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+        env: { CLAUDE_CONFIG_DIR: '/provider-scoped/claude-config' },
+      });
+
+      expect(provider.usingClaudeCodeOAuth).toBe(true);
+      expect(claudeCodeAuthMocks.loadClaudeCodeCredential).toHaveBeenCalledWith({
+        CLAUDE_CONFIG_DIR: '/provider-scoped/claude-config',
+      });
+    });
+
     it('does not attempt to load a Claude Code credential when apiKeyRequired defaults to true', () => {
       restoreEnv?.();
       restoreEnv = mockProcessEnv({ ANTHROPIC_API_KEY: 'env-key' });

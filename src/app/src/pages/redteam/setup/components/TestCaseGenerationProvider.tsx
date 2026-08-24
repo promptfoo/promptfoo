@@ -119,6 +119,7 @@ async function callTestGenerationApi(
   turn: number = 0,
   maxTurns: number = 1,
   count: number = 1,
+  provider: Config['provider'] = undefined,
 ) {
   const previewLanguage = getPreviewLanguage(language);
   const pluginLanguage = getPreviewLanguage(plugin.config.language);
@@ -144,6 +145,7 @@ async function callTestGenerationApi(
       plugin: pluginWithLanguage,
       strategy,
       config: { applicationDefinition: { purpose } },
+      provider,
       history,
       turn,
       maxTurns,
@@ -286,6 +288,8 @@ export const TestCaseGenerationProvider: React.FC<{
           history,
           currentTurn,
           maxTurns,
+          1,
+          redTeamConfig.provider,
         );
 
         const data = await response.json();
@@ -452,6 +456,7 @@ export const TestCaseGenerationProvider: React.FC<{
           0,
           1,
           count,
+          redTeamConfig.provider,
         );
 
         const data = await response.json();
@@ -480,7 +485,12 @@ export const TestCaseGenerationProvider: React.FC<{
         throw error;
       }
     },
-    [redTeamConfig.applicationDefinition?.purpose, redTeamConfig.language, recordEvent],
+    [
+      redTeamConfig.applicationDefinition?.purpose,
+      redTeamConfig.language,
+      redTeamConfig.provider,
+      recordEvent,
+    ],
   );
 
   /**
