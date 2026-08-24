@@ -39,8 +39,6 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-export type CodexSecurityOperation = (typeof CODEX_SECURITY_OPERATIONS)[number];
-
 const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.18';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
