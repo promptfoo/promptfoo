@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.227",
+    "@anthropic-ai/claude-agent-sdk": "0.3.228",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -231,7 +231,7 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.7",
+    "@biomejs/biome": "2.5.8",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.4.0",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.227",
+    "@anthropic-ai/claude-agent-sdk": "0.3.228",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -297,7 +297,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
-    "@opencode-ai/sdk": "^1.18.15",
+    "@opencode-ai/sdk": "^1.18.18",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
     "@slack/web-api": "^8.0.0",
@@ -308,7 +308,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.46",
     "@swc/core-linux-x64-musl": "^1.15.46",
     "@swc/core-win32-x64-msvc": "^1.15.46",
-    "google-auth-library": "^11.0.1",
+    "google-auth-library": "^11.0.2",
     "hono": "^4.12.34",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
