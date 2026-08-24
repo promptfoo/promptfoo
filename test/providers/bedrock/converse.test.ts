@@ -1988,6 +1988,37 @@ Third line`;
       )?.[0] as { inferenceConfig?: Record<string, unknown> };
       expect(call?.inferenceConfig?.temperature).toBe(0);
     });
+
+    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
+      const provider = new AwsBedrockConverseProvider(
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        {
+          config: {
+            region: 'us-east-1',
+            max_tokens: 10000,
+            temperature: 0.5,
+            topP: 0.9,
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        },
+      );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+          additionalModelRequestFields: {
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        }),
+      );
+    });
   });
 
   describe('performance and service tier configuration', () => {
