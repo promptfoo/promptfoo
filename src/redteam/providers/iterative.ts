@@ -369,6 +369,9 @@ export async function runRedteamConversation({
           goal: test?.metadata?.goal as string | undefined,
         },
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
