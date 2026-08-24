@@ -154,6 +154,40 @@ describe('postRemoteGenerationTask', () => {
     expect(usage).toMatchObject({ total: 14, prompt: 9, completion: 5, numRequests: 1 });
   });
 
+  it('records a coalesced remote generation failure only once', async () => {
+    const usage: TokenUsage = {};
+    const runtimeContext = createTrackedContext(usage);
+    const error = Object.assign(new Error('generation failed'), {
+      tokenUsage: { total: 14, prompt: 9, completion: 5 },
+    });
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+
+    const results = await Promise.allSettled([
+      postRemoteGenerationTask({ task: 'citation', topic: 'duplicate' }, runtimeContext),
+      postRemoteGenerationTask({ task: 'citation', topic: 'duplicate' }, runtimeContext),
+    ]);
+
+    expect(results.every((result) => result.status === 'rejected')).toBe(true);
+    expect(usage).toMatchObject({ total: 14, prompt: 9, completion: 5, numRequests: 1 });
+  });
+
+  it('tracks the same remote failure separately for independent accounting scopes', async () => {
+    const firstUsage: TokenUsage = {};
+    const secondUsage: TokenUsage = {};
+    const error = Object.assign(new Error('generation failed'), {
+      tokenUsage: { total: 14, prompt: 9, completion: 5 },
+    });
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+
+    await Promise.allSettled([
+      postRemoteGenerationTask({ task: 'citation' }, createTrackedContext(firstUsage)),
+      postRemoteGenerationTask({ task: 'citation' }, createTrackedContext(secondUsage)),
+    ]);
+
+    expect(firstUsage).toMatchObject({ total: 14, numRequests: 1 });
+    expect(secondUsage).toMatchObject({ total: 14, numRequests: 1 });
+  });
+
   it('does not invent model usage when a remote request fails without a token breakdown', async () => {
     const usage: TokenUsage = {};
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('generation timed out'));
