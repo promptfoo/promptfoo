@@ -1716,6 +1716,39 @@ describe('HydraProvider', () => {
       // Probes should only count target calls.
       expect(result.tokenUsage?.numRequests).toBe(2);
     });
+
+    it('should not fail closed when every target turn is served from the response cache', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      // Providers that serve a promptfoo response-cache hit report numRequests 0. That is not
+      // the same as never probing the target, and must not trip the fail-closed guard.
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        cached: true,
+        tokenUsage: { cached: 80, total: 80, numRequests: 0 },
+      });
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalled();
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage?.numRequests).toBe(0);
+    });
   });
 
   describe('callApi() - cloud request format', () => {

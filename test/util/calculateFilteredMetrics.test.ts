@@ -207,6 +207,45 @@ describe('calculateFilteredMetrics', () => {
         numRequests: 0,
       });
     });
+
+    it('should sum explicit request counts and preserve the legacy fallback', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const tokenUsages = [
+        { total: 10, cached: 10, numRequests: 0 },
+        { total: 30, prompt: 12, completion: 18, numRequests: 3 },
+        { total: 10, prompt: 4, completion: 6 },
+      ];
+
+      for (const [testIdx, tokenUsage] of tokenUsages.entries()) {
+        await eval_.addResult({
+          promptIdx: 0,
+          testIdx,
+          testCase: { vars: {} },
+          promptId: 'test-prompt',
+          provider: { id: 'test-provider', label: 'test' },
+          prompt: { raw: 'Test prompt', label: 'Test prompt' },
+          vars: {},
+          response: { output: 'test output', tokenUsage },
+          error: null,
+          failureReason: ResultFailureReason.NONE,
+          success: true,
+          score: 1,
+          latencyMs: 100,
+          gradingResult: { pass: true, score: 1, reason: 'Test reason' },
+          namedScores: {},
+          cost: 0,
+          metadata: {},
+        });
+      }
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({ total: 50, cached: 10, numRequests: 4 });
+    });
   });
 
   describe('named scores aggregation', () => {

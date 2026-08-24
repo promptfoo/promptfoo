@@ -329,6 +329,7 @@ export class GoogleImageProvider implements ApiProvider {
       // All images in structured field for UI rendering
       images: imageOutputs,
       cached,
+      tokenUsage: { numRequests: cached ? 0 : 1 },
       latencyMs,
       // Cached responses were already paid for on the original request.
       cost: cached ? undefined : totalCost,

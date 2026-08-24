@@ -664,7 +664,7 @@ describe('GeminiImageProvider', () => {
       });
     });
 
-    it('should count cached responses as one logical request', async () => {
+    it('should not count cached responses as upstream requests', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -693,7 +693,7 @@ describe('GeminiImageProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 10,
         total: 10,
-        numRequests: 1,
+        numRequests: 0,
       });
     });
   });
