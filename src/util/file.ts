@@ -22,6 +22,10 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+function isExecutableScriptFile(filePath: string): boolean {
+  return isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb');
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -97,11 +101,11 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve executable script file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  if (context === 'assertion' && isExecutableScriptFile(cleanPath)) {
+    logger.debug(`Preserving script file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 
@@ -114,16 +118,16 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For Python/JS files with function names, return the original string unchanged
+  // For executable script files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (functionName && isExecutableScriptFile(cleanPath)) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
+  // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName && !isExecutableScriptFile(cleanPath)
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -265,19 +269,19 @@ export function maybeLoadConfigFromExternalFile(
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
+      // Script assertion values and script URLs must remain available to the
+      // assertion runtime instead of being dereferenced by the config loader.
+      const isScriptAssertionField =
+        (key === 'value' || key === 'script') &&
         'type' in config &&
         typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
+        ['javascript', 'python', 'ruby'].includes(config.type.replace(/^not-/, ''));
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = isScriptAssertionField ? 'assertion' : isVarsField ? 'vars' : context;
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {

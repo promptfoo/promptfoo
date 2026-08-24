@@ -797,6 +797,15 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve Ruby files in assertion context', () => {
+        const result = maybeLoadFromExternalFile(
+          'file://assert.rb:Checks::check_value',
+          'assertion',
+        );
+        expect(result).toBe('file://assert.rb:Checks::check_value');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should load Python files normally in general context', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def test(): pass');
         const result = maybeLoadFromExternalFile('file://script.py', 'general');
@@ -867,6 +876,21 @@ describe('file utilities', () => {
         };
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['javascript', 'file://assertion.js:checkResult'],
+        ['not-python', 'file://assertion.py:check_result'],
+        ['ruby', 'file://assertion.rb:Checks::check_result'],
+      ])('should preserve %s script fields', (type, script) => {
+        const config = {
+          assert: [{ type, script, value: 'call-site value' }],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config);
+
+        expect(result.assert[0].script).toBe(script);
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
