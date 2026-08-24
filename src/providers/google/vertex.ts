@@ -26,6 +26,7 @@ import {
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -39,6 +40,7 @@ import {
   normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -136,7 +138,7 @@ function getVertexApiHost(
     configApiHost ||
     envOverrides?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+    getVertexApiHostForRegion(region)
   );
 }
 
@@ -174,7 +176,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.config.apiHost ||
       this.env?.VERTEX_API_HOST ||
       getEnvString('VERTEX_API_HOST') ||
-      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+      getVertexApiHostForRegion(region)
     );
   }
 
@@ -268,7 +270,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       topP: this.config.topP,
       maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -639,6 +641,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -894,7 +900,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             : completionTokenCount + (thoughtsTokenCount ?? 0);
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
-          config,
+          { ...config, region: this.getRegion() },
           promptTokenCount,
           completionForCost,
           true,
@@ -942,6 +948,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
                     : structured_output.functionCall.args,
                 ),
                 config,
+                structured_output.functionCall.id,
               );
               results.push(functionResult);
             } catch (error) {

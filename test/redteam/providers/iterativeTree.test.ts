@@ -4,6 +4,7 @@ import {
   evaluateResponse,
   getNewPrompt,
   DEFAULT_MAX_WIDTH as MAX_WIDTH,
+  default as RedteamIterativeTreeProvider,
   renderSystemPrompts,
   selectNodes,
   updateRedteamHistory,
@@ -13,8 +14,10 @@ import {
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
-import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
+import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import { getNunjucksEngine } from '../../../src/util/templates';
+import { TokenUsageTracker } from '../../../src/util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -156,6 +159,44 @@ describe('RedteamIterativeProvider', () => {
       );
     });
 
+    it('includes internal judge usage in the scan-local grading totals', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+        tokenUsage: {
+          total: 19,
+          prompt: 11,
+          completion: 8,
+          numRequests: 2,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      const tokenUsage = createEmptyTokenUsage();
+
+      await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Target response',
+        'Previous response',
+        false,
+        tokenUsage,
+      );
+
+      expect(tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        assertions: {
+          total: 19,
+          prompt: 11,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+    });
+
     it('should apply penalty for penalized phrases', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({
@@ -233,6 +274,7 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
+      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -260,6 +302,106 @@ describe('RedteamIterativeProvider', () => {
           }),
         }),
       );
+    });
+
+    it('accounts for failed attacker responses before propagating their errors', async () => {
+      const usage = createEmptyTokenUsage();
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'tree attacker failed after inference',
+        tokenUsage: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      await expect(getNewPrompt(mockRedteamProvider, [], undefined, usage)).rejects.toMatchObject({
+        message: 'Error from redteam provider: tree attacker failed after inference',
+        tokenUsage: usage,
+      });
+
+      expect(usage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
+    });
+
+    it('returns accumulated attacker usage when the tree provider fails', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'tree attacker failed after inference',
+        tokenUsage: { total: 31, prompt: 19, completion: 12, numRequests: 1 },
+      });
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+        });
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(result).toMatchObject({
+          error: 'Error from redteam provider: tree attacker failed after inference',
+          metadata: { stopReason: 'ATTACKER_ERROR', attempts: 0 },
+          tokenUsage: {
+            total: 0,
+            numRequests: 0,
+            attacker: { total: 31, prompt: 19, completion: 12, numRequests: 1 },
+          },
+        });
+        expect(targetProvider.callApi).not.toHaveBeenCalled();
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
+    it('counts the final target probe even when the target reports no token usage', async () => {
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi.mockResolvedValue({ output: 'final response' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal', maxDepth: 1 });
+        (provider as unknown as { treeParams: { maxDepth: number } }).treeParams.maxDepth = 0;
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(targetProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.tokenUsage?.numRequests).toBe(1);
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
     });
 
     it('should gracefully handle invalid API response by skipping the turn', async () => {

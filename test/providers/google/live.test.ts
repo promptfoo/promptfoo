@@ -1779,31 +1779,38 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('keeps a continuously streaming response alive past the idle-timeout window', async () => {
-    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 120,
-        apiKey: 'test-api-key',
-      },
-    });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
+    vi.useFakeTimers();
+    try {
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 120,
+          apiKey: 'test-api-key',
+        },
       });
-      // Stream for ~300ms total (longer than timeoutMs) with every gap below the
-      // 120ms idle window — the idle guard must re-arm instead of hard-killing.
-      for (let i = 1; i <= 4; i++) {
-        setTimeout(() => simulateTextMessage(mockWs, `chunk${i} `), 60 * i);
-      }
-      setTimeout(() => simulateCompletionMessage(mockWs), 300);
-      return mockWs;
-    });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+        });
+        // Stream for 300ms total (longer than timeoutMs) with every gap below the
+        // 120ms idle window — the idle guard must re-arm instead of hard-killing.
+        for (let i = 1; i <= 4; i++) {
+          setTimeout(() => simulateTextMessage(mockWs, `chunk${i} `), 60 * i);
+        }
+        setTimeout(() => simulateCompletionMessage(mockWs), 300);
+        return mockWs;
+      });
 
-    const response = await provider.callApi('test prompt');
+      const responsePromise = provider.callApi('test prompt');
+      await vi.runAllTimersAsync();
+      const response = await responsePromise;
 
-    expect(response.error).toBeUndefined();
-    expect(response.output).toMatchObject({ text: 'chunk1 chunk2 chunk3 chunk4 ' });
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'chunk1 chunk2 chunk3 chunk4 ' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should keep the Live request timeout active after a partial text response', async () => {
