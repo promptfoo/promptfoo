@@ -1371,6 +1371,21 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether an agent obeys malicious instructions injected through a trusted peer or orchestrator agent (privilege escalation, data exfiltration, goal hijacking)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/cross-agent-injection/',
+    name: 'Cross-Agent Injection',
+    pluginId: 'cross-agent-injection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
     label: 'technical',
     link: '/docs/red-team/plugins/indirect-prompt-injection/',

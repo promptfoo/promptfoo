@@ -46,6 +46,7 @@ import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
+import { CrossAgentInjectionPlugin } from './crossAgentInjection';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
 import { DebugAccessPlugin } from './debugAccess';
@@ -519,6 +520,7 @@ const pluginFactories: PluginFactory[] = [
     ),
   ),
   createPluginFactory(ContractPlugin, 'contracts'),
+  createPluginFactory(CrossAgentInjectionPlugin, 'cross-agent-injection'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
