@@ -372,6 +372,38 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('counts the final target probe even when the target reports no token usage', async () => {
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi.mockResolvedValue({ output: 'final response' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal', maxDepth: 1 });
+        (provider as unknown as { treeParams: { maxDepth: number } }).treeParams.maxDepth = 0;
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(targetProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.tokenUsage?.numRequests).toBe(1);
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
     it('should gracefully handle invalid API response by skipping the turn', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
 
