@@ -227,10 +227,7 @@ function ProviderConfigEditor({
       ) {
         errors.push('Codex Security provider ID must start with openai:codex-security');
       }
-      const repository =
-        typeof provider.config.repository === 'string' && provider.config.repository.trim()
-          ? provider.config.repository
-          : provider.config.working_dir;
+      const repository = provider.config.repository ?? provider.config.working_dir;
       if (typeof repository !== 'string' || !repository.trim()) {
         errors.push('Repository path is required');
       }
@@ -243,6 +240,26 @@ function ProviderConfigEditor({
       }
       if (provider.config.working_tree && provider.config.head_ref) {
         errors.push('Working-tree scans cannot specify a head Git reference');
+      }
+      if (
+        provider.config.operation !== 'security-diff-scan' &&
+        (provider.config.base_ref || provider.config.head_ref || provider.config.working_tree)
+      ) {
+        errors.push('Git diff target options require the diff scan operation');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        Array.isArray(provider.config.paths) &&
+        provider.config.paths.length > 0
+      ) {
+        errors.push('Scoped repository paths cannot be combined with diff scans');
+      }
+      if (
+        provider.config.model_reasoning_effort &&
+        provider.config.reasoning_effort &&
+        provider.config.model_reasoning_effort !== provider.config.reasoning_effort
+      ) {
+        errors.push('Reasoning effort settings must match');
       }
       if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
         errors.push('Maximum scan cost must be greater than 0');

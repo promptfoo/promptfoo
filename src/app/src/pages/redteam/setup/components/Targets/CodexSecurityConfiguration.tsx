@@ -92,6 +92,12 @@ export default function CodexSecurityConfiguration({
     updateCustomTarget('config', nextConfig);
   };
 
+  const updateCanonicalSetting = (field: string, alias: string, value: unknown) => {
+    const nextConfig: ProviderOptions['config'] = { ...config, [field]: value };
+    delete nextConfig[alias];
+    updateCustomTarget('config', nextConfig);
+  };
+
   const updateScopedPaths = (value: string) => {
     setScopedPaths(value);
     const nextConfig: ProviderOptions['config'] = { ...config };
@@ -175,7 +181,9 @@ export default function CodexSecurityConfiguration({
             id="codex-security-repository"
             value={repository}
             placeholder="/absolute/path/to/repository"
-            onChange={(event) => updateCustomTarget('repository', event.target.value)}
+            onChange={(event) =>
+              updateCanonicalSetting('repository', 'working_dir', event.target.value)
+            }
           />
           <p className="text-sm text-muted-foreground">
             Use the same authorized repository for every model or scan-depth comparison.
@@ -202,8 +210,14 @@ export default function CodexSecurityConfiguration({
           <select
             id="codex-security-reasoning"
             className={SELECT_CLASS_NAME}
-            value={config.model_reasoning_effort ?? 'high'}
-            onChange={(event) => updateCustomTarget('model_reasoning_effort', event.target.value)}
+            value={config.model_reasoning_effort ?? config.reasoning_effort ?? 'high'}
+            onChange={(event) =>
+              updateCanonicalSetting(
+                'model_reasoning_effort',
+                'reasoning_effort',
+                event.target.value,
+              )
+            }
           >
             {REASONING_OPTIONS.map((effort) => (
               <option key={effort} value={effort}>

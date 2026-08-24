@@ -328,7 +328,7 @@ describe('OpenAICodexSecurityProvider', () => {
         codexOverrides: { model: 'gpt-5.6-sol', model_reasoning_effort: 'high' },
       });
       expect(mockRun).toHaveBeenCalledWith(
-        '/repos/service',
+        path.resolve('/repos/service'),
         expect.objectContaining({
           mode: 'standard',
           target: 'repository',
@@ -340,7 +340,6 @@ describe('OpenAICodexSecurityProvider', () => {
         cached: false,
         format: 'json',
         cost: 0.012,
-        latencyMs: 1500,
         sessionId: 'thread-123',
         tokenUsage: {
           prompt: 100,
@@ -365,6 +364,7 @@ describe('OpenAICodexSecurityProvider', () => {
         },
       });
       expect(JSON.parse(response.output)).toHaveProperty('findings.findings');
+      expect(response.latencyMs).toBeUndefined();
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
 
@@ -452,7 +452,8 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('resolves repository, output, plugin, and knowledge-base paths from the config directory', async () => {
-      cliState.basePath = '/workspace/evals';
+      const configDirectory = path.resolve('/workspace/evals');
+      cliState.basePath = configDirectory;
       const provider = new OpenAICodexSecurityProvider({
         config: {
           repository: '../fixtures/service',
@@ -473,15 +474,15 @@ describe('OpenAICodexSecurityProvider', () => {
       await provider.callApi('Check checkout handlers');
 
       expect(MockCodexSecurity).toHaveBeenCalledWith({
-        pluginPath: '/workspace/evals/plugins/security',
-        pythonPath: '/workspace/evals/python',
+        pluginPath: path.resolve(configDirectory, 'plugins/security'),
+        pythonPath: path.resolve(configDirectory, 'python'),
       });
       expect(mockRun).toHaveBeenCalledWith(
-        '/workspace/fixtures/service',
+        path.resolve(configDirectory, '../fixtures/service'),
         expect.objectContaining({
           auth: 'api-key',
-          outputDir: '/workspace/evals/outputs/scan',
-          knowledgeBasePaths: ['/workspace/evals/knowledge.md'],
+          outputDir: path.resolve(configDirectory, 'outputs/scan'),
+          knowledgeBasePaths: [path.resolve(configDirectory, 'knowledge.md')],
           archiveExisting: true,
           scanPrompt: 'Security policy: protect payment data.\n\nCheck checkout handlers',
           validationPrompt: 'Reject speculative issues.',
@@ -493,10 +494,11 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('prefers an explicit provider base path over global CLI state', async () => {
-      cliState.basePath = '/unrelated/global-config';
+      const configDirectory = path.resolve('/programmatic/evals');
+      cliState.basePath = path.resolve('/unrelated/global-config');
       const provider = new OpenAICodexSecurityProvider({
         config: {
-          basePath: '/programmatic/evals',
+          basePath: configDirectory,
           repository: '../service',
           plugin_path: './plugins/security',
           python_path: './python',
@@ -508,14 +510,14 @@ describe('OpenAICodexSecurityProvider', () => {
       await provider.callApi('Scan the programmatically configured repository');
 
       expect(MockCodexSecurity).toHaveBeenCalledWith({
-        pluginPath: '/programmatic/evals/plugins/security',
-        pythonPath: '/programmatic/evals/python',
+        pluginPath: path.resolve(configDirectory, 'plugins/security'),
+        pythonPath: path.resolve(configDirectory, 'python'),
       });
       expect(mockRun).toHaveBeenCalledWith(
-        '/programmatic/service',
+        path.resolve(configDirectory, '../service'),
         expect.objectContaining({
-          outputDir: '/programmatic/evals/artifacts/scan',
-          knowledgeBasePaths: ['/programmatic/evals/knowledge.md'],
+          outputDir: path.resolve(configDirectory, 'artifacts/scan'),
+          knowledgeBasePaths: [path.resolve(configDirectory, 'knowledge.md')],
         }),
       );
     });
@@ -568,7 +570,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       await provider.callApi('Scan payment endpoints', context);
 
-      expect(mockRun).toHaveBeenCalledWith('/repos/payments', expect.any(Object));
+      expect(mockRun).toHaveBeenCalledWith(path.resolve('/repos/payments'), expect.any(Object));
       expect(MockCodexSecurity).toHaveBeenCalledWith({
         codexOverrides: { model: 'gpt-5.6-terra' },
       });
@@ -679,9 +681,9 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Ignored because finding is configured');
 
       expect(mockValidate).toHaveBeenCalledWith({
-        repositoryPath: '/repos/service',
+        repositoryPath: path.resolve('/repos/service'),
         finding,
-        outputDir: '/tmp/validation',
+        outputDir: path.resolve('/tmp/validation'),
         auth: 'chatgpt',
       });
       expect(response).toMatchObject({
@@ -694,7 +696,8 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('loads and parses explicit finding files before invoking the SDK', async () => {
-      cliState.basePath = '/workspace/evals';
+      const configDirectory = path.resolve('/workspace/evals');
+      cliState.basePath = configDirectory;
       const readFile = vi
         .spyOn(fs, 'readFile')
         .mockResolvedValue('{"title":"Authorization bypass"}');
@@ -704,19 +707,20 @@ describe('OpenAICodexSecurityProvider', () => {
 
       await provider.callApi('Validate');
 
-      expect(readFile).toHaveBeenCalledWith('/workspace/evals/finding.json', 'utf8');
+      expect(readFile).toHaveBeenCalledWith(path.resolve(configDirectory, 'finding.json'), 'utf8');
       expect(mockValidate).toHaveBeenCalledWith(
         expect.objectContaining({ finding: { title: 'Authorization bypass' } }),
       );
     });
 
     it('resolves validation paths from an explicit provider base path', async () => {
-      cliState.basePath = '/unrelated/global-config';
+      const configDirectory = path.resolve('/programmatic/evals');
+      cliState.basePath = path.resolve('/unrelated/global-config');
       const readFile = vi.spyOn(fs, 'readFile').mockResolvedValue('{"title":"Auth bypass"}');
       const provider = new OpenAICodexSecurityProvider({
         config: {
           operation: 'validation',
-          basePath: '/programmatic/evals',
+          basePath: configDirectory,
           repository: '../service',
           finding_file: './finding.json',
           output_dir: './artifacts/validation',
@@ -725,12 +729,12 @@ describe('OpenAICodexSecurityProvider', () => {
 
       await provider.callApi('Validate the programmatically supplied finding');
 
-      expect(readFile).toHaveBeenCalledWith('/programmatic/evals/finding.json', 'utf8');
+      expect(readFile).toHaveBeenCalledWith(path.resolve(configDirectory, 'finding.json'), 'utf8');
       expect(mockValidate).toHaveBeenCalledWith(
         expect.objectContaining({
-          repositoryPath: '/programmatic/service',
+          repositoryPath: path.resolve(configDirectory, '../service'),
           finding: { title: 'Auth bypass' },
-          outputDir: '/programmatic/evals/artifacts/validation',
+          outputDir: path.resolve(configDirectory, 'artifacts/validation'),
         }),
       );
     });

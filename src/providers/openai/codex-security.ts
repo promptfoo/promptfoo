@@ -529,9 +529,6 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       sessionId: result.threadId,
       ...(cost ? { cost: cost.estimatedUsd } : {}),
       ...(tokenUsage ? { tokenUsage } : {}),
-      ...(typeof result.turnResult.durationMs === 'number'
-        ? { latencyMs: result.turnResult.durationMs }
-        : {}),
       metadata: {
         operation,
         mode,

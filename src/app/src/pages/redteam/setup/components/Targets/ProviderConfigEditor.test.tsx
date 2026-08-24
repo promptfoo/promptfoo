@@ -552,6 +552,14 @@ describe('ProviderConfigEditor', () => {
         expectedError: 'Repository path is required',
       },
       {
+        config: {
+          operation: 'security-scan',
+          repository: '',
+          working_dir: '/repos/legacy-service',
+        },
+        expectedError: 'Repository path is required',
+      },
+      {
         config: { operation: 'security-diff-scan', repository: '/repos/service' },
         expectedError: 'A base Git reference or working tree target is required for diff scans',
       },
@@ -567,6 +575,32 @@ describe('ProviderConfigEditor', () => {
           head_ref: 'feature/auth',
         },
         expectedError: 'Working-tree scans cannot specify a head Git reference',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          base_ref: 'origin/main',
+        },
+        expectedError: 'Git diff target options require the diff scan operation',
+      },
+      {
+        config: {
+          operation: 'security-diff-scan',
+          repository: '/repos/service',
+          base_ref: 'origin/main',
+          paths: ['src/auth'],
+        },
+        expectedError: 'Scoped repository paths cannot be combined with diff scans',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          model_reasoning_effort: 'high',
+          reasoning_effort: 'low',
+        },
+        expectedError: 'Reasoning effort settings must match',
       },
     ])('validates Codex Security configuration: $expectedError', ({ config, expectedError }) => {
       const mockSetError = vi.fn();
@@ -711,6 +745,48 @@ describe('ProviderConfigEditor', () => {
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
       'model',
     );
+  });
+
+  it('normalizes the legacy working directory when editing or clearing repository paths', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ repository: undefined, working_dir: '/repos/legacy-service' }}
+      />,
+    );
+
+    const repositoryInput = screen.getByLabelText('Repository path *');
+    expect(repositoryInput).toHaveValue('/repos/legacy-service');
+
+    await user.clear(repositoryInput);
+
+    let config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.repository).toBe('');
+    expect(config).not.toHaveProperty('working_dir');
+
+    await user.type(repositoryInput, '/repos/new-service');
+
+    config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.repository).toBe('/repos/new-service');
+    expect(config).not.toHaveProperty('working_dir');
+  });
+
+  it('displays and normalizes the legacy reasoning-effort alias', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ model_reasoning_effort: undefined, reasoning_effort: 'low' }}
+      />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    expect(reasoning).toHaveValue('low');
+
+    await user.selectOptions(reasoning, 'high');
+
+    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.model_reasoning_effort).toBe('high');
+    expect(config).not.toHaveProperty('reasoning_effort');
   });
 
   it('trims pasted model names and treats whitespace-only input as an unset model', async () => {
