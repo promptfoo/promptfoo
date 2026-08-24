@@ -139,14 +139,8 @@ function parseConfig(config: unknown = {}): OpenAICodexSecurityConfig {
   return parsed.data;
 }
 
-async function loadCodexSecurity(configBasePath?: string): Promise<CodexSecurityModule> {
-  const basePaths = [
-    configBasePath ? path.resolve(configBasePath) : undefined,
-    cliState.basePath ? path.resolve(cliState.basePath) : undefined,
-    process.cwd(),
-    path.resolve(getDirectory(), '..'),
-    path.resolve(getDirectory(), '../..'),
-  ].filter((candidate): candidate is string => Boolean(candidate));
+async function loadCodexSecurity(): Promise<CodexSecurityModule> {
+  const basePaths = [path.resolve(getDirectory(), '..'), path.resolve(getDirectory(), '../..')];
   const visitedEntryPoints = new Set<string>();
   const incompatibleVersions = new Set<string>();
   let importFailed = false;
@@ -333,7 +327,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         }
       }
 
-      const module = await loadCodexSecurity(config.basePath);
+      const module = await loadCodexSecurity();
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,

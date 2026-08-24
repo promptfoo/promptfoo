@@ -157,12 +157,13 @@ export default function CodexSecurityConfiguration({
             id="codex-security-model"
             value={model}
             placeholder="gpt-5.6-luna"
-            onChange={(event) =>
+            onChange={(event) => {
+              const nextModel = event.target.value.trim();
               updateCustomTarget(
                 'id',
-                event.target.value ? `${PROVIDER_PREFIX}:${event.target.value}` : PROVIDER_PREFIX,
-              )
-            }
+                nextModel ? `${PROVIDER_PREFIX}:${nextModel}` : PROVIDER_PREFIX,
+              );
+            }}
           />
         </div>
 

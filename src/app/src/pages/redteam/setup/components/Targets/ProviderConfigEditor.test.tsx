@@ -713,6 +713,25 @@ describe('ProviderConfigEditor', () => {
     );
   });
 
+  it('trims pasted model names and treats whitespace-only input as an unset model', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    const modelInput = screen.getByLabelText('Model');
+    await user.clear(modelInput);
+    await user.click(modelInput);
+    await user.paste('  gpt-5.6-terra  ');
+
+    expect(modelInput).toHaveValue('gpt-5.6-terra');
+    expect(screen.getByText('openai:codex-security:gpt-5.6-terra')).toBeInTheDocument();
+
+    await user.clear(modelInput);
+    await user.type(modelInput, '   ');
+
+    expect(modelInput).toHaveValue('');
+    expect(screen.getByText('openai:codex-security')).toBeInTheDocument();
+  });
+
   it('configures scoped repository paths and mutually exclusive working-tree diff targets', async () => {
     const user = userEvent.setup();
     renderWithProviders(<StatefulCodexSecurityEditor />);

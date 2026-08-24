@@ -1,8 +1,9 @@
 import fs from 'fs/promises';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { importModule, resolvePackageEntryPoint } from '../../src/esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import {
   CODEX_SECURITY_OPERATIONS,
   OpenAICodexSecurityProvider,
@@ -216,10 +217,10 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain('even-numbered Node.js');
     });
 
-    it('ignores an outdated config-directory SDK and loads a compatible Promptfoo installation', async () => {
-      cliState.basePath = '/evaluation/config';
+    it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
+      const firstTrustedRoot = path.resolve(getDirectory(), '..');
       vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
-        basePath === '/evaluation/config'
+        basePath === firstTrustedRoot
           ? '/legacy/@openai/codex-security/dist/index.js'
           : '/promptfoo/@openai/codex-security/dist/index.js',
       );
@@ -237,10 +238,10 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
 
-    it('continues searching when the first installed SDK cannot be imported', async () => {
-      cliState.basePath = '/evaluation/config';
+    it('continues searching trusted install paths when the first SDK cannot be imported', async () => {
+      const firstTrustedRoot = path.resolve(getDirectory(), '..');
       vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
-        basePath === '/evaluation/config'
+        basePath === firstTrustedRoot
           ? '/broken/@openai/codex-security/dist/index.js'
           : '/promptfoo/@openai/codex-security/dist/index.js',
       );
@@ -257,6 +258,32 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.metadata?.sdkVersion).toBe('0.1.18');
       expect(importModule).toHaveBeenCalledWith('/broken/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
+    });
+
+    it('never imports SDK packages from an adversarial repository or config directory', async () => {
+      cliState.basePath = '/adversarial/repository';
+      vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
+        basePath === '/adversarial/repository'
+          ? '/adversarial/repository/node_modules/@openai/codex-security/dist/index.js'
+          : '/promptfoo/node_modules/@openai/codex-security/dist/index.js',
+      );
+      const provider = new OpenAICodexSecurityProvider({
+        config: { basePath: '/adversarial/repository', repository: '.' },
+      });
+
+      const response = await provider.callApi('Scan the adversarial checkout');
+
+      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(resolvePackageEntryPoint).not.toHaveBeenCalledWith(
+        '@openai/codex-security',
+        '/adversarial/repository',
+      );
+      expect(importModule).toHaveBeenCalledWith(
+        '/promptfoo/node_modules/@openai/codex-security/dist/index.js',
+      );
+      expect(importModule).not.toHaveBeenCalledWith(
+        '/adversarial/repository/node_modules/@openai/codex-security/dist/index.js',
+      );
     });
 
     it('rejects provider-scoped credentials that the native SDK cannot consume', async () => {
@@ -480,10 +507,6 @@ describe('OpenAICodexSecurityProvider', () => {
 
       await provider.callApi('Scan the programmatically configured repository');
 
-      expect(resolvePackageEntryPoint).toHaveBeenCalledWith(
-        '@openai/codex-security',
-        '/programmatic/evals',
-      );
       expect(MockCodexSecurity).toHaveBeenCalledWith({
         pluginPath: '/programmatic/evals/plugins/security',
         pythonPath: '/programmatic/evals/python',

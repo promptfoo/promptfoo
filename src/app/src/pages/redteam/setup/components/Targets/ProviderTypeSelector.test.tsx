@@ -112,7 +112,7 @@ describe('ProviderTypeSelector', () => {
         config: {
           operation: 'security-scan',
           repository: '',
-          auth: 'chatgpt',
+          auth: 'auto',
           model_reasoning_effort: 'high',
           max_cost_usd: 1,
         },

@@ -24,7 +24,7 @@ Promptfoo declares the SDK as an optional dependency. Install it manually if opt
 npm install @openai/codex-security@^0.1.18
 ```
 
-The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. The SDK supports Node.js `^22.13.0`, `^24.0.0`, and `^26.0.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. The SDK supports Node.js `^22.13.0`, `^24.0.0`, and `^26.0.0`. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
