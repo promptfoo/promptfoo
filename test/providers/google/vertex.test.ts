@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
-import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -112,10 +112,12 @@ vi.mock('../../../src/providers/google/auth', async () => {
       getApiKey: vi.fn().mockReturnValue({ apiKey: undefined, source: 'none' }),
       determineVertexMode: vi.fn().mockReturnValue(true),
       validateAndWarn: vi.fn(),
-      // Respect config.region when provided, otherwise default to us-central1
-      resolveRegion: vi.fn().mockImplementation((config?: { region?: string }) => {
-        return config?.region || 'us-central1';
-      }),
+      resolveRegion: vi
+        .fn()
+        .mockImplementation(
+          (config?: { region?: string }, env?: { VERTEX_REGION?: string }) =>
+            config?.region || env?.VERTEX_REGION || 'us-central1',
+        ),
       resolveProjectId: vi.fn().mockResolvedValue('test-project-id'),
     },
   };
@@ -192,6 +194,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should call the Gemini API and return the response', async () => {
@@ -249,6 +252,81 @@ describe('VertexChatProvider.callGeminiApi', () => {
       timeout: expect.any(Number),
     });
   });
+
+  it.each([
+    ['gemini-3.7-flash', 0.002625],
+    ['gemini-3.6-flash', 0.002625],
+    ['gemini-3.5-flash-lite', 0.00155],
+  ])(
+    'normalizes generation controls and calculates Vertex cost for %s',
+    async (modelName, expectedCost) => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+
+      const latestProvider = new VertexChatProvider(modelName, {
+        config: {
+          region: 'global',
+          temperature: 0.7,
+          topP: 0.9,
+          topK: 40,
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 256,
+            thinkingConfig: { thinkingLevel: 'HIGH' },
+            candidateCount: 2,
+          } as any,
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        },
+      ]);
+
+      const result = await latestProvider.callGeminiApi('test prompt');
+      const request = mockRequest.mock.calls.at(-1)?.[0];
+
+      expect(request.url).toContain(`/locations/global/publishers/google/models/${modelName}:`);
+      expect(request.data.generationConfig).toMatchObject({
+        maxOutputTokens: 256,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      });
+      expect(request.data.generationConfig).not.toHaveProperty('temperature');
+      expect(request.data.generationConfig).not.toHaveProperty('topP');
+      expect(request.data.generationConfig).not.toHaveProperty('topK');
+      expect(request.data.generationConfig).not.toHaveProperty('candidateCount');
+      expect(result.cost).toBeCloseTo(expectedCost, 10);
+    },
+  );
+
+  it.each(['us', 'eu'])(
+    'prices Gemini Flash-Lite using the resolved %s multi-region',
+    async (region) => {
+      const latestProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: {},
+        env: { VERTEX_REGION: region },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        },
+      ]);
+
+      const result = await latestProvider.callGeminiApi('test prompt');
+
+      expect(mockRequest.mock.calls[0][0].url).toContain(`aiplatform.${region}.rep.googleapis.com`);
+      expect(result.cost).toBeCloseTo(0.001705, 10);
+    },
+  );
 
   it('should return cached response if available', async () => {
     const mockCachedResponse = {
@@ -1791,64 +1869,61 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
     });
 
-    it.each([
-      'PROHIBITED_CONTENT',
-      'RECITATION',
-      'BLOCKLIST',
-      'SPII',
-      'IMAGE_SAFETY',
-    ])('should handle %s finishReason with guardrails response', async (finishReason) => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+    it.each(['PROHIBITED_CONTENT', 'RECITATION', 'BLOCKLIST', 'SPII', 'IMAGE_SAFETY'])(
+      'should handle %s finishReason with guardrails response',
+      async (finishReason) => {
+        const provider = new VertexChatProvider('gemini-pro', {
+          config: {},
+        });
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [
-              {
-                content: { parts: [{ text: 'partial response' }] },
-                finishReason,
+        const mockResponse = {
+          data: [
+            {
+              candidates: [
+                {
+                  content: { parts: [{ text: 'partial response' }] },
+                  finishReason,
+                },
+              ],
+              usageMetadata: {
+                totalTokenCount: 10,
+                promptTokenCount: 5,
+                candidatesTokenCount: 5,
               },
-            ],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
             },
-          },
-        ],
-      };
+          ],
+        };
 
-      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+        const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-        client: {
-          request: mockRequest,
-        } as unknown as JSONClient,
-        projectId: 'test-project-id',
-      });
+        vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+          client: {
+            request: mockRequest,
+          } as unknown as JSONClient,
+          projectId: 'test-project-id',
+        });
 
-      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
-        if (typeof creds === 'object') {
-          return JSON.stringify(creds);
-        }
-        return creds;
-      });
-      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+        vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+          if (typeof creds === 'object') {
+            return JSON.stringify(creds);
+          }
+          return creds;
+        });
+        vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
-      const response = await provider.callGeminiApi('test prompt');
+        const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toBe(
-        `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
-      );
-      expect(response.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: false,
-        flaggedOutput: true,
-        reason: `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
-      });
-    });
+        expect(response.error).toBe(
+          `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+        );
+        expect(response.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+          reason: `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+        });
+      },
+    );
 
     it('should handle MAX_TOKENS finishReason with truncated output', async () => {
       const provider = new VertexChatProvider('gemini-pro', {
@@ -2881,39 +2956,42 @@ describe('VertexChatProvider.callClaudeApi', () => {
       pricingOverrides: { inputCost: 2 / 1e6, outputCost: 7 / 1e6 },
       expectedCost: 0.74,
     },
-  ])('prices Vertex Sonnet 4.5 $name', async ({
-    region,
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheCreationTokens,
-    pricingOverrides,
-    expectedCost,
-  }) => {
-    const model = 'claude-sonnet-4-5@20250929';
-    provider = new VertexChatProvider(model, {
-      config: { region, max_tokens: 32, ...pricingOverrides },
-    });
-    mockVertexRequest({
-      id: 'test-id',
-      type: 'message',
-      role: 'assistant',
-      model,
-      content: [{ type: 'text', text: 'ok' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cache_read_input_tokens: cacheReadTokens,
-        cache_creation_input_tokens: cacheCreationTokens,
-      },
-    });
+  ])(
+    'prices Vertex Sonnet 4.5 $name',
+    async ({
+      region,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      pricingOverrides,
+      expectedCost,
+    }) => {
+      const model = 'claude-sonnet-4-5@20250929';
+      provider = new VertexChatProvider(model, {
+        config: { region, max_tokens: 32, ...pricingOverrides },
+      });
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_read_input_tokens: cacheReadTokens,
+          cache_creation_input_tokens: cacheCreationTokens,
+        },
+      });
 
-    const result = await provider.callClaudeApi('test prompt');
+      const result = await provider.callClaudeApi('test prompt');
 
-    expect(result.cost).toBeCloseTo(expectedCost, 6);
-  });
+      expect(result.cost).toBeCloseTo(expectedCost, 6);
+    },
+  );
 
   it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
     const model = 'claude-fable-5';
@@ -3977,6 +4055,29 @@ describe('VertexChatProvider.callClaudeApi', () => {
       const provider = new VertexChatProvider('gemini-pro', { config: { region: 'us-central1' } });
       expect(provider.getApiHost()).toBe('us-central1-aiplatform.googleapis.com');
     });
+
+    it.each([
+      ['us', 'aiplatform.us.rep.googleapis.com'],
+      ['eu', 'aiplatform.eu.rep.googleapis.com'],
+    ])('should return the dedicated %s multi-region endpoint', (region, expectedHost) => {
+      const provider = new VertexChatProvider('gemini-3.5-flash-lite', { config: { region } });
+
+      expect(provider.getApiHost()).toBe(expectedHost);
+    });
+
+    it.each([
+      ['us', 'aiplatform.us.rep.googleapis.com'],
+      ['eu', 'aiplatform.eu.rep.googleapis.com'],
+    ])(
+      'should use the dedicated %s multi-region endpoint for embeddings',
+      (region, expectedHost) => {
+        const provider = new VertexEmbeddingProvider('gemini-embedding-001', {
+          config: { region },
+        });
+
+        expect(provider.getApiHost()).toBe(expectedHost);
+      },
+    );
 
     it('should use custom apiHost over default', () => {
       const provider = new VertexChatProvider('gemini-pro', {

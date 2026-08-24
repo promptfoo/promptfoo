@@ -17,6 +17,27 @@ providers:
       temperature: 0.7
       maxOutputTokens: 2048
 
+  - id: google:gemini-3.7-flash
+    config:
+      generationConfig:
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: MEDIUM # Latest Flash model; LOW, MEDIUM, and HIGH are supported
+
+  - id: google:gemini-3.6-flash
+    config:
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: HIGH # Previous-generation Flash model
+
+  - id: google:gemini-3.5-flash-lite
+    config:
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: LOW # High-throughput, low-latency Flash-Lite model
+
   - id: google:gemini-3.1-pro-preview
     config:
       generationConfig:
@@ -31,7 +52,7 @@ providers:
         temperature: 0.7
         maxOutputTokens: 2048
         thinkingConfig:
-          thinkingLevel: HIGH # Newest, fastest frontier Flash model
+          thinkingLevel: HIGH # Earlier frontier Flash model
 
   - id: google:gemini-3-flash-preview
     config:

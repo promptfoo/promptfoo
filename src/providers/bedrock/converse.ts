@@ -23,6 +23,7 @@ import {
   type GenAISpanContext,
   type GenAISpanResult,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -864,7 +865,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -895,7 +900,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Execute the callback
       logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -1072,8 +1079,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      // YAML can deserialize unquoted guardrail values as numbers despite their TypeScript types.
+      guardrailIdentifier: String(this.config.guardrailIdentifier as unknown),
+      guardrailVersion: String((this.config.guardrailVersion || 'DRAFT') as unknown),
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
@@ -1186,7 +1194,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       topP: inferenceConfig?.topP,
       stopSequences: inferenceConfig?.stopSequences,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -1619,7 +1627,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {

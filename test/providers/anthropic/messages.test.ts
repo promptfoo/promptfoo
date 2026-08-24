@@ -132,6 +132,12 @@ describe('AnthropicMessagesProvider', () => {
     mcpMocks.instances.length = 0;
   });
 
+  it('keeps Anthropic provider identity when a custom ID has an unrelated prefix', () => {
+    const provider = createProvider('claude-3-5-sonnet-20241022', { id: 'customer:reviewer' });
+
+    expect(provider['getGenAISystem']()).toBe('anthropic');
+  });
+
   describe('callApi', () => {
     const tools: Anthropic.Tool[] = [
       {
@@ -736,9 +742,9 @@ describe('AnthropicMessagesProvider', () => {
       await getCache().set(cacheKey, 'Test output');
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
-      // Legacy cache items (plain strings) don't get the cached flag
       expect(result).toMatchObject({
         output: 'Test output',
+        cached: true,
         tokenUsage: {},
       });
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
@@ -1275,6 +1281,18 @@ describe('AnthropicMessagesProvider', () => {
         expect(result.finishReason).toBe('length');
       });
 
+      it('should normalize model_context_window_exceeded to length', async () => {
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+          stop_reason: 'model_context_window_exceeded',
+          usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('length');
+      });
+
       it('should normalize tool_use to tool_calls', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
@@ -1683,62 +1701,62 @@ describe('AnthropicMessagesProvider', () => {
         mcpResult: { content: '', isError: true },
         expectedContent: 'MCP Tool Error (search_companies): Tool returned an error result',
       },
-    ])('marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)', async ({
-      mcpResult,
-      expectedContent,
-    }) => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
+    ])(
+      'marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)',
+      async ({ mcpResult, expectedContent }) => {
+        provider = createProvider('claude-3-5-sonnet-latest', {
+          config: {
+            mcp: {
+              enabled: true,
+              server: {
+                command: 'npm',
+                args: ['start'],
+              },
             },
           },
-        },
-      });
+        });
 
-      mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
+        mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
 
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_error',
-              name: 'search_companies',
-              input: { query: 'grid storage' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
-        .mockResolvedValueOnce({
-          content: [{ type: 'text', text: 'I could not complete that lookup.' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_error',
+                name: 'search_companies',
+                input: { query: 'grid storage' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'I could not complete that lookup.' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message);
 
-      const result = await provider.callApi('Find grid storage companies');
+        const result = await provider.callApi('Find grid storage companies');
 
-      expect(result.output).toBe('I could not complete that lookup.');
-      const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
-      expect(secondRequest.messages.slice(-1)).toEqual([
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: 'toolu_error',
-              content: expectedContent,
-              is_error: true,
-            },
-          ],
-        },
-      ]);
-    });
+        expect(result.output).toBe('I could not complete that lookup.');
+        const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+        expect(secondRequest.messages.slice(-1)).toEqual([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_error',
+                content: expectedContent,
+                is_error: true,
+              },
+            ],
+          },
+        ]);
+      },
+    );
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
       provider = createProvider('claude-3-5-sonnet-latest', {
@@ -3252,30 +3270,30 @@ describe('AnthropicMessagesProvider', () => {
       { model: 'claude-sonnet-4-6', thinking: { type: 'adaptive' as const } },
       // Fable is always-on adaptive; normalization strips any explicit config.
       { model: 'claude-fable-5', thinking: undefined },
-    ])('keeps a forced tool_choice with adaptive thinking on $model', async ({
-      model,
-      thinking,
-    }) => {
-      // Verified live that adaptive thinking + a forced tool_choice returns 200 on all of
-      // these; only legacy budget-based thinking is rejected by the API.
-      const provider = createProvider(model, {
-        config: {
-          ...(thinking ? { thinking } : {}),
-          tool_choice: { type: 'any' },
-          tools: [
-            { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
-          ],
-        },
-      });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model });
+    ])(
+      'keeps a forced tool_choice with adaptive thinking on $model',
+      async ({ model, thinking }) => {
+        // Verified live that adaptive thinking + a forced tool_choice returns 200 on all of
+        // these; only legacy budget-based thinking is rejected by the API.
+        const provider = createProvider(model, {
+          config: {
+            ...(thinking ? { thinking } : {}),
+            tool_choice: { type: 'any' },
+            tools: [
+              { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
+            ],
+          },
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
-      expect(params.tool_choice).toEqual({ type: 'any' });
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
+        expect(params.tool_choice).toEqual({ type: 'any' });
+      },
+    );
 
     it('drops a forced tool_choice only for legacy budget-based thinking', async () => {
       // The API rejects this pairing: "Thinking may not be enabled when tool_choice forces
@@ -3343,6 +3361,34 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.guardrails).toEqual({
         flagged: true,
         reason: expect.stringContaining('category: cyber'),
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should expose general_harms refusals as flagged guardrails', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'general_harms',
+          explanation: 'The request may involve a harmful area',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(refusalResponse);
+
+      const result = await provider.callApi('A request refused for general harms');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: general_harms'),
       });
       expect(result.finishReason).toBe('content_filter');
     });

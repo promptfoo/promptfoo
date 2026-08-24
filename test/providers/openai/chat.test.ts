@@ -66,6 +66,18 @@ describe('OpenAI Provider', () => {
       vi.clearAllMocks();
     });
 
+    it('keeps OpenAI provider identity when a custom ID omits a provider prefix', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer-judge' });
+
+      expect(provider['getGenAISystem']()).toBe('openai');
+    });
+
+    it('keeps OpenAI provider identity when a custom ID has an unrelated prefix', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer:judge' });
+
+      expect(provider['getGenAISystem']()).toBe('openai');
+    });
+
     it('should reject a per-prompt Codex-only chat model override before dispatch', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { apiKey: 'test-key' },
@@ -107,15 +119,22 @@ describe('OpenAI Provider', () => {
     it('should record GPT-5.6 cache writes in the chat span', async () => {
       const spanAttributes: Record<string, unknown> = {};
       const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-        startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
-          callback({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes?: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          Object.assign(spanAttributes, options.attributes);
+          return callback({
             setAttribute: (key: string, value: unknown) => {
               spanAttributes[key] = value;
             },
             setStatus: vi.fn(),
             recordException: vi.fn(),
             end: vi.fn(),
-          }),
+          });
+        },
       } as any);
       mockFetchWithCache.mockResolvedValue({
         data: {
@@ -140,8 +159,9 @@ describe('OpenAI Provider', () => {
           cacheReadInputTokens: 2,
           cacheCreationInputTokens: 3,
         });
-        expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(2);
-        expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(3);
+        expect(spanAttributes['gen_ai.usage.cache_read.input_tokens']).toBe(2);
+        expect(spanAttributes['gen_ai.usage.cache_creation.input_tokens']).toBe(3);
+        expect(spanAttributes['openai.api.type']).toBe('chat_completions');
       } finally {
         getTracerSpy.mockRestore();
       }
@@ -393,82 +413,87 @@ describe('OpenAI Provider', () => {
       expect(provider.config.max_tokens).toBe(config.max_tokens);
     });
 
-    it.each([
-      'gpt-5-search-api',
-      'gpt-5-search-api-2025-10-14',
-    ])('should send a valid Chat Completions search request, preserve citations, and include the search fee for %s', async (model) => {
-      const annotations = [
-        {
-          type: 'url_citation',
-          url_citation: {
-            start_index: 0,
-            end_index: 6,
-            url: 'https://example.com/source',
-            title: 'Example source',
+    it.each(['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'])(
+      'should send a valid Chat Completions search request, preserve citations, and include the search fee for %s',
+      async (model) => {
+        const annotations = [
+          {
+            type: 'url_citation',
+            url_citation: {
+              start_index: 0,
+              end_index: 6,
+              url: 'https://example.com/source',
+              title: 'Example source',
+            },
           },
-        },
-      ];
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Current answer', annotations }, finish_reason: 'stop' }],
-          usage: {
-            prompt_tokens: 2_000,
-            completion_tokens: 1_000,
-            total_tokens: 3_000,
-            prompt_tokens_details: { cached_tokens: 500 },
+        ];
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [
+              { message: { content: 'Current answer', annotations }, finish_reason: 'stop' },
+            ],
+            usage: {
+              prompt_tokens: 2_000,
+              completion_tokens: 1_000,
+              total_tokens: 3_000,
+              prompt_tokens_details: { cached_tokens: 500 },
+            },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      const provider = new OpenAiChatCompletionProvider(model, {
-        config: {
-          passthrough: {
-            web_search_options: { search_context_size: 'high' },
+        const provider = new OpenAiChatCompletionProvider(model, {
+          config: {
+            passthrough: {
+              web_search_options: { search_context_size: 'high' },
+            },
           },
-        },
-      });
-      const result = await provider.callApi('What happened today?');
-      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const body = JSON.parse(call[1].body);
+        });
+        const result = await provider.callApi('What happened today?');
+        const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+        const body = JSON.parse(call[1].body);
 
-      expect(call[0]).toContain('/chat/completions');
-      expect(body).toMatchObject({
-        model,
-        web_search_options: { search_context_size: 'high' },
-      });
-      expect(body).not.toHaveProperty('max_tokens');
-      expect(result.output).toBe('Current answer');
-      expect(result.metadata?.annotations).toEqual(annotations);
-      expect(result.metadata?.citations).toEqual([
-        { url: 'https://example.com/source', content: 'Example source: Current' },
-      ]);
-      expect(result.cost).toBeCloseTo(0.01 + (1_500 * 1.25 + 500 * 0.125 + 1_000 * 10) / 1e6, 10);
-    });
+        expect(call[0]).toContain('/chat/completions');
+        expect(body).toMatchObject({
+          model,
+          web_search_options: { search_context_size: 'high' },
+        });
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(result.output).toBe('Current answer');
+        expect(result.metadata?.annotations).toEqual(annotations);
+        expect(result.metadata?.citations).toEqual([
+          { url: 'https://example.com/source', content: 'Example source: Current' },
+        ]);
+        expect(result.cost).toBeCloseTo(0.01 + (1_500 * 1.25 + 500 * 0.125 + 1_000 * 10) / 1e6, 10);
+      },
+    );
 
     it.each([
       ['openai/gpt-5-search-api', 0.0100625],
       ['openai/gpt-5-search-api-2025-10-14', 0.0100625],
       ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.0250045],
-    ])('should include token rates and the Chat Completions search fee for routed model %s', async (model, cost) => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+    ])(
+      'should include token rates and the Chat Completions search fee for routed model %s',
+      async (model, cost) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      const result = await new OpenAiChatCompletionProvider(model, {
-        config: { apiBaseUrl: 'https://gateway.example/v1' },
-      }).callApi('What happened today?');
+        const result = await new OpenAiChatCompletionProvider(model, {
+          config: { apiBaseUrl: 'https://gateway.example/v1' },
+        }).callApi('What happened today?');
 
-      expect(result.cost).toBeCloseTo(cost, 10);
-    });
+        expect(result.cost).toBeCloseTo(cost, 10);
+      },
+    );
 
     it('should build and bill a Chat search request using the effective passthrough model', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
@@ -1010,49 +1035,49 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         callToolResult: { content: '', isError: true },
         expectedOutput: 'MCP Tool Error (read_file): Tool returned an error result',
       },
-    ])('should surface MCP tool error results in chat tool callbacks ($label)', async ({
-      callToolResult,
-      expectedOutput,
-    }) => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    function: {
-                      name: 'read_file',
-                      arguments: '{"path":"../../../etc/passwd"}',
+    ])(
+      'should surface MCP tool error results in chat tool callbacks ($label)',
+      async ({ callToolResult, expectedOutput }) => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'read_file',
+                        arguments: '{"path":"../../../etc/passwd"}',
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
-          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-      mockFetchWithCache.mockResolvedValue(mockResponse);
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const mcpClient = {
-        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
-        callTool: vi.fn().mockResolvedValue(callToolResult),
-      };
-      (provider as any).mcpClient = mcpClient;
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+        const mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+          callTool: vi.fn().mockResolvedValue(callToolResult),
+        };
+        (provider as any).mcpClient = mcpClient;
 
-      const result = await provider.callApi('Read the file');
+        const result = await provider.callApi('Read the file');
 
-      expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-        path: '../../../etc/passwd',
-      });
-      expect(result.output).toBe(expectedOutput);
-    });
+        expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
+          path: '../../../etc/passwd',
+        });
+        expect(result.output).toBe(expectedOutput);
+      },
+    );
 
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
@@ -2339,21 +2364,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(regularBody.reasoning_effort).toBeUndefined();
     });
 
-    it.each([
-      'gpt-5.6',
-      'gpt-5.6-sol',
-      'gpt-5.6-terra',
-      'gpt-5.6-luna',
-    ])('should forward max reasoning_effort for %s', async (model) => {
-      const provider = new OpenAiChatCompletionProvider(model, {
-        config: { reasoning_effort: 'max' },
-      });
+    it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+      'should forward max reasoning_effort for %s',
+      async (model) => {
+        const provider = new OpenAiChatCompletionProvider(model, {
+          config: { reasoning_effort: 'max' },
+        });
 
-      const { body } = await provider.getOpenAiBody('Test prompt');
+        const { body } = await provider.getOpenAiBody('Test prompt');
 
-      expect(body.reasoning_effort).toBe('max');
-      expect(body.temperature).toBeUndefined();
-    });
+        expect(body.reasoning_effort).toBe('max');
+        expect(body.temperature).toBeUndefined();
+      },
+    );
 
     it('should handle o4-mini with reasoning_effort and service_tier', async () => {
       const mockResponse = {

@@ -9,12 +9,18 @@ import type { GradingResult, TokenUsage } from '../types/index';
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
 ): TokenUsage {
+  const prompt = tokenUsage?.prompt ?? 0;
+  const completion = tokenUsage?.completion ?? 0;
+  const cached = tokenUsage?.cached ?? 0;
+  const componentTotal = prompt + completion;
+  const cachedResponse = tokenUsage?.numRequests === 0 && cached > 0 && componentTotal <= cached;
+
   return {
-    total: tokenUsage?.total || 0,
-    prompt: tokenUsage?.prompt || 0,
-    completion: tokenUsage?.completion || 0,
-    cached: tokenUsage?.cached || 0,
-    numRequests: tokenUsage?.numRequests || 0,
+    total: tokenUsage?.total ?? (cachedResponse ? 0 : componentTotal),
+    prompt,
+    completion,
+    cached,
+    numRequests: tokenUsage?.numRequests ?? 0,
     completionDetails: tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,

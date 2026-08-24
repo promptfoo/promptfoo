@@ -470,7 +470,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // The `gen_ai.provider.name` span attribute. Subclasses serving a different vendor
   // through the Anthropic wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {
@@ -519,7 +519,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -972,6 +972,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
+            cached: true,
             tokenUsage: createEmptyTokenUsage(),
           };
         }

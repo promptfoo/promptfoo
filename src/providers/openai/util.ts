@@ -341,24 +341,24 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-5.6-terra',
     cost: {
-      input: 2.5 / 1e6,
-      output: 15 / 1e6,
+      input: 2 / 1e6,
+      output: 12 / 1e6,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 5 / 1e6,
-        output: 22.5 / 1e6,
+        input: 4 / 1e6,
+        output: 18 / 1e6,
       },
     },
   },
   {
     id: 'gpt-5.6-luna',
     cost: {
-      input: 1 / 1e6,
-      output: 6 / 1e6,
+      input: 0.2 / 1e6,
+      output: 1.2 / 1e6,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 2 / 1e6,
-        output: 9 / 1e6,
+        input: 0.4 / 1e6,
+        output: 1.8 / 1e6,
       },
     },
   },
