@@ -37,6 +37,49 @@ export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<st
   );
 }
 
+/**
+ * Client options for an Anthropic-compatible endpoint that is *not* Anthropic
+ * (Bedrock's mantle host, a Cloudflare AI Gateway).
+ *
+ * `ANTHROPIC_CUSTOM_HEADERS` is scoped to api.anthropic.com, so anything it
+ * defines — an Authorization bearer, a proxy secret, an Anthropic `x-api-key` —
+ * must never ride along to a third-party host. Drop every name it defines, in
+ * every case variant (HTTP header names are case-insensitive, so `X-Api-Key`
+ * and `x-api-key` are the same header and both have to go), then re-assert this
+ * provider's own credential.
+ */
+export function buildIsolatedAnthropicClientOptions(
+  options: ClientOptions,
+  env: EnvOverrides | undefined,
+  apiKey: string | undefined,
+): ClientOptions {
+  const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(env);
+  const suppressedNames = new Set(
+    Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+  );
+  const safeDefaultHeaders = Object.fromEntries(
+    Object.entries(options.defaultHeaders ?? {}).filter(
+      ([name]) => !suppressedNames.has(name.toLowerCase()),
+    ),
+  );
+  // Re-assert the provider's key under every x-api-key spelling the env
+  // suppressed, so a suppression cannot leave the request unauthenticated.
+  const apiKeyHeaders = Object.fromEntries(
+    Object.keys(suppressedEnvHeaders)
+      .filter((name) => name.toLowerCase() === 'x-api-key')
+      .map((name) => [name, apiKey]),
+  );
+
+  return {
+    ...options,
+    defaultHeaders: {
+      ...safeDefaultHeaders,
+      ...suppressedEnvHeaders,
+      ...(apiKey ? { 'x-api-key': apiKey, ...apiKeyHeaders } : {}),
+    },
+  };
+}
+
 function parseAnthropicCustomHeaders(value: string | undefined): Record<string, string> {
   const headers: Record<string, string> = {};
   for (const line of value?.split('\n') ?? []) {

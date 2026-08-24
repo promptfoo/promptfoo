@@ -1,4 +1,4 @@
-import { getAnthropicEnvHeaderSuppressions } from '../anthropic/generic';
+import { buildIsolatedAnthropicClientOptions } from '../anthropic/generic';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
 import {
   getBedrockMantleOrigin,
@@ -34,28 +34,7 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions(this.env);
-    const suppressedNames = new Set(
-      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
-    );
-    const safeDefaultHeaders = Object.fromEntries(
-      Object.entries(options.defaultHeaders ?? {}).filter(
-        ([name]) => !suppressedNames.has(name.toLowerCase()),
-      ),
-    );
-    const apiKeyHeaders = Object.fromEntries(
-      Object.keys(suppressedEnvHeaders)
-        .filter((name) => name.toLowerCase() === 'x-api-key')
-        .map((name) => [name, this.apiKey]),
-    );
-    return {
-      ...options,
-      defaultHeaders: {
-        ...safeDefaultHeaders,
-        ...suppressedEnvHeaders,
-        ...(this.apiKey ? { 'x-api-key': this.apiKey, ...apiKeyHeaders } : {}),
-      },
-    };
+    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
   }
 
   protected override hasCustomHeaders(): boolean {
