@@ -2,6 +2,7 @@ import React from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
@@ -71,6 +72,35 @@ vi.mock('./CommonConfigurationOptions', () => ({
     return <div data-testid="common-config" />;
   },
 }));
+
+function StatefulCodexSecurityEditor({
+  initialConfig = {},
+}: {
+  initialConfig?: ProviderOptions['config'];
+}) {
+  const [provider, setProvider] = React.useState<ProviderOptions>({
+    id: 'openai:codex-security:gpt-5.6-luna',
+    config: {
+      operation: 'security-scan',
+      repository: '/repos/service',
+      auth: 'chatgpt',
+      model_reasoning_effort: 'high',
+      max_cost_usd: 1,
+      ...initialConfig,
+    },
+  });
+
+  return (
+    <>
+      <ProviderConfigEditor
+        provider={provider}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />
+      <output data-testid="codex-security-config">{JSON.stringify(provider.config)}</output>
+    </>
+  );
+}
 
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
@@ -512,6 +542,203 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it.each([
+      {
+        config: { operation: 'security-scan', repository: '' },
+        expectedError: 'Repository path is required',
+      },
+      {
+        config: { operation: 'security-diff-scan', repository: '/repos/service' },
+        expectedError: 'A base Git reference or working tree target is required for diff scans',
+      },
+      {
+        config: { operation: 'security-scan', repository: '/repos/service', max_cost_usd: 0 },
+        expectedError: 'Maximum scan cost must be greater than 0',
+      },
+      {
+        config: {
+          operation: 'security-diff-scan',
+          repository: '/repos/service',
+          working_tree: true,
+          head_ref: 'feature/auth',
+        },
+        expectedError: 'Working-tree scans cannot specify a head Git reference',
+      },
+      {
+        config: {
+          operation: 'fix-finding',
+          repository: '/repos/service',
+          model_reasoning_effort: 'ultra',
+        },
+        expectedError: 'Finding remediation supports reasoning effort through max',
+      },
+      {
+        config: {
+          operation: 'verify-fix',
+          repository: '/repos/service',
+          severity: 'high',
+        },
+        expectedError: 'Severity filtering requires a finding ID or scan ID',
+      },
+    ])('validates Codex Security configuration: $expectedError', ({ config, expectedError }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:codex-security:gpt-5.6-luna', config }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(expectedError);
+    });
+
+    it('accepts native Codex Security provider IDs without requiring a Python adapter', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security:gpt-5.6-luna',
+            config: { operation: 'security-scan', repository: '/repos/service' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
+  });
+
+  it('configures the Codex model, security operation, and deep-scan worker settings', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/service');
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'deep-security-scan');
+
+    expect(screen.getByLabelText('Discovery workers')).toHaveValue(2);
+    expect(screen.getByLabelText('Subagents per worker')).toHaveValue(1);
+    expect(screen.getByLabelText('Maximum discovery passes')).toHaveValue(3);
+
+    const subagents = screen.getByLabelText('Subagents per worker');
+    await user.clear(subagents);
+    await user.type(subagents, '0');
+
+    expect(subagents).toHaveValue(0);
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      subagents: 0,
+    });
+
+    const modelInput = screen.getByLabelText('Model');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-5.6-terra');
+
+    expect(screen.getByText('openai:codex-security:gpt-5.6-terra')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-scan');
+
+    expect(screen.queryByLabelText('Discovery workers')).not.toBeInTheDocument();
+  });
+
+  it('configures scoped repository paths and mutually exclusive working-tree diff targets', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    await user.type(screen.getByLabelText('Scoped paths'), 'src/auth, src/api');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+    });
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-diff-scan');
+
+    expect(screen.queryByLabelText('Scoped paths')).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'paths',
+    );
+
+    await user.type(screen.getByLabelText('Base Git reference'), 'origin/main');
+    await user.type(screen.getByLabelText('Head Git reference'), 'feature/auth');
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Scan uncommitted working-tree changes.' }),
+    );
+
+    expect(screen.queryByLabelText('Head Git reference')).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      operation: 'security-diff-scan',
+      base_ref: 'origin/main',
+      working_tree: true,
+    });
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'head_ref',
+    );
+  });
+
+  it('removes cleared optional fields and configures saved remediation findings', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    const outputDirectory = screen.getByLabelText('Artifact output directory');
+    await user.type(outputDirectory, '/tmp/security-artifacts');
+    await user.clear(outputDirectory);
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'output_dir',
+    );
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'verify-fix');
+    await user.type(screen.getByLabelText('Finding ID'), 'finding-123');
+    await user.type(screen.getByLabelText('Scan ID'), 'scan-456');
+    await user.selectOptions(screen.getByLabelText('Minimum finding severity'), 'high');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      finding_id: 'finding-123',
+      scan_id: 'scan-456',
+      severity: 'high',
+    });
+
+    await user.clear(screen.getByLabelText('Finding ID'));
+    await user.clear(screen.getByLabelText('Scan ID'));
+    await user.selectOptions(screen.getByLabelText('Minimum finding severity'), '');
+
+    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config).not.toHaveProperty('finding_id');
+    expect(config).not.toHaveProperty('scan_id');
+    expect(config).not.toHaveProperty('severity');
+  });
+
+  it('limits remediation reasoning to options supported by the Codex Security CLI', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor initialConfig={{ model_reasoning_effort: 'ultra' }} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'fix-finding');
+
+    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('max');
+    expect(screen.queryByRole('option', { name: 'ultra' })).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      model_reasoning_effort: 'max',
     });
   });
 

@@ -60,6 +60,7 @@ export default function AddProviderDialog({
     // Only move to configure step if user has made an explicit selection
     // (not when ProviderTypeSelector auto-sets a default or we're using placeholder)
     if (newProvider.id && newProvider.id !== '' && newProvider.id !== '__selecting__') {
+      setError(null);
       setProvider(newProvider);
       setProviderType(type);
       setStep('configure');
@@ -143,7 +144,7 @@ export default function AddProviderDialog({
                   provider={provider as RedteamProviderOptions}
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
-                  validateAll={false}
+                  validateAll={providerType === 'codex-security'}
                   providerType={providerType}
                   mode="eval"
                 />
@@ -183,6 +184,9 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return undefined;
   }
 
+  if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
+    return 'codex-security';
+  }
   if (id.startsWith('openai:')) {
     return 'openai';
   }

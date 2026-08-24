@@ -4,6 +4,7 @@ import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CodexSecurityConfiguration from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
@@ -216,6 +217,39 @@ function ProviderConfigEditor({
       if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
         errors.push('Valid WebSocket URL is required');
       }
+    } else if (providerType === 'codex-security') {
+      if (
+        provider.id !== 'openai:codex-security' &&
+        !provider.id.startsWith('openai:codex-security:')
+      ) {
+        errors.push('Codex Security provider ID must start with openai:codex-security');
+      }
+      if (typeof provider.config.repository !== 'string' || !provider.config.repository.trim()) {
+        errors.push('Repository path is required');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        !provider.config.base_ref &&
+        !provider.config.working_tree
+      ) {
+        errors.push('A base Git reference or working tree target is required for diff scans');
+      }
+      if (provider.config.working_tree && provider.config.head_ref) {
+        errors.push('Working-tree scans cannot specify a head Git reference');
+      }
+      if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
+        errors.push('Maximum scan cost must be greater than 0');
+      }
+      if (
+        ['fix-finding', 'verify-fix'].includes(provider.config.operation) &&
+        (provider.config.model_reasoning_effort === 'ultra' ||
+          provider.config.reasoning_effort === 'ultra')
+      ) {
+        errors.push('Finding remediation supports reasoning effort through max');
+      }
+      if (provider.config.severity && !provider.config.finding_id && !provider.config.scan_id) {
+        errors.push('Severity filtering requires a finding ID or scan ID');
+      }
     } else if (
       [
         'openai',
@@ -396,6 +430,13 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
           onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
+        />
+      )}
+
+      {providerType === 'codex-security' && (
+        <CodexSecurityConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
         />
       )}
 

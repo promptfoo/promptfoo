@@ -23,6 +23,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex',
   'openai:codex-app-server',
   'openai:codex-desktop',
+  'openai:codex-security',
   'openai:codex-sdk',
   'openinterpreter',
   'opencode',

@@ -42,6 +42,8 @@ describe('agentic-utils', () => {
     it.each([
       'openai:codex-sdk',
       'openai:codex-sdk:gpt-5.5',
+      'openai:codex-security',
+      'openai:codex-security:gpt-5.6-sol',
       'openai:codex-app-server:gpt-5.5',
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
