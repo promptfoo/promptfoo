@@ -97,6 +97,8 @@ export interface AssistantErrorEntry {
 const TOOL_SPAN_BODY_LIMIT = 4096;
 const REDACTED_SUBAGENT_TRANSCRIPT =
   '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
+/** Returned when cancellation is observed at any checkpoint before the SDK query starts. */
+const ABORTED_BEFORE_START_ERROR = 'Claude Agent SDK call aborted before it started';
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -1130,6 +1132,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: ABORTED_BEFORE_START_ERROR };
+    }
+
     // Merge configs from the provider and the prompt
     const config: ClaudeCodeOptions = {
       ...this.config,
@@ -1427,6 +1433,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: ABORTED_BEFORE_START_ERROR };
+    }
     if (cachedResponse) {
       return cachedResponse;
     }
@@ -1454,7 +1463,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Make sure we didn't already abort
     if (callOptions?.abortSignal?.aborted) {
-      return { error: 'Claude Agent SDK call aborted before it started' };
+      if (isTempDir && workingDir) {
+        await fs.rm(workingDir, { recursive: true, force: true });
+      }
+      return { error: ABORTED_BEFORE_START_ERROR };
     }
 
     // Propagate abort signal to the Claude Agent SDK call

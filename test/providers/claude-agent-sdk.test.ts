@@ -2420,6 +2420,90 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('abort signal', () => {
+      it('should reject an aborted request instead of returning a cached response', async () => {
+        mockQuery.mockImplementation(() => createMockResponse('Cached response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Cached abort prompt');
+
+        const abortController = new AbortController();
+        abortController.abort();
+
+        const result = await provider.callApi('Cached abort prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+
+        expect(result.error).toBe('Claude Agent SDK call aborted before it started');
+        expect(result.output).toBeUndefined();
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+      });
+
+      it('should reject a cached response when cancellation occurs during its lookup', async () => {
+        const abortController = new AbortController();
+        const cache = await getCache();
+        vi.spyOn(cache, 'get').mockImplementation(async function () {
+          abortController.abort();
+          return JSON.stringify({ output: 'Cached response' });
+        });
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Cancellation during cache lookup', undefined, {
+          abortSignal: abortController.signal,
+        });
+
+        expect(result.error).toBe('Claude Agent SDK call aborted before it started');
+        expect(result.output).toBeUndefined();
+        expect(tempDirSpy).not.toHaveBeenCalled();
+        expect(mockQuery).not.toHaveBeenCalled();
+      });
+
+      it('should not create a temporary directory for an already-aborted request', async () => {
+        const abortController = new AbortController();
+        abortController.abort();
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Abort before temporary directory', undefined, {
+          abortSignal: abortController.signal,
+        });
+
+        expect(result.error).toBe('Claude Agent SDK call aborted before it started');
+        expect(tempDirSpy).not.toHaveBeenCalled();
+        expect(rmSyncSpy).not.toHaveBeenCalled();
+        expect(mockQuery).not.toHaveBeenCalled();
+      });
+
+      it('should clean up the temporary directory when cancellation occurs during creation', async () => {
+        const abortController = new AbortController();
+        tempDirSpy.mockImplementation(() => {
+          abortController.abort();
+          return '/tmp/test-temp-dir';
+        });
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi(
+          'Abort during temporary directory creation',
+          undefined,
+          {
+            abortSignal: abortController.signal,
+          },
+        );
+
+        expect(result.error).toBe('Claude Agent SDK call aborted before it started');
+        expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
+        expect(mockQuery).not.toHaveBeenCalled();
+      });
+
       it('should handle abort signal scenarios', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
