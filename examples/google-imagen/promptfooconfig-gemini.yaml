@@ -11,25 +11,34 @@ providers:
     config:
       imageAspectRatio: '16:9'
 
-  # Gemini 3.1 Flash Image Preview (Nano Banana 2)
-  # imageSize supports: 512px, 1K, 2K, 4K
-  - id: google:gemini-3.1-flash-image-preview
+  # Gemini 3.1 Flash Image (Nano Banana 2)
+  # imageSize supports: 512px, 1K, 2K, 4K (this model only; see per-model notes below)
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9'
       imageSize: '2K'
 
-  # Gemini 3 Pro - Advanced image generation with reasoning (global endpoint only)
-  # imageSize is supported for Gemini 3 models (1K, 2K, 4K)
-  - id: google:gemini-3-pro-image-preview
+  # Gemini 3.1 Flash-Lite Image (Nano Banana 2 Lite)
+  # Fastest, lowest-cost tier; 1K resolution only; no Google Search grounding
+  - id: google:gemini-3.1-flash-lite-image
+    config:
+      imageAspectRatio: '16:9'
+      imageSize: '1K'
+
+  # Gemini 3 Pro Image (Nano Banana Pro) — advanced generation, global endpoint only
+  # imageSize supports: 1K, 2K, 4K
+  - id: google:gemini-3-pro-image
     config:
       imageAspectRatio: '16:9'
       imageSize: '2K'
 
 defaultTest:
   assert:
-    # Verify that an image was generated
-    - type: contains
-      value: '![Generated Image](data:image/'
+    # Verify that an image was generated (images land in the structured
+    # providerResponse.images field; output alone is text when the model
+    # also returns text parts)
+    - type: javascript
+      value: '(context.providerResponse?.images?.length ?? 0) > 0'
 
 tests:
   - vars:

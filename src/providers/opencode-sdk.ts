@@ -282,7 +282,7 @@ export interface OpenCodeSDKConfig {
 
   /**
    * Port for the OpenCode server (when starting a new server)
-   * @default 4096
+   * @default 0 (random available port)
    */
   port?: number;
 

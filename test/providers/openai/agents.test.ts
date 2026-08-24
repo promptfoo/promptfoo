@@ -492,38 +492,37 @@ describe('OpenAiAgentsProvider', () => {
     expect(timeoutErrorFunction).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'toString',
-    'constructor',
-    '__proto__',
-  ])('does not read inherited tool mock values for %s', async (toolName) => {
-    const prototypeNamedTool = vi.mocked(tool)({
-      name: toolName,
-      description: 'Exercise a prototype-shaped tool name.',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-      execute: async () => ({ status: 'real' }),
-    });
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: new Agent({
-          name: 'Boundary Agent',
-          instructions: 'Exercise boundary tools.',
-          tools: [prototypeNamedTool],
-        }),
-        executeTools: 'mock',
-      },
-    });
+  it.each(['toString', 'constructor', '__proto__'])(
+    'does not read inherited tool mock values for %s',
+    async (toolName) => {
+      const prototypeNamedTool = vi.mocked(tool)({
+        name: toolName,
+        description: 'Exercise a prototype-shaped tool name.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
+        execute: async () => ({ status: 'real' }),
+      });
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: new Agent({
+            name: 'Boundary Agent',
+            instructions: 'Exercise boundary tools.',
+            tools: [prototypeNamedTool],
+          }),
+          executeTools: 'mock',
+        },
+      });
 
-    await provider.callApi('Exercise the tool');
-    const wrappedTool = mockRun.mock.calls[0][0].tools[0];
+      await provider.callApi('Exercise the tool');
+      const wrappedTool = mockRun.mock.calls[0][0].tools[0];
 
-    await expect(wrappedTool.invoke({}, '{}')).resolves.toEqual({ mocked: true, tool: toolName });
-  });
+      await expect(wrappedTool.invoke({}, '{}')).resolves.toEqual({ mocked: true, tool: toolName });
+    },
+  );
 
   it('preserves an explicit null tool mock value', async () => {
     const nullableTool = vi.mocked(tool)({
@@ -554,23 +553,20 @@ describe('OpenAiAgentsProvider', () => {
     await expect(mockRun.mock.calls[0][0].tools[0].invoke({}, '{}')).resolves.toBeNull();
   });
 
-  it.each([
-    'false',
-    'mocked',
-    null,
-    0,
-    {},
-  ])('rejects malformed executeTools value %# before loading or running an agent', async (executeTools) => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: new Agent({ name: 'Unsafe Agent', instructions: 'Run real tools.' }),
-        executeTools: executeTools as any,
-      },
-    });
+  it.each(['false', 'mocked', null, 0, {}])(
+    'rejects malformed executeTools value %# before loading or running an agent',
+    async (executeTools) => {
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: new Agent({ name: 'Unsafe Agent', instructions: 'Run real tools.' }),
+          executeTools: executeTools as any,
+        },
+      });
 
-    await expect(provider.callApi('Run a tool')).rejects.toThrow(/executeTools must be/);
-    expect(mockRun).not.toHaveBeenCalled();
-  });
+      await expect(provider.callApi('Run a tool')).rejects.toThrow(/executeTools must be/);
+      expect(mockRun).not.toHaveBeenCalled();
+    },
+  );
 
   it('recursively mocks handoff agent tools when executeTools is mock', async () => {
     const childTool = vi.mocked(tool)({
@@ -767,25 +763,25 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it.each([
-    false,
-    'mock',
-  ] as const)('rejects root SandboxAgent capabilities when executeTools is %s', async (executeTools) => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: {
-          type: 'sandbox',
-          name: 'Sandbox Agent',
-          instructions: 'Use sandbox capabilities.',
-          capabilities: [],
+  it.each([false, 'mock'] as const)(
+    'rejects root SandboxAgent capabilities when executeTools is %s',
+    async (executeTools) => {
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: {
+            type: 'sandbox',
+            name: 'Sandbox Agent',
+            instructions: 'Use sandbox capabilities.',
+            capabilities: [],
+          },
+          executeTools,
         },
-        executeTools,
-      },
-    });
+      });
 
-    await expect(provider.callApi('Run a command')).rejects.toThrow(/SandboxAgent/);
-    expect(mockRun).not.toHaveBeenCalled();
-  });
+      await expect(provider.callApi('Run a command')).rejects.toThrow(/SandboxAgent/);
+      expect(mockRun).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects SandboxAgent capabilities reached through a handoff', async () => {
     const sandboxAgent = new SandboxAgent({
@@ -821,45 +817,45 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { prompt: { id: 'pmpt_root' } },
-    { extraBody: { prompt: { id: 'pmpt_extra' } } },
-  ])('rejects providerData prompt overrides in mock mode %#', async (providerData) => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
-        executeTools: 'mock',
-        modelSettings: { providerData },
-      },
-    });
+  it.each([{ prompt: { id: 'pmpt_root' } }, { extraBody: { prompt: { id: 'pmpt_extra' } } }])(
+    'rejects providerData prompt overrides in mock mode %#',
+    async (providerData) => {
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+          executeTools: 'mock',
+          modelSettings: { providerData },
+        },
+      });
 
-    await expect(provider.callApi('Use a template')).rejects.toThrow(
-      /providerData prompt overrides/,
-    );
-    expect(mockRun).not.toHaveBeenCalled();
-  });
+      await expect(provider.callApi('Use a template')).rejects.toThrow(
+        /providerData prompt overrides/,
+      );
+      expect(mockRun).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    'extraBody',
-    'extra_body',
-  ] as const)('rejects providerData %s tools from run options in mock mode', async (extraBodyKey) => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
-        executeTools: 'mock',
-        runOptions: {
-          modelSettings: {
-            providerData: {
-              [extraBodyKey]: { tools: [{ type: 'code_interpreter' }] },
+  it.each(['extraBody', 'extra_body'] as const)(
+    'rejects providerData %s tools from run options in mock mode',
+    async (extraBodyKey) => {
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: new Agent({ name: 'Support Agent', instructions: 'Help the user.' }),
+          executeTools: 'mock',
+          runOptions: {
+            modelSettings: {
+              providerData: {
+                [extraBodyKey]: { tools: [{ type: 'code_interpreter' }] },
+              },
             },
-          },
-        } as any,
-      },
-    });
+          } as any,
+        },
+      });
 
-    await expect(provider.callApi('Run code')).rejects.toThrow(/providerData tool overrides/);
-    expect(mockRun).not.toHaveBeenCalled();
-  });
+      await expect(provider.callApi('Run code')).rejects.toThrow(/providerData tool overrides/);
+      expect(mockRun).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects providerData tools from agent model settings in mock mode', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
@@ -1292,6 +1288,27 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
   });
 
+  it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
+    vi.resetModules();
+    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+      '../../../src/providers/openai/agents'
+    );
+    const provider = new IsolatedOpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        tracing: true,
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(addTraceProcessor).toHaveBeenCalledTimes(1);
+    expect(setTraceProcessors).not.toHaveBeenCalled();
+  });
+
   it('joins SDK tracing to the evaluator trace when traceparent is provided', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
@@ -1327,21 +1344,174 @@ describe('OpenAiAgentsProvider', () => {
     });
   });
 
-  it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
+  it('routes SDK spans to the receiver configured for the active eval', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
         agent: {
           name: 'Inline Support Agent',
           instructions: 'Help the user.',
         },
-        tracing: true,
       },
     });
 
-    await provider.callApi('Where is my order?');
+    await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+      async () =>
+        provider.callApi('Where is my order?', {
+          prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          vars: {},
+        }),
+    );
 
-    expect(addTraceProcessor).toHaveBeenCalledTimes(1);
-    expect(setTraceProcessors).not.toHaveBeenCalled();
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.otlp_endpoint': 'http://127.0.0.2:14318',
+      },
+    });
+  });
+
+  it('does not register the SDK exporter for a traceparent without an OTLP destination', async () => {
+    vi.resetModules();
+    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+      '../../../src/providers/openai/agents'
+    );
+    const provider = new IsolatedOpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(addTraceProcessor).not.toHaveBeenCalled();
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: { 'promptfoo.parent_span_id': '0123456789abcdef' },
+    });
+  });
+
+  it('preserves explicitly configured OTLP endpoints without a local receiver', async () => {
+    vi.resetModules();
+    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+      '../../../src/providers/openai/agents'
+    );
+    const provider = new IsolatedOpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+        otlpEndpoint: 'https://collector.example.com:4318',
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(addTraceProcessor).toHaveBeenCalledOnce();
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.otlp_endpoint': 'https://collector.example.com:4318',
+      },
+    });
+  });
+
+  it('routes SDK spans to protobuf-only evaluation receivers', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.2', port: 14318, acceptFormats: ['protobuf'] },
+        },
+      },
+      async () =>
+        provider.callApi('Where is my order?', {
+          prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          vars: {},
+        }),
+    );
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.otlp_endpoint': 'http://127.0.0.2:14318',
+        'promptfoo.otlp_format': 'protobuf',
+      },
+    });
+  });
+
+  it('preserves requested model aliases in trace metadata', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: 'customer-model-alias',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.request_model': 'customer-model-alias',
+      },
+    });
+  });
+
+  it('preserves provider identity exposed by custom SDK model objects', async () => {
+    const customModel = {
+      provider: 'anthropic',
+      getResponse: vi.fn(),
+      getStreamedResponse: vi.fn(),
+    };
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: customModel,
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.model_provider': 'anthropic',
+      },
+    });
   });
 
   it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {

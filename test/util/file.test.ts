@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import path from 'path';
 
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {

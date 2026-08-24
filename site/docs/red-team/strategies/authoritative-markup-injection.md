@@ -47,10 +47,10 @@ redteam:
   plugins:
     - harmful
     - pii
-    - prompt-injection
 
   strategies:
     - authoritative-markup-injection
+    - jailbreak-templates
 ```
 
 ## Example Scenario

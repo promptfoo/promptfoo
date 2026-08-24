@@ -382,17 +382,31 @@ describe('evaluator', () => {
           table: { head: { prompts: [], vars: [] }, body: [] },
           stats: { successes: 0, failures: 0 },
         } as any,
-        { redteam: {} as any },
+        {
+          redteam: {} as any,
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'legacy-runtime-secret' },
+              headers: { Authorization: 'Bearer legacy-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
       );
 
       const db = await getDb();
       const stored = await db
-        .select({ isRedteam: evalsTable.isRedteam })
+        .select({ isRedteam: evalsTable.isRedteam, config: evalsTable.config })
         .from(evalsTable)
         .where(eq(evalsTable.id, evalId))
         .get();
 
       expect(stored?.isRedteam).toBe(true);
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-runtime-secret');
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-secret');
+      expect(stored?.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
     });
 
     it.each([
@@ -540,6 +554,141 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com/traces',
+            timeout: 5_000,
+            auth: {
+              username: 'trace-reader',
+              password: 'literal-password',
+              token: 'literal-token',
+            },
+            headers: {
+              Authorization: 'Bearer literal-authorization',
+              'X-Api-Key': 'literal-api-key',
+              'X-Honeycomb-Team': 'literal-honeycomb-key',
+              'X-Tenant-Credential': 'literal-custom-credential',
+              'X-Tempo-Reader': 'short-reader-value',
+              'X-Trace-Access': 'Bearer short-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(evaluation.config.tracing?.provider).toEqual(config.tracing.provider);
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com/traces',
+        timeout: 5_000,
+        auth: { username: 'trace-reader' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      });
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('literal-');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-secret');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-reader-value');
+
+      evaluation.config.tracing!.provider!.auth!.token = 'updated-runtime-token';
+      await evaluation.save();
+
+      const savedEvaluation = await Eval.findById(evaluation.id);
+      expect(JSON.stringify(savedEvaluation?.config)).not.toContain('updated-runtime-token');
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('updated-runtime-token');
+    });
+
+    it('preserves safe trace-provider environment references for resumed evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.TEMPO_TOKEN }}',
+              password: '{{ env.TEMPO_PASSWORD | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER_TOKEN }}',
+              'X-Api-Key': '{{ env["TEMPO_API_KEY"] }}',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual(config.tracing.provider);
+    });
+
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before saving or exporting: %s', async (endpoint) => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: { id: 'tempo', endpoint },
+          },
+        },
+        [],
+      );
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+      const exportedEvaluation = await evaluation.toResultsFile();
+
+      expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('endpoint-secret');
+      expect(JSON.stringify(exportedEvaluation.config)).not.toContain('endpoint-secret');
+    });
+
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])(
+      'redacts credential-like endpoint path segments before persistence: %s',
+      async (credential) => {
+        const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+        const evaluation = await Eval.create(
+          {
+            tracing: {
+              enabled: true,
+              provider: { id: 'tempo', endpoint },
+            },
+          },
+          [],
+        );
+        const persistedEvaluation = await Eval.findById(evaluation.id);
+        const exportedEvaluation = await evaluation.toResultsFile();
+
+        expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+        expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
+        expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
+      },
+    );
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
@@ -671,6 +820,32 @@ describe('evaluator', () => {
   });
 
   describe('copy', () => {
+    it('removes trace-provider credentials when copying a live evaluation', async () => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'copy-runtime-secret' },
+              headers: { Authorization: 'Bearer copied-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
+        [],
+      );
+
+      const copiedEvaluation = await evaluation.copy();
+      const persistedCopy = await Eval.findById(copiedEvaluation.id);
+
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copy-runtime-secret');
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copied-secret');
+      expect(persistedCopy?.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
+    });
+
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       await EvalResult.createFromEvaluateResult(
@@ -939,6 +1114,40 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('attributes generation metadata once without increasing target tokens or probes', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+          },
+        },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
+        { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
+      ] as any;
+
+      const stats = eval1.getStats();
+
+      expect(stats.tokenUsage).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      });
+    });
+
+    it('does not attribute historical suite generation metadata without a run charge', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generation: { id: 'old-generation', tokenUsage: { total: 40, numRequests: 4 } },
+          generationTokenUsage: { total: 40, numRequests: 4 },
+        },
+      });
+
+      expect(eval1.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
@@ -956,6 +1165,7 @@ describe('evaluator', () => {
                 prompt: 40,
                 completion: 50,
                 cached: 10,
+                numRequests: 3,
               },
             },
           },
@@ -974,6 +1184,7 @@ describe('evaluator', () => {
                 prompt: 80,
                 completion: 100,
                 cached: 20,
+                numRequests: 5,
               },
             },
           },
@@ -986,7 +1197,7 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
-        numRequests: 0,
+        numRequests: 8,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -1166,6 +1377,52 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('drops malformed trace-provider headers when exporting older evaluations', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            headers: {
+              'X-Null': null,
+              'X-Number': 42,
+              'X-Object': { malformed: true },
+              'X-Array': ['malformed'],
+              Authorization: 'Bearer legacy-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            } as unknown as Record<string, string>,
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(JSON.stringify(results.config)).not.toContain('legacy-secret');
+    });
+
+    it('removes trace-provider credentials from exported results without mutating live config', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'export-runtime-secret' },
+            headers: { Authorization: 'Bearer exported-secret', 'X-Scope-OrgID': 'tenant-a' },
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(JSON.stringify(results.config)).not.toContain('export-runtime-secret');
+      expect(JSON.stringify(results.config)).not.toContain('exported-secret');
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('export-runtime-secret');
+    });
+
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
       const results = await eval1.toResultsFile();
@@ -2438,6 +2695,27 @@ describe('evaluator', () => {
   });
 
   describe('combineFilterConditions', () => {
+    /**
+     * Renders a combined SQL fragment to text so tests can assert on the operators used.
+     * combineFilterConditions nests fragments as it reduces, so this must recurse —
+     * a flat map over queryChunks would hide operators inside nested fragments.
+     */
+    const toSqlText = (chunk: unknown): string => {
+      if (typeof chunk === 'string') {
+        return chunk;
+      }
+      const chunks = (chunk as { queryChunks?: unknown[] })?.queryChunks;
+      if (Array.isArray(chunks)) {
+        return chunks.map(toSqlText).join(' ');
+      }
+      // drizzle's StringChunk stores its literal text as a string[].
+      const value = (chunk as { value?: unknown })?.value;
+      if (Array.isArray(value)) {
+        return value.filter((part) => typeof part === 'string').join(' ');
+      }
+      return typeof value === 'string' ? value : '';
+    };
+
     it('should return null for empty array', () => {
       const result = combineFilterConditions([]);
       expect(result).toBeNull();
@@ -2456,9 +2734,9 @@ describe('evaluator', () => {
         { condition: cond1, logicOperator: 'AND' },
         { condition: cond2, logicOperator: 'AND' },
       ]);
-      expect(result).not.toBeNull();
-      // Verify the result contains both conditions
       expect(result!.queryChunks.length).toBeGreaterThan(1);
+      expect(toSqlText(result)).toContain('AND');
+      expect(toSqlText(result)).not.toContain('OR');
     });
 
     it('should combine two conditions with OR', () => {
@@ -2468,7 +2746,8 @@ describe('evaluator', () => {
         { condition: cond1, logicOperator: 'AND' },
         { condition: cond2, logicOperator: 'OR' },
       ]);
-      expect(result).not.toBeNull();
+      expect(toSqlText(result)).toContain('OR');
+      expect(toSqlText(result)).not.toContain('AND');
     });
 
     it('should handle mixed AND/OR operators', () => {
@@ -2483,17 +2762,42 @@ describe('evaluator', () => {
         { condition: cond3, logicOperator: 'OR' },
         { condition: cond4, logicOperator: 'AND' },
       ]);
-      expect(result).not.toBeNull();
+      const sqlText = toSqlText(result);
+      expect(sqlText).toContain('OR');
+      expect(sqlText).toContain('AND');
     });
 
-    it('should use AND as default for unrecognized operators', () => {
-      const cond1 = sql`field1 = ${1}`;
-      const cond2 = sql`field2 = ${2}`;
+    // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
+    // lowercase operators; an exact-match against 'OR' silently combined with AND.
+    it.each(['or', 'Or', 'OR'])(
+      'should combine with OR for logicOperator %j',
+      (logicOperator: string) => {
+        const result = combineFilterConditions([
+          { condition: sql`field1 = ${1}`, logicOperator },
+          { condition: sql`field2 = ${2}`, logicOperator },
+        ]);
+        const sqlText = toSqlText(result);
+        expect(sqlText).toContain('OR');
+        expect(sqlText).not.toContain('AND');
+      },
+    );
+
+    // Filters are unvalidated JSON from the query string, so a non-string operator
+    // must fall back to AND rather than throwing (which would 500 the table route).
+    it.each([
+      ['unrecognized string', 'UNKNOWN'],
+      ['lowercase and', 'and'],
+      ['number', 1 as unknown as string],
+      ['object', {} as unknown as string],
+      ['undefined', undefined as unknown as string],
+    ])('should fall back to AND for a %s operator', (_label: string, logicOperator: string) => {
       const result = combineFilterConditions([
-        { condition: cond1, logicOperator: 'UNKNOWN' },
-        { condition: cond2, logicOperator: 'INVALID' },
+        { condition: sql`field1 = ${1}`, logicOperator },
+        { condition: sql`field2 = ${2}`, logicOperator },
       ]);
-      expect(result).not.toBeNull();
+      const sqlText = toSqlText(result);
+      expect(sqlText).toContain('AND');
+      expect(sqlText).not.toContain('OR');
     });
   });
 

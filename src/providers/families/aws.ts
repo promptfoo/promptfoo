@@ -64,11 +64,11 @@ export const awsProviderFactories: ProviderFactory[] = [
       // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
       // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
       // aliases before the per-type handlers so
-      // `bedrock:openai.gpt-5.5`, `bedrock:xai.grok-4.3`, and the explicit
+      // `bedrock:openai.gpt-5.6-sol`, `bedrock:xai.grok-4.3`, and the explicit
       // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
       // gpt-oss models fall through to InvokeModel/Converse below.
       //
-      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.5`, exactly two
+      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.6-sol`, exactly two
       // segments) and the explicit `converse:`/`completion:` aliases. Responses ids contain no
       // colon, so the bare form is always two segments. This prevents sub-typed forms whose id
       // merely contains the prefix

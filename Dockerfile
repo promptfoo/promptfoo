@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.17.0-alpine AS base
+FROM node:24.19.0-alpine AS base
 
 # Update Alpine packages to get latest security patches
 RUN apk upgrade --no-cache
@@ -37,11 +37,14 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 COPY src/app/package.json ./src/app/package.json
 COPY site/package.json ./site/package.json
-# The site workspace postinstall writes a generated stats placeholder.
-RUN mkdir -p site/src
+# Block dependency lifecycle scripts during install, then rebuild only the two native
+# packages the build needs. The specs must be exact directories: `npm rebuild esbuild`
+# matches every folder of that name anywhere in the tree, so a nested dependency aliased
+# to `esbuild` would get its install script run and defeat --ignore-scripts.
 # Leverage BuildKit cache
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --install-links --include=peer
+    npm ci --install-links --include=peer --ignore-scripts && \
+    npm rebuild ./node_modules/esbuild ./node_modules/@swc/core
 
 # Copy the rest of the application code
 COPY . .
@@ -64,6 +67,9 @@ RUN ln -s /app /app/node_modules/promptfoo && \
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
+ARG PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${PROMPTFOO_OFFICIAL_DOCKER_IMAGE}
 
 USER promptfoo
 

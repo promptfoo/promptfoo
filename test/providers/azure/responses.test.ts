@@ -485,6 +485,116 @@ describe('AzureResponsesProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
     });
 
+    it('applies the cached-input rate from Responses usage details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+    });
+
+    it('preserves full cached usage when the Responses result comes from disk cache', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toMatchObject({ cached: 3_000, total: 3_000 });
+    });
+
+    it('applies priority pricing after Responses flattens passthrough fields', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { passthrough: { service_tier: 'priority' } },
+      });
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('prices image-token usage from Azure Responses details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          usage: {
+            input_tokens: 1_000,
+            input_tokens_details: { image_tokens: 400 },
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-image-1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('Describe the image');
+
+      expect(result.cost).toBeCloseTo((600 * 5 + 400 * 10) / 1e6, 12);
+    });
+
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { response_format: 'file://missing.json' as any },

@@ -3,6 +3,8 @@ import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -28,7 +30,9 @@ interface MockAppServer {
   messages: () => any[];
 }
 
-function createMockAppServer(): MockAppServer {
+function createMockAppServer(
+  options: { configReadResult?: unknown; configReadError?: unknown } = {},
+): MockAppServer {
   const proc = new EventEmitter() as any;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -49,9 +53,30 @@ function createMockAppServer(): MockAppServer {
 
   stdin.write = vi.fn((chunk: any) => {
     writes.push(String(chunk));
+    const message = JSON.parse(String(chunk));
+    if (message.method === 'config/read') {
+      queueMicrotask(() => {
+        stdout.write(
+          `${JSON.stringify({
+            id: message.id,
+            ...(options.configReadError
+              ? { error: options.configReadError }
+              : { result: options.configReadResult ?? { config: {} } }),
+          })}\n`,
+        );
+      });
+    }
     return true;
   }) as any;
-  stdin.end = vi.fn(() => stdin) as any;
+  stdin.end = vi.fn(() => {
+    queueMicrotask(() => {
+      if (!proc.killed && proc.exitCode === null) {
+        proc.exitCode = 0;
+        proc.emit('exit', 0, null);
+      }
+    });
+    return stdin;
+  }) as any;
 
   return {
     proc,
@@ -164,10 +189,105 @@ describe('OpenAICodexAppServerProvider', () => {
 
   afterEach(async () => {
     await providerRegistry.shutdownAll();
+    cliState.setActiveOtlpReceiver();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
     mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey, CODEX_API_KEY: originalCodexApiKey });
+  });
+
+  it.each([
+    [{ type: 'mcpToolCall', server: 'inventory', tool: 'lookup_order' }, 'lookup_order'],
+    [{ type: 'dynamicToolCall', tool: 'search_documents' }, 'search_documents'],
+  ])('adds standard tool attributes for %s', (item, expectedToolName) => {
+    const provider = new OpenAICodexAppServerProvider();
+
+    expect((provider as any).getAttributesForItem(item)).toMatchObject({
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': expectedToolName,
+    });
+  });
+
+  it('routes native app-server spans to the receiver configured for the active eval', async () => {
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true },
+    });
+
+    const env = await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+      async () => (provider as any).prepareEnvironment({ deep_tracing: true }),
+    );
+
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://127.0.0.2:14318');
+    expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject({
+      otel: {
+        trace_exporter: {
+          'otlp-http': {
+            endpoint: 'http://127.0.0.2:14318/v1/traces',
+            protocol: 'json',
+          },
+        },
+      },
+    });
+  });
+
+  it.each([
+    [['json'], 'http/json', 'json'],
+    [['protobuf'], 'http/protobuf', 'binary'],
+  ])(
+    'matches app-server tracing protocol to receiver formats %j',
+    async (acceptFormats, protocol, exporterProtocol) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
+
+      await cliState.withRequestTracingConfig(
+        {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+            },
+          },
+        },
+        async () => {
+          const env = (provider as any).prepareEnvironment({ deep_tracing: true });
+          expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe(protocol);
+          expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject(
+            {
+              otel: {
+                trace_exporter: { 'otlp-http': { protocol: exporterProtocol } },
+              },
+            },
+          );
+        },
+      );
+    },
+  );
+
+  it('routes app-server telemetry to the receiver actually shared by overlapping evals', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.2',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+    const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+        },
+      },
+      async () => {
+        const env = (provider as any).prepareEnvironment({ deep_tracing: true });
+        expect(env).toMatchObject({
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
+          OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+        });
+      },
+    );
   });
 
   it('initializes with safe defaults and validates config strictly', () => {
@@ -222,6 +342,24 @@ describe('OpenAICodexAppServerProvider', () => {
           },
         }),
     ).not.toThrow();
+
+    for (const [model, effort] of [
+      ['gpt-5.6-sol', 'max'],
+      ['gpt-5.6-sol', 'ultra'],
+      ['gpt-5.6-terra', 'max'],
+      ['gpt-5.6-terra', 'ultra'],
+      ['gpt-5.6-luna', 'max'],
+    ] as const) {
+      expect(
+        () =>
+          new OpenAICodexAppServerProvider({
+            config: {
+              model,
+              model_reasoning_effort: effort,
+            },
+          }),
+      ).not.toThrow();
+    }
 
     expect(
       () =>
@@ -494,8 +632,8 @@ describe('OpenAICodexAppServerProvider', () => {
       'gen_ai.turn.index': 1,
       'gen_ai.usage.input_tokens': 13,
       'gen_ai.usage.output_tokens': 5,
-      'gen_ai.usage.cached_tokens': 2,
-      'gen_ai.usage.reasoning_tokens': 1,
+      'gen_ai.usage.cache_read.input_tokens': 2,
+      'gen_ai.usage.reasoning.output_tokens': 1,
     });
     expect(turnSpan?.ended).toBe(true);
 
@@ -863,7 +1001,7 @@ describe('OpenAICodexAppServerProvider', () => {
     try {
       const provider = new OpenAICodexAppServerProvider({
         config: {
-          model: 'openai.gpt-5.5',
+          model: 'openai.gpt-5.6-sol',
           model_provider: 'amazon-bedrock',
           thread_cleanup: 'none',
         },
@@ -896,6 +1034,16 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
       server.send({
+        method: 'thread/tokenUsage/updated',
+        params: {
+          threadId: 'thr_bedrock_noleak',
+          turnId: 'turn_bedrock_noleak',
+          tokenUsage: {
+            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+          },
+        },
+      });
+      server.send({
         method: 'turn/completed',
         params: {
           threadId: 'thr_bedrock_noleak',
@@ -903,7 +1051,9 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
 
-      await expect(resultPromise).resolves.toMatchObject({ output: 'On Bedrock' });
+      const result = await resultPromise;
+      expect(result.output).toBe('On Bedrock');
+      expect(result.cost).toBeCloseTo(0.041525, 10);
 
       const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
       expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
@@ -1440,92 +1590,93 @@ describe('OpenAICodexAppServerProvider', () => {
         error: { code: -32000, message: 'stale subscription already closed' },
       },
     },
-  ])('re-resumes a persistent explicit thread when stale unsubscribe is $outcome', async ({
-    unsubscribeResponse,
-  }) => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_id: 'thr_authority',
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
-    const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
-      provider.callApi('Check authority', {
-        prompt: {
-          raw: 'Check authority',
-          label: 'authority',
-          config: { sandbox_mode },
+  ])(
+    're-resumes a persistent explicit thread when stale unsubscribe is $outcome',
+    async ({ unsubscribeResponse }) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          thread_id: 'thr_authority',
+          persist_threads: true,
+          thread_cleanup: 'none',
         },
-        vars: {},
       });
+      const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
+        provider.callApi('Check authority', {
+          prompt: {
+            raw: 'Check authority',
+            label: 'authority',
+            config: { sandbox_mode },
+          },
+          vars: {},
+        });
 
-    const firstResult = callWithSandbox('danger-full-access');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const firstResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume',
-    );
-    expect(firstResume.params).toMatchObject({
-      threadId: 'thr_authority',
-      sandbox: 'danger-full-access',
-    });
-    server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
-    const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: firstTurn.id,
-      result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
+      const firstResult = callWithSandbox('danger-full-access');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const firstResume = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/resume',
+      );
+      expect(firstResume.params).toMatchObject({
         threadId: 'thr_authority',
-        turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
-      },
-    });
-    expect(await firstResult).not.toHaveProperty('error');
+        sandbox: 'danger-full-access',
+      });
+      server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
+      const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: firstTurn.id,
+        result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_authority',
+          turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
+        },
+      });
+      expect(await firstResult).not.toHaveProperty('error');
 
-    const secondResult = callWithSandbox('read-only');
-    const unsubscribe = await waitForMessage(
-      server,
-      (message) =>
-        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
-    );
-    server.send({ id: unsubscribe.id, ...unsubscribeResponse });
-    const secondResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
-    );
-    expect(secondResume.params).toMatchObject({
-      threadId: 'thr_authority',
-      sandbox: 'read-only',
-    });
-    server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
-    const secondTurn = await waitForMessage(
-      server,
-      (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
-    );
-    server.send({
-      id: secondTurn.id,
-      result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
+      const secondResult = callWithSandbox('read-only');
+      const unsubscribe = await waitForMessage(
+        server,
+        (message) =>
+          message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
+      );
+      server.send({ id: unsubscribe.id, ...unsubscribeResponse });
+      const secondResume = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+      );
+      expect(secondResume.params).toMatchObject({
         threadId: 'thr_authority',
-        turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
-      },
-    });
-    expect(await secondResult).not.toHaveProperty('error');
+        sandbox: 'read-only',
+      });
+      server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
+      const secondTurn = await waitForMessage(
+        server,
+        (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
+      );
+      server.send({
+        id: secondTurn.id,
+        result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_authority',
+          turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
+        },
+      });
+      expect(await secondResult).not.toHaveProperty('error');
 
-    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
-      2,
-    );
-    expect((provider as any).threads.size).toBe(1);
-  });
+      expect(
+        server.messages().filter((message) => message.method === 'thread/resume'),
+      ).toHaveLength(2);
+      expect((provider as any).threads.size).toBe(1);
+    },
+  );
 
   it('reconnects before re-resuming when stale unsubscribe times out', async () => {
     vi.useFakeTimers();
@@ -1931,6 +2082,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondInitialize = await waitForMessage(
       secondServer,
       (message) => message.method === 'initialize',
+    );
+    expect(mocks.spawn.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([
+        'otel.trace_exporter.otlp-http.endpoint="http://127.0.0.1:4318/v1/traces"',
+        'otel.trace_exporter.otlp-http.protocol="json"',
+      ]),
     );
     firstServer.send({ id: firstInitialize.id, result: {} });
     secondServer.send({ id: secondInitialize.id, result: {} });
@@ -3851,6 +4008,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
+    const attachedProviderId = vi.fn(() => 'attached-provider');
+    const attachedProvider: Record<string, unknown> = {
+      id: attachedProviderId,
+    };
+    attachedProvider.self = attachedProvider;
+
     const provider = new OpenAICodexAppServerProvider({
       config: {
         thread_cleanup: 'none',
@@ -3868,6 +4031,7 @@ describe('OpenAICodexAppServerProvider', () => {
         config: {
           working_dir: '{{ workspaceDir }}',
           model: '{{ modelName }}',
+          provider: attachedProvider,
           cli_config: {
             rendered_config: '{{ envValue }}',
           },
@@ -3925,6 +4089,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'Rendered config done' });
+    expect(attachedProviderId).not.toHaveBeenCalled();
   });
 
   it('applies prompt-level server request policy for each turn on a reused connection', async () => {
@@ -4901,6 +5066,64 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.output).toBe('Done');
   });
 
+  it.each([
+    ['reusable', true],
+    ['non-reusable', false],
+  ])(
+    'closes the active %s connection immediately when buffered turn events overflow',
+    async (_label, reuseServer) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
+      });
+
+      const resultPromise = provider.callApi('overflow');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
+      });
+
+      for (let index = 0; index < 2; index++) {
+        server.send({
+          method: 'item/agentMessage/delta',
+          params: {
+            threadId: 'thr_overflow',
+            turnId: 'turn_overflow',
+            itemId: 'stream',
+            delta: 'x'.repeat(4_000_000),
+          },
+        });
+      }
+      server.send({
+        id: 700,
+        method: 'item/commandExecution/requestApproval',
+        params: {
+          threadId: 'thr_overflow',
+          turnId: 'turn_overflow',
+          itemId: 'command',
+          command: 'x'.repeat(4_000_000),
+        },
+      });
+
+      expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
+        false,
+      );
+      await expect(resultPromise).resolves.toMatchObject({
+        error: expect.stringContaining('codex app-server turn events exceeded'),
+      });
+    },
+  );
+
   it('sanitizes sensitive command metadata', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -5186,6 +5409,309 @@ describe('OpenAICodexAppServerProvider', () => {
         source: 'heuristic',
       },
     ]);
+  });
+
+  it('lets deep-tracing app-server processes flush and exit after stdin closes', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        deep_tracing: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Flush native spans');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_flush' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_flush',
+        turn: { id: 'turn_flush', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(server.proc.stdin.end).toHaveBeenCalledOnce();
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('warns when managed Codex configuration overrides the requested trace exporter', async () => {
+    const server = createMockAppServer({
+      configReadResult: {
+        config: {
+          otel: {
+            trace_exporter: {
+              'otlp-http': {
+                endpoint: 'https://managed.example.com/v1/traces?token=sensitive',
+                protocol: 'binary',
+              },
+            },
+          },
+        },
+        origins: {
+          'otel.trace_exporter.otlp-http.endpoint': {
+            name: { type: 'legacyManagedConfigTomlFromMdm' },
+          },
+        },
+      },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Inspect managed tracing');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_managed_tracing' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_managed_tracing', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_managed_tracing',
+        turn: { id: 'turn_managed_tracing', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(server.messages()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: 'config/read', params: { includeLayers: false } }),
+      ]),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Enterprise-managed Codex configuration overrides'),
+      expect.objectContaining({
+        requestedOrigin: 'http://127.0.0.1:4318',
+        effectiveOrigin: 'https://managed.example.com',
+        requestedProtocol: 'json',
+        effectiveProtocol: 'binary',
+        configOrigin: 'legacyManagedConfigTomlFromMdm',
+      }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('sensitive');
+  });
+
+  it('continues deep tracing when an older app-server does not support config/read', async () => {
+    const server = createMockAppServer({
+      configReadError: { code: -32601, message: 'config/read is not supported' },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Use legacy app-server');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_legacy_config' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_legacy_config', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_legacy_config',
+        turn: { id: 'turn_legacy_config', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.not.toHaveProperty('error');
+    expect(server.messages().some((message) => message.method === 'config/read')).toBe(true);
+  });
+
+  it.each([
+    ['none', 'none'],
+    [{ console: {} }, 'unsupported'],
+  ])('warns when managed Codex tracing is %s', async (traceExporter, expectedExporter) => {
+    const server = createMockAppServer({
+      configReadResult: {
+        config: { otel: { trace_exporter: traceExporter } },
+        origins: {
+          'otel.trace_exporter': { name: { type: 'legacyManagedConfigTomlFromMdm' } },
+        },
+      },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Inspect disabled managed tracing');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_disabled_tracing' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_disabled_tracing', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_disabled_tracing',
+        turn: { id: 'turn_disabled_tracing', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Enterprise-managed Codex configuration overrides'),
+      expect.objectContaining({
+        effectiveExporter: expectedExporter,
+        configOrigin: 'legacyManagedConfigTomlFromMdm',
+      }),
+    );
+  });
+
+  it('waits beyond one second for a deep-tracing app-server to finish flushing', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    server.proc.stdin.end.mockImplementation(() => {
+      setTimeout(() => {
+        server.proc.exitCode = 0;
+        server.proc.emit('exit', 0, null);
+      }, 2_000);
+      return server.proc.stdin;
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Wait for delayed exporter flush');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_delayed_flush' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_delayed_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_delayed_flush',
+        turn: { id: 'turn_delayed_flush', status: 'completed', items: [], error: null },
+      },
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await resultPromise;
+
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('escalates signals when a deep-tracing app-server ignores graceful shutdown', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    server.proc.stdin.end.mockImplementation(() => server.proc.stdin);
+    server.proc.kill.mockImplementation((signal?: NodeJS.Signals) => {
+      server.proc.killed = true;
+      if (signal === 'SIGKILL') {
+        server.proc.exitCode = 0;
+        server.proc.emit('exit', 0, signal);
+      }
+      return true;
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        deep_tracing: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Escalate stalled shutdown');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_stalled_flush' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_stalled_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_stalled_flush',
+        turn: { id: 'turn_stalled_flush', status: 'completed', items: [], error: null },
+      },
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(server.proc.stdin.end).toHaveBeenCalledOnce();
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await resultPromise;
+
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
   it('kills the app-server process during cleanup', async () => {

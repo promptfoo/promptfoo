@@ -25,7 +25,7 @@ export function addCrescendo(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Crescendo`,
+        metric: assertion.metric ? `${assertion.metric}/Crescendo` : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,

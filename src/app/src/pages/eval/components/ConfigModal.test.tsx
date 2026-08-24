@@ -2,7 +2,7 @@ import { mockDocumentExecCommand, mockObjectUrl } from '@app/tests/browserMocks'
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigModal from './ConfigModal';
 import { useTableStore } from './store';

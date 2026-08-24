@@ -266,7 +266,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   }
 
   async sendSystemPrompt(sessionId: string, prompt: string) {
-    return this.sendTextMessage(sessionId, 'SYSTEM', prompt);
+    return await this.sendTextMessage(sessionId, 'SYSTEM', prompt);
   }
 
   async sendChatTextHistory(sessionId: string, role: 'USER' | 'ASSISTANT', prompt: string) {
@@ -505,7 +505,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
         // TODO: Add proper token usage tracking
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
         cached: false,
         metadata: {
           ...audioOutput,
