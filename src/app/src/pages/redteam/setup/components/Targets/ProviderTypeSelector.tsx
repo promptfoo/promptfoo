@@ -117,7 +117,7 @@ const allProviderOptions = [
   {
     value: 'codex-security',
     label: 'Codex Security SDK',
-    description: 'Evaluate security scans, findings, fixes, model reasoning, and cost',
+    description: 'Evaluate security scans, finding validation, model reasoning, and cost',
     tag: 'agents',
     recommended: true,
   },

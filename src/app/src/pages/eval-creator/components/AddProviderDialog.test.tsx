@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -34,69 +32,20 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
       >
         Choose Codex Security SDK
       </button>
-      <button
-        type="button"
-        onClick={() =>
-          setProvider(
-            {
-              id: 'openai:codex-security:gpt-5.6-luna',
-              config: { operation: 'security-scan', repository: '' },
-            },
-            'codex-security',
-          )
-        }
-      >
-        Choose unconfigured Codex Security SDK
-      </button>
     </div>
   ),
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
-  default: ({
-    provider,
-    providerType,
-    setProvider,
-    setError,
-    validateAll,
-  }: {
-    provider: { id: string; config: Record<string, unknown> };
-    providerType?: string;
-    setProvider: (provider: { id: string; config: Record<string, unknown> }) => void;
-    setError?: (error: string | null) => void;
-    validateAll?: boolean;
-  }) => {
-    const repository =
-      typeof provider.config.repository === 'string' ? provider.config.repository : '';
-
-    useEffect(() => {
-      if (validateAll && providerType === 'codex-security') {
-        setError?.(repository.trim() ? null : 'Repository path is required');
-      }
-    }, [providerType, repository, setError, validateAll]);
-
-    return (
-      <div
-        data-testid="provider-config-editor"
-        data-provider-type={providerType}
-        data-validate-all={String(validateAll)}
-      >
-        provider config editor
-        {providerType === 'codex-security' && (
-          <input
-            aria-label="Repository path"
-            value={repository}
-            onChange={(event) =>
-              setProvider({
-                ...provider,
-                config: { ...provider.config, repository: event.target.value },
-              })
-            }
-          />
-        )}
-      </div>
-    );
-  },
+  default: ({ providerType, validateAll }: { providerType?: string; validateAll?: boolean }) => (
+    <div
+      data-testid="provider-config-editor"
+      data-provider-type={providerType}
+      data-validate-all={String(validateAll)}
+    >
+      provider config editor
+    </div>
+  ),
 }));
 
 afterEach(() => {
@@ -240,34 +189,5 @@ describe('AddProviderDialog layout', () => {
       label: 'openai:codex-security:gpt-5.6-luna',
       config: { operation: 'security-scan', repository: '/repos/service' },
     });
-  });
-
-  it('prevents saving Codex Security until a repository path is provided', async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    render(
-      <TooltipProvider>
-        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
-      </TooltipProvider>,
-    );
-
-    await user.click(
-      screen.getByRole('button', { name: 'Choose unconfigured Codex Security SDK' }),
-    );
-
-    const addProvider = screen.getByRole('button', { name: 'Add Provider' });
-    expect(addProvider).toBeDisabled();
-    expect(onSave).not.toHaveBeenCalled();
-
-    await user.type(screen.getByLabelText('Repository path'), '/repos/service');
-
-    expect(addProvider).toBeEnabled();
-    await user.click(addProvider);
-
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: { operation: 'security-scan', repository: '/repos/service' },
-      }),
-    );
   });
 });

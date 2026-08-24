@@ -1,12 +1,8 @@
-import { execFile } from 'child_process';
 import fs from 'fs/promises';
-import path from 'path';
-import type { ChildProcess } from 'child_process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule, resolvePackageEntryPoint } from '../../src/esm';
-import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import {
   CODEX_SECURITY_OPERATIONS,
   OpenAICodexSecurityProvider,
@@ -14,11 +10,6 @@ import {
 import { providerRegistry } from '../../src/providers/providerRegistry';
 
 import type { CallApiContextParams } from '../../src/types/index';
-
-vi.mock('child_process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('child_process')>()),
-  execFile: vi.fn(),
-}));
 
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/esm')>()),
@@ -88,20 +79,6 @@ function createScanResult(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mockCli(stdout: string, error: NodeJS.ErrnoException | null = null): ChildProcess {
-  const child = { kill: vi.fn() } as unknown as ChildProcess;
-  vi.mocked(execFile).mockImplementation(((
-    _file: string,
-    _args: string[],
-    _options: unknown,
-    callback: Function,
-  ) => {
-    queueMicrotask(() => callback(error, stdout, ''));
-    return child;
-  }) as typeof execFile);
-  return child;
-}
-
 describe('OpenAICodexSecurityProvider', () => {
   let originalBasePath: string | undefined;
 
@@ -137,7 +114,6 @@ describe('OpenAICodexSecurityProvider', () => {
         close: mockClose,
       };
     });
-    vi.mocked(execFile).mockReset();
   });
 
   afterEach(async () => {
@@ -158,20 +134,13 @@ describe('OpenAICodexSecurityProvider', () => {
       );
     });
 
-    it('includes every operation bundled with the Codex Security SDK', () => {
-      expect(CODEX_SECURITY_OPERATIONS).toHaveLength(14);
-      expect(CODEX_SECURITY_OPERATIONS).toEqual(
-        expect.arrayContaining([
-          'security-scan',
-          'deep-security-scan',
-          'security-diff-scan',
-          'validation',
-          'fix-finding',
-          'verify-fix',
-          'threat-model',
-          'track-findings',
-        ]),
-      );
+    it('exposes only operations implemented natively by the Codex Security SDK', () => {
+      expect(CODEX_SECURITY_OPERATIONS).toEqual([
+        'security-scan',
+        'deep-security-scan',
+        'security-diff-scan',
+        'validation',
+      ]);
     });
 
     it('accepts a custom provider ID and SDK settings', () => {
@@ -199,6 +168,12 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(
         () => new OpenAICodexSecurityProvider({ config: { apiKey: 'secret' } as never }),
       ).toThrow('Unrecognized key');
+      expect(
+        () => new OpenAICodexSecurityProvider({ config: { operation: 'fix-finding' } as never }),
+      ).toThrow('Invalid OpenAI Codex Security provider configuration');
+      expect(
+        () => new OpenAICodexSecurityProvider({ config: { operation: 'threat-model' } as never }),
+      ).toThrow('Invalid OpenAI Codex Security provider configuration');
     });
 
     it('rejects conflicting reasoning settings and incompatible diff targets', () => {
@@ -260,6 +235,40 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.metadata?.sdkVersion).toBe('0.1.18');
       expect(importModule).toHaveBeenCalledWith('/legacy/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
+    });
+
+    it('continues searching when the first installed SDK cannot be imported', async () => {
+      cliState.basePath = '/evaluation/config';
+      vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
+        basePath === '/evaluation/config'
+          ? '/broken/@openai/codex-security/dist/index.js'
+          : '/promptfoo/@openai/codex-security/dist/index.js',
+      );
+      vi.mocked(importModule).mockImplementation(async (entryPoint) => {
+        if (String(entryPoint).startsWith('/broken/')) {
+          throw new Error('broken local SDK installation');
+        }
+        return mockModule;
+      });
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(importModule).toHaveBeenCalledWith('/broken/@openai/codex-security/dist/index.js');
+      expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
+    });
+
+    it('rejects provider-scoped credentials that the native SDK cannot consume', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        env: { OPENAI_API_KEY: 'provider-scoped-test-key' },
+      });
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('does not support provider-scoped OPENAI_API_KEY');
+      expect(response.error).toContain('Promptfoo process environment');
+      expect(mockRun).not.toHaveBeenCalled();
     });
 
     it('rejects outdated security SDKs that omit validation and deep-worker usage', async () => {
@@ -373,6 +382,46 @@ describe('OpenAICodexSecurityProvider', () => {
         process.cwd(),
         expect.objectContaining({ mode: 'deep', subagents: 0 }),
       );
+    });
+
+    it('uses aggregate scan usage rather than only the final model turn', async () => {
+      mockRun.mockResolvedValue(
+        createScanResult({
+          turnResult: {
+            usage: {
+              input_tokens: 10,
+              output_tokens: 4,
+              cached_input_tokens: 2,
+              cache_write_input_tokens: 1,
+              reasoning_output_tokens: 3,
+            },
+          },
+          cost: {
+            inputTokens: 500,
+            outputTokens: 200,
+            cachedInputTokens: 50,
+            cacheWriteInputTokens: 20,
+            estimatedUsd: 0.08,
+          },
+        }),
+      );
+      const provider = new OpenAICodexSecurityProvider({
+        config: { operation: 'deep-security-scan' },
+      });
+
+      const response = await provider.callApi('Run a complete deep scan');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 500,
+        completion: 200,
+        cached: 50,
+        total: 700,
+        completionDetails: {
+          reasoning: 3,
+          cacheReadInputTokens: 50,
+          cacheCreationInputTokens: 20,
+        },
+      });
     });
 
     it('resolves repository, output, plugin, and knowledge-base paths from the config directory', async () => {
@@ -496,6 +545,17 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(await provider.callApi('Scan')).toEqual({
         error: 'Codex Security operation failed: Trusted Access is required',
       });
+      expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves successful scan results when closing the SDK client fails', async () => {
+      mockClose.mockRejectedValue(new Error('cleanup failed'));
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.operation).toBe('security-scan');
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
   });
@@ -625,237 +685,17 @@ describe('OpenAICodexSecurityProvider', () => {
         expect.objectContaining({ finding: 'Unchecked redirect in /login' }),
       );
     });
-  });
 
-  describe('remediation CLI', () => {
-    it('requires explicit permission before patching repository files', async () => {
+    it('preserves validated findings when closing the SDK client fails', async () => {
+      mockClose.mockRejectedValue(new Error('cleanup failed'));
       const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'fix-finding' },
+        config: { operation: 'validation' },
       });
 
-      const response = await provider.callApi('Fix SQL injection');
+      const response = await provider.callApi('Validate this finding');
 
-      expect(response.error).toContain('allow_file_writes: true');
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('patches saved findings through the bundled CLI and returns structured results', async () => {
-      mockCli('{"scanId":"scan-42","patches":[{"status":"fixed"}]}');
-      const provider = new OpenAICodexSecurityProvider({
-        config: {
-          operation: 'fix-finding',
-          repository: '/repos/isolated-checkout',
-          allow_file_writes: true,
-          scan_id: 'scan-42',
-          severity: 'high',
-          model: 'gpt-5.6-sol',
-          reasoning_effort: 'high',
-          cli_env: { SECURITY_EVAL: true },
-        },
-      });
-
-      const response = await provider.callApi('Patch findings');
-
-      expect(execFile).toHaveBeenCalledWith(
-        process.execPath,
-        [
-          '/packages/@openai/codex-security/bin/codex-security.mjs',
-          'patch',
-          '--codex',
-          'model="gpt-5.6-sol"',
-          '--effort',
-          'high',
-          '--scan',
-          'scan-42',
-          '--severity',
-          'high',
-          '--format',
-          'json',
-        ],
-        expect.objectContaining({
-          cwd: '/repos/isolated-checkout',
-          env: expect.objectContaining({ SECURITY_EVAL: 'true' }),
-        }),
-        expect.any(Function),
-      );
-      expect(JSON.parse(response.output)).toEqual({
-        scanId: 'scan-42',
-        patches: [{ status: 'fixed' }],
-      });
-      expect(response.metadata?.operation).toBe('fix-finding');
-    });
-
-    it('does not request unsupported JSON output when patching literal finding text', async () => {
-      mockCli('Updated src/query.ts and verified the regression test.');
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'fix-finding', allow_file_writes: true },
-      });
-
-      const response = await provider.callApi('SQL injection in src/query.ts');
-
-      expect(vi.mocked(execFile).mock.calls[0][1]).not.toContain('--format');
-      expect(response.output).toBe('Updated src/query.ts and verified the regression test.');
-    });
-
-    it('preserves structured verification failures returned with a nonzero exit status', async () => {
-      mockCli('{"results":[{"status":"still_vulnerable"}]}', {
-        name: 'Error',
-        message: 'sensitive finding text should not leak',
-        code: 1,
-      } as unknown as NodeJS.ErrnoException);
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', finding_id: 'finding-42' },
-      });
-
-      const response = await provider.callApi('Verify the fix');
-
-      expect(JSON.parse(response.output)).toEqual({
-        results: [{ status: 'still_vulnerable' }],
-      });
-      expect(response.metadata).toMatchObject({ operation: 'verify-fix', exitCode: 1 });
       expect(response.error).toBeUndefined();
-    });
-
-    it('returns sanitized CLI failures without exposing arguments or stderr', async () => {
-      mockCli('', {
-        name: 'Error',
-        message: 'Command failed: finding contains secret-token',
-        code: 2,
-      } as unknown as NodeJS.ErrnoException);
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix' },
-      });
-
-      expect(await provider.callApi('secret-token')).toEqual({
-        error: 'Codex Security verify-fix failed (exit code 2).',
-      });
-    });
-
-    it('rejects model-provider overrides unsupported by patch and verify-fix commands', async () => {
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', model_provider: 'amazon-bedrock' },
-      });
-
-      expect((await provider.callApi('Verify')).error).toContain('does not support');
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('rejects CLI reasoning and severity settings unsupported by the actual bundled commands', async () => {
-      const ultraProvider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', reasoning_effort: 'ultra' },
-      });
-      const severityProvider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', severity: 'high' },
-      });
-
-      expect((await ultraProvider.callApi('Verify')).error).toContain('does not support ultra');
-      expect((await severityProvider.callApi('Verify')).error).toContain(
-        'severity filtering requires scan_id or finding_id',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('forwards explicit finding files to remediation commands', async () => {
-      cliState.basePath = '/workspace/evals';
-      mockCli('{"results":[{"status":"fixed"}]}');
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', finding_file: './findings/issue.md' },
-      });
-
-      await provider.callApi('Verify');
-
-      expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(
-        expect.arrayContaining(['/workspace/evals/findings/issue.md', '--format', 'json']),
-      );
-    });
-  });
-
-  describe('standalone plugin skills', () => {
-    it('invokes installed security skills through the Codex SDK with a read-only sandbox', async () => {
-      cliState.basePath = '/workspace/evals';
-      const callApi = vi
-        .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: 'Threat model', metadata: { toolCalls: 3 } });
-      const provider = new OpenAICodexSecurityProvider({
-        config: {
-          operation: 'threat-model',
-          repository: '../repo',
-          codex_home: './codex-home',
-          model: 'gpt-5.6-terra',
-          reasoning_effort: 'medium',
-        },
-      });
-
-      const response = await provider.callApi('Map trust boundaries');
-
-      expect(callApi).toHaveBeenCalledWith(
-        'Use $codex-security:threat-model to complete this task.\n\nMap trust boundaries',
-        undefined,
-        undefined,
-      );
-      const delegatedProvider = callApi.mock.instances[0] as OpenAICodexSDKProvider;
-      expect(delegatedProvider.config).toMatchObject({
-        model: 'gpt-5.6-terra',
-        model_reasoning_effort: 'medium',
-        working_dir: '/workspace/repo',
-        sandbox_mode: 'read-only',
-        approval_policy: 'never',
-        cli_env: { CODEX_HOME: '/workspace/evals/codex-home' },
-      });
-      expect(response.metadata).toMatchObject({
-        toolCalls: 3,
-        operation: 'threat-model',
-        repository: '/workspace/repo',
-      });
-    });
-
-    it('requires write opt-in before updating repository security policy', async () => {
-      const callApi = vi.spyOn(OpenAICodexSDKProvider.prototype, 'callApi');
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'define-security-policy' },
-      });
-
-      expect((await provider.callApi('Create SECURITY.md')).error).toContain(
-        'allow_file_writes: true',
-      );
-      expect(callApi).not.toHaveBeenCalled();
-    });
-
-    it('requires explicit approval before creating external issues', async () => {
-      const callApi = vi.spyOn(OpenAICodexSDKProvider.prototype, 'callApi');
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'track-findings' },
-      });
-
-      expect((await provider.callApi('Create Linear issues')).error).toContain(
-        'allow_external_writes: true',
-      );
-      expect(callApi).not.toHaveBeenCalled();
-    });
-
-    it('preserves eval context without leaking security-only config into the delegated provider', async () => {
-      const callApi = vi
-        .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: 'Finding triaged' });
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'triage-finding' },
-      });
-      const context = {
-        prompt: { raw: 'triage', config: { operation: 'triage-finding' } },
-        vars: { finding: 'CVE-example' },
-        evaluationId: 'eval-123',
-      } as unknown as CallApiContextParams;
-
-      await provider.callApi('Triage CVE-example', context);
-
-      expect(callApi).toHaveBeenCalledWith(
-        expect.stringContaining('$codex-security:triage-finding'),
-        expect.objectContaining({
-          evaluationId: 'eval-123',
-          prompt: expect.objectContaining({ config: undefined }),
-        }),
-        undefined,
-      );
+      expect(response.metadata?.disposition).toBe('reportable');
     });
   });
 
@@ -867,19 +707,6 @@ describe('OpenAICodexSecurityProvider', () => {
       await provider.shutdown();
 
       expect(mockClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('resolves the bundled CLI relative to the optional package entry point', async () => {
-      mockCli('{"results":[]}');
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'verify-fix', finding_id: 'finding-42' },
-      });
-
-      await provider.callApi('Verify');
-
-      expect(vi.mocked(execFile).mock.calls[0][1]?.[0]).toBe(
-        path.join('/packages/@openai/codex-security', 'bin/codex-security.mjs'),
-      );
     });
   });
 });

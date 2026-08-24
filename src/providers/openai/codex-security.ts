@@ -1,16 +1,19 @@
-import { type ChildProcess, execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
-import cliState from '../../cliState';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
-import { renderVarsInObject } from '../../util/render';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
 import type {
   CodexSecurity,
   JsonObject,
@@ -20,13 +23,13 @@ import type {
   ValidationOptions,
 } from '@openai/codex-security';
 
-import type { TokenUsage } from '../../contracts/shared';
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
+  TokenUsage,
 } from '../../types/index';
 
 export const CODEX_SECURITY_OPERATIONS = [
@@ -34,16 +37,6 @@ export const CODEX_SECURITY_OPERATIONS = [
   'deep-security-scan',
   'security-diff-scan',
   'validation',
-  'fix-finding',
-  'verify-fix',
-  'threat-model',
-  'finding-discovery',
-  'attack-path-analysis',
-  'triage-finding',
-  'define-security-policy',
-  'propose-security-hardening',
-  'vulnerability-writeup',
-  'track-findings',
 ] as const;
 
 export type CodexSecurityOperation = (typeof CODEX_SECURITY_OPERATIONS)[number];
@@ -91,16 +84,6 @@ const CodexSecurityConfigSchema = z
     codex_overrides: z.record(z.string(), z.unknown()).optional(),
     finding: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
     finding_file: z.string().min(1).optional(),
-    finding_id: z.string().min(1).optional(),
-    scan_id: z.string().min(1).optional(),
-    severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-    codex_home: z.string().min(1).optional(),
-    sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-    cli_env: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
-    enable_streaming: z.boolean().optional(),
-    deep_tracing: z.boolean().optional(),
-    allow_file_writes: z.boolean().optional(),
-    allow_external_writes: z.boolean().optional(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -137,11 +120,6 @@ export type OpenAICodexSecurityConfig = z.infer<typeof CodexSecurityConfigSchema
 
 type CodexSecurityModule = typeof import('@openai/codex-security');
 
-interface LoadedCodexSecurity {
-  module: CodexSecurityModule;
-  entryPoint: string;
-}
-
 interface ScanObservers {
   cost?: ScanCost;
   progress?: unknown;
@@ -163,7 +141,7 @@ function parseConfig(config: unknown = {}): OpenAICodexSecurityConfig {
   return parsed.data;
 }
 
-async function loadCodexSecurity(): Promise<LoadedCodexSecurity> {
+async function loadCodexSecurity(): Promise<CodexSecurityModule> {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -172,6 +150,7 @@ async function loadCodexSecurity(): Promise<LoadedCodexSecurity> {
   ].filter((candidate): candidate is string => Boolean(candidate));
   const visitedEntryPoints = new Set<string>();
   const incompatibleVersions = new Set<string>();
+  let importFailed = false;
 
   for (const basePath of new Set(basePaths)) {
     const entryPoint = resolvePackageEntryPoint('@openai/codex-security', basePath);
@@ -191,26 +170,30 @@ async function loadCodexSecurity(): Promise<LoadedCodexSecurity> {
         continue;
       }
 
-      return { module, entryPoint };
+      return module;
     } catch (error) {
       logger.debug('[CodexSecurity] Failed to load SDK', { error });
-      throw new Error(
-        dedent`Failed to load @openai/codex-security.
-
-        The package requires a supported even-numbered Node.js release: ^22.13.0, ^24.0.0, or ^26.0.0.
-        Reinstall it with:
-          npm install @openai/codex-security
-
-        See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
-      );
+      importFailed = true;
     }
+  }
+
+  if (importFailed) {
+    throw new Error(
+      dedent`Failed to load @openai/codex-security.
+
+      The package requires a supported even-numbered Node.js release: ^22.13.0, ^24.0.0, or ^26.0.0.
+      Reinstall it with:
+        npm install @openai/codex-security
+
+      See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
+    );
   }
 
   if (incompatibleVersions.size > 0) {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for standalone finding validation, complete security skills, and accurate deep-worker cost tracking.
+      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for finding validation and accurate deep-worker cost tracking.
       Upgrade it with:
         npm install @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
@@ -238,17 +221,19 @@ function getTokenUsage(result: ScanResult, observedCost?: ScanCost): TokenUsage 
   const values = usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : {};
   const cost = result.cost ?? observedCost;
   const inputTokens =
-    typeof values.input_tokens === 'number' ? values.input_tokens : cost?.inputTokens;
+    cost?.inputTokens ??
+    (typeof values.input_tokens === 'number' ? values.input_tokens : undefined);
   const outputTokens =
-    typeof values.output_tokens === 'number' ? values.output_tokens : cost?.outputTokens;
+    cost?.outputTokens ??
+    (typeof values.output_tokens === 'number' ? values.output_tokens : undefined);
   const cachedTokens =
-    typeof values.cached_input_tokens === 'number'
-      ? values.cached_input_tokens
-      : cost?.cachedInputTokens;
+    cost?.cachedInputTokens ??
+    (typeof values.cached_input_tokens === 'number' ? values.cached_input_tokens : undefined);
   const cacheWriteTokens =
-    typeof values.cache_write_input_tokens === 'number'
+    cost?.cacheWriteInputTokens ??
+    (typeof values.cache_write_input_tokens === 'number'
       ? values.cache_write_input_tokens
-      : cost?.cacheWriteInputTokens;
+      : undefined);
   const reasoningTokens =
     typeof values.reasoning_output_tokens === 'number' ? values.reasoning_output_tokens : undefined;
 
@@ -273,26 +258,12 @@ function getTokenUsage(result: ScanResult, observedCost?: ScanCost): TokenUsage 
   };
 }
 
-function parseCliOutput(stdout: string): unknown {
-  const trimmed = stdout.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return trimmed;
-  }
-}
-
 export class OpenAICodexSecurityProvider implements ApiProvider {
   readonly config: OpenAICodexSecurityConfig;
   readonly env?: EnvOverrides;
 
   private readonly providerId: string;
   private readonly activeClients = new Set<CodexSecurity>();
-  private readonly activeChildren = new Set<ChildProcess>();
 
   constructor(
     options: { id?: string; config?: OpenAICodexSecurityConfig; env?: EnvOverrides } = {},
@@ -316,11 +287,6 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    for (const child of this.activeChildren) {
-      child.kill();
-    }
-    this.activeChildren.clear();
-
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
@@ -356,47 +322,19 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
       const repository = resolveConfigPath(configuredRepository) ?? process.cwd();
 
-      if (
-        (operation === 'fix-finding' || operation === 'define-security-policy') &&
-        config.allow_file_writes !== true
-      ) {
-        return {
-          error: `Codex Security operation "${operation}" changes repository files. Set allow_file_writes: true and evaluate an isolated repository checkout.`,
-        };
-      }
-
-      if (operation === 'track-findings' && config.allow_external_writes !== true) {
-        return {
-          error:
-            'Codex Security operation "track-findings" can create or update external issues. Set allow_external_writes: true to enable it.',
-        };
-      }
-
       if (callOptions?.abortSignal?.aborted) {
         return { error: 'Codex Security operation was aborted before it started.' };
       }
 
-      if (operation === 'fix-finding' || operation === 'verify-fix') {
-        return await this.runCliOperation(prompt, repository, operation, config, callOptions);
+      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+        if (this.env?.[key] && this.env[key] !== process.env[key]) {
+          return {
+            error: `Codex Security does not support provider-scoped ${key}. Set ${key} in the Promptfoo process environment before running the evaluation.`,
+          };
+        }
       }
 
-      if (
-        operation !== 'security-scan' &&
-        operation !== 'deep-security-scan' &&
-        operation !== 'security-diff-scan' &&
-        operation !== 'validation'
-      ) {
-        return await this.runStandaloneSkill(
-          prompt,
-          repository,
-          operation,
-          config,
-          context,
-          callOptions,
-        );
-      }
-
-      const { module } = await loadCodexSecurity();
+      const module = await loadCodexSecurity();
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,
@@ -427,7 +365,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         );
       } finally {
         this.activeClients.delete(client);
-        await client.close();
+        try {
+          await client.close();
+        } catch (error) {
+          logger.warn('[CodexSecurity] Error while closing SDK client', { error });
+        }
       }
     } catch (error) {
       return {
@@ -665,166 +607,5 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         skillCalls: [{ name: 'validation' }],
       },
     };
-  }
-
-  private async runCliOperation(
-    prompt: string,
-    repository: string,
-    operation: 'fix-finding' | 'verify-fix',
-    config: OpenAICodexSecurityConfig,
-    callOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const { entryPoint } = await loadCodexSecurity();
-    const executable = path.resolve(path.dirname(entryPoint), '../bin/codex-security.mjs');
-    const command = operation === 'fix-finding' ? 'patch' : 'verify-fix';
-    const args = [executable, command];
-    const effort = config.model_reasoning_effort ?? config.reasoning_effort;
-
-    if (config.model_provider) {
-      return {
-        error: `Codex Security ${command} does not support the model_provider override.`,
-      };
-    }
-
-    if (effort === 'ultra') {
-      return {
-        error: `Codex Security ${command} supports reasoning effort through max, but does not support ultra.`,
-      };
-    }
-
-    if (config.severity && !config.scan_id && !config.finding_id) {
-      return {
-        error: `Codex Security ${command} severity filtering requires scan_id or finding_id.`,
-      };
-    }
-
-    if (config.model) {
-      args.push('--codex', `model=${JSON.stringify(config.model)}`);
-    }
-    if (effort) {
-      args.push('--effort', effort);
-    }
-    if (config.scan_id) {
-      args.push('--scan', config.scan_id);
-    }
-    if (config.severity) {
-      args.push('--severity', config.severity);
-    }
-    if (config.finding_id) {
-      args.push(config.finding_id);
-    } else if (!config.scan_id) {
-      const finding = config.finding_file
-        ? resolveConfigPath(config.finding_file)!
-        : (config.finding ?? prompt);
-      args.push(typeof finding === 'string' ? finding : JSON.stringify(finding));
-    }
-    if (operation === 'verify-fix' || config.scan_id || config.finding_id) {
-      args.push('--format', 'json');
-    }
-
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...Object.fromEntries(
-        Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
-      ),
-      ...(config.codex_home ? { CODEX_HOME: resolveConfigPath(config.codex_home) } : {}),
-    };
-
-    return new Promise<ProviderResponse>((resolve) => {
-      let child: ChildProcess;
-      child = execFile(
-        process.execPath,
-        args,
-        {
-          cwd: repository,
-          env: childEnv,
-          encoding: 'utf8',
-          maxBuffer: 16 * 1024 * 1024,
-          ...(callOptions?.abortSignal ? { signal: callOptions.abortSignal } : {}),
-        },
-        (error, stdout) => {
-          this.activeChildren.delete(child);
-          const output = parseCliOutput(stdout ?? '');
-          if (error && (output === undefined || typeof output === 'string')) {
-            const code = typeof error.code === 'number' ? ` (exit code ${error.code})` : '';
-            resolve({ error: `Codex Security ${command} failed${code}.` });
-            return;
-          }
-
-          const structured = output !== undefined && typeof output !== 'string';
-          resolve({
-            output: structured ? JSON.stringify(output) : output,
-            ...(structured ? { format: 'json', raw: output } : {}),
-            cached: false,
-            metadata: {
-              operation,
-              repository,
-              ...(config.model ? { model: config.model } : {}),
-              ...(effort ? { reasoningEffort: effort } : {}),
-              ...(typeof error?.code === 'number' ? { exitCode: error.code } : {}),
-              skillCalls: [{ name: operation }],
-            },
-          });
-        },
-      );
-      this.activeChildren.add(child);
-    });
-  }
-
-  private async runStandaloneSkill(
-    prompt: string,
-    repository: string,
-    operation: CodexSecurityOperation,
-    config: OpenAICodexSecurityConfig,
-    context?: CallApiContextParams,
-    callOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const { OpenAICodexSDKProvider } = await import('./codex-sdk');
-    const effort = config.model_reasoning_effort ?? config.reasoning_effort;
-    const provider = new OpenAICodexSDKProvider({
-      id: this.providerId,
-      env: this.env,
-      config: {
-        ...(config.model ? { model: config.model } : {}),
-        ...(config.model_provider ? { model_provider: config.model_provider } : {}),
-        ...(effort ? { model_reasoning_effort: effort } : {}),
-        ...(config.maxRetries === undefined ? {} : { maxRetries: config.maxRetries }),
-        working_dir: repository,
-        sandbox_mode:
-          config.sandbox_mode ?? (config.allow_file_writes ? 'workspace-write' : 'read-only'),
-        approval_policy: 'never',
-        enable_streaming: config.enable_streaming ?? true,
-        ...(config.deep_tracing === undefined ? {} : { deep_tracing: config.deep_tracing }),
-        cli_env: {
-          ...config.cli_env,
-          ...(config.codex_home ? { CODEX_HOME: resolveConfigPath(config.codex_home)! } : {}),
-        },
-      },
-    });
-
-    try {
-      const skillPrompt = `Use $codex-security:${operation} to complete this task.\n\n${prompt}`;
-      const delegatedContext = context
-        ? {
-            ...context,
-            prompt: {
-              ...context.prompt,
-              config: undefined,
-            },
-          }
-        : undefined;
-      const response = await provider.callApi(skillPrompt, delegatedContext, callOptions);
-      return {
-        ...response,
-        metadata: {
-          ...response.metadata,
-          operation,
-          repository,
-          ...(config.model ? { model: config.model } : {}),
-        },
-      };
-    } finally {
-      await provider.shutdown();
-    }
   }
 }

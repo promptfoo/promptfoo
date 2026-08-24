@@ -75,11 +75,13 @@ vi.mock('./CommonConfigurationOptions', () => ({
 
 function StatefulCodexSecurityEditor({
   initialConfig = {},
+  initialId = 'openai:codex-security:gpt-5.6-luna',
 }: {
   initialConfig?: ProviderOptions['config'];
+  initialId?: string;
 }) {
   const [provider, setProvider] = React.useState<ProviderOptions>({
-    id: 'openai:codex-security:gpt-5.6-luna',
+    id: initialId,
     config: {
       operation: 'security-scan',
       repository: '/repos/service',
@@ -566,22 +568,6 @@ describe('ProviderConfigEditor', () => {
         },
         expectedError: 'Working-tree scans cannot specify a head Git reference',
       },
-      {
-        config: {
-          operation: 'fix-finding',
-          repository: '/repos/service',
-          model_reasoning_effort: 'ultra',
-        },
-        expectedError: 'Finding remediation supports reasoning effort through max',
-      },
-      {
-        config: {
-          operation: 'verify-fix',
-          repository: '/repos/service',
-          severity: 'high',
-        },
-        expectedError: 'Severity filtering requires a finding ID or scan ID',
-      },
     ])('validates Codex Security configuration: $expectedError', ({ config, expectedError }) => {
       const mockSetError = vi.fn();
       let validateFn: (() => boolean) | null = null;
@@ -624,9 +610,54 @@ describe('ProviderConfigEditor', () => {
       expect(validateFn!()).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
     });
+
+    it('accepts the documented working_dir repository alias', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security',
+            config: { operation: 'security-scan', working_dir: '/repos/legacy-service' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/legacy-service');
+      expect(validateFn!()).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
+
+    it('validates missing repository paths immediately in the provider dialog', async () => {
+      const mockSetError = vi.fn();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security',
+            config: { operation: 'security-scan', repository: '' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          validateAll
+          providerType="codex-security"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(mockSetError).toHaveBeenCalledWith('Repository path is required');
+      });
+    });
   });
 
-  it('configures the Codex model, security operation, and deep-scan worker settings', async () => {
+  it('configures native scan operations, models, reasoning, authentication, and cost', async () => {
     const user = userEvent.setup();
 
     renderWithProviders(<StatefulCodexSecurityEditor />);
@@ -636,17 +667,8 @@ describe('ProviderConfigEditor', () => {
 
     await user.selectOptions(screen.getByLabelText('Security operation'), 'deep-security-scan');
 
-    expect(screen.getByLabelText('Discovery workers')).toHaveValue(2);
-    expect(screen.getByLabelText('Subagents per worker')).toHaveValue(1);
-    expect(screen.getByLabelText('Maximum discovery passes')).toHaveValue(3);
-
-    const subagents = screen.getByLabelText('Subagents per worker');
-    await user.clear(subagents);
-    await user.type(subagents, '0');
-
-    expect(subagents).toHaveValue(0);
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
-      subagents: 0,
+      operation: 'deep-security-scan',
     });
 
     const modelInput = screen.getByLabelText('Model');
@@ -655,9 +677,40 @@ describe('ProviderConfigEditor', () => {
 
     expect(screen.getByText('openai:codex-security:gpt-5.6-terra')).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-scan');
+    await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
+    await user.selectOptions(screen.getByLabelText('Authentication'), 'api-key');
+    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    await user.type(screen.getByLabelText('Maximum cost (USD)'), '2');
 
-    expect(screen.queryByLabelText('Discovery workers')).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      model_reasoning_effort: 'max',
+      auth: 'api-key',
+      max_cost_usd: 2,
+    });
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-scan');
+    expect(screen.getByLabelText('Security operation')).toHaveValue('security-scan');
+  });
+
+  it('clears legacy config.model when the inline model is edited or removed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialId="openai:codex-security"
+        initialConfig={{ model: 'gpt-5.6-sol' }}
+      />,
+    );
+
+    const modelInput = screen.getByLabelText('Model');
+    expect(modelInput).toHaveValue('gpt-5.6-sol');
+
+    await user.clear(modelInput);
+
+    expect(modelInput).toHaveValue('');
+    expect(screen.getByText('openai:codex-security')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'model',
+    );
   });
 
   it('configures scoped repository paths and mutually exclusive working-tree diff targets', async () => {
@@ -692,54 +745,46 @@ describe('ProviderConfigEditor', () => {
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
       'head_ref',
     );
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Scan uncommitted working-tree changes.' }),
+    );
+    expect(screen.getByLabelText('Head Git reference')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'working_tree',
+    );
   });
 
-  it('removes cleared optional fields and configures saved remediation findings', async () => {
+  it('removes cleared optional paths, scan cost, and finding files', async () => {
     const user = userEvent.setup();
     renderWithProviders(<StatefulCodexSecurityEditor />);
 
-    const outputDirectory = screen.getByLabelText('Artifact output directory');
-    await user.type(outputDirectory, '/tmp/security-artifacts');
-    await user.clear(outputDirectory);
+    const scopedPaths = screen.getByLabelText('Scoped paths');
+    await user.type(scopedPaths, 'src/auth');
+    await user.clear(scopedPaths);
 
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
-      'output_dir',
+      'paths',
     );
 
-    await user.selectOptions(screen.getByLabelText('Security operation'), 'verify-fix');
-    await user.type(screen.getByLabelText('Finding ID'), 'finding-123');
-    await user.type(screen.getByLabelText('Scan ID'), 'scan-456');
-    await user.selectOptions(screen.getByLabelText('Minimum finding severity'), 'high');
-
-    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
-      finding_id: 'finding-123',
-      scan_id: 'scan-456',
-      severity: 'high',
-    });
-
-    await user.clear(screen.getByLabelText('Finding ID'));
-    await user.clear(screen.getByLabelText('Scan ID'));
-    await user.selectOptions(screen.getByLabelText('Minimum finding severity'), '');
-
-    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
-    expect(config).not.toHaveProperty('finding_id');
-    expect(config).not.toHaveProperty('scan_id');
-    expect(config).not.toHaveProperty('severity');
-  });
-
-  it('limits remediation reasoning to options supported by the Codex Security CLI', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <StatefulCodexSecurityEditor initialConfig={{ model_reasoning_effort: 'ultra' }} />,
+    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'max_cost_usd',
     );
 
-    await user.selectOptions(screen.getByLabelText('Security operation'), 'fix-finding');
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'validation');
+    expect(screen.queryByLabelText('Maximum cost (USD)')).not.toBeInTheDocument();
 
-    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('max');
-    expect(screen.queryByRole('option', { name: 'ultra' })).not.toBeInTheDocument();
+    const findingFile = screen.getByLabelText('Finding file');
+    await user.type(findingFile, '/tmp/finding.json');
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
-      model_reasoning_effort: 'max',
+      finding_file: '/tmp/finding.json',
     });
+
+    await user.clear(findingFile);
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'finding_file',
+    );
   });
 
   it('should render without crashing when provider is an empty object', () => {

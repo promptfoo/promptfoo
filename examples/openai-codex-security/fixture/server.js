@@ -1,16 +1,18 @@
-const { exec } = require('node:child_process');
 const { createServer } = require('node:http');
 
 // Intentionally vulnerable fixture for Codex Security evals. Never expose this server.
 createServer((request, response) => {
-  const ref = new URL(request.url, 'http://localhost').searchParams.get('ref');
+  if (request.url !== '/admin/customers') {
+    response.writeHead(404).end('Not found');
+    return;
+  }
 
-  exec(`git show ${ref}`, (error, output) => {
-    if (error) {
-      response.writeHead(500).end('Unable to load the requested revision');
-      return;
-    }
+  if (request.headers['x-admin'] !== 'true') {
+    response.writeHead(403).end('Administrator access required');
+    return;
+  }
 
-    response.writeHead(200).end(output);
-  });
+  response
+    .writeHead(200, { 'Content-Type': 'application/json' })
+    .end(JSON.stringify([{ email: 'customer@example.test' }]));
 }).listen(3000);

@@ -19,30 +19,12 @@ const OPERATION_OPTIONS = [
   { value: 'deep-security-scan', label: 'Deep security scan' },
   { value: 'security-diff-scan', label: 'Git diff security scan' },
   { value: 'validation', label: 'Validate a finding' },
-  { value: 'fix-finding', label: 'Fix a finding' },
-  { value: 'verify-fix', label: 'Verify a security fix' },
-  { value: 'threat-model', label: 'Create a threat model' },
-  { value: 'finding-discovery', label: 'Discover candidate findings' },
-  { value: 'attack-path-analysis', label: 'Analyze an attack path' },
-  { value: 'triage-finding', label: 'Triage a finding' },
-  { value: 'define-security-policy', label: 'Define a security policy' },
-  { value: 'propose-security-hardening', label: 'Propose security hardening' },
-  { value: 'vulnerability-writeup', label: 'Write a vulnerability report' },
-  { value: 'track-findings', label: 'Track findings externally' },
 ] as const;
 
 const REASONING_OPTIONS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
 const SELECT_CLASS_NAME =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background';
-
-const DEEP_SCAN_FIELDS = [
-  'workers',
-  'subagents',
-  'stop_after_no_new',
-  'max_discovery_runs',
-  'max_time_hours',
-] as const;
 
 export default function CodexSecurityConfiguration({
   selectedTarget,
@@ -57,27 +39,20 @@ export default function CodexSecurityConfiguration({
       : '';
   const isScan = ['security-scan', 'deep-security-scan', 'security-diff-scan'].includes(operation);
   const isRepositoryScan = ['security-scan', 'deep-security-scan'].includes(operation);
-  const isDeepScan = operation === 'deep-security-scan';
   const isDiffScan = operation === 'security-diff-scan';
-  const isFindingOperation = ['validation', 'fix-finding', 'verify-fix'].includes(operation);
-  const isRemediationOperation = ['fix-finding', 'verify-fix'].includes(operation);
-  const changesRepository = ['fix-finding', 'define-security-policy'].includes(operation);
+  const isFindingOperation = operation === 'validation';
+  const repository =
+    typeof config.repository === 'string'
+      ? config.repository
+      : typeof config.working_dir === 'string'
+        ? config.working_dir
+        : '';
   const [scopedPaths, setScopedPaths] = useState(() =>
     Array.isArray(config.paths) ? config.paths.join(', ') : '',
   );
 
   const updateOperation = (nextOperation: string) => {
     const nextConfig: ProviderOptions['config'] = { ...config, operation: nextOperation };
-
-    if (nextOperation === 'deep-security-scan') {
-      nextConfig.workers ??= 2;
-      nextConfig.subagents ??= 1;
-      nextConfig.max_discovery_runs ??= 3;
-    } else {
-      for (const field of DEEP_SCAN_FIELDS) {
-        delete nextConfig[field];
-      }
-    }
 
     if (nextOperation !== 'security-diff-scan') {
       delete nextConfig.base_ref;
@@ -90,29 +65,8 @@ export default function CodexSecurityConfiguration({
       setScopedPaths('');
     }
 
-    if (!['validation', 'fix-finding', 'verify-fix'].includes(nextOperation)) {
+    if (nextOperation !== 'validation') {
       delete nextConfig.finding_file;
-    }
-
-    if (['fix-finding', 'verify-fix'].includes(nextOperation)) {
-      if (nextConfig.model_reasoning_effort === 'ultra') {
-        nextConfig.model_reasoning_effort = 'max';
-      }
-      if (nextConfig.reasoning_effort === 'ultra') {
-        nextConfig.reasoning_effort = 'max';
-      }
-    } else {
-      delete nextConfig.finding_id;
-      delete nextConfig.scan_id;
-      delete nextConfig.severity;
-    }
-
-    if (!['fix-finding', 'define-security-policy'].includes(nextOperation)) {
-      delete nextConfig.allow_file_writes;
-    }
-
-    if (nextOperation !== 'track-findings') {
-      delete nextConfig.allow_external_writes;
     }
 
     updateCustomTarget('config', nextConfig);
@@ -172,9 +126,9 @@ export default function CodexSecurityConfiguration({
           <AlertDescription>
             <p className="font-semibold">Codex Security SDK</p>
             <p className="mt-1">
-              Compare repository scans, security skills, finding remediation, model reasoning, and
-              estimated cost. Install <code>@openai/codex-security@^0.1.18</code> and use an
-              existing Codex login or OpenAI API key.
+              Compare repository scans, finding validation, model reasoning, and estimated cost.
+              Install <code>@openai/codex-security@^0.1.18</code> and use an existing Codex login or
+              OpenAI API key.
             </p>
           </AlertDescription>
         </AlertContent>
@@ -218,7 +172,7 @@ export default function CodexSecurityConfiguration({
           </Label>
           <Input
             id="codex-security-repository"
-            value={typeof config.repository === 'string' ? config.repository : ''}
+            value={repository}
             placeholder="/absolute/path/to/repository"
             onChange={(event) => updateCustomTarget('repository', event.target.value)}
           />
@@ -250,9 +204,7 @@ export default function CodexSecurityConfiguration({
             value={config.model_reasoning_effort ?? 'high'}
             onChange={(event) => updateCustomTarget('model_reasoning_effort', event.target.value)}
           >
-            {REASONING_OPTIONS.filter(
-              (effort) => !isRemediationOperation || effort !== 'ultra',
-            ).map((effort) => (
+            {REASONING_OPTIONS.map((effort) => (
               <option key={effort} value={effort}>
                 {effort}
               </option>
@@ -275,83 +227,18 @@ export default function CodexSecurityConfiguration({
         </div>
 
         {isScan && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-max-cost">Maximum cost (USD)</Label>
-              <Input
-                id="codex-security-max-cost"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={config.max_cost_usd ?? ''}
-                placeholder="1"
-                onChange={(event) => updateOptionalNumber('max_cost_usd', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-output-dir">Artifact output directory</Label>
-              <Input
-                id="codex-security-output-dir"
-                value={typeof config.output_dir === 'string' ? config.output_dir : ''}
-                placeholder="Optional; choose a path outside the repository"
-                onChange={(event) => updateOptionalString('output_dir', event.target.value)}
-              />
-            </div>
-          </>
-        )}
-
-        {isDeepScan && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-workers">Discovery workers</Label>
-              <Input
-                id="codex-security-workers"
-                type="number"
-                min="1"
-                step="1"
-                value={config.workers ?? ''}
-                onChange={(event) => updateOptionalNumber('workers', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-subagents">Subagents per worker</Label>
-              <Input
-                id="codex-security-subagents"
-                type="number"
-                min="0"
-                step="1"
-                value={config.subagents ?? ''}
-                onChange={(event) => updateOptionalNumber('subagents', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-max-runs">Maximum discovery passes</Label>
-              <Input
-                id="codex-security-max-runs"
-                type="number"
-                min="1"
-                step="1"
-                value={config.max_discovery_runs ?? ''}
-                onChange={(event) => updateOptionalNumber('max_discovery_runs', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-max-hours">Maximum runtime (hours)</Label>
-              <Input
-                id="codex-security-max-hours"
-                type="number"
-                min="0.01"
-                step="0.1"
-                value={config.max_time_hours ?? ''}
-                placeholder="Optional"
-                onChange={(event) => updateOptionalNumber('max_time_hours', event.target.value)}
-              />
-            </div>
-          </>
+          <div className="space-y-2">
+            <Label htmlFor="codex-security-max-cost">Maximum cost (USD)</Label>
+            <Input
+              id="codex-security-max-cost"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={config.max_cost_usd ?? ''}
+              placeholder="1"
+              onChange={(event) => updateOptionalNumber('max_cost_usd', event.target.value)}
+            />
+          </div>
         )}
 
         {isDiffScan && (
@@ -400,75 +287,6 @@ export default function CodexSecurityConfiguration({
               onChange={(event) => updateOptionalString('finding_file', event.target.value)}
             />
           </div>
-        )}
-
-        {isRemediationOperation && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-finding-id">Finding ID</Label>
-              <Input
-                id="codex-security-finding-id"
-                value={typeof config.finding_id === 'string' ? config.finding_id : ''}
-                placeholder="Optional saved finding ID"
-                onChange={(event) => updateOptionalString('finding_id', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-scan-id">Scan ID</Label>
-              <Input
-                id="codex-security-scan-id"
-                value={typeof config.scan_id === 'string' ? config.scan_id : ''}
-                placeholder="Optional saved scan ID"
-                onChange={(event) => updateOptionalString('scan_id', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="codex-security-severity">Minimum finding severity</Label>
-              <select
-                id="codex-security-severity"
-                className={SELECT_CLASS_NAME}
-                value={typeof config.severity === 'string' ? config.severity : ''}
-                onChange={(event) => updateOptionalString('severity', event.target.value)}
-              >
-                <option value="">Any severity</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-          </>
-        )}
-
-        {changesRepository && (
-          <label className="flex items-start gap-3 text-sm sm:col-span-2">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={config.allow_file_writes === true}
-              onChange={(event) => updateCustomTarget('allow_file_writes', event.target.checked)}
-            />
-            <span>
-              Allow repository file changes. Run remediation against an isolated repository
-              checkout.
-            </span>
-          </label>
-        )}
-
-        {operation === 'track-findings' && (
-          <label className="flex items-start gap-3 text-sm sm:col-span-2">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={config.allow_external_writes === true}
-              onChange={(event) =>
-                updateCustomTarget('allow_external_writes', event.target.checked)
-              }
-            />
-            <span>Allow creating or updating findings in external issue trackers.</span>
-          </label>
         )}
       </div>
 

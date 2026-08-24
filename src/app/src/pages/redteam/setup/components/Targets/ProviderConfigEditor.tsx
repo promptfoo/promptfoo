@@ -99,6 +99,9 @@ function ProviderConfigEditor({
 
     if (field === 'id') {
       updatedTarget.id = value as string;
+      if (providerType === 'codex-security') {
+        delete updatedTarget.config.model;
+      }
       if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
@@ -224,7 +227,11 @@ function ProviderConfigEditor({
       ) {
         errors.push('Codex Security provider ID must start with openai:codex-security');
       }
-      if (typeof provider.config.repository !== 'string' || !provider.config.repository.trim()) {
+      const repository =
+        typeof provider.config.repository === 'string' && provider.config.repository.trim()
+          ? provider.config.repository
+          : provider.config.working_dir;
+      if (typeof repository !== 'string' || !repository.trim()) {
         errors.push('Repository path is required');
       }
       if (
@@ -239,16 +246,6 @@ function ProviderConfigEditor({
       }
       if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
         errors.push('Maximum scan cost must be greater than 0');
-      }
-      if (
-        ['fix-finding', 'verify-fix'].includes(provider.config.operation) &&
-        (provider.config.model_reasoning_effort === 'ultra' ||
-          provider.config.reasoning_effort === 'ultra')
-      ) {
-        errors.push('Finding remediation supports reasoning effort through max');
-      }
-      if (provider.config.severity && !provider.config.finding_id && !provider.config.scan_id) {
-        errors.push('Severity filtering requires a finding ID or scan ID');
       }
     } else if (
       [

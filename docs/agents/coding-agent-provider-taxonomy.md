@@ -21,7 +21,7 @@ The main providers in this family today are:
 | Provider family         | Provider IDs                                          | Runtime boundary                                |
 | ----------------------- | ----------------------------------------------------- | ----------------------------------------------- |
 | OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                     |
-| OpenAI Codex Security   | `openai:codex-security`                               | `@openai/codex-security` SDK and bundled CLI    |
+| OpenAI Codex Security   | `openai:codex-security`                               | Native `@openai/codex-security` SDK             |
 | OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process       |
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
 | Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
@@ -225,14 +225,11 @@ Provider IDs:
 - `openai:codex-security:<model>`
 
 The provider runs `@openai/codex-security` directly for standard, deep, and diff
-scans and finding validation. Finding remediation and fix verification use the
-package's bundled CLI. Other security skills delegate to the Codex SDK and require
-the security plugin to already be installed in the configured Codex home.
+scans and finding validation. All supported operations use the native SDK, which
+bootstraps its bundled security plugin automatically.
 
 Scan responses expose structured findings, repository coverage, artifact paths,
 model and reasoning metadata, SDK-reported token usage, and estimated scan cost.
-Patching and security-policy changes require explicit filesystem-write opt-in;
-external finding tracking requires separate external-write opt-in.
 
 Docs and examples:
 

@@ -5,10 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -22,11 +19,18 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
 import {
   getCodexTraceEndpoint,
   getCodexTraceProtocol,
@@ -44,11 +48,11 @@ import {
   getCodexSkillRootPrefixes,
 } from './codexSkillMetadata';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../../types/index';
 

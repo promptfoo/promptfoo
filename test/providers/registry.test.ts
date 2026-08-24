@@ -231,7 +231,7 @@ describe('Provider Registry', () => {
       });
     });
 
-    it('supports inline Codex Security model selection and preserves env for delegated skills', async () => {
+    it('supports inline Codex Security model selection and preserves provider environment metadata', async () => {
       const provider = await registry.create('openai:codex-security:gpt-5.6-sol', {
         ...mockContext,
         env: { OPENAI_API_KEY: 'context-key' },

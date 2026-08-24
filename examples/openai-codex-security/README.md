@@ -2,6 +2,8 @@
 
 Compare Codex Security standard and deep scans across models and reasoning settings using the same intentionally vulnerable repository fixture.
 
+## Setup
+
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
@@ -14,14 +16,16 @@ Use Node.js `^22.13.0`, `^24.0.0`, or `^26.0.0`. Authenticate with an existing C
 promptfoo eval --no-cache
 ```
 
+## Evaluate scan models and depth
+
 The example compares:
 
 - `security-scan` using `gpt-5.6-terra` with medium reasoning.
 - `security-scan` using `gpt-5.6-sol` with high reasoning.
 - `deep-security-scan` using `gpt-5.6-sol` with high reasoning and two workers.
 
-Each provider returns structured findings, repository coverage, token usage, and SDK-estimated cost when available. The fixture intentionally contains command injection; do not deploy or expose it.
+Each provider returns structured findings, repository coverage, token usage, and SDK-estimated cost when available. The fixture intentionally trusts a client-controlled administrator header, creating an authorization bypass; do not deploy or expose it.
 
-To compare your own repository, change each provider's `repository` setting. Managed security scans require an authorized repository and may require Trusted Access. Use an isolated checkout when enabling `operation: fix-finding` and `allow_file_writes: true`.
+To compare your own repository, change each provider's `repository` setting. Managed security scans require an authorized repository and may require Trusted Access.
 
-See the [Codex Security SDK provider documentation](https://www.promptfoo.dev/docs/providers/openai-codex-security/) for the complete operation list, model and reasoning options, finding assertions, cost accounting, and remediation safety requirements.
+See the [Codex Security SDK provider documentation](https://www.promptfoo.dev/docs/providers/openai-codex-security/) for supported native operations, model and reasoning options, finding assertions, and cost accounting.

@@ -2,19 +2,19 @@
 sidebar_position: 43
 sidebar_label: Codex Security SDK
 title: OpenAI Codex Security SDK
-description: Compare Codex Security scans, finding validation, remediation, model reasoning, repository coverage, token usage, and estimated cost in Promptfoo evals.
+description: Compare Codex Security scans, finding validation, model reasoning, repository coverage, token usage, and estimated cost in Promptfoo evals.
 ---
 
 # OpenAI Codex Security SDK
 
-The Codex Security provider runs the `@openai/codex-security` SDK and its bundled CLI as Promptfoo providers. Use it to compare standard and deep scans, models, reasoning effort, vulnerability recall, finding validation, remediation, token usage, and estimated scan cost.
+The Codex Security provider runs the `@openai/codex-security` SDK directly as a Promptfoo provider. Use it to compare standard and deep scans, models, reasoning effort, vulnerability recall, finding validation, token usage, and estimated scan cost.
 
-| Provider                                         | Best for                                                                 | Provider ID                     |
-| ------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------- |
-| Codex Security SDK                               | Repository security scans, validated findings, coverage, and remediation | `openai:codex-security:<model>` |
-| [Codex SDK](./openai-codex-sdk.md)               | General coding-agent tasks, local skills, and structured output          | `openai:codex-sdk`              |
-| [Codex App Server](./openai-codex-app-server.md) | Rich-client protocol events, approvals, and thread lifecycle             | `openai:codex-app-server`       |
-| [OpenAI Agents](./openai-agents.md)              | Application agents, tools, handoffs, and sessions                        | `openai:agents:<agent>`         |
+| Provider                                         | Best for                                                        | Provider ID                     |
+| ------------------------------------------------ | --------------------------------------------------------------- | ------------------------------- |
+| Codex Security SDK                               | Repository security scans, validated findings, and coverage     | `openai:codex-security:<model>` |
+| [Codex SDK](./openai-codex-sdk.md)               | General coding-agent tasks, local skills, and structured output | `openai:codex-sdk`              |
+| [Codex App Server](./openai-codex-app-server.md) | Rich-client protocol events, approvals, and thread lifecycle    | `openai:codex-app-server`       |
+| [OpenAI Agents](./openai-agents.md)              | Application agents, tools, handoffs, and sessions               | `openai:agents:<agent>`         |
 
 ## Installation and authentication
 
@@ -24,7 +24,7 @@ Promptfoo declares the SDK as an optional dependency. Install it manually if opt
 npm install @openai/codex-security@^0.1.18
 ```
 
-The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit standalone validation and can undercount deep-worker token usage and cost. The SDK supports Node.js `^22.13.0`, `^24.0.0`, and `^26.0.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not accept a provider-scoped `apiKey` configuration value.
+The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. The SDK supports Node.js `^22.13.0`, `^24.0.0`, and `^26.0.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -32,7 +32,7 @@ Codex Security access, Trusted Access, and model availability depend on the auth
 
 Open **Setup**, select **Add Provider**, and search for **Codex Security SDK** or **security**. The provider is listed under **Agent Frameworks** and uses the native `openai:codex-security:<model>` provider ID rather than a Python adapter.
 
-Choose a security operation, repository path, model, reasoning effort, authentication method, and scan cost limit. Selecting **Deep security scan** also exposes discovery workers, subagents, maximum discovery passes, and runtime limits. Finding remediation and external tracking require explicit permission before they can change repository files or create issues.
+Choose a security operation, repository path, model, reasoning effort, authentication method, and optional scan cost limit. Configure advanced deep-scan workers, subagents, discovery limits, and runtime limits in YAML when needed.
 
 ## Compare scan depth, models, and reasoning
 
@@ -103,24 +103,14 @@ npx promptfoo eval --no-cache
 
 The `operation` value matches the corresponding Codex Security skill name exactly.
 
-| Operation                    | Execution path                               | Purpose                                                                                       |
-| ---------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `security-scan`              | Native SDK: `run(..., { mode: 'standard' })` | Single-pass repository or scoped-path scan. Default operation.                                |
-| `deep-security-scan`         | Native SDK: `run(..., { mode: 'deep' })`     | Repeated discovery and validation with worker and stopping controls.                          |
-| `security-diff-scan`         | Native SDK: `run()` with `DiffTarget`        | Scan a committed Git diff or the working tree.                                                |
-| `validation`                 | Native SDK: `validate()`                     | Determine whether a candidate finding is reportable, suppressed, not applicable, or deferred. |
-| `fix-finding`                | Bundled CLI: `codex-security patch`          | Apply and verify a finding fix. Requires `allow_file_writes: true`.                           |
-| `verify-fix`                 | Bundled CLI: `codex-security verify-fix`     | Determine whether a previously reported issue is fixed.                                       |
-| `threat-model`               | Installed security skill through Codex SDK   | Create or update a repository threat model.                                                   |
-| `finding-discovery`          | Installed security skill through Codex SDK   | Discover candidate findings without the complete managed scan lifecycle.                      |
-| `attack-path-analysis`       | Installed security skill through Codex SDK   | Trace attacker-controlled input through a vulnerable sink.                                    |
-| `triage-finding`             | Installed security skill through Codex SDK   | Triage imported findings or existing security backlog items.                                  |
-| `define-security-policy`     | Installed security skill through Codex SDK   | Define or update repository security guidance. Requires `allow_file_writes: true`.            |
-| `propose-security-hardening` | Installed security skill through Codex SDK   | Produce structural or architectural hardening proposals.                                      |
-| `vulnerability-writeup`      | Installed security skill through Codex SDK   | Write a validated vulnerability report.                                                       |
-| `track-findings`             | Installed security skill through Codex SDK   | Create or update external security issues. Requires `allow_external_writes: true`.            |
+| Operation            | Execution path                               | Purpose                                                                                       |
+| -------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `security-scan`      | Native SDK: `run(..., { mode: 'standard' })` | Single-pass repository or scoped-path scan. Default operation.                                |
+| `deep-security-scan` | Native SDK: `run(..., { mode: 'deep' })`     | Repeated discovery and validation with worker and stopping controls.                          |
+| `security-diff-scan` | Native SDK: `run()` with `DiffTarget`        | Scan a committed Git diff or the working tree.                                                |
+| `validation`         | Native SDK: `validate()`                     | Determine whether a candidate finding is reportable, suppressed, not applicable, or deferred. |
 
-Native scans and validation bootstrap the security plugin bundled with `@openai/codex-security`. Standalone skill operations use the existing `openai:codex-sdk` provider and therefore require the Codex Security plugin to already be installed in the active Codex home; set `codex_home` when the plugin is installed in a separate home directory.
+All four operations use the native SDK, which bootstraps its bundled security plugin automatically. Remediation, fix verification, and standalone delegated security skills are not supported by this provider.
 
 ## Scope repository and diff scans
 
@@ -151,7 +141,7 @@ providers:
 
 Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets.
 
-## Validate, fix, and verify findings
+## Validate findings
 
 Pass a structured finding directly or load it from `finding_file`:
 
@@ -166,55 +156,33 @@ providers:
 
 Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text.
 
-To patch findings from a saved scan:
-
-```yaml
-providers:
-  - id: openai:codex-security:gpt-5.6-sol
-    config:
-      operation: fix-finding
-      repository: ./fresh-checkout-for-this-eval-row
-      allow_file_writes: true
-      scan_id: scan-123
-      severity: high
-      model_reasoning_effort: high
-```
-
-Use `finding_id` to select one saved finding, or omit `scan_id` and `finding_id` to use the prompt as literal finding text. Saved-finding patch operations return structured JSON; the bundled CLI returns plain text when patching literal finding text.
-
-Use `operation: verify-fix` with the same `finding_id`, `scan_id`, or prompt to evaluate remediation independently. Structured verification results remain available when the CLI reports a nonzero exit status because a finding is still vulnerable.
-
 :::warning
 
-Managed Codex Security scans run with the access required by the security SDK and are not constrained by the standalone Codex SDK `sandbox_mode` setting. Run scans only against repositories you are authorized to assess. Use a fresh isolated checkout per eval row for `fix-finding`, and explicitly opt into external ticket creation with `allow_external_writes: true`.
+Managed Codex Security scans run with the access required by the security SDK. Run scans only against repositories you are authorized to assess, and account for sensitive source-code excerpts in generated findings and artifacts.
 
 :::
 
 ## Configuration
 
-| Setting                                                     | Applies to                               | Description                                                                                                    |
-| ----------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `operation`                                                 | All operations                           | Exact Codex Security skill name. Defaults to `security-scan`.                                                  |
-| `model`                                                     | All operations                           | Codex model; can also be provided in the provider ID.                                                          |
-| `model_reasoning_effort` / `reasoning_effort`               | All operations                           | Model reasoning effort. If both are set, they must match. Patch and verification support levels through `max`. |
-| `model_provider`                                            | Native SDK and standalone skills         | Alternative Codex model provider. The bundled patch and verify-fix commands do not support this override.      |
-| `repository` / `working_dir`                                | All operations                           | Repository path. A `repository` eval variable is also accepted.                                                |
-| `paths`                                                     | Repository and deep scans                | Repository-relative paths to assess.                                                                           |
-| `base_ref`, `head_ref`, `working_tree`                      | Diff scans                               | Committed-ref or working-tree target selection.                                                                |
-| `max_cost_usd`                                              | Scans                                    | Hard SDK scan-cost ceiling.                                                                                    |
-| `workers`, `subagents`                                      | Deep scans                               | Discovery worker and subagent counts.                                                                          |
-| `stop_after_no_new`, `max_discovery_runs`, `max_time_hours` | Deep scans                               | Variance, coverage, and runtime stopping controls.                                                             |
-| `scan_prompt`, `validation_prompt`, `post_scan_prompt`      | Scans                                    | Additional instructions for individual scan phases.                                                            |
-| `output_dir`, `archive_existing`                            | Scans                                    | Scan artifact location and replacement behavior.                                                               |
-| `knowledge_base_paths`                                      | Scans                                    | Additional repository security context.                                                                        |
-| `expected_plugin_version`, `failure_severity`               | Scans                                    | Plugin-version and severity policies.                                                                          |
-| `auth`                                                      | Native SDK scans and validation          | `auto`, `chatgpt`, or `api-key`.                                                                               |
-| `plugin_path`, `python_path`, `codex_overrides`             | Native SDK scans and validation          | Security runtime configuration.                                                                                |
-| `finding`, `finding_file`                                   | Validation; literal remediation findings | Candidate vulnerability text or a structured finding.                                                          |
-| `finding_id`, `scan_id`, `severity`                         | Fix and verification                     | Saved finding selection and severity filtering.                                                                |
-| `codex_home`, `cli_env`                                     | Bundled CLI and standalone skills        | Codex home and process environment overrides.                                                                  |
-| `sandbox_mode`, `enable_streaming`, `deep_tracing`          | Standalone skills                        | Existing Codex SDK runtime options. Standalone skills default to a read-only sandbox.                          |
-| `allow_file_writes`, `allow_external_writes`                | Mutating operations                      | Explicit permission gates for repository or external issue-tracker writes.                                     |
+| Setting                                                     | Applies to                | Description                                                     |
+| ----------------------------------------------------------- | ------------------------- | --------------------------------------------------------------- |
+| `operation`                                                 | All operations            | Exact Codex Security skill name. Defaults to `security-scan`.   |
+| `model`                                                     | All operations            | Codex model; can also be provided in the provider ID.           |
+| `model_reasoning_effort` / `reasoning_effort`               | All operations            | Model reasoning effort. If both are set, they must match.       |
+| `model_provider`                                            | All operations            | Alternative Codex model provider.                               |
+| `repository` / `working_dir`                                | All operations            | Repository path. A `repository` eval variable is also accepted. |
+| `paths`                                                     | Repository and deep scans | Repository-relative paths to assess.                            |
+| `base_ref`, `head_ref`, `working_tree`                      | Diff scans                | Committed-ref or working-tree target selection.                 |
+| `max_cost_usd`                                              | Scans                     | Hard SDK scan-cost ceiling.                                     |
+| `workers`, `subagents`                                      | Deep scans                | Discovery worker and subagent counts.                           |
+| `stop_after_no_new`, `max_discovery_runs`, `max_time_hours` | Deep scans                | Variance, coverage, and runtime stopping controls.              |
+| `scan_prompt`, `validation_prompt`, `post_scan_prompt`      | Scans                     | Additional instructions for individual scan phases.             |
+| `output_dir`, `archive_existing`                            | Scans                     | Scan artifact location and replacement behavior.                |
+| `knowledge_base_paths`                                      | Scans                     | Additional repository security context.                         |
+| `expected_plugin_version`, `failure_severity`               | Scans                     | Plugin-version and severity policies.                           |
+| `auth`                                                      | All operations            | `auto`, `chatgpt`, or `api-key`.                                |
+| `plugin_path`, `python_path`, `codex_overrides`             | All operations            | Security runtime configuration.                                 |
+| `finding`, `finding_file`                                   | Validation                | Candidate vulnerability text or a structured finding.           |
 
 ## Results, cost, and assertions
 
@@ -224,9 +192,9 @@ Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`,
 - `tokenUsage.completionDetails.reasoning`, `cacheReadInputTokens`, and `cacheCreationInputTokens` when reported.
 - `cost`, using the security SDK's `estimatedUsd` value.
 - `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, `metadata.coverage`, artifact paths, warnings, SDK version, and plugin version.
-- `metadata.skillCalls` for native scan, validation, patch, and verification operation routing.
+- `metadata.skillCalls` for native scan and finding-validation operation routing.
 
-Validation and bundled CLI remediation do not currently expose reliable token or cost totals, so the provider leaves those fields unset. Standalone skills preserve whatever usage and skill metadata the existing Codex SDK provider actually reports.
+Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.
 
 Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to compare finding recall, skill routing, scan coverage, latency, and spend in the web UI:
 
@@ -268,7 +236,7 @@ tests:
         metric: ScanLatency
 ```
 
-`cost` assertions require a native scan that reports estimated spend; do not use them for finding validation or CLI remediation when the SDK omits usage. Finding output and stored artifacts may include sensitive source-code excerpts; configure Promptfoo retention and sharing accordingly.
+`cost` assertions require a native scan that reports estimated spend; do not use them for finding validation when the SDK omits usage. Finding output and stored artifacts may include sensitive source-code excerpts; configure Promptfoo retention and sharing accordingly.
 
 ## Troubleshooting
 
