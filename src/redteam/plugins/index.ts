@@ -8,6 +8,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -16,6 +17,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -80,7 +82,13 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
+import type {
+  ApiProvider,
+  PluginActionParams,
+  PluginConfig,
+  TestCase,
+  TokenUsage,
+} from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -345,6 +353,7 @@ async function fetchRemoteTestCases(
   n: number,
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
+  provider?: ApiProvider,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -386,10 +395,12 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    tokenUsage?: TokenUsage;
   }
 
+  let responseRecorded = false;
   try {
-    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
+    const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -398,6 +409,10 @@ async function fetchRemoteTestCases(
       },
       getRequestTimeoutMs(),
     );
+    if (provider) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+      responseRecorded = true;
+    }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
@@ -409,6 +424,9 @@ async function fetchRemoteTestCases(
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
+    }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
   }
@@ -452,6 +470,7 @@ function createPluginFactory<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        provider,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
@@ -578,6 +597,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
         params.targetId,
+        params.provider,
       );
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
@@ -620,6 +640,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
       params.targetId,
+      params.provider,
     );
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
@@ -644,6 +665,7 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
+      provider,
       purpose,
       injectVar,
       n,
@@ -665,6 +687,7 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        provider,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({

@@ -1279,32 +1279,35 @@ describe('ProviderConfigEditor', () => {
   it.each([
     ['python', 'file://provider.py'],
     ['sagemaker', 'sagemaker:my-endpoint'],
-  ])('should reject malformed %s configuration when validation is requested', (providerType, id) => {
-    const setError = vi.fn();
-    const onValidate = vi.fn();
-    let validateFn: (() => boolean) | null = null;
+  ])(
+    'should reject malformed %s configuration when validation is requested',
+    (providerType, id) => {
+      const setError = vi.fn();
+      const onValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
 
-    renderWithProviders(
-      <ProviderConfigEditor
-        provider={{ id, config: { timeout: 30000 } }}
-        setProvider={vi.fn()}
-        setError={setError}
-        onValidate={onValidate}
-        onValidationRequest={(validator) => {
-          validateFn = validator;
-        }}
-        providerType={providerType}
-      />,
-    );
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id, config: { timeout: 30000 } }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidate={onValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType={providerType}
+        />,
+      );
 
-    act(() => {
-      screen.getByTestId('invalidate-custom-config').click();
-    });
+      act(() => {
+        screen.getByTestId('invalidate-custom-config').click();
+      });
 
-    expect(validateFn!()).toBe(false);
-    expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
-    expect(onValidate).toHaveBeenLastCalledWith(false);
-  });
+      expect(validateFn!()).toBe(false);
+      expect(setError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+      expect(onValidate).toHaveBeenLastCalledWith(false);
+    },
+  );
 
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
     const mockSetProvider = vi.fn();

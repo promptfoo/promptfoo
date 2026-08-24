@@ -91,28 +91,31 @@ describe('CustomTargetConfiguration', () => {
   it.each([
     ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
     ['non-object JSON', '[]', 'Configuration must be a JSON object'],
-  ])('preserves the last valid Open Interpreter config when formatting %s', async (_case, value, error) => {
-    const user = userEvent.setup();
-    const updateCustomTarget = vi.fn();
-    const onConfigErrorChange = vi.fn();
+  ])(
+    'preserves the last valid Open Interpreter config when formatting %s',
+    async (_case, value, error) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      const onConfigErrorChange = vi.fn();
 
-    render(
-      <CustomTargetConfiguration
-        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
-        updateCustomTarget={updateCustomTarget}
-        rawConfigJson={value}
-        setRawConfigJson={vi.fn()}
-        bodyError={null}
-        providerType="openinterpreter"
-        onConfigErrorChange={onConfigErrorChange}
-      />,
-    );
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={value}
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType="openinterpreter"
+          onConfigErrorChange={onConfigErrorChange}
+        />,
+      );
 
-    await user.click(screen.getByRole('button', { name: /Format/i }));
+      await user.click(screen.getByRole('button', { name: /Format/i }));
 
-    expect(updateCustomTarget).not.toHaveBeenCalled();
-    expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
-  });
+      expect(updateCustomTarget).not.toHaveBeenCalled();
+      expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
+    },
+  );
 
   it('does not clear a restored validation error for a reordered but unchanged config', async () => {
     const user = userEvent.setup();

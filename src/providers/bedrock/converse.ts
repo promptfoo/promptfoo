@@ -23,6 +23,7 @@ import {
   type GenAISpanContext,
   type GenAISpanResult,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -43,6 +44,7 @@ import {
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
+import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -64,6 +66,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
@@ -80,15 +83,9 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stopSequences?: string[];
   stop?: string[]; // Alias for compatibility
 
-  // Extended thinking (Claude models)
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-        display?: 'summarized' | 'omitted';
-      }
-    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-    | { type: 'disabled' };
+  // Extended thinking (Claude models) — the SDK's own union, shared with the Anthropic
+  // and Bedrock InvokeModel providers so a new thinking mode lands in one place.
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -868,7 +865,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -899,7 +900,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Execute the callback
       logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -1076,8 +1079,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      // YAML can deserialize unquoted guardrail values as numbers despite their TypeScript types.
+      guardrailIdentifier: String(this.config.guardrailIdentifier as unknown),
+      guardrailVersion: String((this.config.guardrailVersion || 'DRAFT') as unknown),
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
@@ -1100,7 +1104,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      const normalizedThinking = normalizeClaudeThinkingConfig(this.modelName, additionalThinking);
+      // Converse has no typed effort option, but `output_config.effort` is a supported
+      // escape hatch through these raw fields — so read it back out and feed it to the
+      // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
+      // cannot fire on this path.
+      const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        additionalThinking,
+        effort,
+      );
       if (normalizedThinking === undefined) {
         delete fields.thinking;
       } else {
@@ -1113,6 +1126,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
+        // Converse takes effort only via additionalModelRequestFields, which this path
+        // does not inspect, so the effort-capped rules cannot be evaluated here.
+        undefined,
       );
       if (normalizedThinking !== undefined) {
         fields.thinking = normalizedThinking;
@@ -1178,7 +1194,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       topP: inferenceConfig?.topP,
       stopSequences: inferenceConfig?.stopSequences,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -1225,11 +1241,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1328,7 +1340,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Resolves the effective tool choice for a request without touching the MCP
    * client. Used by `callApi`/`callApiStreaming` to short-circuit MCP init for
-   * tool-disabled requests so a hung MCP transport never stalls them.
+   * tool-disabled requests so a hung MCP transport never stalls them, and to supply
+   * the `toolsDisabled` flag those methods pass on to `parseResponse`.
    */
   private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
     return isDisabledToolChoice(
@@ -1614,7 +1627,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {
@@ -1710,11 +1727,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();

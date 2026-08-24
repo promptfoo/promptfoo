@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
+import {
+  looksLikeSecret,
+  redactAzureBlobSasTokens,
+  sanitizeUrlForLogging,
+} from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -51,6 +55,14 @@ const HEADER_CREDENTIAL_NAMES = new Set([
   'x_honeycomb_team',
   'proxy_authorization',
   'x_amz_security_token',
+]);
+const SAFE_TRACING_PROVIDER_HEADER_NAMES = new Set([
+  'accept',
+  'content_type',
+  'x_org_id',
+  'x_organization_id',
+  'x_scope_org_id',
+  'x_tenant_id',
 ]);
 // Bare parameter aliases are credential carriers only in HTTP request data
 // (query params, form bodies, and multipart fields).
@@ -964,15 +976,69 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
   };
 };
 
-// OTLP trace forwarding can carry an `Authorization` header. The rest of the
-// tracing block is non-secret runtime config.
+// OTLP forwarding and external trace providers can both contain credentials.
 const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
-  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+  if (!isRecord(tracing)) {
     return tracing;
   }
+
+  const sanitizedProvider = isRecord(tracing.provider)
+    ? (omitProviderCredentials(tracing.provider, undefined, templatePaths) as Record<
+        string,
+        unknown
+      >)
+    : undefined;
+  if (sanitizedProvider && typeof sanitizedProvider.endpoint === 'string') {
+    const providerEndpoint = sanitizedProvider.endpoint;
+    try {
+      const endpoint = new URL(providerEndpoint);
+      if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+        endpoint.username = '';
+        endpoint.password = '';
+        endpoint.search = '';
+        endpoint.hash = '';
+        sanitizedProvider.endpoint = endpoint.toString();
+      }
+      const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+      if (safeEndpoint !== endpoint.toString()) {
+        sanitizedProvider.endpoint = safeEndpoint;
+      }
+    } catch {
+      sanitizedProvider.endpoint = scrubProviderUrl(providerEndpoint, templatePaths);
+    }
+  }
+  if (sanitizedProvider && isRecord(sanitizedProvider.headers)) {
+    sanitizedProvider.headers = Object.fromEntries(
+      Object.entries(sanitizedProvider.headers).filter(([name, value]) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+        const knownSafeHeader = SAFE_TRACING_PROVIDER_HEADER_NAMES.has(
+          normalizeCredentialName(name),
+        );
+        if (isTemplatedCredentialReference(value)) {
+          if (!knownSafeHeader) {
+            preserveCredentialTemplate(value, templatePaths);
+          }
+          return true;
+        }
+        return knownSafeHeader && !looksLikeHeaderCredential(name, value, templatePaths);
+      }),
+    );
+  }
+
+  const sanitizedTracing = {
+    ...tracing,
+    ...(sanitizedProvider ? { provider: sanitizedProvider } : {}),
+  };
+
+  if (!isRecord(tracing.forwarding)) {
+    return sanitizedTracing;
+  }
+
   const forwarding = tracing.forwarding;
   return {
-    ...tracing,
+    ...sanitizedTracing,
     forwarding: {
       ...forwarding,
       ...(typeof forwarding.endpoint === 'string'
@@ -1284,6 +1350,7 @@ export const useStore = create<EvalConfigState>()(
           providers: config.providers,
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
+          tracing: config.tracing,
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
           derivedMetrics: config.derivedMetrics,

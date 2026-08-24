@@ -181,40 +181,40 @@ describe('useRedTeamConfig', () => {
     expect(secondMarker).not.toBe(firstMarker);
   });
 
-  it.each([
-    'BigInt',
-    'cyclic array',
-  ] as const)('keeps an existing invalid target blocked when a new %s import cannot be serialized', (invalidType) => {
-    const cyclicConfig: unknown[] = [];
-    cyclicConfig.push(cyclicConfig);
-    const invalidConfig = invalidType === 'BigInt' ? BigInt(1) : cyclicConfig;
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: [] as unknown as Config['target']['config'],
-      },
-    });
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-
-    expect(() =>
+  it.each(['BigInt', 'cyclic array'] as const)(
+    'keeps an existing invalid target blocked when a new %s import cannot be serialized',
+    (invalidType) => {
+      const cyclicConfig: unknown[] = [];
+      cyclicConfig.push(cyclicConfig);
+      const invalidConfig = invalidType === 'BigInt' ? BigInt(1) : cyclicConfig;
       useRedTeamConfig.getState().setFullConfig({
         ...useRedTeamConfig.getState().config,
         target: {
           id: 'openai:gpt-5',
-          label: 'Unserializable foundation target',
-          config: invalidConfig as unknown as Config['target']['config'],
+          label: 'Foundation target',
+          config: [] as unknown as Config['target']['config'],
         },
-      }),
-    ).toThrow(TypeError);
+      });
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
-  });
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openai:gpt-5',
+            label: 'Unserializable foundation target',
+            config: invalidConfig as unknown as Config['target']['config'],
+          },
+        }),
+      ).toThrow(TypeError);
+
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+    },
+  );
 
   it('only clears a blocked target after a valid full import successfully persists', () => {
     useRedTeamConfig.getState().setFullConfig({
@@ -564,48 +564,51 @@ describe('useRedTeamConfig', () => {
     ['HTTPS URL provider', 'https://api.example.test', 'h', 'https://example.test/chat'],
     ['WebSocket', 'websocket', 'w', 'wss://example.test/chat'],
     ['WSS URL provider', 'wss://socket.example.test', 'w', 'wss://example.test/chat'],
-  ])('keeps an imported non-object %s target blocked until its structured endpoint is valid', (_case, id, partialUrl, validUrl) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id,
-        label: `${id} target`,
-        config: null as unknown as Config['target']['config'],
-      },
-    });
+  ])(
+    'keeps an imported non-object %s target blocked until its structured endpoint is valid',
+    (_case, id, partialUrl, validUrl) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id,
+          label: `${id} target`,
+          config: null as unknown as Config['target']['config'],
+        },
+      });
 
-    useRedTeamConfig.getState().updateConfig('target', {
-      ...useRedTeamConfig.getState().config.target,
-      config: { url: partialUrl },
-    });
+      useRedTeamConfig.getState().updateConfig('target', {
+        ...useRedTeamConfig.getState().config.target,
+        config: { url: partialUrl },
+      });
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
-      /^non-object-json:[a-z0-9-]+$/,
-    );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+        /^non-object-json:[a-z0-9-]+$/,
+      );
 
-    useRedTeamConfig.getState().updateConfig('target', {
-      ...useRedTeamConfig.getState().config.target,
-      config: { url: validUrl },
-    });
+      useRedTeamConfig.getState().updateConfig('target', {
+        ...useRedTeamConfig.getState().config.target,
+        config: { url: validUrl },
+      });
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
 
-    const executableConfig = id.startsWith('http')
-      ? { url: validUrl, body: '{"message":"{{prompt}}"}' }
-      : { url: validUrl, messageTemplate: '{{prompt}}', timeoutMs: 25000 };
-    useRedTeamConfig.getState().updateConfig('target', {
-      ...useRedTeamConfig.getState().config.target,
-      config: executableConfig,
-    });
+      const executableConfig = id.startsWith('http')
+        ? { url: validUrl, body: '{"message":"{{prompt}}"}' }
+        : { url: validUrl, messageTemplate: '{{prompt}}', timeoutMs: 25000 };
+      useRedTeamConfig.getState().updateConfig('target', {
+        ...useRedTeamConfig.getState().config.target,
+        config: executableConfig,
+      });
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().config.target.config).toEqual(executableConfig);
-  });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      expect(useRedTeamConfig.getState().config.target.config).toEqual(executableConfig);
+    },
+  );
 
   it.each([
     [
@@ -1374,24 +1377,27 @@ describe('useRedTeamConfig', () => {
       { method: 'POST', body: '{"message":"{{prompt}}"}' },
     ],
     ['WebSocket URL target', 'wss://example.test/socket', { messageTemplate: '{{prompt}}' }],
-  ])('recovers an imported non-object %s without duplicating the provider-ID endpoint', (_case, id, targetConfig) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id,
-        label: 'Imported URL target',
-        config: null as unknown as Config['target']['config'],
-      },
-    });
+  ])(
+    'recovers an imported non-object %s without duplicating the provider-ID endpoint',
+    (_case, id, targetConfig) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id,
+          label: 'Imported URL target',
+          config: null as unknown as Config['target']['config'],
+        },
+      });
 
-    useRedTeamConfig.getState().updateConfig('target', {
-      ...useRedTeamConfig.getState().config.target,
-      config: targetConfig,
-    });
+      useRedTeamConfig.getState().updateConfig('target', {
+        ...useRedTeamConfig.getState().config.target,
+        config: targetConfig,
+      });
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
-    expect(useRedTeamConfig.getState().config.target.config).toEqual(targetConfig);
-  });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      expect(useRedTeamConfig.getState().config.target.config).toEqual(targetConfig);
+    },
+  );
 
   it('clears an imported non-object foundation target only after a valid structured replacement persists', () => {
     useRedTeamConfig.getState().setFullConfig({
@@ -1531,71 +1537,69 @@ describe('useRedTeamConfig', () => {
     );
   });
 
-  it.each([
-    'description',
-    'plugins',
-    'application definition',
-    'provider type',
-  ] as const)('clears an imported non-object foundation target when an unrelated %s update persists its corrected in-memory target after quota recovers', (update) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: null as unknown as Config['target']['config'],
-      },
-    });
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const persisted = window.localStorage.getItem('redTeamConfig');
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+  it.each(['description', 'plugins', 'application definition', 'provider type'] as const)(
+    'clears an imported non-object foundation target when an unrelated %s update persists its corrected in-memory target after quota recovers',
+    (update) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: null as unknown as Config['target']['config'],
+        },
+      });
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      const persisted = window.localStorage.getItem('redTeamConfig');
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamConfig') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        expect(() =>
+          useRedTeamConfig.getState().updateConfig('target', {
+            ...useRedTeamConfig.getState().config.target,
+            config: { temperature: 0.3 },
+          }),
+        ).toThrow('The quota has been exceeded.');
+        expect(useRedTeamConfig.getState().config.target.config).toEqual({ temperature: 0.3 });
+        expect(window.localStorage.getItem('redTeamConfig')).toBe(persisted);
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+      } finally {
+        setItem.mockRestore();
       }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      expect(() =>
-        useRedTeamConfig.getState().updateConfig('target', {
-          ...useRedTeamConfig.getState().config.target,
-          config: { temperature: 0.3 },
-        }),
-      ).toThrow('The quota has been exceeded.');
-      expect(useRedTeamConfig.getState().config.target.config).toEqual({ temperature: 0.3 });
-      expect(window.localStorage.getItem('redTeamConfig')).toBe(persisted);
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
-    } finally {
-      setItem.mockRestore();
-    }
 
-    const configState = useRedTeamConfig.getState();
-    switch (update) {
-      case 'description':
-        configState.updateConfig('description', 'retry after freeing storage');
-        break;
-      case 'plugins':
-        configState.updatePlugins(['harmful:privacy']);
-        break;
-      case 'application definition':
-        configState.updateApplicationDefinition('purpose', 'retry after freeing storage');
-        break;
-      case 'provider type':
-        configState.setProviderType('openai');
-        break;
-    }
+      const configState = useRedTeamConfig.getState();
+      switch (update) {
+        case 'description':
+          configState.updateConfig('description', 'retry after freeing storage');
+          break;
+        case 'plugins':
+          configState.updatePlugins(['harmful:privacy']);
+          break;
+        case 'application definition':
+          configState.updateApplicationDefinition('purpose', 'retry after freeing storage');
+          break;
+        case 'provider type':
+          configState.setProviderType('openai');
+          break;
+      }
 
-    const durableConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config;
-    expect(durableConfig.target.config).toEqual({ temperature: 0.3 });
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
-      /^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/,
-    );
-  });
+      const durableConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config;
+      expect(durableConfig.target.config).toEqual({ temperature: 0.3 });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+        /^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/,
+      );
+    },
+  );
 
   it('clears a failed non-object full import when a later structured target replacement successfully persists', () => {
     useRedTeamConfig.getState().setFullConfig({
@@ -1656,140 +1660,143 @@ describe('useRedTeamConfig', () => {
     ['newer raw draft', 'draft'],
     ['cross-tab persisted target', 'persisted-target'],
     ['cross-tab invalid marker during persist', 'marker'],
-  ] as const)('does not clear a %s when an unrelated update persists a corrected in-memory target', (_case, interference) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: null as unknown as Config['target']['config'],
-      },
-    });
-    const originalSetItem = Storage.prototype.setItem;
-    const quotaSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+  ] as const)(
+    'does not clear a %s when an unrelated update persists a corrected in-memory target',
+    (_case, interference) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: null as unknown as Config['target']['config'],
+        },
+      });
+      const originalSetItem = Storage.prototype.setItem;
+      const quotaSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamConfig') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        expect(() =>
+          useRedTeamConfig.getState().updateConfig('target', {
+            ...useRedTeamConfig.getState().config.target,
+            config: { temperature: 0.3 },
+          }),
+        ).toThrow('The quota has been exceeded.');
+      } finally {
+        quotaSetItem.mockRestore();
       }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      expect(() =>
-        useRedTeamConfig.getState().updateConfig('target', {
-          ...useRedTeamConfig.getState().config.target,
-          config: { temperature: 0.3 },
-        }),
-      ).toThrow('The quota has been exceeded.');
-    } finally {
-      quotaSetItem.mockRestore();
-    }
 
-    if (interference === 'draft') {
-      useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('[]');
-    }
-    if (interference === 'persisted-target') {
-      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-      persistedConfig.state.config.target.config = { temperature: 0.9 };
-      window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
-    }
-    const expectedDraft = interference === 'draft' ? '[]' : 'null';
-    let expectedMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const racingSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (interference === 'marker' && this === window.localStorage && key === 'redTeamConfig') {
-        useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('["other-tab"]');
-        useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('null');
-        expectedMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-      }
-      return result;
-    });
-    try {
-      useRedTeamConfig.getState().updateConfig('description', 'retry after freeing storage');
-    } finally {
-      racingSetItem.mockRestore();
-    }
-
-    const durableConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config;
-    expect(durableConfig.description).toBe('retry after freeing storage');
-    expect(durableConfig.target.config).toEqual({ temperature: 0.3 });
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(expectedDraft);
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(expectedMarker);
-  });
-
-  it.each([
-    'valid full import',
-    'reset',
-  ] as const)('does not clear a newer invalid marker that arrives while a %s persists', async (update) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: { temperature: 0.3 },
-      },
-    });
-    useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('[]');
-    useRedTeamTargetConfigValidation
-      .getState()
-      .setTargetConfigError('Configuration must be a JSON object');
-    const originalMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    let newerMarker: string | null = null;
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('["other-tab"]');
+      if (interference === 'draft') {
         useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('[]');
-        newerMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
       }
-      return result;
-    });
-    try {
-      if (update === 'valid full import') {
-        useRedTeamConfig.getState().setFullConfig({
-          ...useRedTeamConfig.getState().config,
-          target: {
-            id: 'openai:gpt-5',
-            label: 'Valid foundation target',
-            config: { temperature: 0.4 },
-          },
-        });
-      } else {
-        useRedTeamConfig.getState().resetConfig();
+      if (interference === 'persisted-target') {
+        const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+        persistedConfig.state.config.target.config = { temperature: 0.9 };
+        window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
       }
-    } finally {
-      setItem.mockRestore();
-    }
+      const expectedDraft = interference === 'draft' ? '[]' : 'null';
+      let expectedMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      const racingSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        const result = originalSetItem.call(this, key, value);
+        if (interference === 'marker' && this === window.localStorage && key === 'redTeamConfig') {
+          useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('["other-tab"]');
+          useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('null');
+          expectedMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+        }
+        return result;
+      });
+      try {
+        useRedTeamConfig.getState().updateConfig('description', 'retry after freeing storage');
+      } finally {
+        racingSetItem.mockRestore();
+      }
 
-    expect(newerMarker).toMatch(/^non-object-json:[a-z0-9-]+$/);
-    expect(newerMarker).not.toBe(originalMarker);
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(newerMarker);
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-  });
+      const durableConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config;
+      expect(durableConfig.description).toBe('retry after freeing storage');
+      expect(durableConfig.target.config).toEqual({ temperature: 0.3 });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(expectedDraft);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(expectedMarker);
+    },
+  );
+
+  it.each(['valid full import', 'reset'] as const)(
+    'does not clear a newer invalid marker that arrives while a %s persists',
+    async (update) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: { temperature: 0.3 },
+        },
+      });
+      useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('[]');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Configuration must be a JSON object');
+      const originalMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      let newerMarker: string | null = null;
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        const result = originalSetItem.call(this, key, value);
+        if (this === window.localStorage && key === 'redTeamConfig') {
+          useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('["other-tab"]');
+          useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('[]');
+          newerMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+        }
+        return result;
+      });
+      try {
+        if (update === 'valid full import') {
+          useRedTeamConfig.getState().setFullConfig({
+            ...useRedTeamConfig.getState().config,
+            target: {
+              id: 'openai:gpt-5',
+              label: 'Valid foundation target',
+              config: { temperature: 0.4 },
+            },
+          });
+        } else {
+          useRedTeamConfig.getState().resetConfig();
+        }
+      } finally {
+        setItem.mockRestore();
+      }
+
+      expect(newerMarker).toMatch(/^non-object-json:[a-z0-9-]+$/);
+      expect(newerMarker).not.toBe(originalMarker);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('[]');
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(newerMarker);
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+    },
+  );
 
   it('does not clear a newer invalid marker that arrives while a target-config clear reconciles', async () => {
     vi.resetModules();
@@ -1846,68 +1853,70 @@ describe('useRedTeamConfig', () => {
     expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
   });
 
-  it.each([
-    'valid full import',
-    'reset',
-  ] as const)('does not authenticate an overwritten persisted target when a %s races with an invalid draft', (update) => {
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Coding target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: staleTarget,
-    });
-    useRedTeamTargetConfigValidation
-      .getState()
-      .setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+  it.each(['valid full import', 'reset'] as const)(
+    'does not authenticate an overwritten persisted target when a %s races with an invalid draft',
+    (update) => {
+      const staleTarget = {
+        id: 'openinterpreter',
+        label: 'Coding target',
+        config: { sandbox_mode: 'danger-full-access' },
+      };
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: staleTarget,
+      });
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      const originalSetItem = Storage.prototype.setItem;
+      let raced = false;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        const result = originalSetItem.call(this, key, value);
+        if (!raced && this === window.localStorage && key === 'redTeamConfig') {
+          raced = true;
+          const overwrittenConfig = JSON.parse(value);
+          overwrittenConfig.state.config.target = staleTarget;
+          originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+        }
+        return result;
+      });
+      try {
+        if (update === 'valid full import') {
+          useRedTeamConfig.getState().setFullConfig({
+            ...useRedTeamConfig.getState().config,
+            target: {
+              ...staleTarget,
+              config: { sandbox_mode: 'read-only' },
+            },
+          });
+        } else {
+          useRedTeamConfig.getState().resetConfig();
+        }
+      } finally {
+        setItem.mockRestore();
       }
-      return result;
-    });
-    try {
-      if (update === 'valid full import') {
-        useRedTeamConfig.getState().setFullConfig({
-          ...useRedTeamConfig.getState().config,
-          target: {
-            ...staleTarget,
-            config: { sandbox_mode: 'read-only' },
-          },
-        });
-      } else {
-        useRedTeamConfig.getState().resetConfig();
-      }
-    } finally {
-      setItem.mockRestore();
-    }
 
-    expect(raced).toBe(true);
-    expect(
-      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
-    ).toEqual({ sandbox_mode: 'danger-full-access' });
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Invalid JSON configuration',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
-      '{"sandbox_mode":"read-only",}',
-    );
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
-  });
+      expect(raced).toBe(true);
+      expect(
+        JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+      ).toEqual({ sandbox_mode: 'danger-full-access' });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Invalid JSON configuration',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"read-only",}',
+      );
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+    },
+  );
 
   it.each([
     'structured target update',
@@ -1999,118 +2008,118 @@ describe('useRedTeamConfig', () => {
     expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
   });
 
-  it.each([
-    'storage',
-    'broadcast',
-  ] as const)('does not authenticate an overwritten persisted target while a %s clear reconciles', async (delivery) => {
-    const peers = new Set<MockBroadcastChannel>();
-    class MockBroadcastChannel {
-      readonly name: string;
-      readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+  it.each(['storage', 'broadcast'] as const)(
+    'does not authenticate an overwritten persisted target while a %s clear reconciles',
+    async (delivery) => {
+      const peers = new Set<MockBroadcastChannel>();
+      class MockBroadcastChannel {
+        readonly name: string;
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
 
-      constructor(name: string) {
-        this.name = name;
-        peers.add(this);
-      }
-      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
-        this.listeners.add(listener);
-      }
-      postMessage(data: unknown) {
-        for (const peer of peers) {
-          if (peer !== this && peer.name === this.name) {
-            for (const listener of peer.listeners) {
-              listener({ data } as MessageEvent<unknown>);
+        constructor(name: string) {
+          this.name = name;
+          peers.add(this);
+        }
+        addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+          this.listeners.add(listener);
+        }
+        postMessage(data: unknown) {
+          for (const peer of peers) {
+            if (peer !== this && peer.name === this.name) {
+              for (const listener of peer.listeners) {
+                listener({ data } as MessageEvent<unknown>);
+              }
             }
           }
         }
-      }
-      close() {
-        peers.delete(this);
-      }
-    }
-    mockBrowserProperty(
-      globalThis,
-      'BroadcastChannel',
-      MockBroadcastChannel as unknown as typeof BroadcastChannel,
-    );
-
-    try {
-      vi.resetModules();
-      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-        './useRedTeamTargetConfigValidation'
-      );
-      const staleTarget = {
-        id: 'openinterpreter',
-        label: 'Coding target',
-        config: { sandbox_mode: 'danger-full-access' },
-      };
-      const correctedTarget = {
-        ...staleTarget,
-        config: { sandbox_mode: 'read-only' },
-      };
-      tabConfig.getState().setFullConfig({
-        ...tabConfig.getState().config,
-        target: staleTarget,
-      });
-      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-      persistedConfig.state.config.target = correctedTarget;
-      window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
-      tabValidation.getState().clearTargetConfigValidation();
-      const clearMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-      expect(clearMarker).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-      tabValidation.setState({
-        targetConfigError: 'Invalid JSON configuration',
-        targetConfigDraft: '{"sandbox_mode":"read-only",}',
-      });
-      const originalGetItem = Storage.prototype.getItem;
-      const originalSetItem = Storage.prototype.setItem;
-      let raced = false;
-      let configReads = 0;
-      const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        const result = originalGetItem.call(this, key);
-        if (
-          !raced &&
-          this === window.localStorage &&
-          key === 'redTeamConfig' &&
-          ++configReads === 2
-        ) {
-          raced = true;
-          const overwrittenConfig = JSON.parse(result!);
-          overwrittenConfig.state.config.target = staleTarget;
-          originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-          return originalGetItem.call(this, key);
+        close() {
+          peers.delete(this);
         }
-        return result;
-      });
+      }
+      mockBrowserProperty(
+        globalThis,
+        'BroadcastChannel',
+        MockBroadcastChannel as unknown as typeof BroadcastChannel,
+      );
+
       try {
-        if (delivery === 'storage') {
-          dispatchStorageEvent('redTeamTargetConfigValidation', clearMarker);
-        } else {
-          new MockBroadcastChannel('redTeamTargetConfigValidation').postMessage(clearMarker);
+        vi.resetModules();
+        const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+        const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        const staleTarget = {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        };
+        const correctedTarget = {
+          ...staleTarget,
+          config: { sandbox_mode: 'read-only' },
+        };
+        tabConfig.getState().setFullConfig({
+          ...tabConfig.getState().config,
+          target: staleTarget,
+        });
+        tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+        tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+        const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+        persistedConfig.state.config.target = correctedTarget;
+        window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
+        tabValidation.getState().clearTargetConfigValidation();
+        const clearMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+        expect(clearMarker).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+        tabValidation.setState({
+          targetConfigError: 'Invalid JSON configuration',
+          targetConfigDraft: '{"sandbox_mode":"read-only",}',
+        });
+        const originalGetItem = Storage.prototype.getItem;
+        const originalSetItem = Storage.prototype.setItem;
+        let raced = false;
+        let configReads = 0;
+        const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+          this: Storage,
+          key: string,
+        ) {
+          const result = originalGetItem.call(this, key);
+          if (
+            !raced &&
+            this === window.localStorage &&
+            key === 'redTeamConfig' &&
+            ++configReads === 2
+          ) {
+            raced = true;
+            const overwrittenConfig = JSON.parse(result!);
+            overwrittenConfig.state.config.target = staleTarget;
+            originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+            return originalGetItem.call(this, key);
+          }
+          return result;
+        });
+        try {
+          if (delivery === 'storage') {
+            dispatchStorageEvent('redTeamTargetConfigValidation', clearMarker);
+          } else {
+            new MockBroadcastChannel('redTeamTargetConfigValidation').postMessage(clearMarker);
+          }
+        } finally {
+          getItem.mockRestore();
         }
-      } finally {
-        getItem.mockRestore();
-      }
 
-      expect(raced).toBe(true);
-      expect(
-        JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
-      ).toEqual({ sandbox_mode: 'danger-full-access' });
-      expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-      expect(tabValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
-        /^invalid-json:[a-z0-9-]+$/,
-      );
-    } finally {
-      restoreBrowserMocks();
-    }
-  });
+        expect(raced).toBe(true);
+        expect(
+          JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+        ).toEqual({ sandbox_mode: 'danger-full-access' });
+        expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        expect(tabValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+          /^invalid-json:[a-z0-9-]+$/,
+        );
+      } finally {
+        restoreBrowserMocks();
+      }
+    },
+  );
 
   it.each([
     ['valid full import', 1],
@@ -2120,189 +2129,57 @@ describe('useRedTeamConfig', () => {
     ['plugins recovery update', 2],
     ['application-definition recovery update', 2],
     ['provider-type recovery update', 2],
-  ] as const)('does not authenticate a target overwritten on the clear-time read during a %s', (update, clearRead) => {
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Stale coding target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
-    const usesNonObjectRecovery = update !== 'valid full import' && update !== 'reset';
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: usesNonObjectRecovery
-        ? {
-            id: 'openai:gpt-5',
-            label: 'Foundation target',
-            config: null as unknown as Config['target']['config'],
-          }
-        : staleTarget,
-    });
-    if (!usesNonObjectRecovery) {
-      useRedTeamTargetConfigValidation
-        .getState()
-        .setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-      useRedTeamTargetConfigValidation
-        .getState()
-        .setTargetConfigError('Invalid JSON configuration');
-    }
-    const originalSetItem = Storage.prototype.setItem;
-    if (usesNonObjectRecovery && update !== 'structured target update') {
-      const quotaSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-        this: Storage,
-        key: string,
-        value: string,
-      ) {
-        if (this === window.localStorage && key === 'redTeamConfig') {
-          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-        }
-        return originalSetItem.call(this, key, value);
-      });
-      try {
-        expect(() =>
-          useRedTeamConfig.getState().updateConfig('target', {
-            ...useRedTeamConfig.getState().config.target,
-            config: { temperature: 0.3 },
-          }),
-        ).toThrow('The quota has been exceeded.');
-      } finally {
-        quotaSetItem.mockRestore();
-      }
-    }
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const originalGetItem = Storage.prototype.getItem;
-    let targetReads = 0;
-    let raced = false;
-    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-    ) {
-      const result = originalGetItem.call(this, key);
-      if (this === window.localStorage && key === 'redTeamConfig' && ++targetReads === clearRead) {
-        raced = true;
-        const overwrittenConfig = JSON.parse(result!);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-        return originalGetItem.call(this, key);
-      }
-      return result;
-    });
-    try {
-      switch (update) {
-        case 'valid full import':
-          useRedTeamConfig.getState().setFullConfig({
-            ...useRedTeamConfig.getState().config,
-            target: {
-              ...staleTarget,
-              config: { sandbox_mode: 'read-only' },
-            },
-          });
-          break;
-        case 'reset':
-          useRedTeamConfig.getState().resetConfig();
-          break;
-        case 'structured target update':
-          useRedTeamConfig.getState().updateConfig('target', {
-            ...useRedTeamConfig.getState().config.target,
-            config: { temperature: 0.4 },
-          });
-          break;
-        case 'description recovery update':
-          useRedTeamConfig.getState().updateConfig('description', 'retry after freeing storage');
-          break;
-        case 'plugins recovery update':
-          useRedTeamConfig.getState().updatePlugins(['harmful:privacy']);
-          break;
-        case 'application-definition recovery update':
-          useRedTeamConfig
-            .getState()
-            .updateApplicationDefinition('purpose', 'retry after freeing storage');
-          break;
-        case 'provider-type recovery update':
-          useRedTeamConfig.getState().setProviderType('openai');
-          break;
-      }
-    } finally {
-      getItem.mockRestore();
-    }
-
-    expect(raced).toBe(true);
-    expect(
-      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
-    ).toEqual({ sandbox_mode: 'danger-full-access' });
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      usesNonObjectRecovery ? 'Configuration must be a JSON object' : 'Invalid JSON configuration',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
-      usesNonObjectRecovery ? 'null' : '{"sandbox_mode":"read-only",}',
-    );
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
-  });
-
-  it.each([
-    ['storage', 3],
-    ['broadcast', 2],
-  ] as const)('does not authenticate a target overwritten on the clear-time read while a %s clear reconciles', async (delivery, clearRead) => {
-    const peers = new Set<MockBroadcastChannel>();
-    class MockBroadcastChannel {
-      readonly name: string;
-      readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
-
-      constructor(name: string) {
-        this.name = name;
-        peers.add(this);
-      }
-      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
-        this.listeners.add(listener);
-      }
-      postMessage(data: unknown) {
-        for (const peer of peers) {
-          if (peer !== this && peer.name === this.name) {
-            for (const listener of peer.listeners) {
-              listener({ data } as MessageEvent<unknown>);
-            }
-          }
-        }
-      }
-      close() {
-        peers.delete(this);
-      }
-    }
-    mockBrowserProperty(
-      globalThis,
-      'BroadcastChannel',
-      MockBroadcastChannel as unknown as typeof BroadcastChannel,
-    );
-
-    try {
-      vi.resetModules();
-      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-        './useRedTeamTargetConfigValidation'
-      );
+  ] as const)(
+    'does not authenticate a target overwritten on the clear-time read during a %s',
+    (update, clearRead) => {
       const staleTarget = {
         id: 'openinterpreter',
-        label: 'Coding target',
+        label: 'Stale coding target',
         config: { sandbox_mode: 'danger-full-access' },
       };
-      tabConfig.getState().setFullConfig({
-        ...tabConfig.getState().config,
-        target: staleTarget,
+      const usesNonObjectRecovery = update !== 'valid full import' && update !== 'reset';
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: usesNonObjectRecovery
+          ? {
+              id: 'openai:gpt-5',
+              label: 'Foundation target',
+              config: null as unknown as Config['target']['config'],
+            }
+          : staleTarget,
       });
-      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-      persistedConfig.state.config.target = {
-        ...staleTarget,
-        config: { sandbox_mode: 'read-only' },
-      };
-      window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
-      tabValidation.getState().clearTargetConfigValidation();
-      const clearMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-      tabValidation.setState({
-        targetConfigError: 'Invalid JSON configuration',
-        targetConfigDraft: '{"sandbox_mode":"read-only",}',
-      });
+      if (!usesNonObjectRecovery) {
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
+      }
       const originalSetItem = Storage.prototype.setItem;
+      if (usesNonObjectRecovery && update !== 'structured target update') {
+        const quotaSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+          this: Storage,
+          key: string,
+          value: string,
+        ) {
+          if (this === window.localStorage && key === 'redTeamConfig') {
+            throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+          }
+          return originalSetItem.call(this, key, value);
+        });
+        try {
+          expect(() =>
+            useRedTeamConfig.getState().updateConfig('target', {
+              ...useRedTeamConfig.getState().config.target,
+              config: { temperature: 0.3 },
+            }),
+          ).toThrow('The quota has been exceeded.');
+        } finally {
+          quotaSetItem.mockRestore();
+        }
+      }
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
       const originalGetItem = Storage.prototype.getItem;
       let targetReads = 0;
       let raced = false;
@@ -2325,10 +2202,39 @@ describe('useRedTeamConfig', () => {
         return result;
       });
       try {
-        if (delivery === 'storage') {
-          dispatchStorageEvent('redTeamTargetConfigValidation', clearMarker);
-        } else {
-          new MockBroadcastChannel('redTeamTargetConfigValidation').postMessage(clearMarker);
+        switch (update) {
+          case 'valid full import':
+            useRedTeamConfig.getState().setFullConfig({
+              ...useRedTeamConfig.getState().config,
+              target: {
+                ...staleTarget,
+                config: { sandbox_mode: 'read-only' },
+              },
+            });
+            break;
+          case 'reset':
+            useRedTeamConfig.getState().resetConfig();
+            break;
+          case 'structured target update':
+            useRedTeamConfig.getState().updateConfig('target', {
+              ...useRedTeamConfig.getState().config.target,
+              config: { temperature: 0.4 },
+            });
+            break;
+          case 'description recovery update':
+            useRedTeamConfig.getState().updateConfig('description', 'retry after freeing storage');
+            break;
+          case 'plugins recovery update':
+            useRedTeamConfig.getState().updatePlugins(['harmful:privacy']);
+            break;
+          case 'application-definition recovery update':
+            useRedTeamConfig
+              .getState()
+              .updateApplicationDefinition('purpose', 'retry after freeing storage');
+            break;
+          case 'provider-type recovery update':
+            useRedTeamConfig.getState().setProviderType('openai');
+            break;
         }
       } finally {
         getItem.mockRestore();
@@ -2338,15 +2244,130 @@ describe('useRedTeamConfig', () => {
       expect(
         JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
       ).toEqual({ sandbox_mode: 'danger-full-access' });
-      expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-      expect(tabValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
-        /^invalid-json:[a-z0-9-]+$/,
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        usesNonObjectRecovery
+          ? 'Configuration must be a JSON object'
+          : 'Invalid JSON configuration',
       );
-    } finally {
-      restoreBrowserMocks();
-    }
-  });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        usesNonObjectRecovery ? 'null' : '{"sandbox_mode":"read-only",}',
+      );
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+    },
+  );
+
+  it.each([
+    ['storage', 3],
+    ['broadcast', 2],
+  ] as const)(
+    'does not authenticate a target overwritten on the clear-time read while a %s clear reconciles',
+    async (delivery, clearRead) => {
+      const peers = new Set<MockBroadcastChannel>();
+      class MockBroadcastChannel {
+        readonly name: string;
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+        constructor(name: string) {
+          this.name = name;
+          peers.add(this);
+        }
+        addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+          this.listeners.add(listener);
+        }
+        postMessage(data: unknown) {
+          for (const peer of peers) {
+            if (peer !== this && peer.name === this.name) {
+              for (const listener of peer.listeners) {
+                listener({ data } as MessageEvent<unknown>);
+              }
+            }
+          }
+        }
+        close() {
+          peers.delete(this);
+        }
+      }
+      mockBrowserProperty(
+        globalThis,
+        'BroadcastChannel',
+        MockBroadcastChannel as unknown as typeof BroadcastChannel,
+      );
+
+      try {
+        vi.resetModules();
+        const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+        const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        const staleTarget = {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        };
+        tabConfig.getState().setFullConfig({
+          ...tabConfig.getState().config,
+          target: staleTarget,
+        });
+        tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+        tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+        const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+        persistedConfig.state.config.target = {
+          ...staleTarget,
+          config: { sandbox_mode: 'read-only' },
+        };
+        window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
+        tabValidation.getState().clearTargetConfigValidation();
+        const clearMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+        tabValidation.setState({
+          targetConfigError: 'Invalid JSON configuration',
+          targetConfigDraft: '{"sandbox_mode":"read-only",}',
+        });
+        const originalSetItem = Storage.prototype.setItem;
+        const originalGetItem = Storage.prototype.getItem;
+        let targetReads = 0;
+        let raced = false;
+        const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+          this: Storage,
+          key: string,
+        ) {
+          const result = originalGetItem.call(this, key);
+          if (
+            this === window.localStorage &&
+            key === 'redTeamConfig' &&
+            ++targetReads === clearRead
+          ) {
+            raced = true;
+            const overwrittenConfig = JSON.parse(result!);
+            overwrittenConfig.state.config.target = staleTarget;
+            originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+            return originalGetItem.call(this, key);
+          }
+          return result;
+        });
+        try {
+          if (delivery === 'storage') {
+            dispatchStorageEvent('redTeamTargetConfigValidation', clearMarker);
+          } else {
+            new MockBroadcastChannel('redTeamTargetConfigValidation').postMessage(clearMarker);
+          }
+        } finally {
+          getItem.mockRestore();
+        }
+
+        expect(raced).toBe(true);
+        expect(
+          JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+        ).toEqual({ sandbox_mode: 'danger-full-access' });
+        expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        expect(tabValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+          /^invalid-json:[a-z0-9-]+$/,
+        );
+      } finally {
+        restoreBrowserMocks();
+      }
+    },
+  );
 
   it('refuses to clear an invalid target when the expected corrected target is not durable', () => {
     const staleTarget = {
@@ -2383,93 +2404,96 @@ describe('useRedTeamConfig', () => {
     expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
   });
 
-  it.each([
-    'local',
-    'quota-fallback',
-  ] as const)('refuses to clear an invalid target when the persisted target changes during a %s clear write', (storage) => {
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Coding target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
-    const correctedTarget = {
-      ...staleTarget,
-      config: { sandbox_mode: 'read-only' },
-    };
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: staleTarget,
-    });
-    useRedTeamTargetConfigValidation
-      .getState()
-      .replaceTargetConfigValidation('Invalid JSON configuration', '{"sandbox_mode":"read-only",}');
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-
-    const originalSetItem = Storage.prototype.setItem;
-    const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-    persistedConfig.state.config.target = correctedTarget;
-    originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
-
-    let raced = false;
-    let activeMarkerDuringWrite: string | null = null;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (
-        storage === 'quota-fallback' &&
-        this === window.localStorage &&
-        key === 'redTeamTargetConfigValidation'
-      ) {
-        throw new DOMException('Quota exceeded', 'QuotaExceededError');
-      }
-      if (
-        !raced &&
-        this === (storage === 'local' ? window.localStorage : window.sessionStorage) &&
-        key === 'redTeamTargetConfigValidation' &&
-        value.startsWith('clear:')
-      ) {
-        raced = true;
-        activeMarkerDuringWrite = getCurrentTargetConfigInvalidMarker();
-        const overwrittenConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(
-          window.localStorage,
-          'redTeamConfig',
-          JSON.stringify(overwrittenConfig),
-        );
-      }
-      return originalSetItem.call(this, key, value);
-    });
-
-    let cleared: boolean;
-    try {
-      cleared = useRedTeamTargetConfigValidation
+  it.each(['local', 'quota-fallback'] as const)(
+    'refuses to clear an invalid target when the persisted target changes during a %s clear write',
+    (storage) => {
+      const staleTarget = {
+        id: 'openinterpreter',
+        label: 'Coding target',
+        config: { sandbox_mode: 'danger-full-access' },
+      };
+      const correctedTarget = {
+        ...staleTarget,
+        config: { sandbox_mode: 'read-only' },
+      };
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: staleTarget,
+      });
+      useRedTeamTargetConfigValidation
         .getState()
-        .clearTargetConfigValidation(JSON.stringify(correctedTarget));
-    } finally {
-      setItem.mockRestore();
-    }
+        .replaceTargetConfigValidation(
+          'Invalid JSON configuration',
+          '{"sandbox_mode":"read-only",}',
+        );
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
 
-    expect(raced).toBe(true);
-    expect(activeMarkerDuringWrite).toBe(invalidMarker);
-    expect(cleared).toBe(false);
-    expect(
-      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
-    ).toEqual({ sandbox_mode: 'danger-full-access' });
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Invalid JSON configuration',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
-      '{"sandbox_mode":"read-only",}',
-    );
-    expect(
-      storage === 'local'
-        ? window.localStorage.getItem('redTeamTargetConfigValidation')
-        : window.sessionStorage.getItem('redTeamTargetConfigValidation'),
-    ).toMatch(/^invalid-json:[a-z0-9-]+$/);
-  });
+      const originalSetItem = Storage.prototype.setItem;
+      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+      persistedConfig.state.config.target = correctedTarget;
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(persistedConfig));
+
+      let raced = false;
+      let activeMarkerDuringWrite: string | null = null;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (
+          storage === 'quota-fallback' &&
+          this === window.localStorage &&
+          key === 'redTeamTargetConfigValidation'
+        ) {
+          throw new DOMException('Quota exceeded', 'QuotaExceededError');
+        }
+        if (
+          !raced &&
+          this === (storage === 'local' ? window.localStorage : window.sessionStorage) &&
+          key === 'redTeamTargetConfigValidation' &&
+          value.startsWith('clear:')
+        ) {
+          raced = true;
+          activeMarkerDuringWrite = getCurrentTargetConfigInvalidMarker();
+          const overwrittenConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+          overwrittenConfig.state.config.target = staleTarget;
+          originalSetItem.call(
+            window.localStorage,
+            'redTeamConfig',
+            JSON.stringify(overwrittenConfig),
+          );
+        }
+        return originalSetItem.call(this, key, value);
+      });
+
+      let cleared: boolean;
+      try {
+        cleared = useRedTeamTargetConfigValidation
+          .getState()
+          .clearTargetConfigValidation(JSON.stringify(correctedTarget));
+      } finally {
+        setItem.mockRestore();
+      }
+
+      expect(raced).toBe(true);
+      expect(activeMarkerDuringWrite).toBe(invalidMarker);
+      expect(cleared).toBe(false);
+      expect(
+        JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+      ).toEqual({ sandbox_mode: 'danger-full-access' });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Invalid JSON configuration',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"read-only",}',
+      );
+      expect(
+        storage === 'local'
+          ? window.localStorage.getItem('redTeamTargetConfigValidation')
+          : window.sessionStorage.getItem('redTeamTargetConfigValidation'),
+      ).toMatch(/^invalid-json:[a-z0-9-]+$/);
+    },
+  );
 
   it('does not clear a newer raw non-object draft when a structured replacement persists after quota recovers', () => {
     useRedTeamConfig.getState().setFullConfig({
@@ -2618,42 +2642,45 @@ describe('useRedTeamConfig', () => {
       'Configuration must be a JSON object',
       '"invalid-config"',
     ],
-  ])('normalizes or blocks a pre-upgrade %s target configuration after rehydration', async (_case, persistedConfig, expectedConfig, expectedError, expectedDraft) => {
-    window.localStorage.setItem(
-      'redTeamConfig',
-      JSON.stringify({
-        state: {
-          config: {
-            ...useRedTeamConfig.getState().config,
-            target: {
-              id: 'openinterpreter',
-              label: 'Coding target',
-              ...(persistedConfig === undefined ? {} : { config: persistedConfig }),
+  ])(
+    'normalizes or blocks a pre-upgrade %s target configuration after rehydration',
+    async (_case, persistedConfig, expectedConfig, expectedError, expectedDraft) => {
+      window.localStorage.setItem(
+        'redTeamConfig',
+        JSON.stringify({
+          state: {
+            config: {
+              ...useRedTeamConfig.getState().config,
+              target: {
+                id: 'openinterpreter',
+                label: 'Coding target',
+                ...(persistedConfig === undefined ? {} : { config: persistedConfig }),
+              },
             },
+            providerType: 'openinterpreter',
           },
-          providerType: 'openinterpreter',
-        },
-        version: 0,
-      }),
-    );
-    window.localStorage.removeItem('redTeamTargetConfigValidation');
-    window.sessionStorage.removeItem('redTeamTargetConfigValidation');
+          version: 0,
+        }),
+      );
+      window.localStorage.removeItem('redTeamTargetConfigValidation');
+      window.sessionStorage.removeItem('redTeamTargetConfigValidation');
 
-    vi.resetModules();
-    const { useRedTeamConfig: rehydratedConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: rehydratedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
+      vi.resetModules();
+      const { useRedTeamConfig: rehydratedConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: rehydratedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
 
-    expect(rehydratedConfig.getState().config.target.config).toEqual(expectedConfig);
-    expect(rehydratedValidation.getState().targetConfigError).toBe(expectedError);
-    expect(rehydratedValidation.getState().targetConfigDraft).toBe(expectedDraft);
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toEqual(
-      expectedError
-        ? expect.stringMatching(/^non-object-json:[a-z0-9-]+$/)
-        : expect.stringMatching(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/),
-    );
-  });
+      expect(rehydratedConfig.getState().config.target.config).toEqual(expectedConfig);
+      expect(rehydratedValidation.getState().targetConfigError).toBe(expectedError);
+      expect(rehydratedValidation.getState().targetConfigDraft).toBe(expectedDraft);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toEqual(
+        expectedError
+          ? expect.stringMatching(/^non-object-json:[a-z0-9-]+$/)
+          : expect.stringMatching(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/),
+      );
+    },
+  );
 
   it('does not let a delayed storage clear erase a newer malformed draft', async () => {
     vi.resetModules();
@@ -2687,180 +2714,189 @@ describe('useRedTeamConfig', () => {
   it.each([
     ['matching', false],
     ['mismatched', true],
-  ])('restores a newer invalid marker when a %s stale storage clear actually overwrites local storage', async (_case, changePersistedTarget) => {
-    vi.resetModules();
-    const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    tabConfig.getState().setFullConfig({
-      ...tabConfig.getState().config,
-      target: {
-        id: 'openinterpreter',
-        label: 'Coding target',
-        config: { sandbox_mode: 'danger-full-access' },
-      },
-    });
-    tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-    tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const firstInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(firstInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
-
-    tabValidation.getState().clearTargetConfigValidation();
-    const oldClear = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(oldClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-    tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"danger-full-access",}');
-    tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const secondInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(secondInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
-    expect(secondInvalid).not.toBe(firstInvalid);
-
-    if (changePersistedTarget) {
-      const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-      persistedConfig.state.config.target.config.sandbox_mode = 'read-only';
-      window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
-    }
-
-    window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
-    dispatchStorageEvent('redTeamTargetConfigValidation', oldClear);
-
-    expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(tabValidation.getState().targetConfigDraft).toBe(
-      '{"sandbox_mode":"danger-full-access",}',
-    );
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
-
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-
-    window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      dispatchStorageEvent('redTeamTargetConfigValidation', oldClear);
-      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+  ])(
+    'restores a newer invalid marker when a %s stale storage clear actually overwrites local storage',
+    async (_case, changePersistedTarget) => {
       vi.resetModules();
-      const { useRedTeamTargetConfigValidation: quotaReloadedValidation } = await import(
+      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
         './useRedTeamTargetConfigValidation'
       );
-      expect(quotaReloadedValidation.getState().targetConfigError).toBe(
-        'Invalid JSON configuration',
+      tabConfig.getState().setFullConfig({
+        ...tabConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      });
+      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const firstInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(firstInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+
+      tabValidation.getState().clearTargetConfigValidation();
+      const oldClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(oldClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"danger-full-access",}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const secondInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(secondInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+      expect(secondInvalid).not.toBe(firstInvalid);
+
+      if (changePersistedTarget) {
+        const persistedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+        persistedConfig.state.config.target.config.sandbox_mode = 'read-only';
+        window.localStorage.setItem('redTeamConfig', JSON.stringify(persistedConfig));
+      }
+
+      window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
+      dispatchStorageEvent('redTeamTargetConfigValidation', oldClear);
+
+      expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(tabValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"danger-full-access",}',
       );
-    } finally {
-      setItem.mockRestore();
-    }
-  });
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+
+      window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        dispatchStorageEvent('redTeamTargetConfigValidation', oldClear);
+        expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+        vi.resetModules();
+        const { useRedTeamTargetConfigValidation: quotaReloadedValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(quotaReloadedValidation.getState().targetConfigError).toBe(
+          'Invalid JSON configuration',
+        );
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
 
   it.each([
     ['deletion', null],
     ['non-marker', 'corrupt'],
-  ])('restores a newer invalid marker when a queued %s storage event follows a stale clear overwrite', async (_case, queuedValue) => {
-    vi.resetModules();
-    const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    tabConfig.getState().setFullConfig({
-      ...tabConfig.getState().config,
-      target: {
-        id: 'openinterpreter',
-        label: 'Coding target',
-        config: { sandbox_mode: 'danger-full-access' },
-      },
-    });
-    tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
-    tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    tabValidation.getState().clearTargetConfigValidation();
-    const oldClear = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(oldClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-    tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"danger-full-access",}');
-    tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const secondInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(secondInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
-    window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
-
-    dispatchStorageEvent('redTeamTargetConfigValidation', queuedValue);
-
-    expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(tabValidation.getState().targetConfigDraft).toBe(
-      '{"sandbox_mode":"danger-full-access",}',
-    );
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-
-    window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      dispatchStorageEvent('redTeamTargetConfigValidation', queuedValue);
-      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+  ])(
+    'restores a newer invalid marker when a queued %s storage event follows a stale clear overwrite',
+    async (_case, queuedValue) => {
       vi.resetModules();
-      const { useRedTeamTargetConfigValidation: quotaReloadedValidation } = await import(
+      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
         './useRedTeamTargetConfigValidation'
       );
-      expect(quotaReloadedValidation.getState().targetConfigError).toBe(
-        'Invalid JSON configuration',
+      tabConfig.getState().setFullConfig({
+        ...tabConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      });
+      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"read-only",}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      tabValidation.getState().clearTargetConfigValidation();
+      const oldClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(oldClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      tabValidation.getState().setTargetConfigDraft('{"sandbox_mode":"danger-full-access",}');
+      tabValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const secondInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(secondInvalid).toMatch(/^invalid-json:[a-z0-9-]+$/);
+      window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
+
+      dispatchStorageEvent('redTeamTargetConfigValidation', queuedValue);
+
+      expect(tabValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(tabValidation.getState().targetConfigDraft).toBe(
+        '{"sandbox_mode":"danger-full-access",}',
       );
-    } finally {
-      setItem.mockRestore();
-    }
-  });
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+
+      window.localStorage.setItem('redTeamTargetConfigValidation', oldClear!);
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        dispatchStorageEvent('redTeamTargetConfigValidation', queuedValue);
+        expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(secondInvalid);
+        vi.resetModules();
+        const { useRedTeamTargetConfigValidation: quotaReloadedValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(quotaReloadedValidation.getState().targetConfigError).toBe(
+          'Invalid JSON configuration',
+        );
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
 
   it.each([
     ['tokened malformed', 'invalid-json:i1-delayed-token', 'Invalid JSON configuration'],
     ['legacy malformed', 'invalid-json', 'Invalid JSON configuration'],
     ['legacy non-object', 'non-object-json', 'Configuration must be a JSON object'],
-  ])('restores a queued %s storage marker when a clean tab has already written clear:none', async (_case, queuedInvalid, expectedError) => {
-    vi.resetModules();
-    const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    tabConfig.getState().setFullConfig({
-      ...tabConfig.getState().config,
-      target: {
-        id: 'openinterpreter',
-        label: 'Coding target',
-        config: { sandbox_mode: 'danger-full-access' },
-      },
-    });
-    const cleanClear = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(cleanClear).toMatch(/^clear:none:[a-z0-9]+:[a-f0-9]{64}$/);
-    dispatchStorageEvent('redTeamTargetConfigValidation', queuedInvalid);
+  ])(
+    'restores a queued %s storage marker when a clean tab has already written clear:none',
+    async (_case, queuedInvalid, expectedError) => {
+      vi.resetModules();
+      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      tabConfig.getState().setFullConfig({
+        ...tabConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      });
+      const cleanClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(cleanClear).toMatch(/^clear:none:[a-z0-9]+:[a-f0-9]{64}$/);
+      dispatchStorageEvent('redTeamTargetConfigValidation', queuedInvalid);
 
-    expect(tabValidation.getState().targetConfigError).toBe(expectedError);
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(queuedInvalid);
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBe(expectedError);
-  });
+      expect(tabValidation.getState().targetConfigError).toBe(expectedError);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(queuedInvalid);
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe(expectedError);
+    },
+  );
 
   it('restores a queued invalid storage marker when the local clear fingerprint no longer matches the persisted target', async () => {
     vi.resetModules();
@@ -3057,41 +3093,44 @@ describe('useRedTeamConfig', () => {
   it.each([
     ['legacy malformed', 'invalid-json', 'Invalid JSON configuration'],
     ['legacy non-object', 'non-object-json', 'Configuration must be a JSON object'],
-  ])('keeps a queued %s marker blocked across clear:legacy and reload', async (_case, marker, error) => {
-    vi.resetModules();
-    const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: tabValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    tabConfig.getState().setFullConfig({
-      ...tabConfig.getState().config,
-      target: {
-        id: 'openinterpreter',
-        label: 'Coding target',
-        config: { sandbox_mode: 'danger-full-access' },
-      },
-    });
-    window.localStorage.setItem('redTeamTargetConfigValidation', 'invalid-json');
-    dispatchStorageEvent('redTeamTargetConfigValidation', 'invalid-json');
-    tabValidation.getState().clearTargetConfigValidation();
-    const legacyClear = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(legacyClear).toMatch(/^clear:legacy:[a-z0-9]+:[a-f0-9]{64}$/);
+  ])(
+    'keeps a queued %s marker blocked across clear:legacy and reload',
+    async (_case, marker, error) => {
+      vi.resetModules();
+      const { useRedTeamConfig: tabConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      tabConfig.getState().setFullConfig({
+        ...tabConfig.getState().config,
+        target: {
+          id: 'openinterpreter',
+          label: 'Coding target',
+          config: { sandbox_mode: 'danger-full-access' },
+        },
+      });
+      window.localStorage.setItem('redTeamTargetConfigValidation', 'invalid-json');
+      dispatchStorageEvent('redTeamTargetConfigValidation', 'invalid-json');
+      tabValidation.getState().clearTargetConfigValidation();
+      const legacyClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(legacyClear).toMatch(/^clear:legacy:[a-z0-9]+:[a-f0-9]{64}$/);
 
-    dispatchStorageEvent('redTeamTargetConfigValidation', marker);
-    expect(tabValidation.getState().targetConfigError).toBe(error);
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(marker);
+      dispatchStorageEvent('redTeamTargetConfigValidation', marker);
+      expect(tabValidation.getState().targetConfigError).toBe(error);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(marker);
 
-    window.localStorage.setItem('redTeamTargetConfigValidation', legacyClear!);
-    dispatchStorageEvent('redTeamTargetConfigValidation', legacyClear);
+      window.localStorage.setItem('redTeamTargetConfigValidation', legacyClear!);
+      dispatchStorageEvent('redTeamTargetConfigValidation', legacyClear);
 
-    expect(tabValidation.getState().targetConfigError).toBe(error);
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(marker);
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBe(error);
-  });
+      expect(tabValidation.getState().targetConfigError).toBe(error);
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(marker);
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe(error);
+    },
+  );
 
   it('does not let a delayed broadcast clear erase a newer malformed draft', async () => {
     const peers = new Set<MockBroadcastChannel>();
@@ -3491,29 +3530,29 @@ describe('useRedTeamConfig', () => {
     expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
   });
 
-  it.each([
-    'local',
-    'session',
-  ] as const)('restores a valid fallback cookie when the %s marker is corrupt', async (storage) => {
-    window.localStorage.removeItem('redTeamTargetConfigValidation');
-    window.sessionStorage.removeItem('redTeamTargetConfigValidation');
-    if (storage === 'local') {
-      window.localStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
-    } else {
-      window.sessionStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
-    }
-    document.cookie = 'redTeamTargetConfigValidation=invalid-json; Path=/; SameSite=Lax';
+  it.each(['local', 'session'] as const)(
+    'restores a valid fallback cookie when the %s marker is corrupt',
+    async (storage) => {
+      window.localStorage.removeItem('redTeamTargetConfigValidation');
+      window.sessionStorage.removeItem('redTeamTargetConfigValidation');
+      if (storage === 'local') {
+        window.localStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
+      } else {
+        window.sessionStorage.setItem('redTeamTargetConfigValidation', 'corrupt');
+      }
+      document.cookie = 'redTeamTargetConfigValidation=invalid-json; Path=/; SameSite=Lax';
 
-    try {
-      vi.resetModules();
-      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-        './useRedTeamTargetConfigValidation'
-      );
-      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-    } finally {
-      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
-    }
-  });
+      try {
+        vi.resetModules();
+        const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      } finally {
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+      }
+    },
+  );
 
   it('keeps the invalid marker after a quota-fallback tab is closed and reopened', async () => {
     useRedTeamConfig.getState().setFullConfig({
@@ -4352,52 +4391,54 @@ describe('useRedTeamConfig', () => {
     }
   });
 
-  it.each([
-    'session',
-    'cookie',
-  ] as const)('does not restore a stale local invalid marker when an authenticated %s clear consumed its token', async (fallback) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: { temperature: 0.3 },
-      },
-    });
-    useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
-    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    expect(invalidMarker).toMatch(/^invalid-json:[a-z0-9-]+$/);
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+  it.each(['session', 'cookie'] as const)(
+    'does not restore a stale local invalid marker when an authenticated %s clear consumed its token',
+    async (fallback) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: { temperature: 0.3 },
+        },
+      });
+      useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+      const invalidMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      expect(invalidMarker).toMatch(/^invalid-json:[a-z0-9-]+$/);
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
+        const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation');
+        expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+        expect(fallbackClear?.split(':')[1]).toBe(invalidMarker?.split(':')[1]);
+      } finally {
+        setItem.mockRestore();
       }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(invalidMarker);
-      const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation');
-      expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-      expect(fallbackClear?.split(':')[1]).toBe(invalidMarker?.split(':')[1]);
-    } finally {
-      setItem.mockRestore();
-    }
-    if (fallback === 'cookie') {
-      window.sessionStorage.removeItem('redTeamTargetConfigValidation');
-    }
+      if (fallback === 'cookie') {
+        window.sessionStorage.removeItem('redTeamTargetConfigValidation');
+      }
 
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    expect(reloadedValidation.getState().targetConfigError).toBeNull();
-  });
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBeNull();
+    },
+  );
 
   it.each([
     ['newer session invalid', 'session-invalid'],
@@ -4405,68 +4446,75 @@ describe('useRedTeamConfig', () => {
     ['mismatched fallback clear token', 'mismatched-clear'],
     ['mismatched fallback clear fingerprint', 'mismatched-fingerprint'],
     ['legacy local invalid', 'legacy-invalid'],
-  ] as const)('keeps a %s blocked when local storage still contains an older invalid marker', async (_case, interference) => {
-    useRedTeamConfig.getState().setFullConfig({
-      ...useRedTeamConfig.getState().config,
-      target: {
-        id: 'openai:gpt-5',
-        label: 'Foundation target',
-        config: { temperature: 0.3 },
-      },
-    });
-    useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
-    useRedTeamTargetConfigValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const oldInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+  ] as const)(
+    'keeps a %s blocked when local storage still contains an older invalid marker',
+    async (_case, interference) => {
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: {
+          id: 'openai:gpt-5',
+          label: 'Foundation target',
+          config: { temperature: 0.3 },
+        },
+      });
+      useRedTeamTargetConfigValidation.getState().setTargetConfigDraft('{"temperature":,}');
+      useRedTeamTargetConfigValidation
+        .getState()
+        .setTargetConfigError('Invalid JSON configuration');
+      const oldInvalid = window.localStorage.getItem('redTeamTargetConfigValidation');
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
+      });
+      try {
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+      } finally {
+        setItem.mockRestore();
       }
-      return originalSetItem.call(this, key, value);
-    });
-    try {
-      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
-    } finally {
-      setItem.mockRestore();
-    }
-    const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
-    expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-    const newerInvalid = 'invalid-json:newer-tab-token';
-    let expectedLocalInvalid = oldInvalid;
-    if (interference === 'session-invalid') {
-      window.sessionStorage.setItem('redTeamTargetConfigValidation', newerInvalid);
-    } else if (interference === 'cookie-invalid') {
-      document.cookie = `redTeamTargetConfigValidation=${newerInvalid}; Path=/; SameSite=Lax`;
-    } else if (interference === 'mismatched-clear') {
-      window.sessionStorage.setItem(
-        'redTeamTargetConfigValidation',
-        fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:'),
+      const fallbackClear = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
+      expect(fallbackClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+      const newerInvalid = 'invalid-json:newer-tab-token';
+      let expectedLocalInvalid = oldInvalid;
+      if (interference === 'session-invalid') {
+        window.sessionStorage.setItem('redTeamTargetConfigValidation', newerInvalid);
+      } else if (interference === 'cookie-invalid') {
+        document.cookie = `redTeamTargetConfigValidation=${newerInvalid}; Path=/; SameSite=Lax`;
+      } else if (interference === 'mismatched-clear') {
+        window.sessionStorage.setItem(
+          'redTeamTargetConfigValidation',
+          fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:'),
+        );
+        document.cookie = `redTeamTargetConfigValidation=${fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:')}; Path=/; SameSite=Lax`;
+      } else if (interference === 'mismatched-fingerprint') {
+        const corruptedClear = `${fallbackClear.slice(0, -1)}${fallbackClear.endsWith('0') ? '1' : '0'}`;
+        window.sessionStorage.setItem('redTeamTargetConfigValidation', corruptedClear);
+        document.cookie = `redTeamTargetConfigValidation=${corruptedClear}; Path=/; SameSite=Lax`;
+      } else {
+        expectedLocalInvalid = 'invalid-json';
+        window.localStorage.setItem('redTeamTargetConfigValidation', expectedLocalInvalid);
+        const legacyClear = fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:legacy:');
+        window.sessionStorage.setItem('redTeamTargetConfigValidation', legacyClear);
+        document.cookie = `redTeamTargetConfigValidation=${legacyClear}; Path=/; SameSite=Lax`;
+      }
+
+      vi.resetModules();
+      const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+        './useRedTeamTargetConfigValidation'
       );
-      document.cookie = `redTeamTargetConfigValidation=${fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:other-tab-token:')}; Path=/; SameSite=Lax`;
-    } else if (interference === 'mismatched-fingerprint') {
-      const corruptedClear = `${fallbackClear.slice(0, -1)}${fallbackClear.endsWith('0') ? '1' : '0'}`;
-      window.sessionStorage.setItem('redTeamTargetConfigValidation', corruptedClear);
-      document.cookie = `redTeamTargetConfigValidation=${corruptedClear}; Path=/; SameSite=Lax`;
-    } else {
-      expectedLocalInvalid = 'invalid-json';
-      window.localStorage.setItem('redTeamTargetConfigValidation', expectedLocalInvalid);
-      const legacyClear = fallbackClear.replace(/^clear:[a-z0-9-]+:/, 'clear:legacy:');
-      window.sessionStorage.setItem('redTeamTargetConfigValidation', legacyClear);
-      document.cookie = `redTeamTargetConfigValidation=${legacyClear}; Path=/; SameSite=Lax`;
-    }
 
-    vi.resetModules();
-    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-
-    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(expectedLocalInvalid);
-    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-  });
+      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(
+        expectedLocalInvalid,
+      );
+      expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+    },
+  );
 
   it('does not clear a newer quota-fallback draft on a queued older invalid event', async () => {
     vi.resetModules();
@@ -4622,126 +4670,129 @@ describe('useRedTeamConfig', () => {
       'invalid-json',
     ],
     ['non-object JSON', 'Configuration must be a JSON object', '[]', 'null', 'non-object-json'],
-  ])('ignores a delayed quota broadcast clear after a newer %s draft and converges on its correction', async (_case, error, firstDraft, secondDraft, kind) => {
-    const peers = new Set<MockBroadcastChannel>();
-    const sent: unknown[] = [];
-    class MockBroadcastChannel {
-      readonly name: string;
-      readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+  ])(
+    'ignores a delayed quota broadcast clear after a newer %s draft and converges on its correction',
+    async (_case, error, firstDraft, secondDraft, kind) => {
+      const peers = new Set<MockBroadcastChannel>();
+      const sent: unknown[] = [];
+      class MockBroadcastChannel {
+        readonly name: string;
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
 
-      constructor(name: string) {
-        this.name = name;
-        peers.add(this);
-      }
-      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
-        this.listeners.add(listener);
-      }
-      postMessage(data: unknown) {
-        sent.push(data);
-      }
-      close() {}
-    }
-    mockBrowserProperty(
-      globalThis,
-      'BroadcastChannel',
-      MockBroadcastChannel as unknown as typeof BroadcastChannel,
-    );
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
-    const deliver = (data: unknown) => {
-      for (const peer of peers) {
-        for (const listener of peer.listeners) {
-          listener({ data } as MessageEvent<unknown>);
+        constructor(name: string) {
+          this.name = name;
+          peers.add(this);
         }
+        addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+          this.listeners.add(listener);
+        }
+        postMessage(data: unknown) {
+          sent.push(data);
+        }
+        close() {}
       }
-    };
-
-    try {
-      vi.resetModules();
-      const { useRedTeamConfig: originConfig } = await import('./useRedTeamConfig');
-      const { useRedTeamTargetConfigValidation: originValidation } = await import(
-        './useRedTeamTargetConfigValidation'
+      mockBrowserProperty(
+        globalThis,
+        'BroadcastChannel',
+        MockBroadcastChannel as unknown as typeof BroadcastChannel,
       );
-      originConfig.getState().setFullConfig({
-        ...originConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          label: 'Coding target',
-          config: { sandbox_mode: 'danger-full-access' },
-        },
+      const originalSetItem = Storage.prototype.setItem;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === window.localStorage && key === 'redTeamTargetConfigValidation') {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, key, value);
       });
-      const clearFingerprint = sent.find(
-        (message): message is string =>
-          typeof message === 'string' && message.startsWith('clear:none:'),
-      );
-      expect(clearFingerprint).toMatch(/^clear:none:[a-z0-9]+:[a-f0-9]{64}$/);
+      const deliver = (data: unknown) => {
+        for (const peer of peers) {
+          for (const listener of peer.listeners) {
+            listener({ data } as MessageEvent<unknown>);
+          }
+        }
+      };
 
-      originValidation.getState().setTargetConfigDraft(firstDraft);
-      originValidation.getState().setTargetConfigError(error);
-      const firstMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
-      expect(firstMarker).toMatch(new RegExp(`^${kind}:[a-z0-9-]+$`));
-      const firstToken = firstMarker.slice(kind.length + 1);
-      const oldClear = clearFingerprint!.replace('clear:none:', `clear:${firstToken}:`);
+      try {
+        vi.resetModules();
+        const { useRedTeamConfig: originConfig } = await import('./useRedTeamConfig');
+        const { useRedTeamTargetConfigValidation: originValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        originConfig.getState().setFullConfig({
+          ...originConfig.getState().config,
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: { sandbox_mode: 'danger-full-access' },
+          },
+        });
+        const clearFingerprint = sent.find(
+          (message): message is string =>
+            typeof message === 'string' && message.startsWith('clear:none:'),
+        );
+        expect(clearFingerprint).toMatch(/^clear:none:[a-z0-9]+:[a-f0-9]{64}$/);
 
-      originValidation.getState().setTargetConfigDraft(secondDraft);
-      const secondMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
-      expect(secondMarker).toMatch(new RegExp(`^${kind}:[a-z0-9-]+$`));
-      expect(secondMarker).not.toBe(firstMarker);
-      expect(sent).toContain(secondMarker);
+        originValidation.getState().setTargetConfigDraft(firstDraft);
+        originValidation.getState().setTargetConfigError(error);
+        const firstMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
+        expect(firstMarker).toMatch(new RegExp(`^${kind}:[a-z0-9-]+$`));
+        const firstToken = firstMarker.slice(kind.length + 1);
+        const oldClear = clearFingerprint!.replace('clear:none:', `clear:${firstToken}:`);
 
-      vi.resetModules();
-      const { useRedTeamConfig: peerConfig } = await import('./useRedTeamConfig');
-      const { useRedTeamTargetConfigValidation: peerValidation } = await import(
-        './useRedTeamTargetConfigValidation'
-      );
-      expect(peerValidation.getState().targetConfigError).toBe(error);
-      expect(peerValidation.getState().targetConfigDraft).toBeNull();
+        originValidation.getState().setTargetConfigDraft(secondDraft);
+        const secondMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation')!;
+        expect(secondMarker).toMatch(new RegExp(`^${kind}:[a-z0-9-]+$`));
+        expect(secondMarker).not.toBe(firstMarker);
+        expect(sent).toContain(secondMarker);
 
-      deliver(oldClear);
+        vi.resetModules();
+        const { useRedTeamConfig: peerConfig } = await import('./useRedTeamConfig');
+        const { useRedTeamTargetConfigValidation: peerValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(peerValidation.getState().targetConfigError).toBe(error);
+        expect(peerValidation.getState().targetConfigDraft).toBeNull();
 
-      expect(originValidation.getState().targetConfigError).toBe(error);
-      expect(originValidation.getState().targetConfigDraft).toBe(secondDraft);
-      expect(peerValidation.getState().targetConfigError).toBe(error);
-      expect(peerValidation.getState().targetConfigDraft).toBeNull();
+        deliver(oldClear);
 
-      originConfig.getState().setFullConfig({
-        ...originConfig.getState().config,
-        description: 'Corrected configuration',
-        target: {
-          id: 'openinterpreter',
-          label: 'Coding target',
-          config: { sandbox_mode: 'read-only' },
-        },
-      });
-      const secondToken = secondMarker.slice(kind.length + 1);
-      const newClear = sent.find(
-        (message): message is string =>
-          typeof message === 'string' && message.startsWith(`clear:${secondToken}:`),
-      );
-      expect(newClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+        expect(originValidation.getState().targetConfigError).toBe(error);
+        expect(originValidation.getState().targetConfigDraft).toBe(secondDraft);
+        expect(peerValidation.getState().targetConfigError).toBe(error);
+        expect(peerValidation.getState().targetConfigDraft).toBeNull();
 
-      deliver(newClear);
+        originConfig.getState().setFullConfig({
+          ...originConfig.getState().config,
+          description: 'Corrected configuration',
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: { sandbox_mode: 'read-only' },
+          },
+        });
+        const secondToken = secondMarker.slice(kind.length + 1);
+        const newClear = sent.find(
+          (message): message is string =>
+            typeof message === 'string' && message.startsWith(`clear:${secondToken}:`),
+        );
+        expect(newClear).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
 
-      expect(originValidation.getState().targetConfigError).toBeNull();
-      expect(peerValidation.getState().targetConfigError).toBeNull();
-      expect(peerValidation.getState().targetConfigDraft).toBeNull();
-      expect(peerConfig.getState().config.target.config.sandbox_mode).toBe('read-only');
-      expect(peerConfig.getState().config.description).toBe('Corrected configuration');
-    } finally {
-      setItem.mockRestore();
-      restoreBrowserMocks();
-      useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
-    }
-  });
+        deliver(newClear);
+
+        expect(originValidation.getState().targetConfigError).toBeNull();
+        expect(peerValidation.getState().targetConfigError).toBeNull();
+        expect(peerValidation.getState().targetConfigDraft).toBeNull();
+        expect(peerConfig.getState().config.target.config.sandbox_mode).toBe('read-only');
+        expect(peerConfig.getState().config.description).toBe('Corrected configuration');
+      } finally {
+        setItem.mockRestore();
+        restoreBrowserMocks();
+        useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
+      }
+    },
+  );
 
   it('converges two local-storage tabs when stale invalid events arrive around a corrected target', async () => {
     type TargetConfigWindow = Window & {
@@ -4860,146 +4911,146 @@ describe('useRedTeamConfig', () => {
     expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(firstMarker);
   });
 
-  it.each([
-    'broadcast',
-    'storage',
-  ] as const)('preserves an independent malformed target draft when another tab corrects its draft over %s', async (delivery) => {
-    type TargetConfigWindow = Window & {
-      __promptfooTargetConfigValidationStorageListener?: (event: StorageEvent) => void;
-    };
-    const peers = new Set<MockBroadcastChannel>();
-    const sent: string[] = [];
-    class MockBroadcastChannel {
-      readonly name: string;
-      private readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+  it.each(['broadcast', 'storage'] as const)(
+    'preserves an independent malformed target draft when another tab corrects its draft over %s',
+    async (delivery) => {
+      type TargetConfigWindow = Window & {
+        __promptfooTargetConfigValidationStorageListener?: (event: StorageEvent) => void;
+      };
+      const peers = new Set<MockBroadcastChannel>();
+      const sent: string[] = [];
+      class MockBroadcastChannel {
+        readonly name: string;
+        private readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
 
-      constructor(name: string) {
-        this.name = name;
-        peers.add(this);
-      }
-
-      addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
-        this.listeners.add(listener);
-      }
-
-      postMessage(data: unknown) {
-        if (typeof data === 'string') {
-          sent.push(data);
+        constructor(name: string) {
+          this.name = name;
+          peers.add(this);
         }
-        if (delivery !== 'broadcast') {
-          return;
+
+        addEventListener(_type: 'message', listener: (event: MessageEvent<unknown>) => void) {
+          this.listeners.add(listener);
         }
-        for (const peer of peers) {
-          if (peer !== this && peer.name === this.name) {
-            for (const listener of peer.listeners) {
-              listener({ data } as MessageEvent<unknown>);
+
+        postMessage(data: unknown) {
+          if (typeof data === 'string') {
+            sent.push(data);
+          }
+          if (delivery !== 'broadcast') {
+            return;
+          }
+          for (const peer of peers) {
+            if (peer !== this && peer.name === this.name) {
+              for (const listener of peer.listeners) {
+                listener({ data } as MessageEvent<unknown>);
+              }
             }
           }
         }
+
+        close() {}
       }
 
-      close() {}
-    }
-
-    mockBrowserProperty(
-      globalThis,
-      'BroadcastChannel',
-      MockBroadcastChannel as unknown as typeof BroadcastChannel,
-    );
-
-    try {
-      vi.resetModules();
-      const { useRedTeamConfig: tabAConfig } = await import('./useRedTeamConfig');
-      const { useRedTeamTargetConfigValidation: tabAValidation } = await import(
-        './useRedTeamTargetConfigValidation'
+      mockBrowserProperty(
+        globalThis,
+        'BroadcastChannel',
+        MockBroadcastChannel as unknown as typeof BroadcastChannel,
       );
-      tabAConfig.getState().setFullConfig({
-        ...tabAConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          label: 'Coding target',
-          config: { sandbox_mode: 'read-only' },
-        },
-      });
-      tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a",}');
-      tabAValidation.getState().setTargetConfigError('Invalid JSON configuration');
-      const tokenA = window.localStorage.getItem('redTeamTargetConfigValidation');
-      const tabAListener = (window as TargetConfigWindow)
-        .__promptfooTargetConfigValidationStorageListener!;
 
-      vi.resetModules();
-      const { useRedTeamConfig: tabBConfig } = await import('./useRedTeamConfig');
-      const {
-        getCurrentTargetConfigInvalidMarker: getTabBInvalidMarker,
-        useRedTeamTargetConfigValidation: tabBValidation,
-      } = await import('./useRedTeamTargetConfigValidation');
-      const tabBListener = (window as TargetConfigWindow)
-        .__promptfooTargetConfigValidationStorageListener!;
-      expect(tabBValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-      tabBValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-b",}');
-      const tokenB = getTabBInvalidMarker();
-      expect(tokenB).not.toBe(tokenA);
-      if (delivery === 'storage') {
-        tabAListener(createStorageEvent('redTeamTargetConfigValidation', tokenB));
+      try {
+        vi.resetModules();
+        const { useRedTeamConfig: tabAConfig } = await import('./useRedTeamConfig');
+        const { useRedTeamTargetConfigValidation: tabAValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        tabAConfig.getState().setFullConfig({
+          ...tabAConfig.getState().config,
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: { sandbox_mode: 'read-only' },
+          },
+        });
+        tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a",}');
+        tabAValidation.getState().setTargetConfigError('Invalid JSON configuration');
+        const tokenA = window.localStorage.getItem('redTeamTargetConfigValidation');
+        const tabAListener = (window as TargetConfigWindow)
+          .__promptfooTargetConfigValidationStorageListener!;
+
+        vi.resetModules();
+        const { useRedTeamConfig: tabBConfig } = await import('./useRedTeamConfig');
+        const {
+          getCurrentTargetConfigInvalidMarker: getTabBInvalidMarker,
+          useRedTeamTargetConfigValidation: tabBValidation,
+        } = await import('./useRedTeamTargetConfigValidation');
+        const tabBListener = (window as TargetConfigWindow)
+          .__promptfooTargetConfigValidationStorageListener!;
+        expect(tabBValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        tabBValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-b",}');
+        const tokenB = getTabBInvalidMarker();
+        expect(tokenB).not.toBe(tokenA);
+        if (delivery === 'storage') {
+          tabAListener(createStorageEvent('redTeamTargetConfigValidation', tokenB));
+        }
+
+        expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        expect(tabAValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"tab-a",}');
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenB);
+
+        tabBConfig.getState().setFullConfig({
+          ...tabBConfig.getState().config,
+          target: {
+            id: 'openinterpreter',
+            label: 'Coding target',
+            config: { sandbox_mode: 'tab-b-fixed' },
+          },
+        });
+        const clearB = [...sent].reverse().find((message) => message.startsWith('clear:')) ?? null;
+        expect(clearB).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
+        if (delivery === 'storage') {
+          tabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
+        }
+
+        const sharedMarkerAfterClear = window.localStorage.getItem('redTeamTargetConfigValidation');
+        if (sharedMarkerAfterClear !== clearB) {
+          tabBListener(createStorageEvent('redTeamTargetConfigValidation', sharedMarkerAfterClear));
+        }
+
+        expect(tabBValidation.getState().targetConfigError).toBeNull();
+        expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+        expect(tabAValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"tab-a",}');
+        expect(tabAConfig.getState().config.target.config).toEqual({ sandbox_mode: 'read-only' });
+        expect(sharedMarkerAfterClear).toBe(clearB);
+        expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
+
+        const sentBeforeReassert = sent.length;
+        tabAValidation.getState().reassertTargetConfigValidation();
+        expect(sent).toHaveLength(sentBeforeReassert);
+
+        tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a-again",}');
+        const isolatedMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation');
+        expect(isolatedMarker).toMatch(/^invalid-json:[a-z0-9-]+$/);
+        expect(isolatedMarker).not.toBe(tokenA);
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(clearB);
+        expect(tabBValidation.getState().targetConfigError).toBeNull();
+
+        vi.resetModules();
+        const { useRedTeamTargetConfigValidation: reloadedTabAValidation } = await import(
+          './useRedTeamTargetConfigValidation'
+        );
+        expect(reloadedTabAValidation.getState().targetConfigError).toBe(
+          'Invalid JSON configuration',
+        );
+        const reloadedTabAListener = (window as TargetConfigWindow)
+          .__promptfooTargetConfigValidationStorageListener!;
+        reloadedTabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
+        expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(clearB);
+        expect(tabBValidation.getState().targetConfigError).toBeNull();
+      } finally {
+        restoreBrowserMocks();
       }
-
-      expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-      expect(tabAValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"tab-a",}');
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenB);
-
-      tabBConfig.getState().setFullConfig({
-        ...tabBConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          label: 'Coding target',
-          config: { sandbox_mode: 'tab-b-fixed' },
-        },
-      });
-      const clearB = [...sent].reverse().find((message) => message.startsWith('clear:')) ?? null;
-      expect(clearB).toMatch(/^clear:[a-z0-9-]+:[a-z0-9]+:[a-f0-9]{64}$/);
-      if (delivery === 'storage') {
-        tabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
-      }
-
-      const sharedMarkerAfterClear = window.localStorage.getItem('redTeamTargetConfigValidation');
-      if (sharedMarkerAfterClear !== clearB) {
-        tabBListener(createStorageEvent('redTeamTargetConfigValidation', sharedMarkerAfterClear));
-      }
-
-      expect(tabBValidation.getState().targetConfigError).toBeNull();
-      expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-      expect(tabAValidation.getState().targetConfigDraft).toBe('{"sandbox_mode":"tab-a",}');
-      expect(tabAConfig.getState().config.target.config).toEqual({ sandbox_mode: 'read-only' });
-      expect(sharedMarkerAfterClear).toBe(clearB);
-      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
-
-      const sentBeforeReassert = sent.length;
-      tabAValidation.getState().reassertTargetConfigValidation();
-      expect(sent).toHaveLength(sentBeforeReassert);
-
-      tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a-again",}');
-      const isolatedMarker = window.sessionStorage.getItem('redTeamTargetConfigValidation');
-      expect(isolatedMarker).toMatch(/^invalid-json:[a-z0-9-]+$/);
-      expect(isolatedMarker).not.toBe(tokenA);
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(clearB);
-      expect(tabBValidation.getState().targetConfigError).toBeNull();
-
-      vi.resetModules();
-      const { useRedTeamTargetConfigValidation: reloadedTabAValidation } = await import(
-        './useRedTeamTargetConfigValidation'
-      );
-      expect(reloadedTabAValidation.getState().targetConfigError).toBe(
-        'Invalid JSON configuration',
-      );
-      const reloadedTabAListener = (window as TargetConfigWindow)
-        .__promptfooTargetConfigValidationStorageListener!;
-      reloadedTabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
-      expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toBe(clearB);
-      expect(tabBValidation.getState().targetConfigError).toBeNull();
-    } finally {
-      restoreBrowserMocks();
-    }
-  });
+    },
+  );
 
   it('preserves an isolated target-draft token when its tab reloads beside another invalid tab', async () => {
     type TargetConfigWindow = Window & {
@@ -5139,121 +5190,121 @@ describe('useRedTeamConfig', () => {
     expect(tabValidation.getState().targetConfigError).toBeNull();
   });
 
-  it.each([
-    'local',
-    'quota-fallback',
-  ] as const)('keeps a competing target draft isolated when a %s clear write races with another target update', async (storage) => {
-    type TargetConfigWindow = Window & {
-      __promptfooTargetConfigValidationStorageListener?: (event: StorageEvent) => void;
-    };
-    const targetA = {
-      id: 'openinterpreter',
-      label: 'Coding target',
-      config: { sandbox_mode: 'read-only' },
-    };
-    const correctedTargetB = {
-      ...targetA,
-      config: { sandbox_mode: 'tab-b-fixed' },
-    };
-    const attemptedTargetA = {
-      ...targetA,
-      config: { sandbox_mode: 'tab-a-fixed' },
-    };
+  it.each(['local', 'quota-fallback'] as const)(
+    'keeps a competing target draft isolated when a %s clear write races with another target update',
+    async (storage) => {
+      type TargetConfigWindow = Window & {
+        __promptfooTargetConfigValidationStorageListener?: (event: StorageEvent) => void;
+      };
+      const targetA = {
+        id: 'openinterpreter',
+        label: 'Coding target',
+        config: { sandbox_mode: 'read-only' },
+      };
+      const correctedTargetB = {
+        ...targetA,
+        config: { sandbox_mode: 'tab-b-fixed' },
+      };
+      const attemptedTargetA = {
+        ...targetA,
+        config: { sandbox_mode: 'tab-a-fixed' },
+      };
 
-    vi.resetModules();
-    const { useRedTeamConfig: tabAConfig } = await import('./useRedTeamConfig');
-    const { useRedTeamTargetConfigValidation: tabAValidation } = await import(
-      './useRedTeamTargetConfigValidation'
-    );
-    tabAConfig.getState().setFullConfig({
-      ...tabAConfig.getState().config,
-      target: targetA,
-    });
-    tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a",}');
-    tabAValidation.getState().setTargetConfigError('Invalid JSON configuration');
-    const tokenA = window.localStorage.getItem('redTeamTargetConfigValidation');
-    const tabAListener = (window as TargetConfigWindow)
-      .__promptfooTargetConfigValidationStorageListener!;
+      vi.resetModules();
+      const { useRedTeamConfig: tabAConfig } = await import('./useRedTeamConfig');
+      const { useRedTeamTargetConfigValidation: tabAValidation } = await import(
+        './useRedTeamTargetConfigValidation'
+      );
+      tabAConfig.getState().setFullConfig({
+        ...tabAConfig.getState().config,
+        target: targetA,
+      });
+      tabAValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-a",}');
+      tabAValidation.getState().setTargetConfigError('Invalid JSON configuration');
+      const tokenA = window.localStorage.getItem('redTeamTargetConfigValidation');
+      const tabAListener = (window as TargetConfigWindow)
+        .__promptfooTargetConfigValidationStorageListener!;
 
-    vi.resetModules();
-    const { useRedTeamConfig: tabBConfig } = await import('./useRedTeamConfig');
-    const {
-      getCurrentTargetConfigInvalidMarker: getTabBInvalidMarker,
-      useRedTeamTargetConfigValidation: tabBValidation,
-    } = await import('./useRedTeamTargetConfigValidation');
-    const tabBListener = (window as TargetConfigWindow)
-      .__promptfooTargetConfigValidationStorageListener!;
-    tabBValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-b",}');
-    const tokenB = getTabBInvalidMarker();
-    tabAListener(createStorageEvent('redTeamTargetConfigValidation', tokenB));
+      vi.resetModules();
+      const { useRedTeamConfig: tabBConfig } = await import('./useRedTeamConfig');
+      const {
+        getCurrentTargetConfigInvalidMarker: getTabBInvalidMarker,
+        useRedTeamTargetConfigValidation: tabBValidation,
+      } = await import('./useRedTeamTargetConfigValidation');
+      const tabBListener = (window as TargetConfigWindow)
+        .__promptfooTargetConfigValidationStorageListener!;
+      tabBValidation.getState().setTargetConfigDraft('{"sandbox_mode":"tab-b",}');
+      const tokenB = getTabBInvalidMarker();
+      tabAListener(createStorageEvent('redTeamTargetConfigValidation', tokenB));
 
-    tabBConfig.getState().setFullConfig({
-      ...tabBConfig.getState().config,
-      target: correctedTargetB,
-    });
-    const clearB = window.localStorage.getItem('redTeamTargetConfigValidation');
-    tabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
-    expect(tabBValidation.getState().targetConfigError).toBeNull();
-    expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
+      tabBConfig.getState().setFullConfig({
+        ...tabBConfig.getState().config,
+        target: correctedTargetB,
+      });
+      const clearB = window.localStorage.getItem('redTeamTargetConfigValidation');
+      tabAListener(createStorageEvent('redTeamTargetConfigValidation', clearB));
+      expect(tabBValidation.getState().targetConfigError).toBeNull();
+      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
 
-    const originalSetItem = Storage.prototype.setItem;
-    const attemptedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-    attemptedConfig.state.config.target = attemptedTargetA;
-    originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(attemptedConfig));
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (
-        storage === 'quota-fallback' &&
-        this === window.localStorage &&
-        key === 'redTeamTargetConfigValidation'
+      const originalSetItem = Storage.prototype.setItem;
+      const attemptedConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+      attemptedConfig.state.config.target = attemptedTargetA;
+      originalSetItem.call(window.localStorage, 'redTeamConfig', JSON.stringify(attemptedConfig));
+      let raced = false;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
       ) {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      if (
-        !raced &&
-        this === (storage === 'local' ? window.localStorage : window.sessionStorage) &&
-        key === 'redTeamTargetConfigValidation' &&
-        value.startsWith('clear:')
-      ) {
-        raced = true;
-        const overwrittenConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
-        overwrittenConfig.state.config.target = correctedTargetB;
-        originalSetItem.call(
-          window.localStorage,
-          'redTeamConfig',
-          JSON.stringify(overwrittenConfig),
-        );
-      }
-      return originalSetItem.call(this, key, value);
-    });
+        if (
+          storage === 'quota-fallback' &&
+          this === window.localStorage &&
+          key === 'redTeamTargetConfigValidation'
+        ) {
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        }
+        if (
+          !raced &&
+          this === (storage === 'local' ? window.localStorage : window.sessionStorage) &&
+          key === 'redTeamTargetConfigValidation' &&
+          value.startsWith('clear:')
+        ) {
+          raced = true;
+          const overwrittenConfig = JSON.parse(window.localStorage.getItem('redTeamConfig')!);
+          overwrittenConfig.state.config.target = correctedTargetB;
+          originalSetItem.call(
+            window.localStorage,
+            'redTeamConfig',
+            JSON.stringify(overwrittenConfig),
+          );
+        }
+        return originalSetItem.call(this, key, value);
+      });
 
-    let cleared: boolean;
-    try {
-      cleared = tabAValidation
-        .getState()
-        .clearTargetConfigValidation(JSON.stringify(attemptedTargetA));
-    } finally {
-      setItem.mockRestore();
-    }
+      let cleared: boolean;
+      try {
+        cleared = tabAValidation
+          .getState()
+          .clearTargetConfigValidation(JSON.stringify(attemptedTargetA));
+      } finally {
+        setItem.mockRestore();
+      }
 
-    expect(raced).toBe(true);
-    expect(cleared).toBe(false);
-    expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-    expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
-    expect(window.sessionStorage.getItem('redTeamTargetConfigValidationIsolated')).toBe(
-      tokenA?.slice('invalid-json:'.length),
-    );
-    const racedLocalMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
-    if (storage === 'local') {
-      tabBListener(createStorageEvent('redTeamTargetConfigValidation', racedLocalMarker));
-    }
-    expect(tabBValidation.getState().targetConfigError).toBeNull();
-    expect(tabBConfig.getState().config.target.config).toEqual(correctedTargetB.config);
-  });
+      expect(raced).toBe(true);
+      expect(cleared).toBe(false);
+      expect(tabAValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+      expect(window.sessionStorage.getItem('redTeamTargetConfigValidation')).toBe(tokenA);
+      expect(window.sessionStorage.getItem('redTeamTargetConfigValidationIsolated')).toBe(
+        tokenA?.slice('invalid-json:'.length),
+      );
+      const racedLocalMarker = window.localStorage.getItem('redTeamTargetConfigValidation');
+      if (storage === 'local') {
+        tabBListener(createStorageEvent('redTeamTargetConfigValidation', racedLocalMarker));
+      }
+      expect(tabBValidation.getState().targetConfigError).toBeNull();
+      expect(tabBConfig.getState().config.target.config).toEqual(correctedTargetB.config);
+    },
+  );
 
   it('fails closed for independent malformed target drafts when session isolation cannot be persisted', async () => {
     type TargetConfigWindow = Window & {

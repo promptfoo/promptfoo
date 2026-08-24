@@ -279,51 +279,54 @@ it.each([
     { temperature: 0.2 },
   ],
   ['Hugging Face', 'huggingface:text-generation:gpt2', { temperature: 0.2 }],
-])('recovers a %s target after a non-object import fails and the tab reloads', async (_case, id, config) => {
-  const { useRedTeamConfig } = await import('./useRedTeamConfig');
-  useRedTeamConfig.getState().setFullConfig({
-    ...useRedTeamConfig.getState().config,
-    target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
-  });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+])(
+  'recovers a %s target after a non-object import fails and the tab reloads',
+  async (_case, id, config) => {
+    const { useRedTeamConfig } = await import('./useRedTeamConfig');
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: 'Imported target',
+            config: null as unknown as Record<string, unknown>,
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+    } finally {
+      setItem.mockRestore();
     }
-    return originalSetItem.call(this, key, value);
-  });
 
-  try {
-    expect(() =>
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id,
-          label: 'Imported target',
-          config: null as unknown as Record<string, unknown>,
-        },
-      }),
-    ).toThrow('The quota has been exceeded.');
-  } finally {
-    setItem.mockRestore();
-  }
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    reloadedConfig.getState().updateConfig('target', {
+      ...reloadedConfig.getState().config.target,
+      config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
+    });
 
-  vi.resetModules();
-  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
-  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-    './useRedTeamTargetConfigValidation'
-  );
-  reloadedConfig.getState().updateConfig('target', {
-    ...reloadedConfig.getState().config.target,
-    config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
-  });
-
-  expect(reloadedValidation.getState().targetConfigError).toBeNull();
-});
+    expect(reloadedValidation.getState().targetConfigError).toBeNull();
+  },
+);
 
 it.each([
   ['A2A', 'a2a:https://agent.example/a2a', { timeoutMs: 30000, url: 'https://agent.example/a2a' }],
@@ -342,51 +345,54 @@ it.each([
     { temperature: 0.2 },
   ],
   ['Hugging Face', 'huggingface:text-generation:gpt2', { temperature: 0.2 }],
-])('recovers a %s target after a valid import fails and the tab reloads', async (_case, id, config) => {
-  const { useRedTeamConfig } = await import('./useRedTeamConfig');
-  useRedTeamConfig.getState().setFullConfig({
-    ...useRedTeamConfig.getState().config,
-    target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
-  });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+])(
+  'recovers a %s target after a valid import fails and the tab reloads',
+  async (_case, id, config) => {
+    const { useRedTeamConfig } = await import('./useRedTeamConfig');
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: 'Imported target',
+            config: { ...config, timeoutMs: 35000 } as Config['target']['config'],
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+    } finally {
+      setItem.mockRestore();
     }
-    return originalSetItem.call(this, key, value);
-  });
 
-  try {
-    expect(() =>
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id,
-          label: 'Imported target',
-          config: { ...config, timeoutMs: 35000 } as Config['target']['config'],
-        },
-      }),
-    ).toThrow('The quota has been exceeded.');
-  } finally {
-    setItem.mockRestore();
-  }
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    reloadedConfig.getState().updateConfig('target', {
+      ...reloadedConfig.getState().config.target,
+      config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
+    });
 
-  vi.resetModules();
-  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
-  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-    './useRedTeamTargetConfigValidation'
-  );
-  reloadedConfig.getState().updateConfig('target', {
-    ...reloadedConfig.getState().config.target,
-    config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
-  });
-
-  expect(reloadedValidation.getState().targetConfigError).toBeNull();
-});
+    expect(reloadedValidation.getState().targetConfigError).toBeNull();
+  },
+);
 
 it.each([
   [
@@ -1254,51 +1260,54 @@ it.each([
     'sagemaker:demo-endpoint',
     { responseFormat: { path: 'return process.env.SECRET' } },
   ],
-])('does not unlock a hydrated executable %s target on an unrelated config edit', async (_case, id, config) => {
-  const { useRedTeamConfig } = await import('./useRedTeamConfig');
-  useRedTeamConfig.getState().setFullConfig({
-    ...useRedTeamConfig.getState().config,
-    target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
-  });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+])(
+  'does not unlock a hydrated executable %s target on an unrelated config edit',
+  async (_case, id, config) => {
+    const { useRedTeamConfig } = await import('./useRedTeamConfig');
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'http',
+            label: 'Imported target',
+            config: { url: 'https://imported.test/chat', body: '{{prompt}}', method: 'POST' },
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+    } finally {
+      setItem.mockRestore();
     }
-    return originalSetItem.call(this, key, value);
-  });
 
-  try {
-    expect(() =>
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'http',
-          label: 'Imported target',
-          config: { url: 'https://imported.test/chat', body: '{{prompt}}', method: 'POST' },
-        },
-      }),
-    ).toThrow('The quota has been exceeded.');
-  } finally {
-    setItem.mockRestore();
-  }
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    reloadedConfig.getState().updateConfig('target', {
+      ...reloadedConfig.getState().config.target,
+      config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
+    });
 
-  vi.resetModules();
-  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
-  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-    './useRedTeamTargetConfigValidation'
-  );
-  reloadedConfig.getState().updateConfig('target', {
-    ...reloadedConfig.getState().config.target,
-    config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
-  });
-
-  expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-});
+    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+  },
+);
 
 it('does not unlock a hydrated HTTP target with top-level environment credentials', async () => {
   const { useRedTeamConfig } = await import('./useRedTeamConfig');
@@ -1424,105 +1433,111 @@ it.each([
     { FIREWORKS_API_BASE_URL: 'https://attacker.test/v1' },
   ],
   ['Hugging Face', 'huggingface:text-generation:gpt2', { HF_TOKEN: 'secret' }],
-])('does not unlock a hydrated %s target with a top-level environment endpoint override', async (_case, id, env) => {
-  const { useRedTeamConfig } = await import('./useRedTeamConfig');
-  useRedTeamConfig.getState().setFullConfig({
-    ...useRedTeamConfig.getState().config,
-    target: { id, label: 'Persisted target', env, config: {} },
-  });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+])(
+  'does not unlock a hydrated %s target with a top-level environment endpoint override',
+  async (_case, id, env) => {
+    const { useRedTeamConfig } = await import('./useRedTeamConfig');
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Persisted target', env, config: {} },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'http',
+            label: 'Imported target',
+            config: { url: 'https://imported.test/chat', body: '{{prompt}}', method: 'POST' },
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+    } finally {
+      setItem.mockRestore();
     }
-    return originalSetItem.call(this, key, value);
-  });
 
-  try {
-    expect(() =>
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'http',
-          label: 'Imported target',
-          config: { url: 'https://imported.test/chat', body: '{{prompt}}', method: 'POST' },
-        },
-      }),
-    ).toThrow('The quota has been exceeded.');
-  } finally {
-    setItem.mockRestore();
-  }
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    reloadedConfig.getState().updateConfig('target', {
+      ...reloadedConfig.getState().config.target,
+      config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
+    });
 
-  vi.resetModules();
-  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
-  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-    './useRedTeamTargetConfigValidation'
-  );
-  reloadedConfig.getState().updateConfig('target', {
-    ...reloadedConfig.getState().config.target,
-    config: { ...reloadedConfig.getState().config.target.config, timeoutMs: 45000 },
-  });
-
-  expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
-});
+    expect(reloadedValidation.getState().targetConfigError).toBe('Invalid JSON configuration');
+  },
+);
 
 it.each([
   ['HTTP', 'http', { url: 'https://safe.test/chat', body: '{{prompt}}', method: 'POST' }],
   ['WebSocket', 'websocket', { url: 'wss://safe.test/socket', messageTemplate: '{{prompt}}' }],
-])('does not clear a hydrated non-object %s marker on a metadata-only edit', async (_case, id, config) => {
-  const { useRedTeamConfig } = await import('./useRedTeamConfig');
-  useRedTeamConfig.getState().setFullConfig({
-    ...useRedTeamConfig.getState().config,
-    target: { id, label: 'Persisted target', config },
-  });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+])(
+  'does not clear a hydrated non-object %s marker on a metadata-only edit',
+  async (_case, id, config) => {
+    const { useRedTeamConfig } = await import('./useRedTeamConfig');
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Persisted target', config },
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === window.localStorage && key === 'redTeamConfig') {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    try {
+      expect(() =>
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: 'Imported target',
+            config: null as unknown as Record<string, unknown>,
+          },
+        }),
+      ).toThrow('The quota has been exceeded.');
+    } finally {
+      setItem.mockRestore();
     }
-    return originalSetItem.call(this, key, value);
-  });
 
-  try {
-    expect(() =>
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id,
-          label: 'Imported target',
-          config: null as unknown as Record<string, unknown>,
-        },
-      }),
-    ).toThrow('The quota has been exceeded.');
-  } finally {
-    setItem.mockRestore();
-  }
+    vi.resetModules();
+    const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
+    const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
+      './useRedTeamTargetConfigValidation'
+    );
+    expect(reloadedValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    reloadedConfig.getState().updateConfig('target', {
+      ...reloadedConfig.getState().config.target,
+      label: 'Renamed target',
+    });
 
-  vi.resetModules();
-  const { useRedTeamConfig: reloadedConfig } = await import('./useRedTeamConfig');
-  const { useRedTeamTargetConfigValidation: reloadedValidation } = await import(
-    './useRedTeamTargetConfigValidation'
-  );
-  expect(reloadedValidation.getState().targetConfigError).toBe(
-    'Configuration must be a JSON object',
-  );
-  reloadedConfig.getState().updateConfig('target', {
-    ...reloadedConfig.getState().config.target,
-    label: 'Renamed target',
-  });
-
-  expect(reloadedValidation.getState().targetConfigError).toBe(
-    'Configuration must be a JSON object',
-  );
-  expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
-    /^non-object-json:[a-z0-9-]+$/,
-  );
-});
+    expect(reloadedValidation.getState().targetConfigError).toBe(
+      'Configuration must be a JSON object',
+    );
+    expect(window.localStorage.getItem('redTeamTargetConfigValidation')).toMatch(
+      /^non-object-json:[a-z0-9-]+$/,
+    );
+  },
+);

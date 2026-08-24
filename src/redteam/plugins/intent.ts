@@ -64,6 +64,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
+          this.provider,
         );
 
         testCases.push({
@@ -85,6 +86,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
+          this.provider,
         );
 
         testCases.push({

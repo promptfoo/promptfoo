@@ -182,67 +182,70 @@ describe('TargetConfiguration lifecycle validation', () => {
     ['HTTPS URL provider', 'https://api.example.test', /^URL/i, 'https://example.test/chat'],
     ['WebSocket', 'websocket', /WebSocket URL/i, 'wss://example.test/chat'],
     ['WSS URL provider', 'wss://socket.example.test', /WebSocket URL/i, 'wss://example.test/chat'],
-  ])('keeps the %s editor mounted and focused while correcting an imported null config', async (_case, id, label, value) => {
-    const user = userEvent.setup();
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id,
-          label: `Imported ${id} target`,
-          config: null as unknown as Config['target']['config'],
-        },
+  ])(
+    'keeps the %s editor mounted and focused while correcting an imported null config',
+    async (_case, id, label, value) => {
+      const user = userEvent.setup();
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: `Imported ${id} target`,
+            config: null as unknown as Config['target']['config'],
+          },
+        });
       });
-    });
-    const revision = useRedTeamTargetConfigValidation.getState().targetConfigRevision;
-    render(<TargetConfigurationHarness />);
-    const url = screen.getByRole('textbox', { name: label }) as HTMLInputElement;
+      const revision = useRedTeamTargetConfigValidation.getState().targetConfigRevision;
+      render(<TargetConfigurationHarness />);
+      const url = screen.getByRole('textbox', { name: label }) as HTMLInputElement;
 
-    await user.click(url);
-    if (/^(?:https?|wss?):\/\//i.test(id)) {
-      url.setSelectionRange(0, url.value.length);
-    }
+      await user.click(url);
+      if (/^(?:https?|wss?):\/\//i.test(id)) {
+        url.setSelectionRange(0, url.value.length);
+      }
 
-    await user.type(url, value.slice(0, 1), { skipClick: true });
+      await user.type(url, value.slice(0, 1), { skipClick: true });
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
-    expect(url).toHaveFocus();
-
-    await user.type(url, value.slice(1));
-
-    expect(useRedTeamConfig.getState().config.target.config.url).toBe(value);
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
-    expect(url).toHaveFocus();
-    expect(url.isConnected).toBe(true);
-
-    if (id.startsWith('http')) {
-      const [requestBody] = screen.getAllByTestId('code-editor');
-      await replaceText(user, requestBody, '{"message":"{{prompt}}"}');
-      expect(useRedTeamConfig.getState().config.target.config.body).toBe(
-        '{"message":"{{prompt}}"}',
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
       );
-    } else {
-      const messageTemplate = screen.getByRole('textbox', { name: /Message Template/i });
-      const timeout = screen.getByRole('spinbutton', { name: /Timeout \(ms\)/i });
-      await replaceText(user, messageTemplate, 'Hello {{prompt}}');
-      await user.click(timeout);
-      await user.keyboard('25000');
-      expect(useRedTeamConfig.getState().config.target.config.messageTemplate).toBe(
-        'Hello {{prompt}}',
-      );
-      expect(useRedTeamConfig.getState().config.target.config.timeoutMs).toBe(25000);
-    }
+      expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+      expect(url).toHaveFocus();
 
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
-  });
+      await user.type(url, value.slice(1));
+
+      expect(useRedTeamConfig.getState().config.target.config.url).toBe(value);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigRevision).toBe(revision);
+      expect(url).toHaveFocus();
+      expect(url.isConnected).toBe(true);
+
+      if (id.startsWith('http')) {
+        const [requestBody] = screen.getAllByTestId('code-editor');
+        await replaceText(user, requestBody, '{"message":"{{prompt}}"}');
+        expect(useRedTeamConfig.getState().config.target.config.body).toBe(
+          '{"message":"{{prompt}}"}',
+        );
+      } else {
+        const messageTemplate = screen.getByRole('textbox', { name: /Message Template/i });
+        const timeout = screen.getByRole('spinbutton', { name: /Timeout \(ms\)/i });
+        await replaceText(user, messageTemplate, 'Hello {{prompt}}');
+        await user.click(timeout);
+        await user.keyboard('25000');
+        expect(useRedTeamConfig.getState().config.target.config.messageTemplate).toBe(
+          'Hello {{prompt}}',
+        );
+        expect(useRedTeamConfig.getState().config.target.config.timeoutMs).toBe(25000);
+      }
+
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    },
+  );
 
   it('keeps a restored unsafe config blocked through whitespace and Format until it is changed', async () => {
     const user = userEvent.setup();
@@ -299,28 +302,31 @@ describe('TargetConfiguration lifecycle validation', () => {
     ['HTTP', 'http', /Use Raw HTTP Request/i],
     ['WebSocket', 'websocket', /Custom WebSocket Endpoint Configuration/i],
     ['browser', 'browser', /Browser Automation Configuration/i],
-  ])('renders an imported %s target with null config without unblocking it', (_case, id, heading) => {
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id,
-          label: `${id} target`,
-          config: null as unknown as Config['target']['config'],
-        },
+  ])(
+    'renders an imported %s target with null config without unblocking it',
+    (_case, id, heading) => {
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id,
+            label: `${id} target`,
+            config: null as unknown as Config['target']['config'],
+          },
+        });
       });
-    });
 
-    render(<TargetConfigurationHarness />);
+      render(<TargetConfigurationHarness />);
 
-    expect(screen.getByText(heading)).toBeInTheDocument();
-    expect(useRedTeamConfig.getState().config.target.config).toBeNull();
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
-      'Configuration must be a JSON object',
-    );
-    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('null');
-    expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
-  });
+      expect(screen.getByText(heading)).toBeInTheDocument();
+      expect(useRedTeamConfig.getState().config.target.config).toBeNull();
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBe('null');
+      expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+    },
+  );
 
   it('recovers an imported foundation target after a structured field replaces its null config', async () => {
     const user = userEvent.setup();
@@ -360,25 +366,28 @@ describe('TargetConfiguration lifecycle validation', () => {
       { method: 'POST', body: '{"message":"{{prompt}}"}' },
     ],
     ['WebSocket URL target', 'wss://example.test/socket', { messageTemplate: '{{prompt}}' }],
-  ])('allows a valid imported %s whose endpoint is stored in the provider ID', async (_case, id, targetConfig) => {
-    const user = userEvent.setup();
-    const onNext = vi.fn();
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: { id, label: 'Imported URL target', config: targetConfig },
+  ])(
+    'allows a valid imported %s whose endpoint is stored in the provider ID',
+    async (_case, id, targetConfig) => {
+      const user = userEvent.setup();
+      const onNext = vi.fn();
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: { id, label: 'Imported URL target', config: targetConfig },
+        });
       });
-    });
-    render(<TargetConfigurationHarness onNext={onNext} />);
+      render(<TargetConfigurationHarness onNext={onNext} />);
 
-    expect(
-      screen.getByRole('textbox', { name: id.startsWith('wss://') ? /WebSocket URL/i : /^URL/i }),
-    ).toHaveValue(id);
-    const next = screen.getByRole('button', { name: /Next/i });
-    expect(next).toBeEnabled();
-    await user.click(next);
-    expect(onNext).toHaveBeenCalledTimes(1);
-  });
+      expect(
+        screen.getByRole('textbox', { name: id.startsWith('wss://') ? /WebSocket URL/i : /^URL/i }),
+      ).toHaveValue(id);
+      const next = screen.getByRole('button', { name: /Next/i });
+      expect(next).toBeEnabled();
+      await user.click(next);
+      expect(onNext).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([
     [
@@ -395,24 +404,27 @@ describe('TargetConfiguration lifecycle validation', () => {
       /WebSocket URL/i,
       'wss://new.example/socket',
     ],
-  ])('allows an imported %s URL target to clear and replace its endpoint', async (_case, id, config, label, nextUrl) => {
-    const user = userEvent.setup();
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: { id, label: 'Imported URL target', config },
+  ])(
+    'allows an imported %s URL target to clear and replace its endpoint',
+    async (_case, id, config, label, nextUrl) => {
+      const user = userEvent.setup();
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: { id, label: 'Imported URL target', config },
+        });
       });
-    });
-    render(<TargetConfigurationHarness />);
+      render(<TargetConfigurationHarness />);
 
-    const input = screen.getByRole('textbox', { name: label });
-    expect(input).toHaveValue(id);
-    await user.clear(input);
-    expect(input).toHaveValue('');
-    await user.type(input, nextUrl);
+      const input = screen.getByRole('textbox', { name: label });
+      expect(input).toHaveValue(id);
+      await user.clear(input);
+      expect(input).toHaveValue('');
+      await user.type(input, nextUrl);
 
-    expect(useRedTeamConfig.getState().config.target.config.url).toBe(nextUrl);
-  });
+      expect(useRedTeamConfig.getState().config.target.config.url).toBe(nextUrl);
+    },
+  );
 
   it.each([
     ['without config.url', { method: 'POST', body: '{"message":"{{prompt}}"}' }],
@@ -494,23 +506,26 @@ describe('TargetConfiguration lifecycle validation', () => {
       'transformResponse',
       'streamResponse',
     ],
-  ])('persists both WebSocket config updates when %s streaming', async (_case, targetConfig, populatedField, clearedField) => {
-    const user = userEvent.setup();
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: { id: 'websocket', label: 'WebSocket target', config: targetConfig },
+  ])(
+    'persists both WebSocket config updates when %s streaming',
+    async (_case, targetConfig, populatedField, clearedField) => {
+      const user = userEvent.setup();
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: { id: 'websocket', label: 'WebSocket target', config: targetConfig },
+        });
       });
-    });
-    render(<TargetConfigurationHarness />);
+      render(<TargetConfigurationHarness />);
 
-    await user.click(screen.getByRole('switch', { name: /Stream Response/i }));
+      await user.click(screen.getByRole('switch', { name: /Stream Response/i }));
 
-    expect(useRedTeamConfig.getState().config.target.config[populatedField]).toEqual(
-      expect.any(String),
-    );
-    expect(useRedTeamConfig.getState().config.target.config[clearedField]).toBeUndefined();
-  });
+      expect(useRedTeamConfig.getState().config.target.config[populatedField]).toEqual(
+        expect.any(String),
+      );
+      expect(useRedTeamConfig.getState().config.target.config[clearedField]).toBeUndefined();
+    },
+  );
 
   it.each([
     ['foundation', 'openai:gpt-5', 'openai'],

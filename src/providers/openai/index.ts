@@ -51,6 +51,18 @@ export class OpenAiGenericProvider implements ApiProvider {
       : `openai:${this.modelName}`;
   }
 
+  /** Keep the actual backend separate from a customer-configured provider label. */
+  protected getGenAISystem(): string {
+    const providerPrototype = Object.getPrototypeOf(this) as OpenAiGenericProvider;
+    const defaultId = providerPrototype.id;
+    if (defaultId === OpenAiGenericProvider.prototype.id) {
+      return 'openai';
+    }
+
+    const providerId = defaultId.call(this);
+    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
+  }
+
   toString(): string {
     return `[OpenAI Provider ${this.modelName}]`;
   }
@@ -94,13 +106,17 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+    if (envApiHost) {
+      return `https://${envApiHost}/v1`;
     }
     return (
-      this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
       getEnvString('OPENAI_API_BASE_URL') ||
@@ -134,12 +150,12 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName();
+    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
   protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName();
+    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
     return (
       model.startsWith('o1') ||
       model.startsWith('o3') ||
