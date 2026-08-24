@@ -257,6 +257,24 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls.find(
+      ([options]) => options.message === 'Which model provider would you like to use?',
+    );
+    const anthropicChoice = providerPrompt?.[0].choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Anthropic]'),
+    );
+
+    expect(anthropicChoice?.value).toContain('anthropic:messages:claude-opus-4-6');
+    expect(anthropicChoice?.value).not.toContain('anthropic:messages:claude-opus-4-1-20250805');
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 

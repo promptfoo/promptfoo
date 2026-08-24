@@ -509,7 +509,7 @@ export async function createDummyFiles(
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
-          'anthropic:messages:claude-opus-4-1-20250805',
+          'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
         ],
       },
