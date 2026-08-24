@@ -465,6 +465,38 @@ describe('OpenAICodexSecurityProvider', () => {
       );
     });
 
+    it('prefers an explicit provider base path over global CLI state', async () => {
+      cliState.basePath = '/unrelated/global-config';
+      const provider = new OpenAICodexSecurityProvider({
+        config: {
+          basePath: '/programmatic/evals',
+          repository: '../service',
+          plugin_path: './plugins/security',
+          python_path: './python',
+          output_dir: './artifacts/scan',
+          knowledge_base_paths: ['./knowledge.md'],
+        },
+      });
+
+      await provider.callApi('Scan the programmatically configured repository');
+
+      expect(resolvePackageEntryPoint).toHaveBeenCalledWith(
+        '@openai/codex-security',
+        '/programmatic/evals',
+      );
+      expect(MockCodexSecurity).toHaveBeenCalledWith({
+        pluginPath: '/programmatic/evals/plugins/security',
+        pythonPath: '/programmatic/evals/python',
+      });
+      expect(mockRun).toHaveBeenCalledWith(
+        '/programmatic/service',
+        expect.objectContaining({
+          outputDir: '/programmatic/evals/artifacts/scan',
+          knowledgeBasePaths: ['/programmatic/evals/knowledge.md'],
+        }),
+      );
+    });
+
     it('captures observed cost, progress, and warnings when the result has no cost', async () => {
       const observedCost = {
         model: 'gpt-5.6-terra',
@@ -652,6 +684,31 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(readFile).toHaveBeenCalledWith('/workspace/evals/finding.json', 'utf8');
       expect(mockValidate).toHaveBeenCalledWith(
         expect.objectContaining({ finding: { title: 'Authorization bypass' } }),
+      );
+    });
+
+    it('resolves validation paths from an explicit provider base path', async () => {
+      cliState.basePath = '/unrelated/global-config';
+      const readFile = vi.spyOn(fs, 'readFile').mockResolvedValue('{"title":"Auth bypass"}');
+      const provider = new OpenAICodexSecurityProvider({
+        config: {
+          operation: 'validation',
+          basePath: '/programmatic/evals',
+          repository: '../service',
+          finding_file: './finding.json',
+          output_dir: './artifacts/validation',
+        },
+      });
+
+      await provider.callApi('Validate the programmatically supplied finding');
+
+      expect(readFile).toHaveBeenCalledWith('/programmatic/evals/finding.json', 'utf8');
+      expect(mockValidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repositoryPath: '/programmatic/service',
+          finding: { title: 'Auth bypass' },
+          outputDir: '/programmatic/evals/artifacts/validation',
+        }),
       );
     });
 

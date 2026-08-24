@@ -139,8 +139,9 @@ function parseConfig(config: unknown = {}): OpenAICodexSecurityConfig {
   return parsed.data;
 }
 
-async function loadCodexSecurity(): Promise<CodexSecurityModule> {
+async function loadCodexSecurity(configBasePath?: string): Promise<CodexSecurityModule> {
   const basePaths = [
+    configBasePath ? path.resolve(configBasePath) : undefined,
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
     path.resolve(getDirectory(), '..'),
@@ -210,8 +211,8 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
   );
 }
 
-function resolveConfigPath(value: string | undefined): string | undefined {
-  return resolveAgenticWorkingDir(value, cliState.basePath);
+function resolveConfigPath(value: string | undefined, configBasePath?: string): string | undefined {
+  return resolveAgenticWorkingDir(value, configBasePath ?? cliState.basePath);
 }
 
 function getTokenUsage(result: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
@@ -318,7 +319,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         config.repository ??
         config.working_dir ??
         (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
-      const repository = resolveConfigPath(configuredRepository) ?? process.cwd();
+      const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
 
       if (callOptions?.abortSignal?.aborted) {
         return { error: 'Codex Security operation was aborted before it started.' };
@@ -332,7 +333,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         }
       }
 
-      const module = await loadCodexSecurity();
+      const module = await loadCodexSecurity(config.basePath);
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,
@@ -341,8 +342,12 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         ...(effort ? { model_reasoning_effort: effort } : {}),
       } as JsonObject;
       const client = new module.CodexSecurity({
-        ...(config.plugin_path ? { pluginPath: resolveConfigPath(config.plugin_path) } : {}),
-        ...(config.python_path ? { pythonPath: resolveConfigPath(config.python_path) } : {}),
+        ...(config.plugin_path
+          ? { pluginPath: resolveConfigPath(config.plugin_path, config.basePath) }
+          : {}),
+        ...(config.python_path
+          ? { pythonPath: resolveConfigPath(config.python_path, config.basePath) }
+          : {}),
         ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
       });
       this.activeClients.add(client);
@@ -453,14 +458,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       target,
       ...(scanPrompt ? { scanPrompt } : {}),
       ...(config.auth ? { auth: config.auth } : {}),
-      ...(config.output_dir ? { outputDir: resolveConfigPath(config.output_dir) } : {}),
+      ...(config.output_dir
+        ? { outputDir: resolveConfigPath(config.output_dir, config.basePath) }
+        : {}),
       ...(config.archive_existing === undefined
         ? {}
         : { archiveExisting: config.archive_existing }),
       ...(config.knowledge_base_paths
         ? {
             knowledgeBasePaths: config.knowledge_base_paths.map(
-              (knowledgePath) => resolveConfigPath(knowledgePath)!,
+              (knowledgePath) => resolveConfigPath(knowledgePath, config.basePath)!,
             ),
           }
         : {}),
@@ -573,7 +580,10 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         : undefined;
     let finding: string | object = config.finding ?? contextualFinding ?? prompt;
     if (config.finding_file) {
-      const findingContents = await fs.readFile(resolveConfigPath(config.finding_file)!, 'utf8');
+      const findingContents = await fs.readFile(
+        resolveConfigPath(config.finding_file, config.basePath)!,
+        'utf8',
+      );
       try {
         finding = JSON.parse(findingContents) as object;
       } catch {
@@ -585,7 +595,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       repositoryPath: repository,
       finding,
       ...(config.auth ? { auth: config.auth } : {}),
-      ...(config.output_dir ? { outputDir: resolveConfigPath(config.output_dir) } : {}),
+      ...(config.output_dir
+        ? { outputDir: resolveConfigPath(config.output_dir, config.basePath) }
+        : {}),
       ...(callOptions?.abortSignal ? { signal: callOptions.abortSignal } : {}),
     };
     const result = await client.validate(options);
