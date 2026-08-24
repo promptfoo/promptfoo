@@ -27,7 +27,6 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-sonnet-4-6', label: 'Anthropic Claude 4.6 Sonnet' },
   { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
   { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
-  { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
   { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
   { value: 'google:gemini-3.6-flash', label: 'Google Gemini 3.6 Flash' },
@@ -43,6 +42,7 @@ const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+  { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
 ];
 
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };

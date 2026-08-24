@@ -193,6 +193,131 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps Renovate on the npm major used by CI', () => {
+    const renovateConfig = readPackageJson<{
+      constraints?: {
+        npm?: string;
+      };
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchPackageNames?: string[];
+        matchUpdateTypes?: string[];
+      }>;
+    }>('renovate.json');
+    const npmConstraint = renovateConfig.constraints?.npm;
+
+    expect(npmConstraint, 'Renovate must constrain its npm version').toBeDefined();
+    expect(validRange(npmConstraint)).not.toBeNull();
+    expect(satisfies('11.17.0', npmConstraint as string)).toBe(false);
+    expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
+    expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchFileNames?.includes('renovate.json') &&
+          rule.matchPackageNames?.includes('npm') &&
+          rule.matchUpdateTypes?.includes('major'),
+      ),
+    ).toBe(true);
+  });
+
+  it('applies the npm release-age policy to Renovate lockfile maintenance', () => {
+    const renovateConfig = readPackageJson<{
+      npmrc?: string;
+      packageRules?: Array<{
+        matchDatasources?: string[];
+        minimumReleaseAge?: string;
+      }>;
+    }>('renovate.json');
+    const npmReleaseAgeRule = renovateConfig.packageRules?.find((rule) =>
+      rule.matchDatasources?.includes('npm'),
+    );
+
+    expect(npmReleaseAgeRule?.minimumReleaseAge).toBe('10 days');
+    expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
+  });
+
+  it('keeps private npm registry endpoints out of the published lockfile', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, { resolved?: string }>;
+    }>('package-lock.json');
+    const privateRegistryPackages = Object.entries(packageLock.packages)
+      .filter(([, packageInfo]) => {
+        if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
+          return false;
+        }
+
+        const hostname = new URL(packageInfo.resolved).hostname;
+        return (
+          hostname === 'internal.api.openai.org' || hostname.endsWith('.internal.api.openai.org')
+        );
+      })
+      .map(([packagePath]) => packagePath);
+
+    expect(privateRegistryPackages).toEqual([]);
+  });
+
+  it('holds Knip below the incompatible public re-export audit', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const knipRange = packageJson.devDependencies?.knip;
+    const knipVersion = packageLock.packages['node_modules/knip']?.version;
+    const knipCap = renovateConfig.packageRules?.find(
+      (rule) => rule.matchPackageNames?.includes('knip') && rule.allowedVersions,
+    )?.allowedVersions;
+
+    expect(knipRange, 'the root manifest must constrain Knip').toBeDefined();
+    expect(satisfies('6.27.0', knipRange as string)).toBe(true);
+    expect(satisfies('6.28.0', knipRange as string)).toBe(false);
+    expect(knipCap).toBe('<6.28.0');
+    expect(knipVersion, 'the root lockfile must resolve Knip').toBeDefined();
+    expect(satisfies(knipVersion as string, knipRange as string)).toBe(true);
+  });
+
+  it('holds TanStack Table below v9 until the shared table migration is complete', () => {
+    const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const tablePackages = ['@tanstack/react-table', '@tanstack/table-core'];
+    const tableVersionCap = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.allowedVersions &&
+        tablePackages.every((packageName) => rule.matchPackageNames?.includes(packageName)),
+    )?.allowedVersions;
+
+    expect(tableVersionCap, 'Renovate must keep the TanStack Table packages on v8').toBe('<9');
+
+    for (const packageName of tablePackages) {
+      const packageRange = appPackageJson.devDependencies?.[packageName];
+      const packageVersion = packageLock.packages[`node_modules/${packageName}`]?.version;
+
+      expect(packageRange, `${packageName} must be declared in the app workspace`).toBeDefined();
+      expect(satisfies('9.0.0', packageRange as string), `${packageName} must exclude v9`).toBe(
+        false,
+      );
+      expect(packageVersion, `${packageName} must be present in the lockfile`).toBeDefined();
+      expect(satisfies(packageVersion as string, packageRange as string)).toBe(true);
+      expect(satisfies(packageVersion as string, tableVersionCap as string)).toBe(true);
+    }
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',
@@ -324,7 +449,9 @@ describe('package manifests', () => {
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
+    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
+    expect(resolvedSdkVersion).toBeDefined();
+    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
     expect(agentPackage.version).toBe(agentVersion);
 
     for (const [binaryName, binaryVersion] of Object.entries(
@@ -360,7 +487,43 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps the Excel parser above the XML entity decoding regression', () => {
+  it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const protobufRange = packageJson.dependencies?.protobufjs;
+
+    expect(protobufRange).toBeDefined();
+    expect(minVersion(protobufRange!)?.compare('8.7.2')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.protobufjs).toBe(protobufRange);
+    expect(packageLock.packages['node_modules/protobufjs'].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages['node_modules/protobufjs'].version!)?.compare('8.7.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps Google Cloud metadata dependencies on the supported Node 22 floor', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = 'gcp-metadata';
+    const dependencyRange = packageJson.dependencies?.[dependencyName];
+
+    expect(dependencyRange).toBeDefined();
+    expect(minVersion(dependencyRange!)?.compare('9.0.2')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.overrides?.mongoose?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.0.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
       packages: Record<
@@ -376,12 +539,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('9.3.3')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('9.3.9')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.3'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.9'),
     ).toBeGreaterThanOrEqual(0);
   });
 
@@ -435,14 +598,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.12.34')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.2')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.12.34',
+        '4.13.2',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -469,6 +632,32 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the OpenCode SDK optional at the upgraded release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          optional?: boolean;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@opencode-ai/sdk';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(installedVersion).toBeDefined();
+    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
+  });
+
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
@@ -491,14 +680,14 @@ describe('package manifests', () => {
     expect(adapterVersion).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(minVersion(adapterVersion!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(adapterVersion!)?.compare('2.1.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.[adapterName]).toBe(adapterVersion);
     expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
-    expect(minVersion(lockedAdapter.version!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.1.1')).toBeGreaterThanOrEqual(0);
     expect(lockedAdapter.engines?.node).toBe('>=20');
 
     for (const manifestPath of [
@@ -633,7 +822,7 @@ describe('package manifests', () => {
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
+    const pinnedParserPackages = ['chevrotain', 'chevrotain-allstar', ...pinnedGrammarPackages];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
@@ -717,7 +906,7 @@ describe('package manifests', () => {
     expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
   });
 
-  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+  it('requires patched WebSocket fragment limits and compression negotiation in manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
       packages?: Record<string, PackageManifest>;
@@ -733,7 +922,7 @@ describe('package manifests', () => {
       const websocketRange = manifest.dependencies?.ws;
 
       expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
-      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(websocketRange as string)?.compare('8.21.3')).toBeGreaterThanOrEqual(0);
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
@@ -761,6 +950,10 @@ describe('package manifests', () => {
         `${manifestPath} must declare a valid js-yaml semver range`,
       ).not.toBeNull();
       expect(
+        minVersion(declaredVersion as string)?.compare('5.3.0'),
+        `${manifestPath} must include the aliased-merge validation fix`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(
         subset(declaredVersion as string, PATCHED_JS_YAML_RANGE),
         `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
       ).toBe(true);
@@ -785,20 +978,48 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'package.json',
+    );
     const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
+      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
     }>('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
     const parserTransportRange = parser?.dependencies?.undici;
+    const parserTransport =
+      packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
 
     expect(
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
+      parserRange,
+    );
+    expect(parser?.version, 'the parser must resolve in the root lockfile').toBeDefined();
+    expect(satisfies(parser.version as string, parserRange as string)).toBe(true);
+    expect(
+      packageJson.engines?.node,
+      'the root must declare its supported Node range',
+    ).toBeDefined();
+    expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
+    expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(
+      parserTransport?.version,
+      'the parser must resolve its private HTTP transport',
+    ).toBeDefined();
+    expect(satisfies(parserTransport.version as string, parserTransportRange as string)).toBe(true);
+    expect(
+      parserTransport.engines?.node,
+      'the HTTP transport must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
+    ).toBe(true);
     expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
   });
 
@@ -809,6 +1030,13 @@ describe('package manifests', () => {
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
     const PATCHED_UNDICI = '7.29.0';
+    const rootPackageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const providerUtilsOverride = rootPackageJson.overrides?.['@ai-sdk/provider-utils'];
+
+    expect(providerUtilsOverride).toMatchObject({ undici: '$undici' });
+
     const projects = [
       // The root declares undici directly; code-scan-action only pins it through an
       // override, since it arrives transitively via @actions/github.

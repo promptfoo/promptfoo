@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { getEnvString } from './envars';
 import logger from './logger';
+import { GEMINI_FLASH_MODELS } from './providers/google/shared';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
 import { pathExists } from './util/file';
@@ -509,16 +510,17 @@ export async function createDummyFiles(
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
-          'anthropic:messages:claude-opus-4-1-20250805',
+          'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
         ],
       },
       {
         name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
-          { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-          'vertex:gemini-3.5-flash-lite',
+          ...GEMINI_FLASH_MODELS.map(({ id }) => ({
+            id: `vertex:${id}`,
+            config: { region: 'global' },
+          })),
           'vertex:gemini-3.1-pro-preview',
           'vertex:gemini-2.5-pro',
         ],

@@ -229,7 +229,7 @@ describe('redteamInit', () => {
     );
   });
 
-  it.each(['vertex:gemini-3.7-flash', 'vertex:gemini-3.6-flash'])(
+  it.each(['vertex:gemini-3.7-flash', 'vertex:gemini-3.6-flash', 'vertex:gemini-3.5-flash-lite'])(
     'configures the global Vertex region for %s',
     async (modelName) => {
       vi.mocked(select)
@@ -249,4 +249,24 @@ describe('redteamInit', () => {
       expect(config.targets[0]).toMatchObject({ id: modelName, config: { region: 'global' } });
     },
   );
+
+  it('offers supported Anthropic targets instead of retired Opus 4.1', async () => {
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await redteamInit(undefined);
+
+    const providerPrompt = vi
+      .mocked(select)
+      .mock.calls.find(([options]) => options.message === 'Choose a model to target:');
+    const choices = providerPrompt?.[0].choices as Array<{ value: string }>;
+
+    expect(choices).toEqual(
+      expect.arrayContaining([
+        { name: 'anthropic:claude-opus-4-6', value: 'anthropic:messages:claude-opus-4-6' },
+      ]),
+    );
+    expect(choices.map((choice) => choice.value)).not.toContain(
+      'anthropic:messages:claude-opus-4-1-20250805',
+    );
+  });
 });

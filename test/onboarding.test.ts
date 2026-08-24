@@ -261,7 +261,7 @@ describe('createDummyFiles', () => {
     const googleModels = [
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      'vertex:gemini-3.5-flash-lite',
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
       'vertex:gemini-3.1-pro-preview',
       'vertex:gemini-2.5-pro',
     ];
@@ -287,6 +287,24 @@ describe('createDummyFiles', () => {
     const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
 
     expect(config.providers).toEqual(googleModels);
+  });
+
+  it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls.find(
+      ([options]) => options.message === 'Which model provider would you like to use?',
+    );
+    const anthropicChoice = providerPrompt?.[0].choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Anthropic]'),
+    );
+
+    expect(anthropicChoice?.value).toContain('anthropic:messages:claude-opus-4-6');
+    expect(anthropicChoice?.value).not.toContain('anthropic:messages:claude-opus-4-1-20250805');
   });
 
   it('should prompt for confirmation when files exist', async () => {

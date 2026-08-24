@@ -36,6 +36,12 @@ export interface GoogleModel {
   vertexRegionalMultiplier?: number;
 }
 
+export const GEMINI_FLASH_MODELS = [
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },
+] as const;
+
 export function getVertexApiHostForRegion(region: string): string {
   if (region === 'global') {
     return 'aiplatform.googleapis.com';
@@ -62,6 +68,13 @@ const GEMINI_2_5_PRO_TIERED_COST = {
 const GEMINI_FLASH_INTRODUCTORY_PRICING = {
   expiresAt: Date.UTC(2027, 0, 1),
   multiplier: 0.5,
+};
+const GEMINI_3_5_FLASH_LITE_COST = {
+  input: 0.3 / 1e6,
+  output: 2.5 / 1e6,
+  cacheRead: 0.03 / 1e6,
+  priorityMultiplier: 1.8,
+  flexMultiplier: 0.5,
 };
 
 /**
@@ -94,25 +107,16 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       audioInput: 1.0 / 1e6,
       priorityMultiplier: 1.8,
     },
+    vertexRegionalMultiplier: 1.1,
   },
   ...['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'].map((id) => ({
     id,
     cost: {
-      input: 0.3 / 1e6,
-      output: 2.5 / 1e6,
-      cacheRead: 0.03 / 1e6,
-      priorityMultiplier: 1.8,
+      ...GEMINI_3_5_FLASH_LITE_COST,
       priorityCacheRead: 0.05 / 1e6,
-      flexMultiplier: 0.5,
       flexCacheRead: 0.02 / 1e6,
     },
-    vertexCost: {
-      input: 0.3 / 1e6,
-      output: 2.5 / 1e6,
-      cacheRead: 0.03 / 1e6,
-      priorityMultiplier: 1.8,
-      flexMultiplier: 0.5,
-    },
+    vertexCost: GEMINI_3_5_FLASH_LITE_COST,
     vertexRegionalMultiplier: 1.1,
   })),
   {

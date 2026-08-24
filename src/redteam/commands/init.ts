@@ -11,6 +11,7 @@ import dedent from 'dedent';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
+import { GEMINI_FLASH_MODELS } from '../../providers/google/shared';
 import telemetry, { type EventProperties } from '../../telemetry';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -336,37 +337,15 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-sonnet-4-5-20250929',
       },
       {
-        name: 'anthropic:claude-opus-4-1-20250805',
-        value: 'anthropic:messages:claude-opus-4-1-20250805',
-      },
-      {
         name: 'anthropic:claude-haiku-4-5',
         value: 'anthropic:messages:claude-haiku-4-5',
       },
-      {
-        name: 'Google Gemini 3.7 Flash',
-        value: 'google:gemini-3.7-flash',
-      },
-      {
-        name: 'Google Gemini 3.6 Flash',
-        value: 'google:gemini-3.6-flash',
-      },
-      {
-        name: 'Google Gemini 3.5 Flash-Lite',
-        value: 'google:gemini-3.5-flash-lite',
-      },
-      {
-        name: 'Google Vertex Gemini 3.7 Flash',
-        value: 'vertex:gemini-3.7-flash',
-      },
-      {
-        name: 'Google Vertex Gemini 3.6 Flash',
-        value: 'vertex:gemini-3.6-flash',
-      },
-      {
-        name: 'Google Vertex Gemini 3.5 Flash-Lite',
-        value: 'vertex:gemini-3.5-flash-lite',
-      },
+      ...['google', 'vertex'].flatMap((provider) =>
+        GEMINI_FLASH_MODELS.map(({ id, name }) => ({
+          name: `Google${provider === 'vertex' ? ' Vertex' : ''} ${name}`,
+          value: `${provider}:${id}`,
+        })),
+      ),
       {
         name: 'Google Vertex Gemini 2.5 Pro',
         value: 'vertex:gemini-2.5-pro',
@@ -388,8 +367,7 @@ export async function redteamInit(directory: string | undefined) {
         {
           id: selectedProvider,
           label,
-          ...(selectedProvider === 'vertex:gemini-3.7-flash' ||
-          selectedProvider === 'vertex:gemini-3.6-flash'
+          ...(GEMINI_FLASH_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
             ? { config: { region: 'global' } }
             : {}),
         },

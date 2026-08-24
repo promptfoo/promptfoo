@@ -18,7 +18,7 @@ import {
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GEMINI_FLASH_MODELS, GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -207,9 +207,7 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
   generationConfig: T,
 ): T {
   if (
-    !modelName.startsWith('gemini-3.7-flash') &&
-    !modelName.startsWith('gemini-3.6-flash') &&
-    !modelName.startsWith('gemini-3.5-flash-lite') &&
+    !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
     modelName !== 'gemini-flash-latest' &&
     modelName !== 'gemini-flash-lite-latest'
   ) {
@@ -233,8 +231,8 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
     delete sanitized[field];
   }
 
-  if (modelName.startsWith('gemini-3.7-flash')) {
-    const thinkingConfig = sanitized.thinkingConfig as
+  if (modelName.startsWith('gemini-3.7-flash') || modelName === 'gemini-flash-latest') {
+    const thinkingConfig = (sanitized.thinkingConfig ?? sanitized.thinking_config) as
       | {
           thinkingBudget?: unknown;
           thinking_budget?: unknown;
@@ -340,11 +338,10 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  const serviceTier =
-    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
-      ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    config.service_tier;
+  const passthrough = config.passthrough as
+    | { service_tier?: unknown; serviceTier?: unknown }
+    | undefined;
+  const serviceTier = passthrough?.service_tier ?? passthrough?.serviceTier ?? config.service_tier;
   let serviceTierMultiplier = 1;
   if (serviceTier === 'priority') {
     serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;

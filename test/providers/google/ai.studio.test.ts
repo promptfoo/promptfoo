@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import {
   AIStudioChatProvider,
@@ -814,6 +814,10 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should pass API key in x-goog-api-key header instead of URL query param', async () => {
       const mockResponse = {
         data: {
@@ -851,6 +855,8 @@ describe('AIStudioChatProvider', () => {
     ])(
       'normalizes generation controls and calculates cost for %s',
       async (modelName, expectedCost) => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+
         const latestProvider = new AIStudioChatProvider(modelName, {
           config: {
             apiKey: 'test-key',

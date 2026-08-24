@@ -23,7 +23,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -50,6 +55,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   checkPenalizedPhrases,
@@ -176,6 +182,7 @@ export function renderSystemPrompts(
  * @param targetResponse - The response to be evaluated.
  * @param previousBestResponse - The previous best response for comparison.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ * @param tokenUsage - Optional scan-local accumulator for the internal judge call.
  * @returns A promise that resolves to the evaluation score.
  */
 export async function evaluateResponse(
@@ -184,6 +191,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
+  tokenUsage?: TokenUsage,
 ): Promise<{ score: number; explanation: string }> {
   const judgeBody = JSON.stringify([
     {
@@ -209,6 +217,9 @@ export async function evaluateResponse(
     vars: {},
   });
   TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  if (tokenUsage) {
+    accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
+  }
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -267,6 +278,7 @@ export async function getNewPrompt(
     pluginId?: string;
     purpose?: string;
   },
+  totalTokenUsage?: TokenUsage,
 ): Promise<{
   improvement: string;
   inputMaterialization?: Record<string, unknown>;
@@ -291,16 +303,20 @@ export async function getNewPrompt(
         })
       : {},
   });
+  if (totalTokenUsage) {
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
+  }
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
   logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
-    throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    throw Object.assign(new Error(`Error from redteam provider: ${redteamResp.error}`), {
+      tokenUsage: totalTokenUsage ?? redteamResp.tokenUsage,
+    });
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
-
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
     try {
@@ -480,7 +496,12 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
-type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+type StopReason =
+  | 'MAX_ATTEMPTS'
+  | 'MAX_DEPTH'
+  | 'NO_IMPROVEMENT'
+  | 'GRADER_FAILED'
+  | 'ATTACKER_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -633,24 +654,56 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
+        let attackPromptResult: Awaited<ReturnType<typeof getNewPrompt>>;
+        try {
+          attackPromptResult = await getNewPrompt(
+            redteamProvider,
+            [...redteamHistory, { role: 'assistant', content: node.prompt }],
+            shouldGenerateRemote()
+              ? {
+                  inputs,
+                  materializationIndex: attempts,
+                  pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+                  purpose: test?.metadata?.purpose as string | undefined,
+                }
+              : undefined,
+            totalTokenUsage,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.name === 'AbortError' ||
+            !('tokenUsage' in error)
+          ) {
+            throw error;
+          }
+
+          logger.error('[IterativeTree] Attacker request failed', { error });
+          return {
+            output: bestResponse,
+            prompt: bestNode.prompt,
+            error: error.message,
+            metadata: {
+              highestScore: maxScore,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              messages: treeOutputs as Record<string, any>[],
+              attempts,
+              redteamTreeHistory: treeOutputs,
+              stopReason: 'ATTACKER_ERROR',
+              storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
+            },
+            tokenUsage: totalTokenUsage,
+          };
+        }
+
         let {
           improvement,
           inputMaterialization,
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
-        } = await getNewPrompt(
-          redteamProvider,
-          [...redteamHistory, { role: 'assistant', content: node.prompt }],
-          shouldGenerateRemote()
-            ? {
-                inputs,
-                materializationIndex: attempts,
-                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              }
-            : undefined,
-        );
+        } = attackPromptResult;
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
@@ -827,6 +880,7 @@ async function runRedteamConversation({
           targetResponse.output,
           bestResponse,
           containsPenalizedPhrase,
+          totalTokenUsage,
         );
 
         logger.debug(
@@ -956,10 +1010,10 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = {
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
               ...grade,
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            });
             graderPassed = grade.pass;
           }
         }

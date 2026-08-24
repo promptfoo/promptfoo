@@ -194,6 +194,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should call the Gemini API and return the response', async () => {
@@ -259,6 +260,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
   ])(
     'normalizes generation controls and calculates Vertex cost for %s',
     async (modelName, expectedCost) => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+
       const latestProvider = new VertexChatProvider(modelName, {
         config: {
           region: 'global',

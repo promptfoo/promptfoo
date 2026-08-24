@@ -2615,25 +2615,58 @@ describe('util', () => {
       );
     });
 
-    it('rejects unsupported MINIMAL thinking on Gemini 3.7 Flash', () => {
-      expect(() =>
-        removeDeprecatedGeminiGenerationParams('gemini-3.7-flash', {
-          thinkingConfig: { thinkingLevel: 'MINIMAL' },
-        }),
-      ).toThrow('Gemini 3.7 Flash does not support MINIMAL thinking');
+    it.each([
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+    ])('rejects unsupported MINIMAL thinking on $modelName', ({ modelName, generationConfig }) => {
+      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+        'Gemini 3.7 Flash does not support MINIMAL thinking',
+      );
     });
 
-    it.each([{ thinkingBudget: 1024 }, { thinking_budget: 1024 }])(
-      'rejects deprecated thinking budgets on Gemini 3.7 Flash',
-      (thinkingConfig) => {
-        expect(() =>
-          removeDeprecatedGeminiGenerationParams('gemini-3.7-flash', { thinkingConfig }),
-        ).toThrow('Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel');
+    it.each([
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
       },
-    );
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+    ])('rejects deprecated thinking budgets on $modelName', ({ modelName, generationConfig }) => {
+      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel',
+      );
+    });
   });
 
   describe('calculateGoogleCost', () => {
+    beforeEach(() => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
       expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
@@ -2722,10 +2755,6 @@ describe('util', () => {
     });
 
     describe('Gemini Flash introductory pricing', () => {
-      afterEach(() => {
-        vi.restoreAllMocks();
-      });
-
       it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
         'switches %s to standard rates when introductory pricing expires',
         (modelName) => {
@@ -2875,14 +2904,36 @@ describe('util', () => {
       expect(flex).toBeCloseTo((600 * 0.15 + 400 * 0.015 + 500 * 1.25) / 1e6, 12);
     });
 
-    it.each(['us', 'eu'])(
-      'applies the Vertex Flash-Lite regional premium in the %s multi-region',
-      (region) => {
-        const cost = calculateGoogleCost('gemini-3.5-flash-lite', { region }, 1000, 500, true);
+    it.each([
+      { modelName: 'gemini-3.5-flash-lite', region: 'us', expectedCost: 0.001705 },
+      { modelName: 'gemini-3.5-flash-lite', region: 'eu', expectedCost: 0.001705 },
+      { modelName: 'gemini-3.5-flash', region: 'us', expectedCost: 0.0066 },
+      { modelName: 'gemini-3.5-flash', region: 'eu', expectedCost: 0.0066 },
+    ])(
+      'applies the Vertex regional premium to $modelName in the $region multi-region',
+      ({ modelName, region, expectedCost }) => {
+        const cost = calculateGoogleCost(modelName, { region }, 1000, 500, true);
 
-        expect(cost).toBeCloseTo(0.001705, 10);
+        expect(cost).toBeCloseTo(expectedCost, 10);
       },
     );
+
+    it('applies the Vertex Gemini 3.5 Flash regional premium to cached tokens', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { region: 'us' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(cost).toBeCloseTo((600 * 1.65 + 400 * 0.165 + 500 * 9.9) / 1e6, 12);
+    });
 
     it('does not apply the Vertex Flash-Lite regional premium to explicit price overrides', () => {
       const cost = calculateGoogleCost(
