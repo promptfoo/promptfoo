@@ -2,16 +2,19 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
-  isClaudeOpus47Model,
-  isClaudeOpus48Model,
+  isClaudeOpus5Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
+  isDisabledThinkingRejectedAtEffort,
   isSamplingParamsDeprecatedClaudeModel,
+  isThinkingOnByDefaultClaudeModel,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -124,6 +127,14 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
+    it('should return undefined for a dated Claude Opus 4.7 snapshot (Anthropic publishes none)', () => {
+      // The Models API 404s on dated 4.6+/4.7 snapshots like `claude-opus-4-7-20260416`
+      // (verified live 2026-07-17). If Anthropic starts publishing dated snapshots again,
+      // verify against the API before registering them in ANTHROPIC_MODELS.
+      const cost = calculateAnthropicCost('claude-opus-4-7-20260416', {}, 100, 200);
+      expect(cost).toBeUndefined();
+    });
+
     it('should apply cache pricing for Claude Opus 4.7 with cache tokens', () => {
       // Opus 4.7: $5/MTok input, $25/MTok output
       // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
@@ -144,6 +155,13 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Opus 4.6 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-6', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should return undefined for a dated Claude Opus 4.6 snapshot (Anthropic publishes none)', () => {
+      // `claude-opus-4-6-20260205` is Azure AI Foundry's deployment name for Opus 4.6,
+      // not a first-party Anthropic model ID — the Models API 404s on it.
+      const cost = calculateAnthropicCost('claude-opus-4-6-20260205', {}, 100, 200);
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate default cost for Claude Opus 4.6 latest model', () => {
@@ -203,6 +221,18 @@ describe('Anthropic utilities', () => {
     it('bills the Claude Sonnet 4.6 latest alias at the standard rate above 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
       expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
+    });
+
+    it('should calculate default cost for Claude Opus 5 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-5', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (5/1e6 * 100) + (25/1e6 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('bills Claude Opus 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+      // Opus 5 bills its full 1M context at the standard rate — there is no >200K surcharge.
+      const cost = calculateAnthropicCost('claude-opus-5', {}, 300_000, 20_000);
+      // (5/1e6 * 300,000) + (25/1e6 * 20,000) = 1.5 + 0.5 = 2.0
+      expect(cost).toBe(2);
     });
 
     it('should calculate default cost for Claude Sonnet 5 model', () => {
@@ -1088,6 +1118,20 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
+    it('passes through tool types that collide with Object.prototype members', () => {
+      // The server-tool spec lookup must be prototype-safe. With a plain object literal,
+      // a `type` of 'constructor'/'toString'/'__proto__' resolves to an inherited member,
+      // passes a truthiness check, and then throws when its `fields` are iterated —
+      // turning a user's odd YAML into a crash during request building. `tools` is
+      // user-supplied, so these must fall through to pass-through untouched.
+      for (const type of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+        const tool = { type, name: 'whatever', max_uses: 1 } as any;
+        const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+        expect(processedTools).toEqual([tool]);
+        expect(requiredBetaFeatures).toEqual([]);
+      }
+    });
+
     it('should process web_fetch_20250910 tool and add beta feature', () => {
       const webFetchTool: WebFetchToolConfig = {
         type: 'web_fetch_20250910',
@@ -1766,6 +1810,26 @@ describe('Anthropic utilities', () => {
       expect(result).toContain('explanation: This request involves prohibited cyber activities');
     });
 
+    it('should preserve the general_harms refusal category added in SDK 0.112.5', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'general_harms',
+          explanation: 'The request may involve a harmful area',
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(getRefusalDetails(message)).toContain('category: general_harms');
+    });
+
     it('should handle refusal with null category and explanation', () => {
       const message = {
         id: 'msg_1',
@@ -1905,33 +1969,38 @@ describe('Anthropic utilities', () => {
         'jp.anthropic.claude-opus-4-8',
         'global.anthropic.claude-opus-4-8',
       ]) {
-        expect(isClaudeOpus48Model(id)).toBe(true);
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        expect(getClaudeModelWarningName(id)).toBe('Claude Opus 4.7 and 4.8');
       }
     });
 
     it('does not treat other models as Opus 4.8', () => {
+      // The 4.7/4.8 family must not claim these. 4.7 shares 4.8's warning name, so it is
+      // checked via the pattern boundary below rather than by warning name.
       for (const id of [
-        'claude-opus-4-7',
         'claude-opus-4-6',
         'claude-sonnet-4-6',
         // Boundary: a hypothetical higher-numbered "4.80" must not match "4.8".
         'claude-opus-4-80',
       ]) {
-        expect(isClaudeOpus48Model(id)).toBe(false);
+        expect(getClaudeModelWarningName(id)).not.toBe('Claude Opus 4.7 and 4.8');
       }
+      // `claude-opus-4-80` is not a recognized family at all, and keeps sampling params.
+      expect(getClaudeModelWarningName('claude-opus-4-80')).toBeUndefined();
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(false);
     });
 
     it('still detects dated Opus 4.8 snapshots', () => {
       // A trailing date/region suffix is a real, supported form and must match.
-      expect(isClaudeOpus48Model('claude-opus-4-8-20260528')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8-20260528')).toBe(true);
+      expect(getClaudeModelWarningName('claude-opus-4-8-20260528')).toBe('Claude Opus 4.7 and 4.8');
     });
 
     it('treats both Opus 4.7 and 4.8 as temperature-deprecated', () => {
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7-20260416')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
-      // The 4.7-only predicate stays scoped to 4.7.
-      expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
     });
 
     it('detects Fable 5 and Mythos 5 across provider naming schemes', () => {
@@ -1954,9 +2023,77 @@ describe('Anthropic utilities', () => {
     });
 
     it('does not treat temperature-supporting models as deprecated', () => {
-      for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
+      for (const id of [
+        'claude-opus-4-6',
+        'claude-opus-4-6-20260205',
+        'claude-sonnet-4-6',
+        'claude-opus-4-5-20251101',
+      ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
+      for (const id of [
+        'claude-haiku-5',
+        'anthropic:messages:claude-haiku-5-20260801',
+        'us.anthropic.claude-research-preview-5',
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-haiku-5',
+        'vertex:claude-sonnet-6',
+        'global.anthropic.claude-opus-10',
+        'claude-haiku-99',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
+      for (const id of [
+        'claude-3-5-sonnet-20241022',
+        'claude-opus-4-50',
+        'claude-sonnet-5x',
+        'notclaude-opus-5',
+        'claude-prod-20260811',
+        'claude-release-2026',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('matches the generation fallback in linear time on adversarial model IDs', () => {
+      // The family-name segment matcher is bounded so a long run of `claude-` segments cannot
+      // force a scan to end of input from every candidate start. The unbounded form took ~28s
+      // on this input; the bounded form finishes in single-digit milliseconds.
+      const adversarial = '-claude-a'.repeat(50_000);
+      const start = performance.now();
+      expect(isSamplingParamsDeprecatedClaudeModel(adversarial)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    it('still matches Claude families with several name segments', () => {
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-research-preview-5')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-a-b-c-d-e-5')).toBe(true);
+    });
+
+    it('disables generation fallback for alias-based Claude providers', () => {
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-5', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-25', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-team-blue-12', {
+          allowGenerationFallback: false,
+        }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', { allowGenerationFallback: false }),
+      ).toBe(true);
     });
 
     it('detects Claude Sonnet 5 across provider naming schemes', () => {
@@ -1975,6 +2112,62 @@ describe('Anthropic utilities', () => {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
         // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
         expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('detects Claude Opus 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-opus-5',
+        'anthropic:messages:claude-opus-5',
+        'anthropic.claude-opus-5',
+        'us.anthropic.claude-opus-5',
+        'eu.anthropic.claude-opus-5',
+        'jp.anthropic.claude-opus-5',
+        'global.anthropic.claude-opus-5',
+        // A trailing date snapshot is a real, supported form and must match.
+        'claude-opus-5-20260724',
+      ]) {
+        expect(isClaudeOpus5Model(id)).toBe(true);
+        // Opus 5 keeps the Opus 4.7+ sampling-param deprecation...
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        // ...and thinks by default, but is NOT always-on: `disabled` is still accepted
+        // at effort `high` or below.
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('does not treat Opus 4.x or hypothetical Opus 50 as Opus 5', () => {
+      for (const id of [
+        'claude-opus-4-5',
+        'claude-opus-4-5-20251101',
+        'claude-opus-4-6',
+        'claude-opus-4-7',
+        'claude-opus-4-8',
+        // Boundary: a hypothetical higher-numbered "50" must not match "5".
+        'claude-opus-50',
+      ]) {
+        expect(isClaudeOpus5Model(id)).toBe(false);
+      }
+      // Opus 4.7/4.8 keep their own warning name and are not thinking-on-by-default.
+      expect(isThinkingOnByDefaultClaudeModel('claude-opus-4-8')).toBe(false);
+      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(false);
+    });
+
+    it('rejects disabled thinking on Opus 5 only above effort "high"', () => {
+      // The API returns 400 for thinking:{disabled} + effort xhigh/max on Opus 5.
+      for (const effort of ['xhigh', 'max'] as const) {
+        expect(isDisabledThinkingRejectedAtEffort('claude-opus-5', effort)).toBe(true);
+        expect(isDisabledThinkingRejectedAtEffort('us.anthropic.claude-opus-5', effort)).toBe(true);
+      }
+      // At or below `high` — and when effort is unset (the API default is `high`) —
+      // disabling thinking is valid.
+      for (const effort of ['low', 'medium', 'high', undefined, null] as const) {
+        expect(isDisabledThinkingRejectedAtEffort('claude-opus-5', effort)).toBe(false);
+      }
+      // Other Claude families have no such cap.
+      for (const id of ['claude-opus-4-8', 'claude-sonnet-5', 'claude-fable-5']) {
+        expect(isDisabledThinkingRejectedAtEffort(id, 'max')).toBe(false);
       }
     });
 
@@ -1997,6 +2190,8 @@ describe('Anthropic utilities', () => {
       for (const id of [
         'claude-sonnet-5',
         'us.anthropic.claude-sonnet-5',
+        'claude-opus-5',
+        'us.anthropic.claude-opus-5',
         'claude-fable-5',
         'claude-mythos-5',
         'claude-opus-4-8',
@@ -2022,9 +2217,94 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('reports whether thinking will consume output tokens', () => {
+      // Explicitly-on thinking consumes tokens on every family.
+      for (const t of [{ type: 'enabled' }, { type: 'adaptive' }]) {
+        expect(claudeThinkingConsumesTokens('claude-opus-4-8', t)).toBe(true);
+        expect(claudeThinkingConsumesTokens('claude-opus-5', t)).toBe(true);
+      }
+      // Always-on models consume tokens no matter what the config says.
+      expect(claudeThinkingConsumesTokens('claude-fable-5', undefined)).toBe(true);
+      // An omitted config consumes tokens only on thinks-by-default models — this is the
+      // case that sizes the default max_tokens and truncates answers when it is wrong.
+      expect(claudeThinkingConsumesTokens('claude-opus-5', undefined)).toBe(true);
+      expect(claudeThinkingConsumesTokens('claude-opus-5', null)).toBe(true);
+      expect(claudeThinkingConsumesTokens('claude-opus-4-8', undefined)).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(false);
+      // Explicitly disabled never consumes tokens (except on always-on models, where the
+      // API rejects `disabled` and normalization strips it before this is called).
+      expect(claudeThinkingConsumesTokens('claude-opus-5', { type: 'disabled' })).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-opus-4-8', { type: 'disabled' })).toBe(false);
+    });
+
+    it('normalizes thinking configs per model family and effort', () => {
+      // Manual budget thinking converts to adaptive on every sampling-deprecated family,
+      // preserving `display`.
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-opus-5',
+          { type: 'enabled', budget_tokens: 8000, display: 'summarized' } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-prod-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'enabled', budget_tokens: 8000 });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-opus-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'adaptive' });
+
+      // Fable/Mythos reject `disabled` outright, at any effort.
+      expect(
+        normalizeClaudeThinkingConfig('claude-fable-5', { type: 'disabled' }, 'low'),
+      ).toBeUndefined();
+
+      // Opus 5 keeps `disabled` at effort `high` or below (and when effort is unset)...
+      for (const effort of [undefined, 'low', 'medium', 'high'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-opus-5', { type: 'disabled' }, effort),
+        ).toEqual({ type: 'disabled' });
+      }
+      // ...but drops it at xhigh/max, where the pairing would 400.
+      for (const effort of ['xhigh', 'max'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-opus-5', { type: 'disabled' }, effort),
+        ).toBeUndefined();
+      }
+
+      // Other families keep `disabled` regardless of effort.
+      expect(normalizeClaudeThinkingConfig('claude-opus-4-8', { type: 'disabled' }, 'max')).toEqual(
+        { type: 'disabled' },
+      );
+      expect(normalizeClaudeThinkingConfig('claude-sonnet-5', { type: 'disabled' }, 'max')).toEqual(
+        {
+          type: 'disabled',
+        },
+      );
+    });
+
     it('resolves the user-facing warning name for recognized Claude families', () => {
       expect(getClaudeModelWarningName('claude-sonnet-5')).toBe('Claude Sonnet 5');
       expect(getClaudeModelWarningName('us.anthropic.claude-sonnet-5')).toBe('Claude Sonnet 5');
+      expect(getClaudeModelWarningName('claude-opus-5')).toBe('Claude Opus 5');
+      expect(getClaudeModelWarningName('global.anthropic.claude-opus-5')).toBe('Claude Opus 5');
       expect(getClaudeModelWarningName('claude-opus-4-8')).toBe('Claude Opus 4.7 and 4.8');
       expect(getClaudeModelWarningName('claude-opus-4-7')).toBe('Claude Opus 4.7 and 4.8');
       expect(getClaudeModelWarningName('claude-fable-5')).toBe(

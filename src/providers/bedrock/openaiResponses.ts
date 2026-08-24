@@ -78,7 +78,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
  * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
+ * uses OpenAI regional-processing rates, which are 10% above first-party rates.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
@@ -97,6 +97,10 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
 
   protected async getApiKeyForRequest(): Promise<string | undefined> {
     return this.bedrockTokenProvider.getToken();
+  }
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
   }
 
   /**

@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import type Langfuse from 'langfuse';
+import type { LangfuseClient } from '@langfuse/client';
 
 import type { VarValue } from '../types';
 
@@ -9,7 +9,7 @@ const langfuseParams = {
   baseUrl: getEnvString('LANGFUSE_HOST'),
 };
 
-let langfuse: Langfuse;
+let langfuse: LangfuseClient;
 
 export async function getPrompt(
   id: string,
@@ -22,11 +22,11 @@ export async function getPrompt(
 
   if (!langfuse) {
     try {
-      const { Langfuse } = await import('langfuse');
-      langfuse = new Langfuse(langfuseParams);
+      const { LangfuseClient } = await import('@langfuse/client');
+      langfuse = new LangfuseClient(langfuseParams);
     } catch (_err) {
       throw new Error(
-        'The langfuse package is required for Langfuse integration. Please install it with: npm install langfuse',
+        'The @langfuse/client package is required for Langfuse integration. Please install it with: npm install @langfuse/client',
       );
     }
   }
@@ -35,9 +35,9 @@ export async function getPrompt(
 
   try {
     if (type === 'text' || type === undefined) {
-      prompt = await langfuse.getPrompt(id, version, { ...options, type: 'text' });
+      prompt = await langfuse.prompt.get(id, { version, ...options, type: 'text' });
     } else {
-      prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
+      prompt = await langfuse.prompt.get(id, { version, ...options, type: 'chat' });
     }
   } catch (err) {
     const error = err as Error;

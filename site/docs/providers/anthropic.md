@@ -57,13 +57,13 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | ---------------------- |
 | `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
 | `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
+| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5          |
 | `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
 | `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
 | `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
-| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus        |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Claude 4 Opus          |
 | `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet      |
 | `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Claude 4 Sonnet        |
@@ -83,6 +83,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
 | Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude Opus 5     | claude-opus-5                                         | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude Sonnet 5   | claude-sonnet-5                                       | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
@@ -91,7 +92,6 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5-latest)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
-| Claude 4.1 Opus   | claude-opus-4-1-20250805                              | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
 | Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
@@ -193,6 +193,24 @@ providers:
         - "\n\nHuman:"
         - 'STOP'
 ```
+
+### Classifier Refusals
+
+An Anthropic safety-classifier refusal can arrive as a successful Messages response with `stop_reason: refusal`. When the response also includes `stop_details`, Promptfoo returns the provider content as `output` and normalizes:
+
+```json
+{
+  "finishReason": "content_filter",
+  "guardrails": {
+    "flagged": true,
+    "reason": "Content refused by Anthropic safety filters — category: ..."
+  }
+}
+```
+
+Promptfoo currently requires `stop_details` to create the top-level `guardrails` signal. A model-written refusal or `stop_reason: refusal` without details is therefore not the same assertion result. Treat the optional `stop_details.category` and `stop_details.explanation` as diagnostic evidence. API validation errors remain provider errors and skip assertions.
+
+In a stream, the terminal refusal reason can arrive after partial text in the final message delta. Promptfoo merges those details before returning the provider response, and cached structured refusals preserve the signal. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) to require the structured classifier signal. Use [`is-refusal`](/docs/configuration/expected-outputs/deterministic#is-refusal) for model-written refusal text.
 
 ### Metadata
 
@@ -540,6 +558,45 @@ priced at $10 per million input tokens and $50 per million output tokens. Mythos
 access is limited through Project Glasswing and may require provider approval. Both
 model IDs are pinned; Anthropic does not publish `-latest` aliases for them.
 
+### Claude Opus 5 notes
+
+Opus 5 is the Opus-tier Claude 5 model, aimed at complex agentic coding and long-horizon
+work. It keeps Opus 4.8's request surface and pricing, with two behavior changes promptfoo
+handles for you:
+
+- **Thinking is on by default.** Unlike Opus 4.7/4.8 — where omitting `thinking` meant no
+  extended thinking — an omitted `thinking` block on Opus 5 runs adaptive thinking. Because
+  `max_tokens` caps thinking _plus_ response text, promptfoo sizes its default `max_tokens`
+  with thinking headroom (2048 instead of 1024) so responses aren't truncated mid-answer.
+  Set `max_tokens` explicitly for anything longer.
+- **Disabling thinking is effort-gated.** `thinking: { type: 'disabled' }` is only accepted
+  at `effort` `high` or below; pairing it with `xhigh` or `max` returns a 400. Promptfoo
+  drops the rejected `thinking: { type: 'disabled' }` (keeping your `effort`) and logs a
+  one-time warning. Lower `effort` to `high` if you actually need thinking off.
+- **Sampling controls are managed for you.** Like Opus 4.7/4.8, Opus 5 rejects
+  `temperature`, `top_p`, and `top_k` with a 400; promptfoo omits all three from every
+  request, including its built-in `temperature: 0` default. A legacy
+  `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
+  `thinking: { type: 'adaptive' }`.
+- **The full `low` → `max` effort ladder is available.** Start at `xhigh` for coding and
+  agentic work, then sweep downward — `low` and `medium` are unusually strong on this model
+  and are the main cost and latency lever. See the [Effort Level](#effort-level) section.
+
+Opus 5 uses a 1M-token context window (both the default and the maximum) billed at a flat
+**$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
+long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
+is a separate research-preview rate that promptfoo does not encode. To track it, set
+`inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
+rates, because it is applied as both the input and the output per-token price.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-5
+    config:
+      effort: xhigh
+      max_tokens: 8192
+```
+
 ### Claude Sonnet 5 notes
 
 Sonnet 5 is the most agentic Sonnet model, with a 1M-token context window and support
@@ -556,7 +613,7 @@ controls at the model level:
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
 
-Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set an explicit `cost` in your provider config if you want to track the introductory rate.
+Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set `inputCost: 2 / 1e6` and `outputCost: 10 / 1e6` to track the introductory rate (a single `cost` is applied as both the input and output rate, so it cannot express the two).
 
 ### Claude Opus 4.8 notes
 

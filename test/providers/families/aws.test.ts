@@ -51,16 +51,16 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:xai.grok-4.3');
   });
 
-  it.each([
-    'bedrock:converse:xai.grok-4.3',
-    'bedrock:completion:xai.grok-4.3',
-  ])('routes the explicit %s form to the Grok mantle Responses provider', async (id) => {
-    const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
-    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
-    expect((provider as any).config.apiBaseUrl).toBe(
-      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
-    );
-  });
+  it.each(['bedrock:converse:xai.grok-4.3', 'bedrock:completion:xai.grok-4.3'])(
+    'routes the explicit %s form to the Grok mantle Responses provider',
+    async (id) => {
+      const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
+      expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect((provider as any).config.apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    },
+  );
 
   it('rejects prefixed Grok ids before native Converse routing', async () => {
     await expect(
@@ -167,18 +167,18 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
   });
 
-  it.each([
-    'converse',
-    'completion',
-  ])('rejects the legacy %s API for Bedrock Mythos with a clear error', async (modelType) => {
-    await expect(
-      bedrockFactory.create(
-        `bedrock:${modelType}:anthropic.claude-mythos-5`,
-        { config: { apiKey: 'bedrock-key' } },
-        ctx,
-      ),
-    ).rejects.toThrow(/Anthropic Messages API/);
-  });
+  it.each(['converse', 'completion'])(
+    'rejects the legacy %s API for Bedrock Mythos with a clear error',
+    async (modelType) => {
+      await expect(
+        bedrockFactory.create(
+          `bedrock:${modelType}:anthropic.claude-mythos-5`,
+          { config: { apiKey: 'bedrock-key' } },
+          ctx,
+        ),
+      ).rejects.toThrow(/Anthropic Messages API/);
+    },
+  );
 
   it('routes the converse: form of Bedrock Fable to the Converse provider', async () => {
     // Unlike Mythos, Fable does not require the Anthropic Messages endpoint, so the
@@ -278,13 +278,18 @@ describe('aws bedrock provider factory routing', () => {
     'bedrock:us.openai.gpt-5.5',
     'bedrock:eu.openai.gpt-5.4',
     'bedrock:global.openai.gpt-5.5',
-  ])('rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id', async (providerPath) => {
-    // AWS does not offer Geo/Global inference profiles for the frontier models, so these are
-    // not real Bedrock ids. They must not be routed to the mantle endpoint; instead the
-    // InvokeModel fallback throws an actionable error suggesting the supported bare id.
-    restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
-    const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
-    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
-    await expect(provider.callApi('hi')).rejects.toThrow(/Responses API.*bedrock:openai\.gpt-5\./s);
-  });
+  ])(
+    'rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id',
+    async (providerPath) => {
+      // AWS does not offer Geo/Global inference profiles for the frontier models, so these are
+      // not real Bedrock ids. They must not be routed to the mantle endpoint; instead the
+      // InvokeModel fallback throws an actionable error suggesting the supported bare id.
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
+      expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+      await expect(provider.callApi('hi')).rejects.toThrow(
+        /Responses API.*bedrock:openai\.gpt-5\./s,
+      );
+    },
+  );
 });

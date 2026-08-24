@@ -5,11 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -28,9 +23,21 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  getTokenUsage,
+  OPENAI_CHAT_MODELS,
+  validateFunctionCall,
+} from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -45,6 +52,44 @@ export type OpenAiChatCompletionCostData = Pick<
   OpenAI.Chat.Completions.ChatCompletion,
   'service_tier' | 'usage'
 >;
+
+function getChatSearchCitations(
+  annotations: unknown,
+  output: unknown,
+): Array<{ url: string; content: string }> {
+  if (!Array.isArray(annotations)) {
+    return [];
+  }
+
+  return annotations.flatMap((annotation) => {
+    const citation = annotation?.type === 'url_citation' ? annotation.url_citation : undefined;
+    if (typeof citation?.url !== 'string' || !/^https?:\/\//i.test(citation.url)) {
+      return [];
+    }
+
+    const excerpt =
+      typeof output === 'string' &&
+      Number.isInteger(citation.start_index) &&
+      Number.isInteger(citation.end_index)
+        ? output.slice(citation.start_index, citation.end_index + 1).trim()
+        : '';
+    const title = typeof citation.title === 'string' ? citation.title.trim() : '';
+
+    return [
+      { url: citation.url, content: [title, excerpt].filter(Boolean).join(': ') || citation.url },
+    ];
+  });
+}
+
+function getChatSearchSurcharge(modelName: string): number {
+  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+    return 0.01;
+  }
+  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+    return 0.025;
+  }
+  return 0;
+}
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -137,6 +182,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     config: OpenAiCompletionOptions,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -168,7 +214,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -189,10 +237,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected getGenAISystem(): string {
-    return 'openai';
-  }
-
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -206,8 +250,26 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const isReasoningModel = this.isReasoningModel();
-    const isGPT5Model = this.isGPT5Model();
+    const passthroughModel =
+      typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
+    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
+      /(^|\/)ft:/,
+      '$1',
+    );
+    const isGPT5Model =
+      this.isGPT5Model() ||
+      capabilityModelName.startsWith('gpt-5') ||
+      capabilityModelName.includes('/gpt-5');
+    const isOSeriesModel =
+      capabilityModelName.startsWith('o1') ||
+      capabilityModelName.startsWith('o3') ||
+      capabilityModelName.startsWith('o4') ||
+      capabilityModelName.includes('/o1') ||
+      capabilityModelName.includes('/o3') ||
+      capabilityModelName.includes('/o4');
+    const isPassthroughReasoningModel =
+      passthroughModel !== undefined && (isGPT5Model || isOSeriesModel);
+    const isReasoningModel = this.isReasoningModel() || isGPT5Model || isOSeriesModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -224,9 +286,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
+    const temperature =
+      this.supportsTemperature() && !isPassthroughReasoningModel
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
@@ -294,7 +357,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
-      ...(this.modelName.includes('audio')
+      ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
             audio: config.audio || { voice: 'alloy', format: 'wav' },
@@ -303,21 +366,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // GPT-5 only: attach verbosity if provided
       ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
+    assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
+    if (config.reasoning_effort && (isReasoningModel || capabilityModelName.includes('gpt-oss'))) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.includes('/o1') ||
-        this.modelName.includes('/o3') ||
-        this.modelName.includes('/o4'))
-    ) {
+    if (config.reasoning && isOSeriesModel) {
       body.reasoning = config.reasoning;
     }
 
@@ -356,11 +412,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
-    return calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const modelName =
+      typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
+    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       serviceTier: data.service_tier ?? config.service_tier,
     });
+    const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);
+
+    return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
   }
 
   async callApi(
@@ -379,6 +442,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const spanContext: GenAISpanContext = {
       system: this.getGenAISystem(),
       operationName: 'chat',
+      openaiApiType: 'chat_completions',
       model: this.modelName,
       providerId: this.id(),
       // Optional request parameters
@@ -388,7 +452,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       stopSequences: this.config.stop,
       // Promptfoo context from test case if available
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -458,7 +522,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         deleteFromCache,
         headers: responseHeaders,
       } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        `${this.getApiUrl()}/chat/completions`,
+        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
         {
           method: 'POST',
           headers: {
@@ -713,6 +777,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 functionName,
                 functionCall.arguments || functionCall.function?.arguments,
                 config,
+                functionCall.call_id ?? functionCall.id,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;
@@ -783,6 +848,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
+      const citations = getChatSearchCitations(message.annotations, output);
+
       return {
         output,
         tokenUsage: getTokenUsage(data, cached),
@@ -800,6 +867,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           // Include all choices for multi-response requests (n > 1)
           ...(data.choices.length > 1 && { choices: data.choices }),
+          ...(Array.isArray(message.annotations) &&
+            message.annotations.length > 0 && { annotations: message.annotations }),
+          ...(citations.length > 0 && { citations }),
         },
       };
     } catch (err) {

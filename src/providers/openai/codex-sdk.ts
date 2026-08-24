@@ -10,7 +10,9 @@ import { getEnvString } from '../../envars';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
@@ -25,6 +27,11 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from './codex-tracing';
 import {
   applyApiKeyToCliEnv,
   shouldInjectApiKey,
@@ -610,7 +617,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js ^20.20.0 or >=22.22.0.
+      Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -627,7 +634,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -824,10 +831,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (config.deep_tracing) {
       // Standard OTEL environment variables - use defaults only if not already set
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-cli';
@@ -882,18 +889,28 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     );
   }
 
-  private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode && !config.model_provider) {
+  private getResolvedCliConfig(
+    config: OpenAICodexSDKConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> | undefined {
+    if (
+      !config.cli_config &&
+      !config.collaboration_mode &&
+      !config.model_provider &&
+      !config.deep_tracing
+    ) {
       return undefined;
     }
 
-    return {
+    const cliConfig = {
       ...(config.cli_config ?? {}),
       // The first-class `model_provider` option takes precedence over any value
       // supplied through raw `cli_config`.
       ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
+
+    return withCodexTraceExporter(cliConfig, env, config.deep_tracing === true);
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
@@ -993,7 +1010,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
 
     // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
     // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
@@ -1047,7 +1064,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const threadIdCacheKey = this.getExplicitThreadCacheKey(config, instanceKey);
       const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
@@ -1055,6 +1072,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
+        const explicitThreadCachePrefix = this.getExplicitThreadCachePrefix(config);
+        for (const cacheKey of this.threads.keys()) {
+          if (cacheKey !== threadIdCacheKey && cacheKey.startsWith(explicitThreadCachePrefix)) {
+            this.threads.delete(cacheKey);
+          }
+        }
         this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
@@ -1325,13 +1348,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -1362,10 +1385,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         attributes['gen_ai.usage.output_tokens'] = outputTokens;
       }
       if (typeof cachedTokens === 'number') {
-        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
       }
       if (typeof reasoningTokens === 'number') {
-        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
@@ -1670,6 +1693,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.mcp.server'] = item.server;
         }
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.mcp.tool'] = item.tool;
         }
         {
@@ -1688,6 +1713,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Collaboration mode attributes
       case 'collaboration_tool_call':
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.collab.tool'] = item.tool;
         }
         if (typeof item.target_thread_id === 'string') {
@@ -1875,7 +1902,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const keyData = {
       env,
       base_url: config.base_url,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       codex_path_override: config.codex_path_override,
     };
 
@@ -1910,14 +1937,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private getThreadRunQueueKey(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
-    instanceKey: string,
   ): string | undefined {
     if (config.deep_tracing) {
       return undefined;
     }
 
     if (config.thread_id) {
-      return `${instanceKey}:${config.thread_id}`;
+      return `explicit:${this.getExplicitThreadIdentity(config)}`;
     }
 
     if (config.persist_threads && cacheKey) {
@@ -1925,6 +1951,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return undefined;
+  }
+
+  private getExplicitThreadCacheKey(config: OpenAICodexSDKConfig, instanceKey: string): string {
+    const variant = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ instanceKey, threadOptions: this.buildThreadOptions(config) }))
+      .digest('hex');
+    return `${this.getExplicitThreadCachePrefix(config)}${variant}`;
+  }
+
+  private getExplicitThreadCachePrefix(config: OpenAICodexSDKConfig): string {
+    return `explicit:${this.getExplicitThreadIdentity(config)}:`;
+  }
+
+  private getExplicitThreadIdentity(config: OpenAICodexSDKConfig): string {
+    return crypto
+      .createHash('sha256')
+      .update(config.thread_id ?? '')
+      .digest('hex');
   }
 
   private async runSerializedThreadTurn<T>(
@@ -2028,8 +2073,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex',
+      agentName: 'Codex',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -2315,7 +2361,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
   ): Promise<{ turn: any; sessionId: string }> {
-    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey, instanceKey);
+    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {

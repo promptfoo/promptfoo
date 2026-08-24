@@ -143,8 +143,27 @@ describe('contracts leaf surface', () => {
           numRequests: 1,
           completionDetails: { reasoning: 1 },
         },
+        attacker: {
+          prompt: 8,
+          completion: 2,
+          total: 10,
+          numRequests: 1,
+        },
+        generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
       });
       expect(parsed.success).toBe(true);
+      expect(parsed).toMatchObject({
+        success: true,
+        data: {
+          attacker: {
+            prompt: 8,
+            completion: 2,
+            total: 10,
+            numRequests: 1,
+          },
+          generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
+        },
+      });
     });
 
     it('parses CompletionTokenDetailsSchema with all fields', () => {

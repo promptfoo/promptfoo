@@ -266,6 +266,10 @@ function getPassthroughConfig(
 export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvider {
   private underlyingProvider: string;
 
+  protected override getGenAISystem(): string {
+    return this.underlyingProvider;
+  }
+
   constructor(
     underlyingProvider: string,
     modelName: string,
@@ -418,6 +422,11 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
       hasApiKey: !!providerOptions.config?.apiKey,
       hasCfAigToken: !!cfAigToken,
     });
+  }
+
+  protected override allowsClaudeGenerationFallback(): boolean {
+    // The dedicated Anthropic gateway forwards canonical model IDs to Anthropic unchanged.
+    return true;
   }
 
   id(): string {

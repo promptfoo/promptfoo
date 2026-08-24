@@ -14,11 +14,10 @@ promptfoo is available as a node package [on npm](https://www.npmjs.com/package/
 npm install promptfoo
 ```
 
-:::warning
+:::note
 
-Node.js 20 support ends July 30, 2026 at 00:00 UTC. Library consumers should upgrade to Node.js
-`22.22.0` or newer before updating promptfoo after the cutoff. Node.js 24 LTS is recommended. See the
-[runtime upgrade guide](/docs/installation#nodejs-runtime-support).
+promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
+[runtime support guide](/docs/installation#nodejs-runtime-support).
 
 :::
 
