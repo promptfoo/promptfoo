@@ -2539,58 +2539,69 @@ describe('ClaudeCodeSDKProvider', () => {
           ]);
         });
 
-        it('redacts raw TaskOutput before the main agent receives the tool result', async () => {
-          mockQuery.mockReturnValue(createMockResponse('Response'));
+        it.each([false, true])(
+          'redacts raw TaskOutput before the main agent receives the tool result (MCP metadata: %s)',
+          async (wrappedWithMetadata) => {
+            mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
-          await provider.callApi('Test prompt');
+            const provider = new ClaudeCodeSDKProvider({
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            });
+            await provider.callApi('Test prompt');
 
-          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
-          const matcher = callArgs.options.hooks.PostToolUse[0];
-          expect(matcher.matcher).toBe('TaskOutput');
+            const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+            const matcher = callArgs.options.hooks.PostToolUse[0];
+            expect(matcher.matcher).toBe('TaskOutput');
 
-          const result = await matcher.hooks[0](
-            {
-              hook_event_name: 'PostToolUse',
-              tool_name: 'TaskOutput',
-              tool_input: { task_id: 'background-task-1' },
-              tool_response: {
-                retrieval_status: 'success',
-                task: {
-                  task_id: 'background-task-1',
-                  task_type: 'local_agent',
-                  output: 'SYSTEM SECRET and hidden reasoning',
-                  result: 'SYSTEM SECRET and hidden reasoning',
-                  isRawTranscript: true,
-                },
+            const toolResponse = {
+              retrieval_status: 'success',
+              task: {
+                task_id: 'background-task-1',
+                task_type: 'local_agent',
+                output: 'SYSTEM SECRET and hidden reasoning',
+                result: 'SYSTEM SECRET and hidden reasoning',
+                isRawTranscript: true,
               },
-              tool_use_id: 'background-task-output',
-            },
-            'background-task-output',
-            { signal: new AbortController().signal },
-          );
-
-          expect(result).toEqual({
-            hookSpecificOutput: {
-              hookEventName: 'PostToolUse',
-              updatedToolOutput: {
-                retrieval_status: 'success',
-                task: {
-                  task_id: 'background-task-1',
-                  task_type: 'local_agent',
-                  output:
-                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
-                  result:
-                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
-                  isRawTranscript: false,
-                },
+            };
+            const metadata = { source: 'mcp' };
+            const result = await matcher.hooks[0](
+              {
+                hook_event_name: 'PostToolUse',
+                tool_name: 'TaskOutput',
+                tool_input: { task_id: 'background-task-1' },
+                tool_response: wrappedWithMetadata
+                  ? { content: toolResponse, _meta: metadata }
+                  : toolResponse,
+                tool_use_id: 'background-task-output',
               },
-            },
-          });
-          expect(JSON.stringify(result)).not.toContain('SYSTEM SECRET');
-        });
+              'background-task-output',
+              { signal: new AbortController().signal },
+            );
+
+            const redactedResponse = {
+              retrieval_status: 'success',
+              task: {
+                task_id: 'background-task-1',
+                task_type: 'local_agent',
+                output:
+                  '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                result:
+                  '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                isRawTranscript: false,
+              },
+            };
+
+            expect(result).toEqual({
+              hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                updatedToolOutput: wrappedWithMetadata
+                  ? { content: redactedResponse, _meta: metadata }
+                  : redactedResponse,
+              },
+            });
+            expect(JSON.stringify(result)).not.toContain('SYSTEM SECRET');
+          },
+        );
 
         it('prevents a model from echoing raw TaskOutput through the real SDK hook bridge', async () => {
           const secretTranscript = 'SYSTEM SECRET and hidden reasoning';
@@ -4394,11 +4405,25 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool call tracking', () => {
-      it.each([false, true])(
-        'only forwards raw TaskOutput subagent transcripts when explicitly enabled: %s',
-        async (forwardSubagentText) => {
+      it.each([
+        { forwardSubagentText: false, wrappedWithMetadata: false },
+        { forwardSubagentText: true, wrappedWithMetadata: false },
+        { forwardSubagentText: false, wrappedWithMetadata: true },
+        { forwardSubagentText: true, wrappedWithMetadata: true },
+      ])(
+        'only forwards raw TaskOutput transcripts when enabled: $forwardSubagentText (MCP metadata: $wrappedWithMetadata)',
+        async ({ forwardSubagentText, wrappedWithMetadata }) => {
           const rawTranscript = 'SYSTEM SECRET and hidden subagent reasoning';
           const taskOutput = `<output>${rawTranscript}</output>`;
+          const toolUseResult = {
+            retrieval_status: 'success',
+            task: {
+              task_id: 'background-task-1',
+              task_type: 'local_agent',
+              output: rawTranscript,
+              isRawTranscript: true,
+            },
+          };
           const emittedToolSpans: Array<Record<string, unknown>> = [];
           vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({
             startSpan: vi.fn((name: string, options: { attributes?: Record<string, unknown> }) => {
@@ -4427,15 +4452,9 @@ describe('ClaudeCodeSDKProvider', () => {
               {
                 type: 'user',
                 parent_tool_use_id: null,
-                tool_use_result: {
-                  retrieval_status: 'success',
-                  task: {
-                    task_id: 'background-task-1',
-                    task_type: 'local_agent',
-                    output: rawTranscript,
-                    isRawTranscript: true,
-                  },
-                },
+                tool_use_result: wrappedWithMetadata
+                  ? { content: toolUseResult, _meta: { source: 'mcp' } }
+                  : toolUseResult,
                 message: {
                   role: 'user',
                   content: [

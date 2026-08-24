@@ -115,6 +115,39 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
   });
 
   describe('Token Usage Tracking', () => {
+    it('keeps remote attack generation separate from target tokens and probes', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: {
+            prompt: 20,
+            completion: 8,
+            total: 28,
+            completionDetails: { reasoning: 3 },
+          },
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'target response',
+        tokenUsage: { prompt: 5, completion: 4, total: 9, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 9,
+        numRequests: 1,
+        attacker: {
+          prompt: 20,
+          completion: 8,
+          total: 28,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
+
     it('should accumulate token usage from target provider', async () => {
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
