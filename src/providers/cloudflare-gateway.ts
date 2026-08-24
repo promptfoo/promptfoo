@@ -434,6 +434,11 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
     return false;
   }
 
+  protected override allowsClaudeGenerationFallback(): boolean {
+    // The dedicated Anthropic gateway forwards canonical model IDs to Anthropic unchanged.
+    return true;
+  }
+
   id(): string {
     return `cloudflare-gateway:anthropic:${this.modelName}`;
   }

@@ -2652,6 +2652,159 @@ describe('VertexChatProvider.callClaudeApi', () => {
     );
   });
 
+  it.each([
+    {
+      source: 'apiHost',
+      apiHost: 'gateway.example.com',
+      env: undefined,
+    },
+    {
+      source: 'VERTEX_API_HOST',
+      apiHost: undefined,
+      env: { VERTEX_API_HOST: 'gateway.example.com' },
+    },
+    {
+      source: 'Google API hostname lookalike',
+      apiHost: 'aiplatform.googleapis.com.evil.example',
+      env: undefined,
+    },
+    {
+      source: 'Google mTLS hostname lookalike',
+      apiHost: 'aiplatform.mtls.googleapis.com.evil.example',
+      env: undefined,
+    },
+  ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
+    const model = 'claude-prod-5';
+    provider = new VertexChatProvider(model, {
+      config: {
+        ...(apiHost ? { apiHost } : {}),
+        max_tokens: 10000,
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+        thinking: { type: 'enabled', budget_tokens: 5000 },
+      },
+      env,
+    });
+    const mockRequest = mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 1 },
+    });
+
+    await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining(`https://${apiHost ?? env?.VERTEX_API_HOST}/`),
+        data: expect.objectContaining({
+          temperature: 0.5,
+          top_p: 0.9,
+          top_k: 40,
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    { name: 'regional', region: 'us-central1', apiHost: undefined, env: undefined },
+    { name: 'global', region: 'global', apiHost: undefined, env: undefined },
+    {
+      name: 'regional with an explicit port',
+      region: 'us-central1',
+      apiHost: 'us-central1-aiplatform.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'global with an explicit port',
+      region: 'global',
+      apiHost: 'aiplatform.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'regional with an environment-configured port',
+      region: 'us-central1',
+      apiHost: undefined,
+      env: { VERTEX_API_HOST: 'us-central1-aiplatform.googleapis.com:443' },
+    },
+    {
+      name: 'global mTLS',
+      region: 'global',
+      apiHost: 'aiplatform.mtls.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'regional mTLS',
+      region: 'us-central1',
+      apiHost: 'us-central1-aiplatform.mtls.googleapis.com',
+      env: undefined,
+    },
+    {
+      name: 'environment-configured regional mTLS',
+      region: 'us-central1',
+      apiHost: undefined,
+      env: { VERTEX_API_HOST: 'us-central1-aiplatform.mtls.googleapis.com' },
+    },
+  ])(
+    'detects future Claude generations on official $name Vertex endpoints',
+    async ({ region, apiHost, env }) => {
+      const model = 'claude-haiku-5';
+      provider = new VertexChatProvider(model, {
+        config: {
+          region,
+          ...(apiHost ? { apiHost } : {}),
+          max_tokens: 10000,
+          temperature: 0.5,
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+        env,
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.thinking).toEqual({ type: 'adaptive' });
+    },
+  );
+
+  it('retains explicit Claude family capabilities behind a custom Vertex host', async () => {
+    const model = 'claude-opus-5';
+    provider = new VertexChatProvider(model, {
+      config: { apiHost: 'gateway.example.com', max_tokens: 32, temperature: 0.5 },
+    });
+    const mockRequest = mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 1 },
+    });
+
+    await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest.mock.calls[0][0].data.temperature).toBeUndefined();
+  });
+
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
       config: { max_tokens: 32, temperature: 0.5 },

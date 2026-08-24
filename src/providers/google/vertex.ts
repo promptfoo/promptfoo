@@ -338,7 +338,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const apiHost = this.getApiHost();
+    const apiHostUrl = `https://${apiHost}`;
+    const normalizedApiHostname = URL.canParse(apiHostUrl) ? new URL(apiHostUrl).hostname : '';
+    const allowGenerationFallback =
+      /^(?:[a-z0-9-]+-)?aiplatform(?:\.mtls)?\.googleapis\.com$/i.test(normalizedApiHostname);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback,
+    });
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
     const effort = this.config.effort;
@@ -346,6 +353,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.modelName,
       requestedThinkingConfig,
       effort,
+      { allowGenerationFallback },
     );
     // Thinking shares the max_tokens budget with the answer, and Opus 5 thinks even with no
     // `thinking` field — so the 512 default would truncate ordinary replies.
@@ -401,7 +409,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
 
     const cache = await getCache();
-    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,

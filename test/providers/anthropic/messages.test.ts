@@ -3044,6 +3044,128 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
+  describe('Claude generation detection with Anthropic-compatible gateways', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-prod-5',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    const proxyConfigs = [
+      {
+        source: 'apiBaseUrl',
+        apiBaseUrl: 'https://gateway.example.com/v1',
+        env: undefined,
+      },
+      {
+        source: 'ANTHROPIC_BASE_URL',
+        apiBaseUrl: undefined,
+        env: { ANTHROPIC_BASE_URL: 'https://gateway.example.com/v1' },
+      },
+    ];
+
+    it.each(proxyConfigs)(
+      'preserves sampling parameters for a numbered alias behind $source',
+      async ({ apiBaseUrl, env }) => {
+        const provider = createProvider('claude-prod-5', {
+          config: {
+            ...(apiBaseUrl ? { apiBaseUrl } : {}),
+            temperature: 0.5,
+            top_k: 40,
+          },
+          env,
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+
+        await provider.callApi('Hello');
+
+        expect(createSpy.mock.calls[0][0]).toMatchObject({
+          model: 'claude-prod-5',
+          temperature: 0.5,
+          top_k: 40,
+        });
+      },
+    );
+
+    it.each(proxyConfigs)(
+      'preserves top_p for a numbered alias behind $source',
+      async ({ apiBaseUrl, env }) => {
+        const provider = createProvider('claude-prod-5', {
+          config: { ...(apiBaseUrl ? { apiBaseUrl } : {}), top_p: 0.9 },
+          env,
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+
+        await provider.callApi('Hello');
+
+        expect(createSpy.mock.calls[0][0]).toMatchObject({
+          model: 'claude-prod-5',
+          top_p: 0.9,
+        });
+      },
+    );
+
+    it.each(proxyConfigs)(
+      'preserves manual thinking for a numbered alias behind $source',
+      async ({ apiBaseUrl, env }) => {
+        const provider = createProvider('claude-prod-5', {
+          config: {
+            ...(apiBaseUrl ? { apiBaseUrl } : {}),
+            thinking: { type: 'enabled', budget_tokens: 5000 },
+            max_tokens: 10000,
+          },
+          env,
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+
+        await provider.callApi('Hello');
+
+        expect(createSpy.mock.calls[0][0]).toMatchObject({
+          model: 'claude-prod-5',
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        });
+      },
+    );
+
+    it('detects future Claude generations at an explicitly configured Anthropic API URL', async () => {
+      const provider = createProvider('claude-haiku-5', {
+        config: { apiBaseUrl: 'https://api.anthropic.com/v1', temperature: 0.5 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-haiku-5' });
+
+      await provider.callApi('Hello');
+
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+    });
+
+    it('retains explicit Claude family capabilities behind a compatible gateway', async () => {
+      const provider = createProvider('claude-opus-5', {
+        config: { apiBaseUrl: 'https://gateway.example.com/v1', temperature: 0.5 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-5' });
+
+      await provider.callApi('Hello');
+
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+    });
+  });
+
   describe('Opus 4.7 temperature handling', () => {
     const mockResp = {
       content: [{ type: 'text', text: 'ok' }],

@@ -488,6 +488,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return 'anthropic';
   }
 
+  // Compatible gateways can assign arbitrary model aliases. Dedicated passthrough providers
+  // may override this when they guarantee requests reach Anthropic without alias translation.
+  protected allowsClaudeGenerationFallback(): boolean {
+    return (
+      URL.canParse(this.anthropic.baseURL) &&
+      new URL(this.anthropic.baseURL).hostname.toLowerCase() === 'api.anthropic.com'
+    );
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -638,9 +647,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort) as
-      | Anthropic.Messages.ThinkingConfigParam
-      | undefined;
+    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {
+      allowGenerationFallback: samplingParamsDeprecated,
+    }) as Anthropic.Messages.ThinkingConfigParam | undefined;
     const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolved);
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
@@ -732,7 +741,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
     // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
     // controls reasoning depth on these models.
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback: this.allowsClaudeGenerationFallback(),
+    });
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const {
