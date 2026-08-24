@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'ACP provider basic usage - single-turn eval with any ACP agent'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number. Do not create any files. Just output the code.'
+
+providers:
+  - id: acp
+    config:
+      command: ['kiro-cli', 'acp']
+      timeout: 120
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'factorial'
+      - type: contains
+        value: 'def '
+      - type: llm-rubric
+        value: 'Should generate a working Python factorial function'

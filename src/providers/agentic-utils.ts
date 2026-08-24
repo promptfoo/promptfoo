@@ -18,6 +18,7 @@ import { safeResolve } from '../util/pathUtils';
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
 const AGENTIC_PROVIDER_IDS = [
+  'acp',
   'anthropic:claude-agent-sdk',
   'anthropic:claude-code',
   'openai:codex',

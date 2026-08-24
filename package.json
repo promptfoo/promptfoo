@@ -278,6 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.232",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",

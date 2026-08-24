@@ -97,6 +97,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires an API key and optional Codex SDK dependency',
   },
   {
+    file: 'providers/acp.e2e.test.ts',
+    kind: 'skip',
+    linePattern: /hasAgent && hasSdk \? describe : describe\.skip/,
+    reason: 'E2E coverage requires ACP agent binary and optional SDK dependency',
+  },
+  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:
