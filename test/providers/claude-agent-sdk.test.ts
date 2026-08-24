@@ -522,6 +522,34 @@ describe('ClaudeCodeSDKProvider', () => {
         });
       });
 
+      it('should report no token usage when the SDK reports neither source', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'success',
+            session_id: 'test-session-123',
+            uuid: '12345678-1234-1234-1234-123456789abc',
+            result: 'Test response',
+            usage: undefined,
+            modelUsage: {},
+            total_cost_usd: 0.002,
+            duration_ms: 1000,
+            duration_api_ms: 800,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          } as any),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        // Zeros would be indistinguishable from a genuine zero-token call downstream.
+        expect(result.tokenUsage).toEqual({});
+      });
+
       it('should preserve cumulative model usage when an SDK call fails', async () => {
         mockQuery.mockReturnValue(
           createMockQuery({

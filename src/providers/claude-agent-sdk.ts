@@ -1793,47 +1793,62 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
           const raw = JSON.stringify(finalMsg);
-          // result.usage excludes subagents; modelUsage covers every model call in the query.
-          const modelUsages = Object.values(finalMsg.modelUsage ?? {});
-          const usage =
-            modelUsages.length > 0
-              ? modelUsages.reduce(
-                  (total, modelUsage) => ({
-                    inputTokens: total.inputTokens + (modelUsage.inputTokens ?? 0),
-                    outputTokens: total.outputTokens + (modelUsage.outputTokens ?? 0),
-                    cacheReadInputTokens:
-                      total.cacheReadInputTokens + (modelUsage.cacheReadInputTokens ?? 0),
-                    cacheCreationInputTokens:
-                      total.cacheCreationInputTokens + (modelUsage.cacheCreationInputTokens ?? 0),
-                  }),
-                  {
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    cacheReadInputTokens: 0,
-                    cacheCreationInputTokens: 0,
-                  },
-                )
-              : {
-                  inputTokens: finalMsg.usage?.input_tokens ?? 0,
-                  outputTokens: finalMsg.usage?.output_tokens ?? 0,
-                  cacheReadInputTokens: finalMsg.usage?.cache_read_input_tokens ?? 0,
-                  cacheCreationInputTokens: finalMsg.usage?.cache_creation_input_tokens ?? 0,
-                };
+          // result.usage counts only the main agent; modelUsage has a row per model, so it also
+          // covers subagent calls. Prefer modelUsage and fall back to result.usage, normalizing
+          // both to one shape so the totals are summed in a single place. When the SDK reports
+          // neither, leave tokenUsage empty rather than synthesizing zeros, which downstream
+          // cost and usage reporting cannot tell apart from a genuine zero count.
+          const usageSources: {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadInputTokens?: number;
+            cacheCreationInputTokens?: number;
+          }[] = Object.values(finalMsg.modelUsage ?? {});
+          if (usageSources.length === 0 && finalMsg.usage) {
+            usageSources.push({
+              inputTokens: finalMsg.usage.input_tokens,
+              outputTokens: finalMsg.usage.output_tokens,
+              cacheReadInputTokens: finalMsg.usage.cache_read_input_tokens,
+              cacheCreationInputTokens: finalMsg.usage.cache_creation_input_tokens,
+            });
+          }
+          const usage = usageSources.reduce<{
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadInputTokens: number;
+            cacheCreationInputTokens: number;
+          }>(
+            (total, source) => ({
+              inputTokens: total.inputTokens + (source.inputTokens ?? 0),
+              outputTokens: total.outputTokens + (source.outputTokens ?? 0),
+              cacheReadInputTokens: total.cacheReadInputTokens + (source.cacheReadInputTokens ?? 0),
+              cacheCreationInputTokens:
+                total.cacheCreationInputTokens + (source.cacheCreationInputTokens ?? 0),
+            }),
+            {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          );
           const promptTokens =
             usage.inputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens;
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: promptTokens,
-            completion: usage.outputTokens,
-            total: promptTokens + usage.outputTokens,
-            ...(usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0
-              ? {
-                  completionDetails: {
-                    cacheReadInputTokens: usage.cacheReadInputTokens,
-                    cacheCreationInputTokens: usage.cacheCreationInputTokens,
-                  },
-                }
-              : {}),
-          };
+          const tokenUsage: ProviderResponse['tokenUsage'] = usageSources.length
+            ? {
+                prompt: promptTokens,
+                completion: usage.outputTokens,
+                total: promptTokens + usage.outputTokens,
+                ...(usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0
+                  ? {
+                      completionDetails: {
+                        cacheReadInputTokens: usage.cacheReadInputTokens,
+                        cacheCreationInputTokens: usage.cacheCreationInputTokens,
+                      },
+                    }
+                  : {}),
+              }
+            : {};
           const cost = finalMsg.total_cost_usd ?? 0;
           const sessionId = finalMsg.session_id;
 
