@@ -2628,6 +2628,13 @@ describe('util', () => {
         modelName: 'gemini-3.7-flash',
         generationConfig: { thinking_config: { thinking_level: 'minimal' } },
       },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: {
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+          thinking_config: { thinking_level: 'MINIMAL' },
+        },
+      },
     ])('rejects unsupported MINIMAL thinking on $modelName', ({ modelName, generationConfig }) => {
       expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
         'Gemini 3.7 Flash does not support MINIMAL thinking',
@@ -2650,6 +2657,13 @@ describe('util', () => {
       {
         modelName: 'gemini-flash-latest',
         generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: {
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+          thinking_config: { thinking_budget: 1024 },
+        },
       },
     ])('rejects deprecated thinking budgets on $modelName', ({ modelName, generationConfig }) => {
       expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
@@ -2933,6 +2947,46 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo((600 * 1.65 + 400 * 0.165 + 500 * 9.9) / 1e6, 12);
+    });
+
+    it.each([
+      { serviceTier: undefined, tierMultiplier: 1 },
+      { serviceTier: 'priority', tierMultiplier: 1.8 },
+    ])(
+      'applies the Vertex Gemini 3.5 Flash regional premium to $serviceTier audio pricing',
+      ({ serviceTier, tierMultiplier }) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.5-flash',
+          { region: 'eu', ...(serviceTier && { service_tier: serviceTier }) },
+          1000,
+          500,
+          true,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
+
+        expect(cost).toBeCloseTo(
+          (tierMultiplier * (400 * 1.65 + 200 * 0.165 + 100 * 1.1 + 300 * 0.165 + 500 * 9.9)) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it('preserves explicit audio price overrides in Vertex multi-regions', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { region: 'us', audioInputCost: 4 / 1e6 },
+        1000,
+        500,
+        true,
+        400,
+      );
+
+      expect(cost).toBeCloseTo((600 * 1.65 + 400 * 4 + 500 * 9.9) / 1e6, 12);
     });
 
     it('does not apply the Vertex Flash-Lite regional premium to explicit price overrides', () => {

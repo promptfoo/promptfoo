@@ -232,27 +232,29 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
   }
 
   if (modelName.startsWith('gemini-3.7-flash') || modelName === 'gemini-flash-latest') {
-    const thinkingConfig = (sanitized.thinkingConfig ?? sanitized.thinking_config) as
-      | {
-          thinkingBudget?: unknown;
-          thinking_budget?: unknown;
-          thinkingLevel?: unknown;
-          thinking_level?: unknown;
-        }
-      | undefined;
-    if (
-      thinkingConfig?.thinkingBudget !== undefined ||
-      thinkingConfig?.thinking_budget !== undefined
-    ) {
-      throw new Error(
-        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).',
-      );
-    }
-    const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
-    if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
-      throw new Error(
-        'Gemini 3.7 Flash does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
-      );
+    for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
+      const thinkingConfig = config as
+        | {
+            thinkingBudget?: unknown;
+            thinking_budget?: unknown;
+            thinkingLevel?: unknown;
+            thinking_level?: unknown;
+          }
+        | undefined;
+      if (
+        thinkingConfig?.thinkingBudget !== undefined ||
+        thinkingConfig?.thinking_budget !== undefined
+      ) {
+        throw new Error(
+          'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).',
+        );
+      }
+      const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
+      if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
+        throw new Error(
+          'Gemini 3.7 Flash does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+        );
+      }
     }
   }
 
@@ -359,6 +361,8 @@ export function calculateGoogleCost(
       ? model.introductoryPricing.multiplier
       : 1;
   const catalogMultiplier = vertexRegionalMultiplier * introductoryMultiplier;
+  const applyCatalogMultiplier = (rate?: number) =>
+    rate === undefined ? undefined : rate * catalogMultiplier;
   const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
   const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
@@ -398,38 +402,41 @@ export function calculateGoogleCost(
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.audioInput ??
+    applyCatalogMultiplier(modelCost.audioInput) ??
     inputCost;
   const audioOutputCost =
     config.audioOutputCost ??
     config.audioCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.audioOutput ??
+    applyCatalogMultiplier(modelCost.audioOutput) ??
     outputCost;
   const videoOutputCost =
     config.videoOutputCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.videoOutput ??
+    applyCatalogMultiplier(modelCost.videoOutput) ??
     outputCost;
   const imageInputCost =
-    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.imageInput) ??
+    inputCost;
   const serviceTierCacheRead =
     serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
       ? modelCost.priorityCacheRead / serviceTierMultiplier
       : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
         ? modelCost.flexCacheRead / serviceTierMultiplier
         : modelCost.cacheRead;
-  const catalogCacheRead =
-    serviceTierCacheRead === undefined ? undefined : serviceTierCacheRead * catalogMultiplier;
+  const catalogCacheRead = applyCatalogMultiplier(serviceTierCacheRead);
   const cachedInputCost = config.inputCost ?? config.cost ?? catalogCacheRead ?? inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheReadAudio ??
+    applyCatalogMultiplier(modelCost.cacheReadAudio) ??
     catalogCacheRead ??
     audioInputCost;
   const cachedImageInputCost =
@@ -444,9 +451,11 @@ export function calculateGoogleCost(
   let serviceTierAudioInputCost = audioInputCost;
   if (!hasAudioInputOverride) {
     if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.priorityAudioInput * catalogMultiplier) / serviceTierMultiplier;
     } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.flexAudioInput * catalogMultiplier) / serviceTierMultiplier;
     }
   }
 

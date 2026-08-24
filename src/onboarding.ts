@@ -8,7 +8,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { getEnvString } from './envars';
 import logger from './logger';
-import { GEMINI_FLASH_MODELS } from './providers/google/shared';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
 import { pathExists } from './util/file';
@@ -517,7 +516,7 @@ export async function createDummyFiles(
       {
         name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          ...GEMINI_FLASH_MODELS.map(({ id }) => ({
+          ...['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'].map((id) => ({
             id: `vertex:${id}`,
             config: { region: 'global' },
           })),
