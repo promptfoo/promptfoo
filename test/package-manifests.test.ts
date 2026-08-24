@@ -564,14 +564,14 @@ describe('package manifests', () => {
       const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
 
       expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
-      expect(minVersion(optionalRange!)?.compare('1.15.46')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(optionalRange!)?.compare('1.16.0')).toBeGreaterThanOrEqual(0);
       expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
       expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
       expect(
         minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-          '1.15.46',
+          '1.16.0',
         ),
       ).toBeGreaterThanOrEqual(0);
     }
