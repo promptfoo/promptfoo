@@ -1717,15 +1717,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
-              // Scheduled triggers are main-agent prompts, not background-task
-              // completions, even though both use the task-notification kind.
-              const isScheduledTrigger =
+              // A background sub-agent completion is the one result we must not mistake
+              // for the main-agent answer. Scheduled triggers share the task-notification
+              // kind but are the session's own assigned prompt, so they stay candidates.
+              // The sibling 'peer-send-message' subkind is deliberately not exempted: it
+              // is another session's message, not a result for the prompt we submitted.
+              // Absent origin (older SDKs) and every other kind stay candidates too; the
+              // position-based last-wins fallback below covers them.
+              const isBackgroundTaskResult =
                 msg.origin?.kind === 'task-notification' &&
-                'subkind' in msg.origin &&
-                msg.origin.subkind === 'scheduled-trigger';
-              // Treat absent origin (older SDKs), other origin kinds, and
-              // scheduled triggers as candidates for the main-agent result.
-              if (msg.origin?.kind !== 'task-notification' || isScheduledTrigger) {
+                !('subkind' in msg.origin && msg.origin.subkind === 'scheduled-trigger');
+              if (!isBackgroundTaskResult) {
                 lastMainResultMsg = msg;
               }
             }

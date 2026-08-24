@@ -1012,6 +1012,54 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(JSON.parse(result.raw as string).session_id).toBe('scheduled-session');
       });
 
+      it('does not treat a peer-send-message notification as the main-agent result', async () => {
+        // 'peer-send-message' is the sibling subkind of 'scheduled-trigger'. It carries a
+        // message from another of the user's sessions, not a result for the prompt we
+        // submitted, so it must stay excluded from main-result selection.
+        const mainResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: '11111111-2222-4333-8444-555555555555',
+          result: 'Main agent answer',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'human' },
+        };
+        const peerMessageResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'peer-session',
+          uuid: '66666666-7777-4888-8999-000000000000',
+          result: 'Message from a peer session',
+          usage: createMockUsage(2, 3),
+          total_cost_usd: 0.0001,
+          duration_ms: 100,
+          duration_api_ms: 80,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'task-notification', subkind: 'peer-send-message' },
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([mainResult, peerMessageResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Main prompt');
+
+        expect(result.output).toBe('Main agent answer');
+        expect(result.sessionId).toBe('main-session');
+      });
+
       it('should not warn about truncation when origin identifies the main result without terminal_reason', async () => {
         // With SDK >= 0.2.126 the `origin` field is authoritative. If the
         // human-origin result has no terminal_reason, that's the legitimate
