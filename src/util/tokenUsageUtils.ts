@@ -66,6 +66,21 @@ function addNumbers(a: number | undefined, b: number | undefined): number {
   return (a ?? 0) + (b ?? 0);
 }
 
+/** Derive omitted totals without turning a response-cache replay into fresh usage. */
+function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
+  if (usage.total !== undefined) {
+    return usage.total;
+  }
+
+  const componentTotal = (usage.prompt ?? 0) + (usage.completion ?? 0);
+  const cachedTotal = usage.cached ?? 0;
+  if (usage.numRequests === 0 && cachedTotal > 0 && componentTotal <= cachedTotal) {
+    return 0;
+  }
+
+  return componentTotal;
+}
+
 /**
  * Helper to accumulate completion details
  */
@@ -108,7 +123,7 @@ export function accumulateTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  target.total = addNumbers(target.total, update.total);
+  target.total = addNumbers(target.total, getAccumulatedTokenTotal(update));
 
   // Handle numRequests
   if (update.numRequests !== undefined) {
@@ -137,7 +152,10 @@ export function accumulateTokenUsage(
       };
     }
 
-    target.assertions.total = addNumbers(target.assertions.total, update.assertions.total);
+    target.assertions.total = addNumbers(
+      target.assertions.total,
+      getAccumulatedTokenTotal(update.assertions),
+    );
     target.assertions.prompt = addNumbers(target.assertions.prompt, update.assertions.prompt);
     target.assertions.completion = addNumbers(
       target.assertions.completion,
@@ -240,7 +258,7 @@ export function accumulateAssertionTokenUsage(
   }
 
   // Accumulate basic token counts
-  target.total = addNumbers(target.total, update.total);
+  target.total = addNumbers(target.total, getAccumulatedTokenTotal(update));
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
