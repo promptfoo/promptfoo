@@ -948,6 +948,10 @@ describe('package manifests', () => {
         `${manifestPath} must declare a valid js-yaml semver range`,
       ).not.toBeNull();
       expect(
+        minVersion(declaredVersion as string)?.compare('5.3.0'),
+        `${manifestPath} must include the aliased-merge validation fix`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(
         subset(declaredVersion as string, PATCHED_JS_YAML_RANGE),
         `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
       ).toBe(true);
