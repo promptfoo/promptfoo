@@ -972,6 +972,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
+            cached: true,
             tokenUsage: createEmptyTokenUsage(),
           };
         }

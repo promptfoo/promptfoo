@@ -485,7 +485,43 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps the Excel parser above the XML entity decoding regression', () => {
+  it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const protobufRange = packageJson.dependencies?.protobufjs;
+
+    expect(protobufRange).toBeDefined();
+    expect(minVersion(protobufRange!)?.compare('8.7.2')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.protobufjs).toBe(protobufRange);
+    expect(packageLock.packages['node_modules/protobufjs'].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages['node_modules/protobufjs'].version!)?.compare('8.7.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps Google Cloud metadata dependencies on the supported Node 22 floor', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = 'gcp-metadata';
+    const dependencyRange = packageJson.dependencies?.[dependencyName];
+
+    expect(dependencyRange).toBeDefined();
+    expect(minVersion(dependencyRange!)?.compare('9.0.2')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.overrides?.mongoose?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.0.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
       packages: Record<
@@ -501,12 +537,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('9.3.3')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('9.3.9')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.3'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.9'),
     ).toBeGreaterThanOrEqual(0);
   });
 
@@ -868,7 +904,7 @@ describe('package manifests', () => {
     expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
   });
 
-  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+  it('requires patched WebSocket fragment limits and compression negotiation in manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
       packages?: Record<string, PackageManifest>;
@@ -884,7 +920,7 @@ describe('package manifests', () => {
       const websocketRange = manifest.dependencies?.ws;
 
       expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
-      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(websocketRange as string)?.compare('8.21.3')).toBeGreaterThanOrEqual(0);
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
