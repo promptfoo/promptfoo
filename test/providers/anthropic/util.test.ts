@@ -2064,6 +2064,21 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('matches the generation fallback in linear time on adversarial model IDs', () => {
+      // The family-name segment matcher is bounded so a long run of `claude-` segments cannot
+      // force a scan to end of input from every candidate start. The unbounded form took ~28s
+      // on this input; the bounded form finishes in single-digit milliseconds.
+      const adversarial = '-claude-a'.repeat(50_000);
+      const start = performance.now();
+      expect(isSamplingParamsDeprecatedClaudeModel(adversarial)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    it('still matches Claude families with several name segments', () => {
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-research-preview-5')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-a-b-c-d-e-5')).toBe(true);
+    });
+
     it('disables generation fallback for alias-based Claude providers', () => {
       expect(
         isSamplingParamsDeprecatedClaudeModel('claude-prod-5', { allowGenerationFallback: false }),

@@ -199,8 +199,12 @@ const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // forward-compatible fallback for Claude 5+ family names so providers do not send rejected
 // parameters while waiting for a model-specific capability row. Generation numbers are capped at
 // two digits so year/date suffixes on custom deployments are not mistaken for model generations.
+// The family-name segment count is bounded: an unbounded `(?:-[a-z][a-z0-9]*)*` makes every
+// `claude-` occurrence scan to end of input, which is quadratic on adversarial model IDs
+// (`'-claude-a'.repeat(50000)` took ~28s). Real families use at most two segments
+// (`claude-research-preview-5`), so five is generous headroom at O(1) work per candidate.
 const CLAUDE_5_OR_LATER_PATTERN =
-  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,4}-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
