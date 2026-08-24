@@ -106,7 +106,7 @@ defaultTest:
         pattern: '*'
         max: 2000
         percentile: 95
-      weight: 0 # This makes it a metric-only assertion
+      metricOnly: true # Emits the metric without affecting pass/fail
       metric: p95_latency
 
     # Ensure retrieval operations are fast
