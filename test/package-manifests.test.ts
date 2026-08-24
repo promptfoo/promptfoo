@@ -976,20 +976,48 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'package.json',
+    );
     const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
+      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
     }>('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
     const parserTransportRange = parser?.dependencies?.undici;
+    const parserTransport =
+      packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
 
     expect(
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
+      parserRange,
+    );
+    expect(parser?.version, 'the parser must resolve in the root lockfile').toBeDefined();
+    expect(satisfies(parser.version as string, parserRange as string)).toBe(true);
+    expect(
+      packageJson.engines?.node,
+      'the root must declare its supported Node range',
+    ).toBeDefined();
+    expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
+    expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(
+      parserTransport?.version,
+      'the parser must resolve its private HTTP transport',
+    ).toBeDefined();
+    expect(satisfies(parserTransport.version as string, parserTransportRange as string)).toBe(true);
+    expect(
+      parserTransport.engines?.node,
+      'the HTTP transport must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
+    ).toBe(true);
     expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
   });
 
