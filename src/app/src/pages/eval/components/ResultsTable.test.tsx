@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -179,8 +179,40 @@ describe('ResultsTable Metrics Display', () => {
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,000',
+    );
+    expect(screen.getByText('Provider Tokens:').parentElement).toHaveTextContent(
+      'Provider Tokens: 1,000',
+    );
+    expect(screen.queryByText('Target Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('labels primary token usage as target tokens for redteam scans', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000',
+    );
+    expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
   });
 
   it('displays average tokens with correct calculation', () => {
@@ -3169,16 +3201,18 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
     const filteredCostElement = screen.getByText('($0.6173 filtered)');
     expect(filteredCostElement).toBeInTheDocument();
-    expect(filteredCostElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredCostElement.style.fontSize).toBe('0.9em');
     expect(filteredCostElement).toHaveStyle('color: #666');
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
-    const filteredTokensElement = screen.getByText('(500 filtered)');
+    const totalTokensRow = screen.getByText('Total Tokens:').parentElement;
+    expect(totalTokensRow).not.toBeNull();
+    const filteredTokensElement = within(totalTokensRow as HTMLElement).getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
-    expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredTokensElement.style.fontSize).toBe('0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
 
@@ -3187,7 +3221,75 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
-    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredLatencyElement.style.fontSize).toBe('0.9em');
+  });
+
+  it('displays filtered totals separately for target, attacker, and grading tokens', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: {
+                  total: 1000,
+                  attacker: { total: 200 },
+                  assertions: { total: 100 },
+                },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          cost: 0.61728,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 0,
+          tokenUsage: {
+            total: 500,
+            attacker: { total: 80 },
+            assertions: { total: 20 },
+          },
+          totalLatencyMs: 1000,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,300(600 filtered)',
+    );
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000(500 filtered)',
+    );
+    expect(screen.getByText('Attacker Tokens:').parentElement).toHaveTextContent(
+      'Attacker Tokens: 200(80 filtered)',
+    );
+    expect(screen.getByText('Grading Tokens:').parentElement).toHaveTextContent(
+      'Grading Tokens: 100(20 filtered)',
+    );
+    expect(screen.getByText('Avg Tokens:').parentElement).toHaveTextContent(
+      'Avg Tokens: 130(120 filtered)',
+    );
   });
 });
 
@@ -3266,7 +3368,7 @@ describe('ResultsTable - No Filters Applied', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
     expect(screen.getByText('200ms')).toBeInTheDocument();

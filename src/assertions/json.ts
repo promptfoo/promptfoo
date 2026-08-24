@@ -57,7 +57,7 @@ export function handleIsJson({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+    reason: pass ? 'Assertion passed' : `Expected output to ${inverse ? 'not ' : ''}be valid JSON`,
     assertion,
   };
 }
@@ -69,7 +69,7 @@ export function handleContainsJson({
   inverse,
   valueFromScript,
 }: AssertionParams): GradingResult {
-  let errorMessage = 'Expected output to contain valid JSON';
+  let errorMessage = `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`;
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {

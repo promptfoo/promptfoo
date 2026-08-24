@@ -99,29 +99,28 @@ describe('createMetaProvider routing', () => {
     expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(/does not expose/);
   });
 
-  it.each([
-    'agents',
-    'chatkit',
-    'codex-sdk',
-    'voice',
-  ])('rejects the unknown %s sub-type instead of routing it as a Responses model', (subType) => {
-    expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(
-      /Unknown Meta Model API sub-type/,
-    );
-  });
+  it.each(['agents', 'chatkit', 'codex-sdk', 'voice'])(
+    'rejects the unknown %s sub-type instead of routing it as a Responses model',
+    (subType) => {
+      expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(
+        /Unknown Meta Model API sub-type/,
+      );
+    },
+  );
 
   it('still treats a bare single-segment path as a model id', () => {
     expect(createMetaProvider('meta:muse-spark-2').id()).toBe('meta:responses:muse-spark-2');
   });
 
-  it.each([
-    'meta:muse-spark-1.1',
-    'meta:chat:muse-spark-1.1',
-    'meta:messages:muse-spark-1.1',
-  ])('attributes %s tracing spans to the meta system', (providerPath) => {
-    const provider = createMetaProvider(providerPath);
-    expect((provider as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe('meta');
-  });
+  it.each(['meta:muse-spark-1.1', 'meta:chat:muse-spark-1.1', 'meta:messages:muse-spark-1.1'])(
+    'attributes %s tracing spans to the meta system',
+    (providerPath) => {
+      const provider = createMetaProvider(providerPath);
+      expect((provider as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe(
+        'meta',
+      );
+    },
+  );
 });
 
 describe('MetaProvider configuration', () => {
@@ -141,20 +140,20 @@ describe('MetaProvider configuration', () => {
     expect(provider.getApiUrl()).toBe('https://proxy.example.com/v1');
   });
 
-  it.each([
-    'meta:chat:muse-spark-1.1',
-    'meta:responses:muse-spark-1.1',
-  ])('honours apiHost and normalizes trailing slashes for %s', (id) => {
-    const trailingSlashes = '/'.repeat(100_000);
-    const withHost = createMetaProvider(id, {
-      config: { apiHost: `proxy.example.com${trailingSlashes}` },
-    }) as MetaResponsesProvider;
-    const withBaseUrl = createMetaProvider(id, {
-      config: { apiBaseUrl: `https://proxy.example.com/v1${trailingSlashes}` },
-    }) as MetaResponsesProvider;
-    expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
-    expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');
-  });
+  it.each(['meta:chat:muse-spark-1.1', 'meta:responses:muse-spark-1.1'])(
+    'honours apiHost and normalizes trailing slashes for %s',
+    (id) => {
+      const trailingSlashes = '/'.repeat(100_000);
+      const withHost = createMetaProvider(id, {
+        config: { apiHost: `proxy.example.com${trailingSlashes}` },
+      }) as MetaResponsesProvider;
+      const withBaseUrl = createMetaProvider(id, {
+        config: { apiBaseUrl: `https://proxy.example.com/v1${trailingSlashes}` },
+      }) as MetaResponsesProvider;
+      expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
+      expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');
+    },
+  );
 
   it('resolves an empty-string apiBaseUrl (e.g. an unset template) to the Meta host', () => {
     const provider = asChat(

@@ -268,6 +268,10 @@ function getPassthroughConfig(
 export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvider {
   private underlyingProvider: string;
 
+  protected override getGenAISystem(): string {
+    return this.underlyingProvider;
+  }
+
   constructor(
     underlyingProvider: string,
     modelName: string,

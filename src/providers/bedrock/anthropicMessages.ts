@@ -61,6 +61,10 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   protected override hasCustomHeaders(): boolean {
     return false;
   }
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(

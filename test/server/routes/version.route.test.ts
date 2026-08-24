@@ -1,15 +1,15 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockProcessEnv } from '../../util/utils';
 
-vi.mock('../../../src/updates', () => ({ getLatestVersion: vi.fn() }));
-vi.mock('../../../src/updates/updateCommands', () => ({ getUpdateCommands: vi.fn() }));
-vi.mock('../../../src/util/promptfooCommand', () => ({ isRunningUnderNpx: vi.fn() }));
+vi.mock('../../../src/updates');
+vi.mock('../../../src/updates/updateCommands');
+vi.mock('../../../src/util/promptfooCommand');
 
 import { createApp } from '../../../src/server/server';
 import { getLatestVersion } from '../../../src/updates';
 import { getUpdateCommands } from '../../../src/updates/updateCommands';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockedGetLatestVersion = vi.mocked(getLatestVersion);
 const mockedGetUpdateCommands = vi.mocked(getUpdateCommands);
@@ -32,7 +32,20 @@ describe('Version Route', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
+
+  /** Prime the route's 5-minute version cache at a fixed time so a test can then advance the clock. */
+  async function seedVersionCache(isoTime: string, latestVersion = '98.0.0') {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(isoTime));
+    mockedGetLatestVersion.mockResolvedValueOnce(latestVersion);
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(response.body.latestVersion).toBe(latestVersion);
+  }
 
   it('should return 200 with valid response schema shape', async () => {
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
@@ -54,34 +67,56 @@ describe('Version Route', () => {
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
-    expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
-    if (process.versions.node.startsWith('20.')) {
-      expect(response.body.runtimeNotice).toMatchObject({ currentMajor: 20, runtime: 'node' });
-      expect(response.body.blockedUpdateNotice).toMatchObject({
-        currentMajor: 20,
-        runtime: 'node',
-      });
-      expect(response.body.runtimePolicy).toEqual({ supportEndDate: '2026-07-30' });
-    } else {
-      expect(response.body.runtimeNotice).toBeNull();
-      expect(response.body.blockedUpdateNotice).toBeNull();
-      expect(response.body.runtimePolicy).toBeNull();
-    }
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-01T00:00:00.000Z'));
-    mockedGetLatestVersion.mockRejectedValue(new Error('Network error'));
+    await seedVersionCache('2099-01-01T00:00:00.000Z');
+
+    vi.setSystemTime(new Date('2099-01-01T00:06:00.000Z'));
+    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));
 
     const response = await request(app).get('/api/version');
 
-    // Should still return 200, not 500 — schema must match even on fallback path
+    // An expired cache must attempt the failing fetch and retain its stale value.
     expect(response.status).toBe(200);
-    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(1);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(2);
     expect(typeof response.body.currentVersion).toBe('string');
-    expect(typeof response.body.latestVersion).toBe('string');
-    expect(typeof response.body.updateAvailable).toBe('boolean');
-    expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
+    expect(response.body.latestVersion).toBe('98.0.0');
+    expect(response.body.updateAvailable).toBe(true);
+  });
+
+  it('should refresh a cached version when the clock moves backward', async () => {
+    await seedVersionCache('2099-01-02T00:00:00.000Z');
+
+    vi.setSystemTime(new Date('2099-01-01T23:59:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('99.0.0');
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(2);
+    expect(response.body.latestVersion).toBe('99.0.0');
+  });
+
+  it('should retry after the clock moves behind a failed update attempt', async () => {
+    await seedVersionCache('2099-01-03T00:00:00.000Z');
+
+    vi.setSystemTime(new Date('2099-01-03T00:10:00.000Z'));
+    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));
+
+    const failedResponse = await request(app).get('/api/version');
+
+    expect(failedResponse.status).toBe(200);
+    expect(failedResponse.body.latestVersion).toBe('98.0.0');
+
+    vi.setSystemTime(new Date('2099-01-03T00:06:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('99.0.0');
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(3);
+    expect(response.body.latestVersion).toBe('99.0.0');
   });
 
   it('should skip upstream update checks when they are disabled', async () => {
@@ -94,61 +129,9 @@ describe('Version Route', () => {
       expect(mockedGetLatestVersion).not.toHaveBeenCalled();
       expect(response.body.latestVersion).toBe(response.body.currentVersion);
       expect(response.body.updateAvailable).toBe(false);
-      if (process.versions.node.startsWith('20.')) {
-        expect(response.body.runtimePolicy).toEqual({ supportEndDate: '2026-07-30' });
-      }
     } finally {
       restoreEnv();
     }
-  });
-
-  it('should preserve blocked update guidance when runtime reminders are disabled', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-31T00:00:00.000Z'));
-    vi.spyOn(process, 'version', 'get').mockReturnValue('v20.20.0');
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_RUNTIME_WARNINGS: 'true' });
-    mockedGetLatestVersion.mockResolvedValue('99.0.0');
-
-    try {
-      const response = await request(app).get('/api/version');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({
-        latestVersion: '99.0.0',
-        updateAvailable: false,
-        updateBlockedByRuntime: true,
-        runtimeNotice: null,
-        blockedUpdateNotice: {
-          currentVersion: 'v20.20.0',
-          currentMajor: 20,
-          removalDate: '2026-07-30',
-          minimumVersion: '22.22.0',
-          recommendedVersion: '24 LTS',
-        },
-      });
-    } finally {
-      restoreEnv();
-    }
-  });
-
-  it('should include all required fields matching UpdateCommandResult shape', async () => {
-    mockedGetLatestVersion.mockResolvedValue('99.0.0');
-    mockedGetUpdateCommands.mockReturnValue({
-      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
-      alternative: null,
-      commandType: 'docker',
-    });
-
-    const response = await request(app).get('/api/version');
-
-    expect(response.status).toBe(200);
-    // Validates that updateCommands has primary/alternative (not global/npx)
-    expect(response.body.updateCommands).toHaveProperty('primary');
-    expect(response.body.updateCommands).toHaveProperty('alternative');
-    expect(response.body.updateCommands).toHaveProperty('commandType');
-    expect(response.body.updateCommands).not.toHaveProperty('global');
-    expect(response.body.updateCommands).not.toHaveProperty('npx');
-    expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
 
   it('should not classify generic self-hosted mode as Docker', async () => {
@@ -233,60 +216,24 @@ describe('Version Route', () => {
     }
   });
 
-  it('should block package updates but preserve Docker updates at the cutoff', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
-    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Seed future retry state'));
-    const futureResponse = await request(app).get('/api/version');
-    expect(futureResponse.status).toBe(200);
-
-    mockedGetLatestVersion.mockReset();
+  it('should include all required fields matching UpdateCommandResult shape', async () => {
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
-    vi.setSystemTime(new Date('2026-07-30T00:00:00.000Z'));
-
-    const packageResponse = await request(app).get('/api/version');
-    expect(packageResponse.status).toBe(200);
-    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(1);
-    expect(packageResponse.body.updateBlockedByRuntime).toBe(
-      process.versions.node.startsWith('20.'),
-    );
-    expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
-    expect(packageResponse.body.blockedUpdateNotice).toEqual(
-      process.versions.node.startsWith('20.')
-        ? expect.objectContaining({ currentMajor: 20 })
-        : null,
-    );
-
     mockedGetUpdateCommands.mockReturnValue({
-      primary: '',
-      alternative: null,
-      commandType: 'npm',
-      isCustomContainer: true,
-    });
-    const customContainerResponse = await request(app).get('/api/version');
-    expect(customContainerResponse.status).toBe(200);
-    expect(customContainerResponse.body.updateBlockedByRuntime).toBe(
-      process.versions.node.startsWith('20.'),
-    );
-    expect(customContainerResponse.body.updateAvailable).toBe(
-      !process.versions.node.startsWith('20.'),
-    );
-    expect(customContainerResponse.body.blockedUpdateNotice).toEqual(
-      process.versions.node.startsWith('20.')
-        ? expect.objectContaining({ currentMajor: 20 })
-        : null,
-    );
-
-    mockedGetUpdateCommands.mockReturnValue({
-      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
+      primary: 'docker pull promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
     });
-    const dockerResponse = await request(app).get('/api/version');
-    expect(dockerResponse.status).toBe(200);
-    expect(dockerResponse.body.updateBlockedByRuntime).toBe(false);
-    expect(dockerResponse.body.updateAvailable).toBe(true);
-    expect(dockerResponse.body.blockedUpdateNotice).toBeNull();
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    // Validates that updateCommands has primary/alternative (not global/npx)
+    expect(response.body.updateCommands).toHaveProperty('primary');
+    expect(response.body.updateCommands).toHaveProperty('alternative');
+    expect(response.body.updateCommands).toHaveProperty('commandType');
+    expect(response.body.updateCommands).not.toHaveProperty('global');
+    expect(response.body.updateCommands).not.toHaveProperty('npx');
+    expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
 
   it('should return 500 with fallback response when schema parse fails', async () => {

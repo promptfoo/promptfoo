@@ -597,7 +597,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-2.5-pro',
+          id: 'google:gemini-3.7-flash',
           config: {},
           label: currentLabel,
         },
@@ -606,8 +606,8 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-2.5-pro',
-          config: {},
+          id: 'vertex:gemini-3.7-flash',
+          config: { region: 'global' },
           label: currentLabel,
         },
         'vertex',
@@ -660,7 +660,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          id: 'bedrock:global.anthropic.claude-sonnet-5',
           config: {},
           label: currentLabel,
         },

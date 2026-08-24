@@ -284,7 +284,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       frequencyPenalty: this.config.frequency_penalty,
       presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -509,6 +509,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               total: data.usage?.total_tokens,
               prompt: data.usage?.prompt_tokens,
               completion: data.usage?.completion_tokens,
+              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
               ...(data.usage?.completion_tokens_details
                 ? {
                     completionDetails: {
@@ -530,6 +533,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
         ),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,

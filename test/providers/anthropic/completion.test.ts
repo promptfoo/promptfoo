@@ -51,7 +51,7 @@ describe('AnthropicCompletionProvider', () => {
       expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         output: 'Test output',
-        tokenUsage: {},
+        tokenUsage: { numRequests: 1 },
       });
     });
 
@@ -69,7 +69,7 @@ describe('AnthropicCompletionProvider', () => {
       expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         output: 'Test output',
-        tokenUsage: {},
+        tokenUsage: { numRequests: 1 },
       });
 
       vi.mocked(provider.anthropic.completions.create).mockClear();
@@ -79,7 +79,7 @@ describe('AnthropicCompletionProvider', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult).toMatchObject({
         output: 'Test output',
-        tokenUsage: {},
+        tokenUsage: { numRequests: 0 },
       });
     });
 

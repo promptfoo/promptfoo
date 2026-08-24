@@ -21,7 +21,7 @@ Claude Sonnet 5 is the Claude 5-generation Sonnet — built to be Anthropic's mo
 - **Adaptive thinking is opt-in.** Set `thinking: { type: adaptive }` (as this example does) to let the model decide when and how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Unlike Fable 5 / Mythos 5, Sonnet 5 also accepts `thinking: { type: disabled }`.
 - **`effort` tunes the cost/performance tradeoff.** Sonnet 5 supports `low`, `medium`, `high`, `xhigh`, and `max`. `high` is a good cost-efficient default; step up to `xhigh`/`max` for the hardest work and pair high effort with a large `max_tokens`.
 - **Sampling controls are managed for you.** Sonnet 5 rejects `temperature`, `top_p`, and `top_k` at the model level; promptfoo omits them automatically (don't set them in config).
-- **Pricing.** $3/$15 per million input/output tokens standard, with introductory pricing of $2/$10 through August 31, 2026. The full 1M-token context bills at the standard rate (no long-context surcharge).
+- **Pricing.** $3/$15 per million input/output tokens standard, with introductory pricing of $2/$10 through August 31, 2026 (to track that, set `inputCost`/`outputCost` — a single `cost` is applied as both rates). The full 1M-token context bills at the standard rate (no long-context surcharge).
 
 ## Running the Example
 
@@ -41,7 +41,7 @@ npx promptfoo@latest view
 Sonnet 5 is also reachable through:
 
 - AWS Bedrock — `bedrock:us.anthropic.claude-sonnet-5` (or `bedrock:converse:us.anthropic.claude-sonnet-5`)
-- Google Vertex — `vertex:claude-sonnet-5` with `config.region: global` (availability may roll out after the Anthropic API launch)
+- Google Vertex — `vertex:claude-sonnet-5` with `config.region: global` (verified working; regional endpoints depend on the quota provisioned for your GCP project)
 - Azure AI Foundry — point `anthropic:messages:claude-sonnet-5` at `https://<resource>.services.ai.azure.com/anthropic` via `apiBaseUrl`
 
 Across all four providers, promptfoo automatically omits the unsupported sampling parameters (`temperature`, `top_p`, `top_k`) for Sonnet 5. The Anthropic Messages provider — used directly and for Azure AI Foundry via `apiBaseUrl` — logs a one-time warning if you set them explicitly; the Bedrock and Vertex paths omit them silently.

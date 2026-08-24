@@ -12,6 +12,7 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
@@ -169,6 +170,103 @@ describe('Plugins', () => {
       expect(() => ragPlugin?.validate?.({ intendedResults: [] })).toThrow(
         'config.intendedResults',
       );
+    });
+  });
+
+  describe('remote generation token accounting', () => {
+    it('records usage returned by uncached remote plugin generation', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const tokenUsage = { total: 28, prompt: 18, completion: 10, numRequests: 2 };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { result: [{ vars: { testVar: 'generated prompt' } }], tokenUsage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const generationUsage = {};
+      const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject(tokenUsage);
+    });
+
+    it('does not charge cached remote plugin responses again', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'cached prompt' } }],
+          tokenUsage: { total: 28, numRequests: 2 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const generationUsage = {};
+      const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toEqual({});
+    });
+
+    it('preserves usage reported by failed remote generation requests', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const tokenUsage = { total: 16, prompt: 10, completion: 6 };
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        Object.assign(new Error('remote generation failed'), { tokenUsage }),
+      );
+      const generationUsage = {};
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
+    });
+
+    it('counts failed remote generation requests when token usage is unavailable', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('remote generation timed out'));
+      const generationUsage = {};
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toEqual({ numRequests: 1 });
     });
   });
 
@@ -542,41 +640,41 @@ describe('Plugins', () => {
       ]);
     });
 
-    it.each([
-      'coding-agent:core',
-      'coding-agent:all',
-    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+    it.each(['coding-agent:core', 'coding-agent:all'])(
+      'should preserve %s canary-breaking strategy exclusions in metadata',
+      async (pluginId) => {
+        vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+          return true;
+        });
+        vi.mocked(neverGenerateRemote).mockImplementation(function () {
+          return false;
+        });
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+        const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+        vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === pluginId);
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: { excludeStrategies: ['custom-strategy'] },
-        delayMs: 0,
-      });
+        const plugin = Plugins.find((p) => p.key === pluginId);
+        const result = await plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { excludeStrategies: ['custom-strategy'] },
+          delayMs: 0,
+        });
 
-      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
-      const requestBody = JSON.parse((callArgs[1] as any).body);
-      expect(requestBody.config.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-    });
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        const requestBody = JSON.parse((callArgs[1] as any).body);
+        expect(requestBody.config.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+        expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+      },
+    );
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test

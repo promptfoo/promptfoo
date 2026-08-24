@@ -26,6 +26,8 @@ description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configur
 
 Use the `langfuse://` prefix in your promptfoo configuration to reference prompts managed in Langfuse.
 
+To retrieve application traces from Langfuse during evals, configure the [`langfuse` external trace provider](/docs/tracing/#langfuse). Trace retrieval uses Langfuse's public API directly and does not require installing the Langfuse client SDK.
+
 ### Prompt formats
 
 You can reference prompts by version or label using two different syntaxes:
@@ -79,7 +81,7 @@ prompts:
   - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
-  - openai:gpt-5-mini
+  - openai:responses:gpt-5.6-luna
 
 tests:
   - vars:
