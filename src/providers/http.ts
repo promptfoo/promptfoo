@@ -2922,6 +2922,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -3167,6 +3168,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -3192,7 +3194,16 @@ export class HttpProvider implements ApiProvider {
     rawText: string,
     transformedPrompt: any,
     prompt: string,
+    originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const originalTokenUsage =
+      originalResponse &&
+      typeof originalResponse === 'object' &&
+      'tokenUsage' in originalResponse &&
+      originalResponse.tokenUsage &&
+      typeof originalResponse.tokenUsage === 'object'
+        ? (originalResponse.tokenUsage as Partial<TokenUsage>)
+        : undefined;
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
@@ -3208,7 +3219,9 @@ export class HttpProvider implements ApiProvider {
       };
       // Add estimated token usage if available and not already present
       if (!result.tokenUsage) {
-        if (estimatedTokenUsage) {
+        if (originalTokenUsage) {
+          result.tokenUsage = originalTokenUsage;
+        } else if (estimatedTokenUsage) {
           result.tokenUsage = estimatedTokenUsage;
         } else {
           result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
@@ -3223,7 +3236,9 @@ export class HttpProvider implements ApiProvider {
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {
-      if (estimatedTokenUsage) {
+      if (originalTokenUsage) {
+        result.tokenUsage = originalTokenUsage;
+      } else if (estimatedTokenUsage) {
         result.tokenUsage = estimatedTokenUsage;
       } else {
         result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
