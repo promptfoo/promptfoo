@@ -53,6 +53,18 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 }
 
 /**
+ * Security scanners run agentic workflows but cannot return rubric grading verdicts.
+ */
+export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
+  if (!provider || !isAgenticProvider(provider)) {
+    return false;
+  }
+
+  const providerId = provider.id();
+  return providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:');
+}
+
+/**
  * Timeout for working directory fingerprint generation (ms)
  * Prevents hanging on extremely large directories
  */
