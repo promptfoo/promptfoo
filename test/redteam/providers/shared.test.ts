@@ -8,6 +8,7 @@ import {
 } from '../../../src/redteam/providers/constants';
 import {
   accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
   callGradingProvider,
@@ -111,6 +112,53 @@ function setCliStateConfig(config: typeof cliState.config) {
 }
 
 describe('shared redteam provider utilities', () => {
+  describe('accumulateUnblockingTokenUsage', () => {
+    it('attributes nested blocking-analysis usage to one grading task', () => {
+      const tokenUsage = {};
+
+      accumulateUnblockingTokenUsage(tokenUsage, {
+        attempted: true,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: {
+            total: 34,
+            prompt: 21,
+            completion: 13,
+            numRequests: 0,
+            completionDetails: { reasoning: 5 },
+          },
+        },
+      });
+
+      expect(tokenUsage).toMatchObject({
+        assertions: {
+          total: 34,
+          prompt: 21,
+          completion: 13,
+          numRequests: 1,
+          completionDetails: { reasoning: 5 },
+        },
+      });
+      expect(tokenUsage).not.toHaveProperty('attacker');
+      expect(tokenUsage).not.toHaveProperty('numRequests');
+    });
+
+    it('does not count disabled or cached unblocking tasks', () => {
+      const disabledUsage = {};
+      accumulateUnblockingTokenUsage(disabledUsage, { attempted: false });
+      expect(disabledUsage).toEqual({});
+
+      const cachedUsage = {};
+      accumulateUnblockingTokenUsage(cachedUsage, {
+        attempted: true,
+        cached: true,
+        tokenUsage: { total: 15, cached: 15, numRequests: 0 },
+      });
+      expect(cachedUsage).toMatchObject({ assertions: { total: 0, numRequests: 0 } });
+    });
+  });
+
   afterEach(() => {
     resetRedteamProviderLoader();
     vi.resetAllMocks();
