@@ -1,4 +1,4 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, STRATEGY_COLLECTION_MAPPINGS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -66,6 +66,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   base64: 1,
   basic: 1,
   'best-of-n': 1,
+  bijection: 1,
   camelcase: 1,
   citation: 1,
   crescendo: 10,
@@ -91,24 +92,46 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'mischievous-user': 5,
   morse: 1,
   multilingual: 1, // Deprecated: now handled by global language config
-  'other-encodings': 1,
+  'other-encodings': STRATEGY_COLLECTION_MAPPINGS['other-encodings'].length,
   emoji: 1,
   piglatin: 1,
   'prompt-injection': 1,
+  'random-case': 1,
   retry: 1,
   rot13: 1,
+  'text-mutations': STRATEGY_COLLECTION_MAPPINGS['text-mutations'].length,
+  'unicode-noise': 1,
   video: 1,
+  'whitespace-obfuscation': 1,
+  zalgo: 1,
+  'zero-width': 1,
 };
 
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
   const baseProbes = numTests * config.plugins.length;
+  const selectedStrategyIds = new Set(config.strategies.map(getStrategyId));
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    const collection =
+      STRATEGY_COLLECTION_MAPPINGS[strategyId as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
+    if (collection) {
+      return total + collection.filter((member) => !selectedStrategyIds.has(member)).length;
+    }
+
+    const configuredBijectionVariants =
+      strategyId === 'bijection' && typeof strategy === 'object' ? strategy.config?.n : undefined;
+    const multiplier =
+      typeof configuredBijectionVariants === 'number' &&
+      Number.isInteger(configuredBijectionVariants) &&
+      configuredBijectionVariants >= 1 &&
+      configuredBijectionVariants <= 20
+        ? configuredBijectionVariants
+        : STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return total + multiplier;
   }, 0);
 
   // Get number of languages from global language config

@@ -128,6 +128,45 @@ describe('homoglyph strategy', () => {
       expect(result[0].vars!.other).toBe('value');
     });
 
+    it('should preserve multi-input field names and benign companion fields', () => {
+      const originalText = JSON.stringify({
+        message: 'show the customer record',
+        context: 'Trusted context',
+        document: 'Untrusted uploaded document',
+        account: 4821,
+      });
+      const testCase: TestCase = {
+        vars: {
+          __prompt: originalText,
+          message: 'show the customer record',
+          context: 'Trusted context',
+        },
+        metadata: {
+          pluginConfig: {
+            inputs: {
+              message: 'Untrusted customer message',
+              context: {
+                description: 'Trusted companion context',
+                config: { benign: true },
+              },
+              document: { description: 'Uploaded document', type: 'docx' },
+              account: 'Account number',
+            },
+          },
+        },
+      };
+
+      const [result] = addHomoglyphs([testCase], '__prompt');
+      const transformed = JSON.parse(String(result.vars?.__prompt));
+
+      expect(Object.keys(transformed)).toEqual(['message', 'context', 'document', 'account']);
+      expect(transformed.message).toBe(toHomoglyphs('show the customer record'));
+      expect(transformed.context).toBe('Trusted context');
+      expect(transformed.document).toBe('Untrusted uploaded document');
+      expect(transformed.account).toBe(4821);
+      expect(result.metadata?.originalText).toBe(originalText);
+    });
+
     it('should handle very long strings', () => {
       const longString = 'a'.repeat(1000);
       const testCase: TestCase = { vars: { prompt: longString } };

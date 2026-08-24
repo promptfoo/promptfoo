@@ -220,6 +220,198 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should configure and save a digit bijection strategy', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="bijection"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'bijection',
+          name: 'Bijection Encoding',
+          description: 'Temporary substitution language',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Mapping Type' }));
+    await user.click(screen.getByRole('option', { name: 'Fixed-width digit tokens' }));
+
+    const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+    await user.click(dispersion);
+    await user.keyboard('{Control>}a{/Control}20');
+
+    const encodingLength = screen.getByRole('spinbutton', { name: 'Digit Token Length' });
+    await user.click(encodingLength);
+    await user.keyboard('{Control>}a{/Control}3');
+
+    const variants = screen.getByRole('spinbutton', { name: 'Variants per Test' });
+    await user.click(variants);
+    await user.keyboard('{Control>}a{/Control}3');
+
+    const seed = screen.getByRole('textbox', { name: 'Seed' });
+    await user.clear(seed);
+    await user.type(seed, 'qa-seed');
+
+    await user.click(screen.getByRole('switch', { name: 'Include harmless translation examples' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('bijection', {
+      type: 'digit',
+      dispersion: 20,
+      encodingLength: 3,
+      n: 3,
+      seed: 'qa-seed',
+      includeExamples: false,
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([10, 16, 19])(
+    'should preserve two-digit letter bijection dispersion %i while editing',
+    async (value) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="bijection"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'bijection',
+            name: 'Bijection Encoding',
+            description: 'Temporary substitution language',
+          }}
+        />,
+      );
+
+      const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+      await user.click(dispersion);
+      await user.keyboard(`{Control>}a{/Control}${value}`);
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('bijection', { dispersion: value });
+    },
+  );
+
+  it('should normalize a single-letter bijection dispersion only when saving', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="bijection"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'bijection',
+          name: 'Bijection Encoding',
+          description: 'Temporary substitution language',
+        }}
+      />,
+    );
+
+    const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+    await user.click(dispersion);
+    await user.keyboard('{Control>}a{/Control}1');
+
+    expect(dispersion).toHaveValue(1);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('bijection', { dispersion: 2 });
+  });
+
+  it('should allow a single-digit bijection dispersion when saving', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="bijection"
+        config={{ type: 'digit' }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'bijection',
+          name: 'Bijection Encoding',
+          description: 'Temporary substitution language',
+        }}
+      />,
+    );
+
+    const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+    await user.click(dispersion);
+    await user.keyboard('{Control>}a{/Control}1');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('bijection', { type: 'digit', dispersion: 1 });
+  });
+
+  it('should configure and save a random-case strategy', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="random-case"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'random-case',
+          name: 'Random Case',
+          description: 'Deterministic mixed casing',
+        }}
+      />,
+    );
+
+    const rate = screen.getByRole('spinbutton', { name: 'Mutation Rate' });
+    await user.click(rate);
+    await user.keyboard('{Control>}a{/Control}0.75');
+
+    const seed = screen.getByRole('textbox', { name: 'Seed' });
+    await user.clear(seed);
+    await user.type(seed, 'qa-seed');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('random-case', {
+      rate: 0.75,
+      seed: 'qa-seed',
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should configure and save Zalgo intensity', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="zalgo"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'zalgo',
+          name: 'Zalgo Text',
+          description: 'Dense combining marks',
+        }}
+      />,
+    );
+
+    const intensity = screen.getByRole('spinbutton', {
+      name: 'Combining Marks per Character',
+    });
+    await user.click(intensity);
+    await user.keyboard('{Control>}a{/Control}5');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('zalgo', { intensity: 5 });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
   it("should call onSave with the correct arguments and then onClose when Save is clicked for a valid 'custom' strategy", async () => {
     const user = userEvent.setup();
     const initialConfig = {};

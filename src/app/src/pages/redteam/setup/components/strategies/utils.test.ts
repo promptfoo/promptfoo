@@ -100,6 +100,56 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
   });
+
+  it('should account for configured bijection variants', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'bijection', config: { n: 3 } }],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(8); // 2 basic + (2 * 3) bijection variants
+  });
+
+  it('should account for every strategy in the text-mutations collection', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: ['text-mutations'],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(14); // 2 basic + (2 * 6) mutations
+  });
+
+  it('should account for every strategy in the other-encodings collection', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: ['other-encodings'],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(10); // 2 basic + (2 * 4) encodings
+  });
+
+  it.each([
+    ['text-mutations', 'zalgo', 14],
+    ['other-encodings', 'morse', 10],
+  ] as const)(
+    'should count an explicitly configured %s collection member only once',
+    (collection, strategy, expectedProbes) => {
+      const config = {
+        ...baseConfig,
+        numTests: 2,
+        plugins: ['plugin1'],
+        strategies: [collection, { id: strategy, config: { seed: 'override' } }],
+      } as Config;
+
+      expect(getEstimatedProbes(config)).toBe(expectedProbes);
+    },
+  );
 });
 
 describe('isStrategyConfigured', () => {

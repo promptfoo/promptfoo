@@ -2852,6 +2852,7 @@
                       "base64",
                       "basic",
                       "best-of-n",
+                      "bijection",
                       "camelcase",
                       "citation",
                       "crescendo",
@@ -2881,9 +2882,15 @@
                       "other-encodings",
                       "piglatin",
                       "prompt-injection",
+                      "random-case",
                       "retry",
                       "rot13",
-                      "video"
+                      "text-mutations",
+                      "unicode-noise",
+                      "video",
+                      "whitespace-obfuscation",
+                      "zalgo",
+                      "zero-width"
                     ]
                   },
                   {
@@ -2907,6 +2914,7 @@
                           "base64",
                           "basic",
                           "best-of-n",
+                          "bijection",
                           "camelcase",
                           "citation",
                           "crescendo",
@@ -2936,9 +2944,15 @@
                           "other-encodings",
                           "piglatin",
                           "prompt-injection",
+                          "random-case",
                           "retry",
                           "rot13",
-                          "video"
+                          "text-mutations",
+                          "unicode-noise",
+                          "video",
+                          "whitespace-obfuscation",
+                          "zalgo",
+                          "zero-width"
                         ]
                       },
                       {
@@ -2963,7 +2977,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, bijection, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, random-case, retry, rot13, text-mutations, unicode-noise, video, whitespace-obfuscation, zalgo, zero-width"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",

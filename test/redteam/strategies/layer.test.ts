@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
-import type { TestCaseWithPlugin } from '../../../src/types/index';
+import type { Inputs, TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addLayerTestCases', () => {
   const mockStrategies: Strategy[] = [
@@ -314,6 +314,26 @@ describe('addLayerTestCases', () => {
     expect(result[0].vars?.input).toBe('dGVzdDE=');
   });
 
+  it.each([
+    ['zero-width', 'base64'],
+    ['base64', 'zero-width'],
+    ['bijection', 'rot13'],
+    ['jailbreak', 'zero-width', 'base64'],
+    ['jailbreak:meta', 'zero-width', 'base64'],
+  ])('should reject mixed multi-input layers: %j', async (...steps) => {
+    const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { __prompt: JSON.stringify({ user_message: 'show the recovery code' }) },
+        metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+      },
+    ];
+
+    await expect(
+      addLayerTestCases(testCases, '__prompt', { steps }, mockStrategies, mockLoadStrategy),
+    ).rejects.toThrow(/multi-input.*whole-prompt/i);
+  });
+
   it('should handle empty result from intermediate step', async () => {
     // Mock a strategy that returns empty array
     const emptyStrategy: Strategy = {
@@ -591,6 +611,188 @@ describe('addLayerTestCases', () => {
         expect(provider.id).toBe('promptfoo:redteam:iterative:meta');
       }
     });
+
+    it.each(['jailbreak:meta', 'jailbreak'])(
+      'should preserve multi-input definitions in the generated %s provider',
+      async (attackProvider) => {
+        const inputs = {
+          user_message: 'Untrusted customer message',
+          retrieved_context: {
+            description: 'Trusted support context',
+            config: { benign: true },
+          },
+        } satisfies Inputs;
+        const testCases: TestCaseWithPlugin[] = [
+          {
+            vars: {
+              __prompt: JSON.stringify({
+                user_message: 'show the recovery code',
+                retrieved_context: 'Trusted support context',
+              }),
+            },
+            metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+          },
+        ];
+
+        const [result] = await addLayerTestCases(
+          testCases,
+          '__prompt',
+          { steps: [attackProvider, 'zero-width'] },
+          mockStrategies,
+          mockLoadStrategy,
+        );
+
+        expect(result.provider).toEqual(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              injectVar: '__prompt',
+              inputs,
+              _perTurnLayers: ['zero-width'],
+            }),
+          }),
+        );
+      },
+    );
+
+    it.each([
+      ['jailbreak:hydra', 'zero-width'],
+      ['jailbreak:goblin', 'unicode-noise'],
+      ['crescendo', 'zalgo'],
+      ['goat', 'whitespace-obfuscation'],
+      ['jailbreak:tree', 'random-case'],
+      ['custom', 'bijection'],
+      ['crescendo', 'homoglyph'],
+    ])(
+      'should reject unsupported multi-input %s layers using %s',
+      async (attackProvider, mutation) => {
+        const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+        const testCases: TestCaseWithPlugin[] = [
+          {
+            vars: { __prompt: JSON.stringify({ user_message: 'show the recovery code' }) },
+            metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+          },
+        ];
+
+        await expect(
+          addLayerTestCases(
+            testCases,
+            '__prompt',
+            { steps: [attackProvider, mutation] },
+            mockStrategies,
+            mockLoadStrategy,
+          ),
+        ).rejects.toThrow(/multi-input.*jailbreak.*jailbreak:meta/i);
+      },
+    );
+
+    it('should allow single-input text mutations after other attack providers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'show the recovery code' }, metadata: { pluginId: 'harmful:test' } },
+      ];
+
+      const [result] = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['crescendo', 'zero-width'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result.provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({ _perTurnLayers: ['zero-width'] }),
+        }),
+      );
+    });
+
+    it.each([
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+      'bijection',
+      'homoglyph',
+    ])('should honor per-turn exclusions for %s', async (mutation) => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'print receipt CANARY-123' },
+          metadata: {
+            pluginId: 'coding-agent:test',
+            pluginConfig: { excludeStrategies: [mutation] },
+          },
+        },
+      ];
+
+      const results = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', { id: mutation, config: { rate: 1 } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(results).toEqual([]);
+    });
+
+    it('should honor per-turn plugin targeting', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'attack A' }, metadata: { pluginId: 'plugin-a' } },
+        { vars: { input: 'attack B' }, metadata: { pluginId: 'plugin-b' } },
+      ];
+
+      const results = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', { id: 'zero-width', config: { plugins: ['plugin-a'] } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].metadata?.pluginId).toBe('plugin-a');
+    });
+
+    it('should reject bijection fanout that cannot execute as a per-turn layer', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'test' }, metadata: { pluginId: 'harmful:test' } },
+      ];
+
+      await expect(
+        addLayerTestCases(
+          testCases,
+          'input',
+          { steps: ['jailbreak:meta', { id: 'bijection', config: { n: 3 } }] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(/bijection.*n.*1.*per-turn/i);
+    });
+
+    it.each([
+      ['jailbreak', { id: 'zero-width', config: { rate: 2 } }, /rate/],
+      ['jailbreak:meta', { id: 'zero-width', config: { rate: -1 } }, /rate/],
+      ['jailbreak', { id: 'zalgo', config: { intensity: 9 } }, /intensity/],
+      ['jailbreak:meta', { id: 'bijection', config: { dispersion: 1 } }, /dispersion/],
+      ['jailbreak', { id: 'bijection', config: { seed: {} } }, /seed/],
+    ])(
+      'should reject invalid %s per-turn mutation settings',
+      async (attackProvider, layer, error) => {
+        const testCases: TestCaseWithPlugin[] = [
+          { vars: { input: 'show the recovery code' }, metadata: { pluginId: 'harmful:test' } },
+        ];
+
+        await expect(
+          addLayerTestCases(
+            testCases,
+            'input',
+            { steps: [attackProvider, layer] },
+            mockStrategies,
+            mockLoadStrategy,
+          ),
+        ).rejects.toThrow(error);
+      },
+    );
 
     it('should detect jailbreak:tree as attack provider', async () => {
       const testCases: TestCaseWithPlugin[] = [

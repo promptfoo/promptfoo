@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import * as fs from 'fs';
 
 import async from 'async';
@@ -153,9 +154,21 @@ async function rematerializeStrategyInputVars(
 
   try {
     const parsed = JSON.parse(String(currentInjectVar));
+    const previousInputs = promptChangedSinceMaterialization
+      ? (JSON.parse(materializedPromptSnapshot as string) as Record<string, unknown>)
+      : undefined;
+    const inputsToMaterialize = previousInputs
+      ? Object.fromEntries(
+          Object.entries(inputs).filter(
+            ([key]) =>
+              !Object.hasOwn(testCase.vars ?? {}, key) ||
+              !isDeepStrictEqual(parsed[key], previousInputs[key]),
+          ),
+        )
+      : inputs;
     const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
       parsed,
-      inputs,
+      inputsToMaterialize,
       {
         materializationIndex,
         pluginId: String(testCase.metadata?.pluginId || 'unknown-plugin'),
@@ -1018,17 +1031,24 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
+  const explicitStrategyIds = new Set(
+    strategies
+      .filter((strategy) => !isStrategyCollection(strategy.id))
+      .map((strategy) => strategy.id),
+  );
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
       const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
       if (aliasedStrategies) {
-        aliasedStrategies.forEach((strategyId) => {
-          expandedStrategies.push({
-            ...strategy,
-            id: strategyId,
-          });
-        });
+        expandedStrategies.push(
+          ...aliasedStrategies
+            .filter((strategyId) => !explicitStrategyIds.has(strategyId))
+            .map((strategyId) => ({
+              ...strategy,
+              id: strategyId,
+            })),
+        );
       } else {
         logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
       }
