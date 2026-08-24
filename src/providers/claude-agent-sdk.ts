@@ -213,6 +213,9 @@ function isRawSubagentTranscript(result: unknown): boolean {
   if (typeof result !== 'object' || result === null) {
     return false;
   }
+  if ('content' in result && '_meta' in result) {
+    return isRawSubagentTranscript(result.content);
+  }
   if ('isRawTranscript' in result && result.isRawTranscript === true) {
     return true;
   }
@@ -231,6 +234,9 @@ function redactRawSubagentToolOutput(result: unknown): unknown {
   }
 
   const output = result as Record<string, unknown>;
+  if ('content' in output && '_meta' in output) {
+    return { ...output, content: redactRawSubagentToolOutput(output.content) };
+  }
   const nestedTask = 'task' in output && typeof output.task === 'object' && output.task !== null;
   const task = (nestedTask ? output.task : output) as Record<string, unknown>;
   const redactedTask = {

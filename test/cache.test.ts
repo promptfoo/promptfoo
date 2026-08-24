@@ -540,9 +540,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         data: response,
         status: 200,
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       const cachedResult = await fetchWithCache(url, {}, 1000);
@@ -643,9 +645,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         status: 200,
         data: { error: 'Rate limit exceeded' },
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       const result3 = await fetchWithCache(url, {}, 1000);
@@ -680,9 +684,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         status: 400,
         data: { error: 'Bad Request' },
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       await fetchWithCache(url, {}, 1000);
