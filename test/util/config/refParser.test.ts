@@ -96,8 +96,12 @@ describe('dereferenceConfig remote references', () => {
     expect(lookup).toHaveBeenCalledOnce();
   });
 
-  it('refuses a remote reference whose hostname resolves to a private address', async () => {
-    vi.spyOn(dns, 'lookup').mockResolvedValue([{ address: '169.254.169.254', family: 4 }] as never);
+  it.each([
+    { address: '169.254.169.254', family: 4, description: 'cloud metadata' },
+    { address: '127.0.0.1', family: 4, description: 'IPv4 loopback' },
+    { address: '::1', family: 6, description: 'IPv6 loopback' },
+  ])('refuses a remote reference resolving to $description', async ({ address, family }) => {
+    vi.spyOn(dns, 'lookup').mockResolvedValue([{ address, family }] as never);
     syncBuiltinESMExports();
 
     const fetch = vi.spyOn(parserTransport, 'fetch');

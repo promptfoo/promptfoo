@@ -993,6 +993,9 @@ describe('package manifests', () => {
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
     expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
+      parserRange,
+    );
     expect(parser?.version, 'the parser must resolve in the root lockfile').toBeDefined();
     expect(satisfies(parser.version as string, parserRange as string)).toBe(true);
     expect(
@@ -1008,6 +1011,13 @@ describe('package manifests', () => {
       'the parser must resolve its private HTTP transport',
     ).toBeDefined();
     expect(satisfies(parserTransport.version as string, parserTransportRange as string)).toBe(true);
+    expect(
+      parserTransport.engines?.node,
+      'the HTTP transport must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
+    ).toBe(true);
     expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
   });
 
