@@ -680,6 +680,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
   const scanTokenUsage = evalData.results.stats?.tokenUsage;
   const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
+  const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
   const evaluationTokens = scanTokenUsage
     ? getTokenUsageTotal(scanTokenUsage) +
       getTokenUsageTotal(scanTokenUsage.attacker) +
@@ -820,7 +821,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                           <span>
                             <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
                           </span>
-                          {prompts.length > 1 || generationTokens > 0 ? (
+                          {prompts.length > 1 || generationTokens > 0 || generationRequests > 0 ? (
                             <>
                               <span>
                                 <strong>Selected Target Subtotal:</strong>{' '}
@@ -828,7 +829,9 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                               </span>
                               <span>
                                 <strong>Generation Tokens (scan-wide):</strong>{' '}
-                                {generationTokens.toLocaleString()}
+                                {generationTokens > 0 || generationRequests === 0
+                                  ? generationTokens.toLocaleString()
+                                  : `Unavailable (${generationRequests.toLocaleString()} ${generationRequests === 1 ? 'request' : 'requests'})`}
                               </span>
                               <span>
                                 <strong>Scan Total Tokens:</strong> {totalTokens.toLocaleString()}

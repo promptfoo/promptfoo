@@ -788,6 +788,47 @@ describe('App component target selector rendering', () => {
     expect(await screen.findByLabelText('240 total tokens')).toHaveTextContent('Total Tokens: 240');
   });
 
+  it('shows unmetered generation requests without adding target probes or tokens', async () => {
+    const user = userEvent.setup();
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    evalData.results.stats = {
+      successes: 1,
+      failures: 0,
+      errors: 0,
+      tokenUsage: {
+        total: 100,
+        prompt: 75,
+        completion: 25,
+        cached: 0,
+        numRequests: 10,
+        completionDetails: {},
+        assertions: {},
+        generation: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    };
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
+    const tokenBadge = screen.getByLabelText('100 total tokens');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Generation Tokens (scan-wide): Unavailable (1 request)');
+    expect(tooltip).toHaveTextContent('Scan Total Tokens: 100');
+  });
+
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);

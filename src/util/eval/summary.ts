@@ -187,8 +187,15 @@ function getTokenUsageLines(
   const hasGradingTokens = gradingUsageLine !== undefined;
   const attackerTokens = getTokenUsageTotal(tokenUsage.attacker);
   const generationTokens = getTokenUsageTotal(tokenUsage.generation);
+  const generationRequests = tokenUsage.generation?.numRequests ?? 0;
 
-  if (primaryTokens === 0 && !hasGradingTokens && attackerTokens === 0 && generationTokens === 0) {
+  if (
+    primaryTokens === 0 &&
+    !hasGradingTokens &&
+    attackerTokens === 0 &&
+    generationTokens === 0 &&
+    generationRequests === 0
+  ) {
     return [];
   }
 
@@ -236,6 +243,11 @@ function getTokenUsageLines(
     const generationParts = buildUsageDetails(tokenUsage.generation, generationTokens);
     lines.push(
       `  ${chalk.gray('Generation:')} ${chalk.white(generationTokens.toLocaleString())} (${generationParts.join(', ')})`,
+    );
+  } else if (generationRequests > 0) {
+    const requestLabel = generationRequests === 1 ? 'request' : 'requests';
+    lines.push(
+      `  ${chalk.gray('Generation:')} token usage unavailable (${generationRequests.toLocaleString()} ${requestLabel})`,
     );
   }
 

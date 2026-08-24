@@ -403,6 +403,34 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
     });
 
+    it('reports unmetered generation requests without treating them as target probes', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-unmetered-generation',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          generation: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
+        },
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 0');
+      expect(output).toContain('Generation: token usage unavailable (1 request)');
+      expect(output).not.toContain('Probes:');
+    });
+
     it('displays attacker-only usage without treating internal requests as target probes', () => {
       const lines = generateEvalSummary({
         evalId: 'eval-attacker-only',
