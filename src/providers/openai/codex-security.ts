@@ -114,6 +114,8 @@ const CodexSecurityConfigSchema = z
     }
   });
 
+const CodexSecurityMergedPromptConfigSchema = CodexSecurityConfigSchema.strip();
+
 export type OpenAICodexSecurityConfig = z.infer<typeof CodexSecurityConfigSchema>;
 
 type CodexSecurityModule = typeof import('@openai/codex-security');
@@ -131,8 +133,14 @@ function configError(error: z.ZodError): Error {
   return new Error(`Invalid OpenAI Codex Security provider configuration: ${details}`);
 }
 
-function parseConfig(config: unknown = {}): OpenAICodexSecurityConfig {
-  const parsed = CodexSecurityConfigSchema.safeParse(config);
+function parseConfig(
+  config: unknown = {},
+  options: { stripUnknownKeys?: boolean } = {},
+): OpenAICodexSecurityConfig {
+  const schema = options.stripUnknownKeys
+    ? CodexSecurityMergedPromptConfigSchema
+    : CodexSecurityConfigSchema;
+  const parsed = schema.safeParse(config);
   if (!parsed.success) {
     throw configError(parsed.error);
   }
@@ -306,7 +314,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     try {
       const mergedConfig = { ...this.config, ...context?.prompt?.config };
       delete mergedConfig.provider;
-      const config = parseConfig(renderVarsInObject(mergedConfig, context?.vars));
+      const config = parseConfig(renderVarsInObject(mergedConfig, context?.vars), {
+        stripUnknownKeys: true,
+      });
       const operation = config.operation ?? 'security-scan';
       const repositoryVariable = context?.vars?.repository;
       const configuredRepository =

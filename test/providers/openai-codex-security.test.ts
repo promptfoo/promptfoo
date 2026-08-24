@@ -328,7 +328,7 @@ describe('OpenAICodexSecurityProvider', () => {
         codexOverrides: { model: 'gpt-5.6-sol', model_reasoning_effort: 'high' },
       });
       expect(mockRun).toHaveBeenCalledWith(
-        path.resolve('/repos/service'),
+        '/repos/service',
         expect.objectContaining({
           mode: 'standard',
           target: 'repository',
@@ -570,10 +570,60 @@ describe('OpenAICodexSecurityProvider', () => {
 
       await provider.callApi('Scan payment endpoints', context);
 
-      expect(mockRun).toHaveBeenCalledWith(path.resolve('/repos/payments'), expect.any(Object));
+      expect(mockRun).toHaveBeenCalledWith('/repos/payments', expect.any(Object));
       expect(MockCodexSecurity).toHaveBeenCalledWith({
         codexOverrides: { model: 'gpt-5.6-terra' },
       });
+    });
+
+    it('ignores generic per-test options while applying supported provider overrides', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: {
+          repository: '/repos/service',
+          model: 'gpt-5.6-terra',
+          model_reasoning_effort: 'medium',
+        },
+      });
+      const context = {
+        prompt: {
+          raw: 'scan',
+          config: {
+            model_reasoning_effort: 'high',
+            transform: 'output => output',
+            storeOutputAs: 'securityScan',
+            timeout: 30_000,
+          },
+        },
+        vars: {},
+      } as unknown as CallApiContextParams;
+
+      const response = await provider.callApi('Scan the service', context);
+
+      expect(response.error).toBeUndefined();
+      expect(mockRun).toHaveBeenCalledWith('/repos/service', expect.any(Object));
+      expect(MockCodexSecurity).toHaveBeenCalledWith({
+        codexOverrides: { model: 'gpt-5.6-terra', model_reasoning_effort: 'high' },
+      });
+    });
+
+    it('still validates conflicting provider settings after stripping generic test options', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: { model_reasoning_effort: 'medium' },
+      });
+      const context = {
+        prompt: {
+          raw: 'scan',
+          config: { reasoning_effort: 'high', timeout: 30_000 },
+        },
+        vars: {},
+      } as unknown as CallApiContextParams;
+
+      const response = await provider.callApi('Scan the service', context);
+
+      expect(response.error).toContain(
+        'reasoning_effort and model_reasoning_effort must match when both are set',
+      );
+      expect(mockRun).not.toHaveBeenCalled();
     });
 
     it('passes cancellation signals to the SDK and skips already-aborted calls', async () => {
@@ -681,9 +731,9 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Ignored because finding is configured');
 
       expect(mockValidate).toHaveBeenCalledWith({
-        repositoryPath: path.resolve('/repos/service'),
+        repositoryPath: '/repos/service',
         finding,
-        outputDir: path.resolve('/tmp/validation'),
+        outputDir: '/tmp/validation',
         auth: 'chatgpt',
       });
       expect(response).toMatchObject({
