@@ -27,7 +27,8 @@ const ANTHROPIC_HEADERS = {
   remainingTokens: 'anthropic-ratelimit-tokens-remaining',
   limitRequests: 'anthropic-ratelimit-requests-limit',
   limitTokens: 'anthropic-ratelimit-tokens-limit',
-  reset: 'anthropic-ratelimit-requests-reset',
+  resetRequests: 'anthropic-ratelimit-requests-reset',
+  resetTokens: 'anthropic-ratelimit-tokens-reset',
 } as const;
 
 // Standard/generic headers (RFC 6585 style)
@@ -78,7 +79,10 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   for (const name of [
     OPENAI_HEADERS.resetRequests,
     OPENAI_HEADERS.resetTokens,
-    ANTHROPIC_HEADERS.reset,
+    ANTHROPIC_HEADERS.resetRequests,
+    // Token limits bind before request limits on eval workloads, and a
+    // token-limited 429 may carry only the tokens reset.
+    ANTHROPIC_HEADERS.resetTokens,
     STANDARD_HEADERS.resetAlt,
     STANDARD_HEADERS.reset,
   ]) {
