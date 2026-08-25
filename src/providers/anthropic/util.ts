@@ -738,13 +738,24 @@ export function getRefusalDetails(data: Anthropic.Messages.Message): string | un
   return parts.join(' — ');
 }
 
+/**
+ * Coerce a token count that may arrive as a numeric string.
+ *
+ * Bedrock's InvokeModel responses have been observed serializing counts as strings, and
+ * plain `?? 0` would make the sums below concatenate rather than add ("15" + 0 -> "150").
+ */
+function toTokenCount(value: unknown): number {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     // Anthropic: total input = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
-    const cacheRead = data.usage.cache_read_input_tokens ?? 0;
-    const cacheCreation = data.usage.cache_creation_input_tokens ?? 0;
-    const allInputTokens = (data.usage.input_tokens ?? 0) + cacheRead + cacheCreation;
-    const total_tokens = allInputTokens + (data.usage.output_tokens ?? 0);
+    const cacheRead = toTokenCount(data.usage.cache_read_input_tokens);
+    const cacheCreation = toTokenCount(data.usage.cache_creation_input_tokens);
+    const allInputTokens = toTokenCount(data.usage.input_tokens) + cacheRead + cacheCreation;
+    const total_tokens = allInputTokens + toTokenCount(data.usage.output_tokens);
 
     if (cached) {
       return { cached: total_tokens, total: total_tokens };
@@ -752,7 +763,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const usage: Partial<TokenUsage> = {
         total: total_tokens,
         prompt: allInputTokens,
-        completion: data.usage.output_tokens ?? 0,
+        completion: toTokenCount(data.usage.output_tokens),
       };
 
       const thinkingTokens = data.usage.output_tokens_details?.thinking_tokens;
@@ -762,7 +773,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 
       if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          ...(thinkingTokens != null && { reasoning: thinkingTokens }),
+          ...(thinkingTokens != null && { reasoning: toTokenCount(thinkingTokens) }),
           // Cache *input* token counts go under completionDetails because Promptfoo's
           // TokenUsage contract has no input-details field.
           ...(hasCacheDetails && {
