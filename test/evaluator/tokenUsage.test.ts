@@ -28,6 +28,127 @@ describeEvaluator('evaluator token usage', () => {
     });
   });
 
+  it.each([
+    1, 2,
+  ])('counts fresh grading as one probe without recharging a cached target at concurrency %i', async (maxConcurrency) => {
+    const cachedTargetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Cached target response',
+        cached: true,
+        tokenUsage: {
+          total: 295,
+          prompt: 201,
+          completion: 94,
+          cached: 12,
+          numRequests: 1,
+          completionDetails: { reasoning: 8 },
+        },
+      }),
+    };
+    const gradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('fresh-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+        tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [cachedTargetProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'The response should be useful',
+              provider: gradingProvider,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
+      expect(tokenUsage).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 295,
+        numRequests: 1,
+        completionDetails: { reasoning: 0 },
+        assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      });
+    }
+    expect(summary.results[0].response).toMatchObject({
+      cached: true,
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 295,
+        numRequests: 1,
+        completionDetails: { reasoning: 0 },
+      },
+    });
+  });
+
+  it('does not count a probe when both target and grading responses are cached', async () => {
+    const cachedTargetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Cached target response',
+        cached: true,
+        tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
+      }),
+    };
+    const cachedGradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Cached grading result' }),
+        cached: true,
+        tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [cachedTargetProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'The response should be useful',
+              provider: cachedGradingProvider,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
+      expect(tokenUsage).toMatchObject({
+        total: 0,
+        cached: 295,
+        numRequests: 0,
+        assertions: { total: 0, cached: 37, numRequests: 0 },
+      });
+    }
+    expect(summary.results[0].response?.tokenUsage).toMatchObject({
+      total: 0,
+      cached: 295,
+      numRequests: 0,
+    });
+  });
+
   it('does not treat untrusted provider metadata as a cached grading response', async () => {
     const gradingProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('fresh-grading-provider'),

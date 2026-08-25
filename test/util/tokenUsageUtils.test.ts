@@ -295,6 +295,60 @@ describe('tokenUsageUtils', () => {
       expect(target.numRequests).toBe(1);
     });
 
+    it('records historical target usage as cached without charging tokens or a probe', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 12 },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 100,
+        numRequests: 0,
+        completionDetails: { reasoning: 0 },
+      });
+    });
+
+    it('counts a cached target turn as one probe when fresh grading still runs', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(
+        target,
+        {
+          cached: true,
+          tokenUsage: { prompt: 60, completion: 40, numRequests: 1 },
+        },
+        { countCachedAsRequest: true },
+      );
+
+      expect(target).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('does not count a cached response without token usage as a request', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, { cached: true });
+
+      expect(target).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+    });
+
     it('should increment numRequests when response exists but has no tokenUsage', () => {
       const target = createEmptyTokenUsage();
       const response = {};

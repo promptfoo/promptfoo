@@ -327,10 +327,22 @@ export function accumulateGradingRequest(
  */
 export function accumulateResponseTokenUsage(
   target: TokenUsage,
-  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
-  options?: { countAsRequest?: boolean },
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean; countCachedAsRequest?: boolean },
 ): void {
   const countAsRequest = options?.countAsRequest ?? true;
+
+  if (response?.cached) {
+    const reportedTotal =
+      response.tokenUsage?.total ??
+      (response.tokenUsage?.prompt ?? 0) + (response.tokenUsage?.completion ?? 0);
+
+    accumulateTokenUsage(target, {
+      cached: Math.max(response.tokenUsage?.cached ?? 0, reportedTotal),
+      numRequests: countAsRequest && options?.countCachedAsRequest ? 1 : 0,
+    });
+    return;
+  }
 
   if (response?.tokenUsage) {
     if (countAsRequest) {

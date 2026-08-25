@@ -60,7 +60,7 @@ export class TokenUsageTracker {
    */
   public trackResponseUsage(
     providerId: string,
-    response: { tokenUsage?: TokenUsage } | undefined,
+    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
   ): void {
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };

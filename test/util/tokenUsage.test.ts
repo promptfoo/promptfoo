@@ -124,6 +124,27 @@ describe('TokenUsageTracker', () => {
     });
   });
 
+  it('tracks a cached provider response without repeating its historical usage', () => {
+    tracker.trackResponseUsage('cached-provider', {
+      cached: true,
+      tokenUsage: {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 10,
+        numRequests: 1,
+      },
+    });
+
+    expect(tracker.getProviderUsage('cached-provider')).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 100,
+      numRequests: 0,
+    });
+  });
+
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {
       total: 100,

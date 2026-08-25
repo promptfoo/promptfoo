@@ -598,6 +598,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
     cached: checkResult.metadata?.cachedResponse,
   });
+  if (row.response?.cached && (row.tokenUsage.assertions.numRequests ?? 0) > 0) {
+    row.tokenUsage.numRequests = Math.max(row.tokenUsage.numRequests ?? 0, 1);
+    if (row.response.tokenUsage) {
+      row.response.tokenUsage.numRequests = row.tokenUsage.numRequests;
+    }
+  }
   row.gradingResult = checkResult;
 }
 
@@ -1248,6 +1254,17 @@ function createEvaluateResult({
   return ret;
 }
 
+/** Persist only avoided usage for cached targets so later metric refreshes remain accurate. */
+function normalizeCachedTargetResponse(response: ProviderResponse): ProviderResponse {
+  if (!response.cached) {
+    return response;
+  }
+
+  const tokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(tokenUsage, response);
+  return { ...response, tokenUsage };
+}
+
 function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   if (!response.tokenUsage) {
     return;
@@ -1256,7 +1273,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   const trackingId = provider.constructor?.name
     ? `${providerId} (${provider.constructor.name})`
     : providerId;
-  TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
 async function applyRunEvalResponseOutcome({
@@ -1662,7 +1679,7 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
-          const { response } = providerCall;
+          const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
 
           updateConversationHistory({
@@ -3459,7 +3476,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics.assertFailCount +=
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
+      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
+    });
 
     if (row.gradingResult?.tokensUsed) {
       updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);

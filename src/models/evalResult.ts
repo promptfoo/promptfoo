@@ -994,6 +994,9 @@ export default class EvalResult {
       accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed, {
         cached: this.gradingResult.metadata?.cachedResponse,
       });
+      if (this.response?.cached && (tokenUsage.assertions.numRequests ?? 0) > 0) {
+        tokenUsage.numRequests = Math.max(tokenUsage.numRequests ?? 0, 1);
+      }
     }
 
     return {
