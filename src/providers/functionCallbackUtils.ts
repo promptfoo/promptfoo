@@ -17,6 +17,103 @@ import type {
 import type { MCPClient } from './mcp/client';
 
 /**
+ * Resolve a `file://` callback reference through the shared path-traversal guard,
+ * preserving the underlying error on `cause` so callers can classify it.
+ */
+export async function loadProviderCallbackFromFileUrl(
+  fileRef: string,
+  logPrefix?: string,
+): Promise<Function> {
+  try {
+    return await loadCallbackFromFileUrl(fileRef, logPrefix ? { logPrefix } : undefined);
+  } catch (error) {
+    if (error instanceof CallbackPathTraversalError) {
+      throw error;
+    }
+    throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
+  }
+}
+
+/**
+ * Load, cache, and invoke one `functionToolCallbacks` entry, returning the string a
+ * tool-result message expects.
+ *
+ * Shared by the two providers that implement function-tool callbacks directly on the
+ * provider class — Bedrock Converse and OpenAI Chat — whose copies were identical apart
+ * from log prefixes. Keeping one implementation is what stops them drifting: the
+ * path-traversal guard is a worked example of a fix that reached one copy of this logic
+ * and not the others.
+ *
+ * The remaining providers with a `loadedFunctionCallbacks` cache (Azure Foundry, Google
+ * base and live) have genuinely different loading and caching behaviour — Azure preloads,
+ * Google Live gates on a shared-cache flag — so they deliberately keep their own.
+ */
+export async function executeProviderFunctionCallback({
+  functionName,
+  args,
+  callId,
+  callbacks,
+  cache,
+  logPrefix,
+}: {
+  functionName: string;
+  args: string;
+  callId?: string;
+  callbacks: Record<string, any> | undefined;
+  /** Per-provider-instance memo of resolved callbacks. Mutated in place. */
+  cache: Record<string, Function>;
+  /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
+  logPrefix?: string;
+}): Promise<string> {
+  const prefix = logPrefix ? `${logPrefix} ` : '';
+  try {
+    let callback = cache[functionName];
+
+    if (!callback) {
+      const callbackRef = callbacks?.[functionName];
+
+      if (callbackRef && typeof callbackRef === 'string') {
+        callback = callbackRef.startsWith('file://')
+          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
+          : new Function('return ' + callbackRef)();
+        cache[functionName] = callback;
+      } else if (typeof callbackRef === 'function') {
+        callback = callbackRef;
+        cache[functionName] = callback;
+      }
+    }
+
+    if (!callback) {
+      throw new Error(`No callback found for function '${functionName}'`);
+    }
+
+    logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+      callback(args),
+    );
+
+    if (result === undefined || result === null) {
+      return '';
+    }
+    if (typeof result === 'object') {
+      try {
+        return JSON.stringify(result);
+      } catch (error) {
+        logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+        return String(result);
+      }
+    }
+    return String(result);
+  } catch (error: any) {
+    logger.error(
+      `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
+    );
+    // Re-thrown so the caller can apply its own fallback behavior.
+    throw error;
+  }
+}
+
+/**
  * Handles function callback execution for AI providers.
  * Provides a unified way to execute function callbacks across different provider formats.
  */
