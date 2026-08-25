@@ -14,8 +14,8 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 ```yaml
 providers:
   - anthropic:messages:claude-opus-4-6
-  - openai:gpt-5
-  - openai:gpt-5-mini
+  - openai:gpt-5.1
+  - openai:o4-mini
   - google:gemini-2.5-pro
   - vertex:gemini-2.5-pro
 ```

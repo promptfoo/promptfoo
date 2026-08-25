@@ -36,7 +36,14 @@ import { MediaModal } from './components/MediaModal';
 import { fetchMediaItemByHash, useEvalsWithMedia, useMediaItems } from './hooks/useMediaItems';
 import { clearExpiredThumbnails } from './hooks/useThumbnailCache';
 
+import type { FetchMediaItemResult } from './hooks/useMediaItems';
 import type { MediaItem, MediaSort, MediaTypeFilter } from './types';
+
+const DEEP_LINK_ERROR_MESSAGES: Record<NonNullable<FetchMediaItemResult['error']>, string> = {
+  not_found: 'Media item not found. It may have been deleted or the link is invalid.',
+  network_error: 'Unable to load media item. Please check your connection and try again.',
+  server_error: 'Server error while loading media item. Please try again later.',
+};
 
 export default function Media() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,6 +82,7 @@ export default function Media() {
     currentFile: '',
   });
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+  const [deepLinkErrorCode, setDeepLinkErrorCode] = useState<FetchMediaItemResult['error']>(null);
   const [isDeepLinkLoading, setIsDeepLinkLoading] = useState(false);
   const [showBulkDownloadConfirm, setShowBulkDownloadConfirm] = useState(false);
   const downloadAbortRef = useRef<AbortController | null>(null);
@@ -105,6 +113,43 @@ export default function Media() {
   // - 'cleared': user explicitly closed/cleared selection (remove hash from URL)
   const lastInternalSelectionRef = useRef<string | null | 'cleared'>(null);
   const lastResolvedDeepLinkRef = useRef<string | null>(null);
+
+  const resolveDeepLinkByHash = useCallback(async (hash: string, isCancelled?: () => boolean) => {
+    setDeepLinkError(null);
+    setDeepLinkErrorCode(null);
+    setIsDeepLinkLoading(true);
+
+    try {
+      const result = await fetchMediaItemByHash(hash);
+      if (isCancelled?.() || !isMountedRef.current) {
+        return;
+      }
+
+      if (result.item) {
+        lastResolvedDeepLinkRef.current = hash;
+        setSelectedItem(result.item);
+        return;
+      }
+
+      if (result.error === 'not_found') {
+        lastResolvedDeepLinkRef.current = hash;
+      }
+
+      setDeepLinkErrorCode(result.error);
+      setDeepLinkError(result.error ? DEEP_LINK_ERROR_MESSAGES[result.error] : null);
+    } catch {
+      if (isCancelled?.() || !isMountedRef.current) {
+        return;
+      }
+
+      setDeepLinkErrorCode('network_error');
+      setDeepLinkError(DEEP_LINK_ERROR_MESSAGES.network_error);
+    } finally {
+      if (!isCancelled?.() && isMountedRef.current) {
+        setIsDeepLinkLoading(false);
+      }
+    }
+  }, []);
 
   // Data fetching
   const {
@@ -240,6 +285,7 @@ export default function Media() {
       lastResolvedDeepLinkRef.current = null;
       lastInternalSelectionRef.current = null;
       setDeepLinkError(null);
+      setDeepLinkErrorCode(null);
       // When the hash is removed from the URL (e.g. browser Back), close the modal
       // so UI state stays in sync with the URL.
       setSelectedItem(null);
@@ -272,6 +318,7 @@ export default function Media() {
       lastResolvedDeepLinkRef.current = hashParam;
       setSelectedItem(item);
       setDeepLinkError(null);
+      setDeepLinkErrorCode(null);
       return;
     }
 
@@ -279,38 +326,13 @@ export default function Media() {
     if (!isLoading) {
       // Item not in current list, fetch by hash directly
       let cancelled = false;
-      setIsDeepLinkLoading(true);
-      fetchMediaItemByHash(hashParam).then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setIsDeepLinkLoading(false);
-        if (result.item) {
-          lastResolvedDeepLinkRef.current = hashParam;
-          setSelectedItem(result.item);
-          setDeepLinkError(null);
-        } else {
-          // Only latch non-transient errors (not_found won't change on retry).
-          // For transient errors (network/server), leave the ref unset so the
-          // user can retry without needing a page reload.
-          if (result.error === 'not_found') {
-            lastResolvedDeepLinkRef.current = hashParam;
-          }
-          // Map error types to user-friendly messages
-          const errorMessages = {
-            not_found: `Media item not found. It may have been deleted or the link is invalid.`,
-            network_error: `Unable to load media item. Please check your connection and try again.`,
-            server_error: `Server error while loading media item. Please try again later.`,
-          };
-          setDeepLinkError(result.error ? errorMessages[result.error] : null);
-        }
-      });
+      void resolveDeepLinkByHash(hashParam, () => cancelled);
       return () => {
         cancelled = true;
         setIsDeepLinkLoading(false);
       };
     }
-  }, [hashParam, items, isLoading]);
+  }, [hashParam, items, isLoading, resolveDeepLinkByHash]);
 
   const handleTypeFilterChange = useCallback(
     (type: MediaTypeFilter) => {
@@ -378,6 +400,18 @@ export default function Media() {
       return !prev;
     });
   }, []);
+
+  useEffect(() => {
+    setSelectedHashes((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const availableHashes = new Set(items.map((item) => item.hash));
+      const next = new Set([...previous].filter((hash) => availableHashes.has(hash)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [items]);
 
   const handleToggleItemSelection = useCallback((hash: string) => {
     setSelectedHashes((prev) => {
@@ -651,7 +685,7 @@ export default function Media() {
                 <span className="min-w-0">{deepLinkError}</span>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                   {/* Retry button for transient errors (not "not found") */}
-                  {!deepLinkError.includes('not found') && (
+                  {deepLinkErrorCode !== 'not_found' && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -659,25 +693,7 @@ export default function Media() {
                         if (!hashParam) {
                           return;
                         }
-                        setDeepLinkError(null);
-                        setIsDeepLinkLoading(true);
-                        fetchMediaItemByHash(hashParam).then((result) => {
-                          setIsDeepLinkLoading(false);
-                          if (result.item) {
-                            lastResolvedDeepLinkRef.current = hashParam;
-                            setSelectedItem(result.item);
-                          } else {
-                            if (result.error === 'not_found') {
-                              lastResolvedDeepLinkRef.current = hashParam;
-                            }
-                            const errorMessages = {
-                              not_found: `Media item not found. It may have been deleted or the link is invalid.`,
-                              network_error: `Unable to load media item. Please check your connection and try again.`,
-                              server_error: `Server error while loading media item. Please try again later.`,
-                            };
-                            setDeepLinkError(result.error ? errorMessages[result.error] : null);
-                          }
-                        });
+                        void resolveDeepLinkByHash(hashParam);
                       }}
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
@@ -689,6 +705,7 @@ export default function Media() {
                     size="sm"
                     onClick={() => {
                       setDeepLinkError(null);
+                      setDeepLinkErrorCode(null);
                       lastInternalSelectionRef.current = 'cleared';
                       // Clear the hash from URL
                       const params = new URLSearchParams(searchParams);

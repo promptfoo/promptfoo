@@ -405,8 +405,8 @@ providers:
 - The web fetch tool requires trusted environments due to potential data exfiltration risks
 - The model cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
 - Use domain filtering to restrict access to specific sites:
-  - Use `allowed_domains` to whitelist trusted domains (recommended)
-  - Use `blocked_domains` to blacklist specific domains
+  - Use `allowed_domains` to allowlist trusted domains (recommended)
+  - Use `blocked_domains` to block specific domains
   - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
 
 #### Model Context Protocol (MCP)
@@ -700,8 +700,8 @@ thinking:
 
 The `display` field controls how thinking content is returned:
 
-- `'summarized'` (default) - thinking content is included in the response
-- `'omitted'` - thinking content is redacted but a signature is returned for multi-turn continuity (saves tokens)
+- `'summarized'` (general default) - thinking content is included in the response
+- `'omitted'` (default for Fable 5 and Mythos 5) - thinking content is redacted but a signature is returned for multi-turn continuity (saves tokens)
 
 ```yaml
 thinking:

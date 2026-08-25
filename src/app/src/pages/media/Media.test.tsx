@@ -3,7 +3,7 @@ import { mockIntersectionObserver } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaItem } from './types';
 
@@ -28,6 +28,7 @@ vi.mock('./hooks/useThumbnailCache', () => ({
 
 import { callApi } from '@app/utils/api';
 import { downloadFile } from '@app/utils/media';
+import * as mediaItemHooks from './hooks/useMediaItems';
 import Media from './Media';
 
 // Helper to capture current location for assertions
@@ -125,6 +126,10 @@ describe('Media page URL state machine', () => {
     mockIntersectionObserver();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders the media grid with items', async () => {
     mockApiResponses();
     renderMedia();
@@ -161,6 +166,28 @@ describe('Media page URL state machine', () => {
     await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
 
     expect(screen.getByText('0 of 2 selected').parentElement).toHaveClass('flex-wrap');
+  });
+
+  it('removes selected items that disappear when the media list reloads', async () => {
+    const user = userEvent.setup();
+    mockApiResponses();
+    renderMedia();
+
+    await screen.findByText('First item');
+    await user.click(screen.getAllByRole('button', { name: /^Download$/ })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
+    await user.click(screen.getByRole('button', { name: 'Select All' }));
+
+    expect(screen.getByText('2 of 2 selected')).toBeInTheDocument();
+
+    mockApiResponses([mockItems[0]]);
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByRole('option', { name: 'Oldest first' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('1 of 1 selected')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Download (1)' })).toBeEnabled();
   });
 
   it('allows the header actions to wrap while a bulk download is running', async () => {
@@ -337,6 +364,47 @@ describe('Media page URL state machine', () => {
     });
 
     expect(screen.getByText(/not found/i).parentElement).toHaveClass('flex-col', 'sm:flex-row');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
+  it('deep-link error: clears loading and allows retry after an unexpected rejection', async () => {
+    mockApiResponses();
+    vi.spyOn(mediaItemHooks, 'fetchMediaItemByHash').mockRejectedValueOnce(
+      new Error('Unexpected media lookup failure'),
+    );
+
+    renderMedia('/media?hash=missing');
+
+    expect(
+      await screen.findByText(
+        'Unable to load media item. Please check your connection and try again.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
+  });
+
+  it('deep-link error: retries a transient failure with the shared lookup handler', async () => {
+    const user = userEvent.setup();
+    const recoveredItem = makeItem('recovered', 'Recovered item');
+    mockApiResponses();
+    vi.spyOn(mediaItemHooks, 'fetchMediaItemByHash')
+      .mockResolvedValueOnce({ item: null, error: 'server_error' })
+      .mockResolvedValueOnce({ item: recoveredItem, error: null });
+
+    renderMedia('/media?hash=recovered');
+
+    expect(
+      await screen.findByText('Server error while loading media item. Please try again later.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    expect(mediaItemHooks.fetchMediaItemByHash).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
   });
 
   it('closing modal removes hash from URL', async () => {
