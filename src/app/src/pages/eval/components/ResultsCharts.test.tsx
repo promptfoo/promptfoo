@@ -60,6 +60,10 @@ describe('ResultsCharts', () => {
     vi.clearAllMocks();
   });
 
+  it('preserves legacy performance-history pass rates without an error count', () => {
+    expect(getPassRate({ testPassCount: 7, testFailCount: 3, score: 0.7 })).toBe(70);
+  });
+
   it('includes errors in performance-history pass rates', () => {
     expect(getPassRate({ testPassCount: 1, testFailCount: 0, testErrorCount: 1, score: 1 })).toBe(
       50,
