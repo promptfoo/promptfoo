@@ -74,7 +74,6 @@ export class BedrockTokenProvider {
           'Set AWS_BEARER_TOKEN_BEDROCK directly, or configure AWS credentials with permission ' +
           'to call bedrock:InvokeModel. ' +
           (error instanceof Error ? error.message : String(error)),
-        { cause: error },
       );
     }
   }
@@ -96,8 +95,8 @@ export class BedrockTokenProvider {
     } catch (error) {
       throw new Error(
         'Unable to load Amazon Bedrock token generation support. Install the optional ' +
-          '@aws/bedrock-token-generator package, or set AWS_BEARER_TOKEN_BEDROCK directly.',
-        { cause: error },
+          '@aws/bedrock-token-generator package, or set AWS_BEARER_TOKEN_BEDROCK directly. ' +
+          (error instanceof Error ? error.message : String(error)),
       );
     }
   }
