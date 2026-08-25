@@ -17,26 +17,26 @@ This example requires:
 
 ## What This Example Shows
 
-- **Mathematical Reasoning**: AIME2024 competition problems with Magistral models
+- **Mathematical Reasoning**: AIME2024 competition problems with Magistral Medium
 - **Model Comparison**: Compare Mistral's different model capabilities
-- **Reasoning Models**: Showcase Magistral Small and Medium for complex problems
+- **Reasoning Models**: Showcase Magistral Medium (native reasoning) vs. Mistral Small 4
 - **Chat Capabilities**: General conversation and task completion
 - **Mistral-powered Evaluation**: Use Mistral models for grading instead of OpenAI
 - **Mistral Embeddings**: Use Mistral's embedding model for similarity checks
 
 ## Models Demonstrated
 
-### Reasoning Models (Magistral)
+### Reasoning Models
 
-- **Magistral Medium** (`magistral-medium-latest`): Enterprise reasoning model ($2/$5 per M tokens)
-- **Magistral Small** (`magistral-small-latest`): Open-source reasoning model ($0.5/$1.5 per M tokens)
+- **Magistral Medium** (`magistral-medium-latest` → `magistral-medium-2509`): Native reasoning model ($2/$5 per 1M tokens, 128k context) — the reasoning showcase in these examples.
 
-### Traditional Chat Models
+> Mistral folded Magistral Small into **Mistral Small 4**: the `magistral-small-latest` alias now resolves to `mistral-small-2603` (a hybrid model, $0.15/$0.60 per 1M), so these examples use the canonical `mistral-small-latest` id. Enable Small 4's reasoning mode with `reasoning_effort: high`. The standalone `magistral-small-2509` snapshot is deprecated (retires 2026-07-31).
 
-- **Mistral Large** (`mistral-large-latest`): Top-tier model for complex tasks
-- **Mistral Medium** (`mistral-medium-latest`): Balanced multimodal model
-- **Mistral Small** (`mistral-small-latest`): Efficient general-purpose model
-- **Mistral Large 3** (`mistral-large-2512`): Current multimodal large model
+### Chat Models
+
+- **Mistral Medium 3.5** (`mistral-medium-latest` → `mistral-medium-2604`): Frontier agentic/coding multimodal model ($1.50/$7.50 per 1M, 256k context)
+- **Mistral Large 3** (`mistral-large-latest` → `mistral-large-2512`): General-purpose multimodal model ($0.50/$1.50 per 1M, 256k context)
+- **Mistral Small 4** (`mistral-small-latest` → `mistral-small-2603`): Hybrid instruct/reasoning/coding model ($0.15/$0.60 per 1M, 256k context)
 
 ### Evaluation Models
 

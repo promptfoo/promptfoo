@@ -29,6 +29,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { getPrimaryTokenUsageLabel, getTokenUsageTotal } from '@app/utils/tokenUsage';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -672,6 +673,28 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       ? evalData.prompts
       : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
+  const selectedTokenUsage = selectedPrompt?.metrics?.tokenUsage;
+  const targetTokens = getTokenUsageTotal(selectedTokenUsage);
+  const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
+  const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
+  const scanTokenUsage = evalData.results.stats?.tokenUsage;
+  const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
+  const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
+  const evaluationTokens = scanTokenUsage
+    ? getTokenUsageTotal(scanTokenUsage) +
+      getTokenUsageTotal(scanTokenUsage.attacker) +
+      getTokenUsageTotal(scanTokenUsage.assertions)
+    : prompts.reduce((total, prompt) => {
+        const tokenUsage = prompt.metrics?.tokenUsage;
+        return (
+          total +
+          getTokenUsageTotal(tokenUsage) +
+          getTokenUsageTotal(tokenUsage?.attacker) +
+          getTokenUsageTotal(tokenUsage?.assertions)
+        );
+      }, 0);
+  const totalTokens = evaluationTokens + generationTokens;
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -764,24 +787,61 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       <strong>Target:</strong> {selectedPrompt.provider}
                     </Badge>
                   ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Badge variant="secondary">
-                          <strong>Depth:</strong>{' '}
-                          {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                          ).toLocaleString()}{' '}
-                          probes
-                        </Badge>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {selectedPrompt?.metrics?.tokenUsage?.total
-                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
-                        : ''}
-                    </TooltipContent>
-                  </Tooltip>
+                  <Badge
+                    variant="secondary"
+                    aria-label={`${(
+                      selectedTokenUsage?.numRequests ?? tableData.length
+                    ).toLocaleString()} target probes`}
+                  >
+                    <strong>Depth:</strong>{' '}
+                    {(selectedTokenUsage?.numRequests ?? tableData.length).toLocaleString()} probes
+                  </Badge>
+                  {selectedTokenUsage ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Badge
+                            variant="secondary"
+                            className="cursor-help"
+                            aria-label={`${totalTokens.toLocaleString()} total tokens`}
+                          >
+                            <strong>Total Tokens:</strong> {totalTokens.toLocaleString()}
+                          </Badge>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="flex flex-col gap-1">
+                          <span>
+                            <strong>{getPrimaryTokenUsageLabel(true)} Tokens:</strong>{' '}
+                            {targetTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Attacker Tokens:</strong> {attackerTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
+                          </span>
+                          {prompts.length > 1 || generationTokens > 0 || generationRequests > 0 ? (
+                            <>
+                              <span>
+                                <strong>Selected Target Subtotal:</strong>{' '}
+                                {selectedTargetTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Generation Tokens (scan-wide):</strong>{' '}
+                                {generationTokens > 0 || generationRequests === 0
+                                  ? generationTokens.toLocaleString()
+                                  : `Unavailable (${generationRequests.toLocaleString()} ${generationRequests === 1 ? 'request' : 'requests'})`}
+                              </span>
+                              <span>
+                                <strong>Scan Total Tokens:</strong> {totalTokens.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
                     <Badge variant="secondary">
                       <strong>Prompt:</strong> &quot;

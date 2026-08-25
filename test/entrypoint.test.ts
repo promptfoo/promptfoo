@@ -1,4 +1,8 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { spoofedNodeVersionEnv } from './util/utils';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];
@@ -112,37 +116,33 @@ function formatMalformedNodeVersionMessage(currentVersion: string, requiredRange
   ].join('\n');
 }
 
-const nodeEngineRange = '^20.20.0 || >=22.22.0';
+const nodeEngineRange = '>=22.22.0';
 const nodeEngineComparatorSets: NodeEngineComparator[][] = [
-  [
-    { operator: '>=', version: '20.20.0' },
-    { operator: '<', version: '21.0.0-0' },
-  ],
   [{ operator: '>=', version: '22.22.0' }],
 ];
-const deprecatedNodeMajorVersions = new Set([20]);
-
-function shouldWarnForDeprecatedNodeVersion(currentVersion: string): boolean {
-  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
-  return (
-    parsedCurrentVersion !== null &&
-    isSupportedNodeEngineVersion(currentVersion, nodeEngineComparatorSets) === true &&
-    deprecatedNodeMajorVersions.has(parsedCurrentVersion[0])
-  );
-}
-
-function formatDeprecatedNodeVersionMessage(currentVersion: string): string {
-  return [
-    '\x1b[33mWarning: Node.js 20 has reached end-of-life and is deprecated in promptfoo.',
-    '',
-    `Detected: ${currentVersion}`,
-    'Recommended: Node.js >=22.22.0 (Node.js 24 LTS preferred)',
-    '',
-    'Upgrade your Node.js runtime to avoid disruption in a future promptfoo release.\x1b[0m',
-  ].join('\n');
-}
-
 describe('entrypoint version check logic', () => {
+  describe('production entrypoint runtime guard', () => {
+    it.each(['v20.20.0', 'v22.21.9'])(
+      'rejects unsupported Node.js %s before importing CLI dependencies',
+      (version) => {
+        const result = spawnSync(
+          process.execPath,
+          ['--import', 'tsx', path.resolve(__dirname, '../src/entrypoint.ts'), '--version'],
+          {
+            cwd: path.resolve(__dirname, '..'),
+            encoding: 'utf8',
+            env: { ...process.env, ...spoofedNodeVersionEnv(version) },
+          },
+        );
+
+        expect(result.status, result.stderr || result.stdout).toBe(1);
+        expect(result.stderr).toContain(`Detected: ${version}`);
+        expect(result.stderr).toContain('Required: >=22.22.0');
+        expect(result.stderr).toContain('Install a supported Node.js version and try again.');
+      },
+    );
+  });
+
   describe('Node.js version parsing', () => {
     it('parses full semver versions with optional prefixes and suffixes', () => {
       expect(parseNodeEngineVersion('v20.9.0')).toEqual([20, 9, 0]);
@@ -165,24 +165,17 @@ describe('entrypoint version check logic', () => {
   });
 
   describe('engine range matching', () => {
-    it('rejects Node.js versions below the supported patch level', () => {
-      const unsupportedVersions = ['v20.9.0', 'v20.19.0'];
-
-      for (const version of unsupportedVersions) {
+    // A single `>=22.22.0` comparator set means retired majors and below-floor patches now
+    // take the same path; there is no longer a gap between ranges to fall into.
+    it.each(['v20.9.0', 'v20.19.0', 'v20.20.0', 'v21.0.0', 'v21.7.0', 'v22.13.0', 'v22.21.9'])(
+      'rejects Node.js %s below the supported range',
+      (version) => {
         expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
-      }
-    });
-
-    it('rejects unsupported major versions between supported ranges', () => {
-      const unsupportedVersions = ['v21.0.0', 'v21.7.0', 'v22.13.0'];
-
-      for (const version of unsupportedVersions) {
-        expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
-      }
-    });
+      },
+    );
 
     it('accepts Node.js versions that satisfy the exact supported range', () => {
-      const supportedVersions = ['v20.20.0', 'v20.21.1', 'v22.22.0', 'v24.14.1'];
+      const supportedVersions = ['v22.22.0', 'v22.23.1', 'v24.14.1', 'v26.0.0'];
 
       for (const version of supportedVersions) {
         expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(true);
@@ -289,52 +282,6 @@ describe('entrypoint version check logic', () => {
     });
   });
 
-  describe('deprecation warning', () => {
-    it('warns for supported Node.js 20 versions', () => {
-      const deprecatedVersions = ['v20.20.0', 'v20.20.2', 'v20.21.1'];
-
-      for (const version of deprecatedVersions) {
-        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(true);
-      }
-    });
-
-    it('does not warn for unsupported Node.js versions', () => {
-      const unsupportedVersions = ['v20.19.0', 'v21.0.0', 'v22.13.0'];
-
-      for (const version of unsupportedVersions) {
-        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
-      }
-    });
-
-    it('does not warn for supported Node.js versions outside the deprecated majors', () => {
-      const recommendedVersions = ['v22.22.0', 'v24.16.0'];
-
-      for (const version of recommendedVersions) {
-        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
-      }
-    });
-
-    it('does not warn for prerelease or unparsable Node.js versions', () => {
-      const unparsableVersions = ['v20.20.0-rc.1', 'node-20.20.0', 'invalid'];
-
-      for (const version of unparsableVersions) {
-        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
-      }
-    });
-
-    it('formats an actionable warning for Node.js 20', () => {
-      const warningMessage = formatDeprecatedNodeVersionMessage('v20.20.2');
-
-      expect(warningMessage).toContain('Node.js 20 has reached end-of-life');
-      expect(warningMessage).toContain('deprecated in promptfoo');
-      expect(warningMessage).toContain('Detected: v20.20.2');
-      expect(warningMessage).toContain('Recommended: Node.js >=22.22.0');
-      expect(warningMessage).toContain('Upgrade your Node.js runtime');
-      expect(warningMessage).toContain('\x1b[33m');
-      expect(warningMessage).toContain('\x1b[0m');
-    });
-  });
-
   describe('build-time constant behavior', () => {
     it('uses the fallback range and comparator set when build-time constants are undefined', () => {
       const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined = undefined;
@@ -343,32 +290,37 @@ describe('entrypoint version check logic', () => {
 
       const fallbackRange =
         typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
-          ? '>=20.0.0'
+          ? '>=22.22.0'
           : __PROMPTFOO_NODE_ENGINE_RANGE__;
       const fallbackComparatorSets =
         typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
-          ? [[{ operator: '>=', version: '20.0.0' }]]
+          ? [[{ operator: '>=', version: '22.22.0' }]]
           : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-      expect(fallbackRange).toBe('>=20.0.0');
-      expect(fallbackComparatorSets).toEqual([[{ operator: '>=', version: '20.0.0' }]]);
+      expect(fallbackRange).toBe('>=22.22.0');
+      expect(fallbackComparatorSets).toEqual([[{ operator: '>=', version: '22.22.0' }]]);
     });
 
     it('uses the injected engine range and comparator sets when provided', () => {
-      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '^20.20.0 || >=22.22.0';
-      const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ = nodeEngineComparatorSets;
+      // Deliberately NOT the current engine range: if the injected value equalled the
+      // fallback, both ternary branches would satisfy the assertions and this test could
+      // never fail.
+      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '>=99.1.2';
+      const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] = [
+        [{ operator: '>=', version: '99.1.2' }],
+      ];
 
       const injectedRange =
         typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
-          ? '>=20.0.0'
+          ? '>=22.22.0'
           : __PROMPTFOO_NODE_ENGINE_RANGE__;
       const injectedComparatorSets =
         typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
-          ? [[{ operator: '>=', version: '20.0.0' }]]
+          ? [[{ operator: '>=', version: '22.22.0' }]]
           : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-      expect(injectedRange).toBe('^20.20.0 || >=22.22.0');
-      expect(injectedComparatorSets).toEqual(nodeEngineComparatorSets);
+      expect(injectedRange).toBe('>=99.1.2');
+      expect(injectedComparatorSets).toEqual([[{ operator: '>=', version: '99.1.2' }]]);
     });
   });
 });

@@ -14,8 +14,10 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
+import { callTargetProvider } from './shared';
 
 import type {
   ApiProvider,
@@ -31,6 +33,7 @@ interface BestOfNResponse {
 
 interface BestOfNConfig {
   injectVar: string;
+  targetId?: string;
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
@@ -49,6 +52,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency?: number;
       nSteps?: number;
       maxCandidatesPerStep?: number;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -61,6 +65,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency: options.maxConcurrency || 3,
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
+      targetId: options.targetId,
     };
   }
 
@@ -85,6 +90,7 @@ export default class BestOfNProvider implements ApiProvider {
           headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
+            ...remoteGenerationContextPayload(this.config.targetId),
             prompt: context.vars[this.config.injectVar],
             nSteps: this.config.nSteps,
             maxCandidatesPerStep: this.config.maxCandidatesPerStep,
@@ -162,7 +168,12 @@ export default class BestOfNProvider implements ApiProvider {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
-            const response = await targetProvider.callApi(renderedPrompt, context, options);
+            const response = await callTargetProvider(
+              targetProvider,
+              renderedPrompt,
+              context,
+              options,
+            );
             const sessionId = getSessionId(response, context);
             if (sessionId) {
               sessionIds.push(sessionId);

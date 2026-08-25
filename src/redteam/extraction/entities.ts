@@ -3,13 +3,22 @@ import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider } from '../../types/index';
+import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
 
-export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
+export async function extractEntities(
+  provider: ApiProvider,
+  prompts: string[],
+  generationContext?: RemoteGenerationContext,
+): Promise<string[]> {
   if (shouldGenerateRemote()) {
     try {
-      const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
+      const result = await fetchRemoteGeneration(
+        'entities' as RedTeamTask,
+        prompts,
+        generationContext,
+        provider,
+      );
       return result as string[];
     } catch (error) {
       logger.warn(

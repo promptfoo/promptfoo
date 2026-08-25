@@ -21,6 +21,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
@@ -84,7 +85,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +111,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -344,22 +349,21 @@ export function computeRateLimitWaitMs(response: Response): number {
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000;
-
   if (openaiReset) {
     const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
-      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
-  } else if (rateLimitReset) {
-    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
-    const now = new Date();
-    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-  } else if (retryAfter) {
-    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  return waitTime;
+  if (rateLimitReset) {
+    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
+    if (Number.isFinite(resetAt) && resetAt >= 0) {
+      return Math.max(resetAt - Date.now() + 1000, 0);
+    }
+  }
+
+  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
 }
 
 /**
@@ -373,14 +377,49 @@ const RATE_LIMIT_JITTER_MS = 1000;
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(waitTime);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, waitTime);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function handleRateLimit(
+  response: Response,
+  signal?: AbortSignal | null,
+): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleep(totalWait);
+  await sleepWithAbort(totalWait, signal);
 }
 
 /**
@@ -561,6 +600,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  signal?: AbortSignal | null,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -600,7 +640,7 @@ async function handleRateLimitedResponse(
   logger.debug(
     `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response);
+  await handleRateLimit(response, signal);
 }
 
 function formatFetchErrorMessage(error: unknown): string {
@@ -629,6 +669,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -645,7 +686,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }
 
@@ -654,6 +695,9 @@ export async function fetchWithRetries(
       // Don't retry on abort - propagate immediately
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
+      }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
       }
 
       // Structured rate-limit errors are already final (quota fail-fast or
@@ -670,7 +714,7 @@ export async function fetchWithRetries(
       );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }

@@ -66,6 +66,8 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
@@ -250,6 +252,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -347,6 +352,9 @@ type EnvVars = {
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
 
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
+
   // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
@@ -355,6 +363,9 @@ type EnvVars = {
 
   // MiniMax
   MINIMAX_API_KEY?: string;
+
+  // Moonshot AI (Kimi)
+  MOONSHOT_API_KEY?: string;
 
   // n8n
   N8N_API_KEY?: string;

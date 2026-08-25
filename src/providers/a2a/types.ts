@@ -127,7 +127,6 @@ export type A2AAgentCard = z.infer<typeof A2AAgentCardSchema>;
 export type A2AAgentInterface = z.infer<typeof A2AAgentInterfaceSchema>;
 export type A2AAgentSkill = z.infer<typeof A2AAgentSkillSchema>;
 export type A2AArtifact = z.infer<typeof A2AArtifactSchema>;
-export type A2AAuth = z.infer<typeof A2AAuthSchema>;
 export type A2AMessage = z.infer<typeof A2AMessageSchema>;
 export type A2APart = z.infer<typeof A2APartSchema>;
 export type A2AProviderConfig = z.infer<typeof A2AProviderConfigSchema>;

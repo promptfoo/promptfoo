@@ -20,11 +20,18 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
 import {
+  callGradingProvider,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
@@ -147,6 +154,7 @@ interface VoiceCrescendoResponse extends ProviderResponse {
  */
 export interface VoiceCrescendoConfig {
   injectVar: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   redteamProvider?: string;
@@ -266,6 +274,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -285,6 +294,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo-eval',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
@@ -299,7 +309,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
   /**
    * Generate the next voice prompt in the conversation
    */
-  private async generateNextVoicePrompt(turnNumber: number): Promise<{
+  private async generateNextVoicePrompt(
+    turnNumber: number,
+    totalTokenUsage: TokenUsage,
+  ): Promise<{
     voicePrompt: string;
     emotionalTone: string;
     escalationLevel: string;
@@ -322,6 +335,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       ]),
     );
 
+    accumulateAttackerTokenUsage(totalTokenUsage, response);
     TokenUsageTracker.getInstance().trackUsage(redTeamProvider.id(), response.tokenUsage);
 
     if (response.error) {
@@ -401,6 +415,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     confidence: number;
     reason: string;
     partialSuccess: boolean;
+    cached?: boolean;
     tokenUsage?: TokenUsage;
   }> {
     const scoringProvider = await this.getScoringProvider();
@@ -411,7 +426,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
       response,
     });
 
-    const evalResponse = await scoringProvider.callApi(
+    const evalResponse = await callGradingProvider(
+      scoringProvider,
       JSON.stringify([
         { role: 'system', content: evalPrompt },
         { role: 'user', content: 'Evaluate the response.' },
@@ -427,6 +443,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         confidence: 0,
         reason: `Evaluation error: ${evalResponse.error}`,
         partialSuccess: false,
+        cached: evalResponse.cached,
         tokenUsage: evalResponse.tokenUsage,
       };
     }
@@ -449,11 +466,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
         confidence: 0,
         reason: 'Failed to parse evaluation response',
         partialSuccess: false,
+        cached: evalResponse.cached,
         tokenUsage: evalResponse.tokenUsage,
       };
     }
 
-    return { ...parsed, tokenUsage: evalResponse.tokenUsage };
+    return { ...parsed, cached: evalResponse.cached, tokenUsage: evalResponse.tokenUsage };
   }
 
   /**
@@ -495,17 +513,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
       try {
         // Generate next voice prompt
-        const {
-          voicePrompt,
-          emotionalTone,
-          escalationLevel,
-          tokenUsage: redteamTokenUsage,
-        } = await this.generateNextVoicePrompt(currentTurn);
-        // Redteam generation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
+        const { voicePrompt, emotionalTone, escalationLevel } = await this.generateNextVoicePrompt(
+          currentTurn,
           totalTokenUsage,
-          { tokenUsage: redteamTokenUsage },
-          { countAsRequest: false },
         );
         lastPrompt = voicePrompt;
 
@@ -593,12 +603,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
-        // Evaluation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: evaluation.tokenUsage },
-          { countAsRequest: false },
-        );
+        accumulateGradingResponseTokenUsage(totalTokenUsage, {
+          cached: evaluation.cached,
+          tokenUsage: evaluation.tokenUsage,
+        });
         logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
 
         if (evaluation.objectiveAchieved || evaluation.partialSuccess) {

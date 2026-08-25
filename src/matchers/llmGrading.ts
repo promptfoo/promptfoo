@@ -9,13 +9,17 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callProviderWithContext,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
@@ -193,7 +197,7 @@ export async function matchesLlmRubric(
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
       return {
@@ -203,6 +207,7 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...getRemoteGradingContext(),
         })),
         assertion,
       };
@@ -225,9 +230,9 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       vars: {
+        ...(vars || {}),
         output: tryParse(gradingOutput),
         rubric,
-        ...(vars || {}),
       },
     });
   } catch (error) {
@@ -312,7 +317,7 @@ export async function matchesFactuality(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -371,7 +376,7 @@ export async function matchesClosedQa(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);

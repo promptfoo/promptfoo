@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { trackGenerationTokenUsage } from '../../src/redteam/generationTokenUsage';
 import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
@@ -166,6 +167,82 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('test goal');
   });
 
+  it('records token usage from fresh goal extraction requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'tracked goal', tokenUsage: { total: 17, prompt: 10, completion: 7 } },
+      deleteFromCache: async () => {},
+    });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(result).toBe('tracked goal');
+    expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
+  });
+
+  it('does not count cached goal extraction responses', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'cached goal', tokenUsage: { total: 17, numRequests: 1 } },
+      deleteFromCache: async () => {},
+    });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(usage).toEqual({});
+  });
+
+  it('counts failed goal extraction requests without reported token usage', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('goal extraction timed out'));
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(result).toBeNull();
+    expect(usage).toEqual({ numRequests: 1 });
+  });
+
   it('should return null on HTTP error', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
@@ -237,6 +314,34 @@ describe('extractGoalFromPrompt', () => {
       expect.any(String),
       expect.objectContaining({
         body: expect.stringContaining('pluginContext'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should include targetId when provided', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'target-scoped goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      'target-123',
+    );
+    expect(result).toBe('target-scoped goal');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"targetId":"target-123"'),
       }),
       expect.any(Number),
     );

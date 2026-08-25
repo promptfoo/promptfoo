@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 const PROMPT_FIELDS = new Set(['message', 'prompt', 'q', 'query', 'question', 'input', 'text']);
@@ -672,7 +672,10 @@ if (!args.spec || !args['operation-id'] || !args['base-url-env']) {
   usage('Missing --spec, --operation-id, or --base-url-env');
 }
 
-const document = yaml.load(fs.readFileSync(args.spec, 'utf8'));
+const document = yaml.load(fs.readFileSync(args.spec, 'utf8'), {
+  // Preserve js-yaml v4's support for YAML merge keys in user-supplied specs.
+  schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
+});
 const { pathTemplate, pathItem, method, operation } = findOperation(
   asRecord(document, 'OpenAPI document'),
   args['operation-id'],

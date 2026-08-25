@@ -1,8 +1,9 @@
 import { rm } from 'fs/promises';
 
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../src/logger';
 import {
   createDummyFiles,
   initializeProject,
@@ -256,6 +257,56 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('offers current Gemini Flash models during interactive onboarding', async () => {
+    const googleModels = [
+      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+      'vertex:gemini-3.1-pro-preview',
+      'vertex:gemini-2.5-pro',
+    ];
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
+
+    await createDummyFiles(tempDir, true);
+
+    expect(mockSelect).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        choices: expect.arrayContaining([
+          expect.objectContaining({
+            name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            value: googleModels,
+          }),
+        ]),
+      }),
+    );
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
+
+    expect(config.providers).toEqual(googleModels);
+  });
+
+  it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls.find(
+      ([options]) => options.message === 'Which model provider would you like to use?',
+    );
+    const anthropicChoice = providerPrompt?.[0].choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Anthropic]'),
+    );
+
+    expect(anthropicChoice?.value).toContain('anthropic:messages:claude-opus-4-6');
+    expect(anthropicChoice?.value).not.toContain('anthropic:messages:claude-opus-4-1-20250805');
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
@@ -282,6 +333,7 @@ describe('initializeProject', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.exitCode = originalExitCode;
   });
 
@@ -299,5 +351,27 @@ describe('initializeProject', () => {
     await expect(initializeProject(null, true)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(130);
+  });
+
+  it('should print current-directory next steps for the redteam path', async () => {
+    // `promptfoo init` with no directory arg, choosing "Run a red team evaluation".
+    mockSelect.mockResolvedValueOnce('redteam');
+
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    await initializeProject(null, true);
+
+    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+
+    // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
+    // output interpolated `undefined` instead of using the current-directory flow.
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Setup complete! Next steps:'),
+        expect.stringContaining('to evaluate your prompts'),
+        expect.stringContaining('to view results in your browser'),
+      ]),
+    );
+    expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
   });
 });

@@ -34,7 +34,7 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent:
         name: Customer Support Agent
@@ -71,7 +71,7 @@ Load agent and tools from external files:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -159,7 +159,7 @@ Transfer conversations between specialized agents:
 
 ```yaml
 providers:
-  - openai:agents:triage
+  - id: openai:agents:triage
     config:
       agent:
         name: Triage Agent
@@ -175,18 +175,20 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
-  - openai:agents:secure-agent
+  - id: openai:agents:secure-agent
     config:
       agent: file://./agents/secure-agent.ts
       inputGuardrails: file://./guardrails/input-guardrails.ts
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 
@@ -194,7 +196,7 @@ OpenAI Agents SDK sessions keep conversation history across agent runs. Promptfo
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session:
@@ -214,7 +216,7 @@ For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/support-session.ts
@@ -226,7 +228,7 @@ If you need the full `run()` surface, use `runOptions`. Promptfoo reserves `cont
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       runOptions:
@@ -265,7 +267,7 @@ Use `transformVars` to stamp each test with a stable per-test session ID, then e
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/redteam-session.ts
@@ -325,7 +327,7 @@ export default new SandboxAgent({
 
 ```yaml
 providers:
-  - openai:agents:workspace-agent
+  - id: openai:agents:workspace-agent
     config:
       agent: file://./agents/workspace-agent.ts
       sandbox:
@@ -369,7 +371,7 @@ OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Pro
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       modelSettings:
@@ -398,7 +400,7 @@ Use mocked tool outputs when you want deterministic evals without calling extern
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -409,13 +411,18 @@ providers:
           tracking: ABC123
 ```
 
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for side-effect-free mock handoffs.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true # Exports to http://localhost:4318
@@ -425,7 +432,7 @@ With a custom OTLP endpoint:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true
@@ -439,9 +446,9 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo records the overall run as `invoke_agent` and normalizes Responses API model calls into `chat` spans with their model, token usage, and `openai.api.type: responses`. SDK tool spans become `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans become command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. The exporter follows the evaluation's configured HTTP receiver, including IPv6 hosts and JSON- or protobuf-only receivers. Passing a trace context by itself does not enable export unless a receiver or explicit `otlpEndpoint` is available. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 

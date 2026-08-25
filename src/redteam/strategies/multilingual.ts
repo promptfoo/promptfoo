@@ -1,22 +1,18 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
-import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { redteamProviderManager } from '../providers/shared';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  shouldGenerateRemote,
-} from '../remoteGeneration';
+import { loadYaml } from '../../util/yamlLoad';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
@@ -126,24 +122,21 @@ async function processRemoteChunk(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   const payload = {
     task: 'multilingual',
     testCases,
     injectVar,
-    config,
-    email: getUserEmail(),
+    config: {
+      ...(config.languages !== undefined && { languages: config.languages }),
+      ...(config.batchSize !== undefined && { batchSize: config.batchSize }),
+      ...(config.maxConcurrency !== undefined && { maxConcurrency: config.maxConcurrency }),
+    },
+    ...remoteGenerationContextPayload(config.targetId),
   };
 
-  const resp = await fetchWithCache(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(payload),
-    },
-    getRequestTimeoutMs(),
-  );
+  const resp = await postRemoteGenerationTask(payload, runtimeContext);
   const { data, status, statusText } = resp as any;
   const result = (data as any)?.result;
   if (!Array.isArray(result)) {
@@ -166,6 +159,7 @@ async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   try {
     const chunkSize = getRemoteChunkSize(config);
@@ -203,7 +197,7 @@ async function generateMultilingual(
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
       try {
-        const chunkResults = await processRemoteChunk(chunk, injectVar, config);
+        const chunkResults = await processRemoteChunk(chunk, injectVar, config, runtimeContext);
 
         const languages: string[] =
           Array.isArray(config.languages) && config.languages.length > 0
@@ -237,7 +231,12 @@ async function generateMultilingual(
           // Try individual test cases from failed chunk silently
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (error) {
               logger.debug(`Individual test case failed in chunk ${chunkNum}: ${error}`);
@@ -256,7 +255,12 @@ async function generateMultilingual(
 
           for (const testCase of missingTestCases) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (error) {
               logger.debug(`Individual retry failed for test case in chunk ${chunkNum}: ${error}`);
@@ -281,7 +285,12 @@ async function generateMultilingual(
         if (chunk.length > 1) {
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (individualError) {
               logger.debug(`Individual test case failed: ${individualError}`);
@@ -346,15 +355,14 @@ async function generateMultilingual(
 async function translateBatchCore(
   text: string,
   languages: string[],
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<Record<string, string>> {
-  // Prefer a preconfigured multilingual provider if available (set by the server at boot).
-  const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
-  const redteamProvider =
-    cachedMultilingual ||
-    (await redteamProviderManager.getProvider({
-      jsonOnly: true,
-      preferSmallModel: true,
-    }));
+  const redteamProvider = await getStrategyGenerationProvider({
+    runtimeContext,
+    jsonOnly: true,
+    preferSmallModel: true,
+    preferMultilingualProvider: true,
+  });
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 
@@ -436,7 +444,7 @@ async function translateBatchCore(
     }
 
     try {
-      const yamlResult = yaml.load(result.output) as any;
+      const yamlResult = loadYaml(result.output) as any;
       if (yamlResult && typeof yamlResult === 'object') {
         const translations: Record<string, string> = {};
         for (const lang of languages) {
@@ -483,6 +491,7 @@ export async function translateBatch(
   text: string,
   languages: string[],
   initialBatchSize?: number,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<Record<string, string>> {
   const batchSize = initialBatchSize || languages.length;
   const allTranslations: Record<string, string> = {};
@@ -490,12 +499,12 @@ export async function translateBatch(
 
   for (let i = 0; i < languages.length; i += currentBatchSize) {
     const languageBatch = languages.slice(i, i + currentBatchSize);
-    const translations = await translateBatchCore(text, languageBatch);
+    const translations = await translateBatchCore(text, languageBatch, runtimeContext);
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
       for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(text, [lang]);
+        const singleTranslation = await translateBatchCore(text, [lang], runtimeContext);
         if (Object.keys(singleTranslation).length > 0) {
           Object.assign(allTranslations, singleTranslation);
         }
@@ -509,7 +518,7 @@ export async function translateBatch(
       if (missingLanguages.length > 0) {
         for (const lang of missingLanguages) {
           try {
-            const singleTranslation = await translateBatchCore(text, [lang]);
+            const singleTranslation = await translateBatchCore(text, [lang], runtimeContext);
             if (Object.keys(singleTranslation).length > 0) {
               Object.assign(allTranslations, singleTranslation);
             }
@@ -524,10 +533,16 @@ export async function translateBatch(
   return allTranslations;
 }
 
+/**
+ * Cloud-consumed: promptfoo-cloud's server/src/task/multilingual.ts imports this
+ * via @promptfoo/redteam/strategies/multilingual. Keep the export (and file)
+ * even if in-repo references disappear.
+ */
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Deprecation warning - this strategy will be removed in a future version
   logger.debug(
@@ -549,8 +564,13 @@ export async function addMultilingual(
 
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
-  if (shouldGenerateRemote()) {
-    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
+  if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
+    const multilingualTestCases = await generateMultilingual(
+      testCases,
+      injectVar,
+      config,
+      runtimeContext,
+    );
     if (multilingualTestCases.length > 0) {
       return multilingualTestCases;
     }
@@ -592,7 +612,7 @@ export async function addMultilingual(
     const results: TestCase[] = [];
 
     // Use adaptive batching - pass the configured batch size as initial size
-    const translations = await translateBatch(originalText, languages, batchSize);
+    const translations = await translateBatch(originalText, languages, batchSize, runtimeContext);
 
     // Create test cases for each successful translation
     for (const [lang, translatedText] of Object.entries(translations)) {

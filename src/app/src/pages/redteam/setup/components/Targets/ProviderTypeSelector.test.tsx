@@ -62,6 +62,30 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Python')).toBeVisible();
   });
 
+  it.each([
+    ['Google AI Studio', 'google', 'google:gemini-3.7-flash', {}],
+    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.7-flash', { region: 'global' }],
+  ])('defaults %s to Gemini 3.7 Flash', async (label, providerType, expectedModel, config) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Gemini target' }}
+        setProvider={setProvider}
+      />,
+    );
+
+    const providerCard = screen.getByText(label).closest('[role="button"]');
+    expect(providerCard).not.toBeNull();
+    await user.click(providerCard!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: expectedModel, config, label: 'Gemini target' },
+      providerType,
+    );
+  });
+
   it('should filter provider options by search term when the user enters text in the search box', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
@@ -306,6 +330,28 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('Go')).toBeVisible();
     expect(screen.getByText('Custom Go integration')).toBeVisible();
+  });
+
+  it('selects the first-class Open Interpreter provider', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Coding target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const card = screen.getByText('Open Interpreter').closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openinterpreter', label: 'Coding target', config: {} },
+      'openinterpreter',
+    );
   });
 
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {

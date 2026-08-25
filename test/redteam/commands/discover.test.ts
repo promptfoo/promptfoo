@@ -1,8 +1,13 @@
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
+  resolveDiscoveryProviderContext,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
@@ -37,6 +42,53 @@ describe('ArgsSchema', () => {
     const { success, error } = ArgsSchema.safeParse(args);
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
+  });
+});
+
+describe('resolveDiscoveryProviderContext', () => {
+  it('derives target context from a Cloud provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(providerPath, 'id: promptfoo://provider/cloud-target-123\n');
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('cloud-target-123');
+      expect(result.providers).toEqual([{ id: 'promptfoo://provider/cloud-target-123' }]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('derives linked target context from a local provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(
+        providerPath,
+        [
+          'id: openai:gpt-4.1-mini',
+          'config:',
+          '  linkedTargetId: promptfoo://provider/linked-target-123',
+          '',
+        ].join('\n'),
+      );
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('linked-target-123');
+      expect(result.providers).toEqual([
+        {
+          id: 'openai:gpt-4.1-mini',
+          config: { linkedTargetId: 'promptfoo://provider/linked-target-123' },
+        },
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -199,6 +251,37 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+    });
+  });
+
+  it('should include Cloud target context in discovery requests', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+          },
+          state: {
+            currentQuestionIndex: 0,
+            answers: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ id: 'test', response: { output: 'unused' } });
+
+    await doTargetPurposeDiscovery(target, undefined, false, 'cloud-target-123');
+
+    const request = mockedFetchWithProxy.mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      task: 'target-purpose-discovery',
+      targetId: 'cloud-target-123',
     });
   });
 

@@ -991,7 +991,9 @@ export default class EvalResult {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
     if (this.gradingResult) {
-      accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);
+      accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed, {
+        cached: this.gradingResult.metadata?.cachedResponse,
+      });
     }
 
     return {

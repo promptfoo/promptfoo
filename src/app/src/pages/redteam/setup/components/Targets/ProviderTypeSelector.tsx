@@ -102,6 +102,12 @@ const allProviderOptions = [
     recommended: true,
   },
   {
+    value: 'openinterpreter',
+    label: 'Open Interpreter',
+    description: 'Local coding agent with sandbox and approval controls',
+    tag: 'agents',
+  },
+  {
     value: 'openai-agents-sdk',
     label: 'OpenAI Agents SDK',
     description: "OpenAI's official agent framework",
@@ -591,7 +597,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-2.5-pro',
+          id: 'google:gemini-3.7-flash',
           config: {},
           label: currentLabel,
         },
@@ -600,8 +606,8 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-2.5-pro',
-          config: {},
+          id: 'vertex:gemini-3.7-flash',
+          config: { region: 'global' },
           label: currentLabel,
         },
         'vertex',
@@ -654,7 +660,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          id: 'bedrock:global.anthropic.claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -959,6 +965,15 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'claude-agent-sdk',
+      );
+    } else if (value === 'openinterpreter') {
+      setProvider(
+        {
+          id: 'openinterpreter',
+          config: {},
+          label: currentLabel,
+        },
+        'openinterpreter',
       );
     } else if (value === 'fireworks') {
       setProvider(

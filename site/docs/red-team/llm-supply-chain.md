@@ -196,7 +196,7 @@ redteam:
 
   strategies:
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Run the baseline and save results:
@@ -278,7 +278,7 @@ redteam:
 
   strategies:
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
 ```
 
@@ -313,7 +313,7 @@ redteam:
 
   strategies:
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 The report shows side-by-side vulnerability rates:
@@ -346,7 +346,7 @@ redteam:
 
   strategies:
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 A significantly higher failure rate on the fine-tuned model indicates the fine-tuning process degraded safety training.
@@ -367,7 +367,7 @@ redteam:
     - indirect-prompt-injection
 
   strategies:
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 See the [RAG security guide](./rag.md) for comprehensive coverage.
@@ -386,7 +386,7 @@ redteam:
 
   strategies:
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 See the [MCP security testing guide](./mcp-security-testing.md) for details.

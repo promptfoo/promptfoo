@@ -1,11 +1,6 @@
 import OpenAI from 'openai';
 import logger from '../../logger';
 import {
-  buildChatSpanContext,
-  extractProviderResponseAttributes,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
   wrapError,
@@ -13,7 +8,13 @@ import {
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
-import { OpenAiGenericProvider } from '.';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
+import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
@@ -124,6 +125,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     context?: CallbackContext,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -168,7 +170,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await callback(parsedArgs, context);
+      const result = await withGenAIToolSpan(
+        { name: functionName, arguments: parsedArgs, callId },
+        () => callback(parsedArgs, context),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -206,7 +211,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, operationName: 'invoke_agent', agentId: this.assistantId },
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );
@@ -221,10 +226,24 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    // When the caller supplies an OpenAI-Organization header override (any case), drop
+    // the SDK `organization` option so only the override is sent. The current SDK's
+    // Headers-based merge already lets defaultHeaders beat the organization option
+    // case-insensitively; doing this explicitly keeps the intent visible and independent
+    // of the SDK's merge semantics.
+    const orgHeaderOverridden = hasHeaderOverride(
+      this.assistantConfig.headers,
+      OPENAI_ORGANIZATION_HEADER,
+    );
+    const apiUrl = new URL(this.getApiUrl());
+    const defaultQuery = Object.fromEntries(apiUrl.searchParams.entries());
+    apiUrl.search = '';
+    apiUrl.hash = '';
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
+      organization: orgHeaderOverridden ? undefined : this.getOrganization(),
+      baseURL: apiUrl.toString(),
+      defaultQuery,
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
       defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
@@ -312,6 +331,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               toolCall.function.name,
               toolCall.function.arguments,
               callbackContext,
+              toolCall.id,
             );
             return {
               tool_call_id: toolCall.id,

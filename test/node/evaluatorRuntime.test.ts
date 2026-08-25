@@ -3,10 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import Eval from '../../src/models/eval';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { mockProcessEnv } from '../util/utils';
 
-import type { EvaluateResult } from '../../src/types/index';
+import type { EvaluateResult, TestSuite } from '../../src/types/index';
 
 describe('nodeEvaluatorRuntime', () => {
   const tempDirs: string[] = [];
@@ -14,9 +16,69 @@ describe('nodeEvaluatorRuntime', () => {
   afterEach(() => {
     vi.clearAllMocks();
     for (const tempDir of tempDirs.splice(0)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      // On Windows, file handles can linger briefly after a stream is closed, so an
+      // immediate recursive delete may throw ENOTEMPTY/EBUSY/EPERM. Retry with a short
+      // backoff (a no-op on POSIX, where these errors don't occur).
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
+
+  it.each([
+    {
+      name: 'ignores credentials from a previous evaluation',
+      disabled: false,
+      processValue: undefined,
+      expected: '{{ env.TEMPO_TOKEN }}',
+    },
+    {
+      name: 'allows explicitly permitted process environment credentials',
+      disabled: false,
+      processValue: 'current-process-secret',
+      expected: 'current-process-secret',
+    },
+    {
+      name: 'respects disabled process environment access',
+      disabled: true,
+      processValue: 'current-process-secret',
+      expected: '{{ env.TEMPO_TOKEN }}',
+    },
+  ])(
+    '$name during programmatic trace-provider resolution',
+    ({ disabled, processValue, expected }) => {
+      const previousConfig = cliState.config;
+      const restoreEnvironment = mockProcessEnv({
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: disabled ? 'true' : 'false',
+        PROMPTFOO_SELF_HOSTED: 'false',
+        TEMPO_TOKEN: processValue,
+      });
+      cliState.config = {
+        env: { TEMPO_TOKEN: 'previous-evaluation-secret' } as NonNullable<TestSuite['env']>,
+      };
+
+      try {
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.TEMPO_TOKEN }}' },
+            },
+          },
+        };
+
+        const resolved = nodeEvaluatorRuntime.resolveRuntimeTestSuite!(suite);
+
+        expect(resolved.tracing?.provider?.auth?.token).toBe(expected);
+        expect(JSON.stringify(resolved.tracing)).not.toContain('previous-evaluation-secret');
+      } finally {
+        cliState.config = previousConfig;
+        restoreEnvironment();
+      }
+    },
+  );
 
   it('creates and closes JSONL writers for JSONL output paths only', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-evaluator-runtime-'));

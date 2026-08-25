@@ -14,12 +14,18 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -40,13 +46,16 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -128,6 +137,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -143,6 +153,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -274,6 +285,7 @@ export async function runRedteamConversation({
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -350,12 +362,16 @@ export async function runRedteamConversation({
         perTurnLayers,
         Strategies,
         {
+          targetId,
           evaluationId: context?.evaluationId,
           testCaseId: test?.metadata?.testCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
           goal: test?.metadata?.goal as string | undefined,
         },
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
@@ -467,13 +483,14 @@ export async function runRedteamConversation({
     }
 
     let traceContext: TraceContextData | null = null;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent =
         iterationContext?.traceparent ?? context?.traceparent ?? test?.metadata?.traceparent;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -482,6 +499,9 @@ export async function runRedteamConversation({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
         if (traceContext) {
           traceSnapshots.push(traceContext);
@@ -601,7 +621,8 @@ export async function runRedteamConversation({
           };
         }
 
-        const { grade, rubric } = await grader.getResult(
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -611,10 +632,10 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = {
+        storedGraderResult = accumulateGraderResult(storedGraderResult, {
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        };
+        });
       }
     }
     // Calculate the score
@@ -635,7 +656,8 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(
+    const judgeResp = await callGradingProvider(
+      gradingProvider,
       judgeBody,
       {
         prompt: {
@@ -648,6 +670,7 @@ export async function runRedteamConversation({
     );
 
     TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
@@ -855,11 +878,13 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(config.targetId),
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -915,6 +940,7 @@ class RedteamIterativeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
 }
