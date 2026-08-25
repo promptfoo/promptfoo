@@ -676,6 +676,54 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('omits temperature for Claude Opus 5 on the reported Bedrock path', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', temperature: 0.5 },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-5',
+      );
+
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for unlisted Claude 5+ models on Bedrock invokeModel', async () => {
+      for (const modelName of [
+        'us.anthropic.claude-haiku-5',
+        'global.anthropic.claude-research-preview-6',
+      ]) {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBeUndefined();
+      }
+    });
+
+    it.each([
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+    ])(
+      'preserves sampling and manual thinking for Claude inference profile %s',
+      async (modelName) => {
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5, thinking },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBe(0.5);
+        expect(params.thinking).toEqual(thinking);
+      },
+    );
+
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
       // `thinking` field, so the bare 1024 default would truncate ordinary answers.
@@ -3212,6 +3260,61 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         total: 40,
         numRequests: 1,
       });
+    });
+
+    it('counts cached prompt tokens and reports the cache breakdown', async () => {
+      // The hand-rolled reader counted only input_tokens, so a cached prompt reported 100
+      // instead of 1200 — while calculateBedrockInvokeModelCost billed from the very same
+      // cache fields, leaving cost and usage disagreeing about one response.
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 100,
+            cache_read_input_tokens: 900,
+            cache_creation_input_tokens: 200,
+            output_tokens: 50,
+          },
+        },
+        'Test prompt',
+      );
+      expect(result).toEqual({
+        prompt: 1200,
+        completion: 50,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 900, cacheCreationInputTokens: 200 },
+      });
+    });
+
+    it('reports Claude thinking tokens as reasoning', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 50,
+            output_tokens_details: { thinking_tokens: 30 },
+          },
+        },
+        'Test prompt',
+      );
+      expect(result.completionDetails).toEqual({ reasoning: 30 });
+    });
+
+    it('still accepts the alternate prompt_tokens/completion_tokens names', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { prompt_tokens: 15, completion_tokens: 25 } },
+        'Test prompt',
+      );
+      expect(result).toEqual({ prompt: 15, completion: 25, total: 40, numRequests: 1 });
+    });
+
+    it('treats a zero input_tokens count as zero rather than missing', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { input_tokens: 0, output_tokens: 7 } },
+        'Test prompt',
+      );
+      expect(result.prompt).toBe(0);
+      expect(result.total).toBe(7);
     });
 
     it('should handle string token counts in Claude Messages', async () => {

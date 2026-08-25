@@ -6,6 +6,8 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
+  clampMaxTokensForThinkingBudget,
+  getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
@@ -1656,6 +1658,11 @@ export const BEDROCK_MODEL = {
           normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
+      // max_tokens was resolved above, before the thinking config was known. Anthropic
+      // rejects a budget at or above the cap, so raise the floor now that both are settled.
+      if (typeof params.max_tokens === 'number') {
+        params.max_tokens = clampMaxTokensForThinkingBudget(params.max_tokens, thinking);
+      }
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
@@ -1675,30 +1682,24 @@ export const BEDROCK_MODEL = {
         };
       }
 
+      // Bedrock relays the Anthropic Messages `usage` object, so read it with the shared
+      // reader instead of maintaining a second interpretation. The hand-rolled version
+      // counted only `input_tokens`, so a cached prompt was under-reported — 100 rather
+      // than 1200 for a prompt with 900 cache-read and 200 cache-creation tokens — and it
+      // dropped the cache and thinking breakdowns entirely, even though
+      // calculateBedrockInvokeModelCost in this same file bills from those very fields.
+      //
+      // The alternate field names this handler has long accepted are normalized first.
+      // `??` rather than `||` so a genuine zero count is not treated as missing.
       const usage = responseJson.usage;
-
-      // Get input tokens
-      const inputTokens = usage.input_tokens || usage.prompt_tokens;
-      const inputTokensNum = coerceStrToNum(inputTokens);
-
-      // Get output tokens
-      const outputTokens = usage.output_tokens || usage.completion_tokens;
-      const outputTokensNum = coerceStrToNum(outputTokens);
-
-      // Get or calculate total tokens
-      let totalTokens = usage.totalTokens || usage.total_tokens;
-      if (
-        (totalTokens === null || totalTokens === undefined) &&
-        inputTokensNum !== undefined &&
-        outputTokensNum !== undefined
-      ) {
-        totalTokens = inputTokensNum + outputTokensNum;
-      }
+      const normalizedUsage = {
+        ...usage,
+        input_tokens: usage.input_tokens ?? usage.prompt_tokens,
+        output_tokens: usage.output_tokens ?? usage.completion_tokens,
+      };
 
       return {
-        prompt: inputTokensNum,
-        completion: outputTokensNum,
-        total: coerceStrToNum(totalTokens),
+        ...getTokenUsage({ usage: normalizedUsage }, false),
         numRequests: 1,
       };
     },

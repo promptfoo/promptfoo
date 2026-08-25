@@ -23,6 +23,25 @@ describe('loadYaml', () => {
     });
   });
 
+  it('rejects aliased merge sequences containing non-mapping values', () => {
+    const content = [
+      'sources: &sources',
+      '  - allowed: true',
+      '  - injected',
+      'merged:',
+      '  <<: *sources',
+    ].join('\n');
+
+    expect(() => loadYaml(content)).toThrow(/cannot merge mappings/);
+  });
+
+  it('keeps merge tokens outside mapping keys as plain strings', () => {
+    expect(loadYaml('values: [<<]\ntext: <<')).toEqual({
+      values: ['<<'],
+      text: '<<',
+    });
+  });
+
   it('preserves js-yaml v4 legacy standard tags', () => {
     expect(loadYaml('!!binary SGVsbG8=')).toEqual(new Uint8Array([72, 101, 108, 108, 111]));
     expect(loadYaml('2024-01-02')).toEqual(new Date('2024-01-02T00:00:00.000Z'));

@@ -12,7 +12,7 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS } from './anthropic/util';
+import { ANTHROPIC_MODELS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -282,10 +282,13 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelType, providerOptions);
       }
 
-      // Check if the second part is a valid Anthropic model name
-      // If it is, assume it's a messages model
+      // The second part is a model name: route it to the Messages API. Catalogued ids
+      // always resolve; so does anything else shaped like a Claude id, so a model
+      // released after this build works without waiting for a catalog entry. The
+      // provider still logs `Using unknown Anthropic model`, and Anthropic returns
+      // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType)) {
+      if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
         return new AnthropicMessagesProvider(modelType, providerOptions);
       }
 
@@ -293,7 +296,7 @@ export const providerMap: ProviderFactory[] = [
         dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats:
         - anthropic:messages:<model name> - For Messages API
         - anthropic:completion:<model name> - For Completion API
-        - anthropic:<model name> - Shorthand for Messages API with a known model name`,
+        - anthropic:<model name> - Shorthand for Messages API, for a model id starting with "claude-"`,
       );
     },
   },
