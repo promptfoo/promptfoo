@@ -191,10 +191,22 @@
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
+        "AWS_ACCESS_KEY_ID": {
+          "type": "string"
+        },
         "AWS_BEARER_TOKEN_BEDROCK": {
           "type": "string"
         },
         "AWS_BEDROCK_REGION": {
+          "type": "string"
+        },
+        "AWS_PROFILE": {
+          "type": "string"
+        },
+        "AWS_SECRET_ACCESS_KEY": {
+          "type": "string"
+        },
+        "AWS_SESSION_TOKEN": {
           "type": "string"
         },
         "AZURE_API_BASE_URL": {
@@ -1665,10 +1677,22 @@
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
+                    "AWS_ACCESS_KEY_ID": {
+                      "type": "string"
+                    },
                     "AWS_BEARER_TOKEN_BEDROCK": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
+                      "type": "string"
+                    },
+                    "AWS_PROFILE": {
+                      "type": "string"
+                    },
+                    "AWS_SECRET_ACCESS_KEY": {
+                      "type": "string"
+                    },
+                    "AWS_SESSION_TOKEN": {
                       "type": "string"
                     },
                     "AZURE_API_BASE_URL": {
