@@ -48,6 +48,7 @@ import {
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
@@ -468,6 +469,9 @@ export class CrescendoProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+        if (transformResult?.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+        }
 
         // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
         if (transformResult?.displayVars) {
@@ -511,9 +515,7 @@ export class CrescendoProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
-        if (unblockingResult.attempted || unblockingResult.tokenUsage) {
-          accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
-        }
+        accumulateUnblockingTokenUsage(totalTokenUsage, unblockingResult);
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -521,20 +523,24 @@ export class CrescendoProvider implements ApiProvider {
             `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse } = await this.sendPrompt(
-            unblockingResult.unblockingPrompt,
-            prompt,
-            vars,
-            filters,
-            provider,
-            roundNum,
-            context,
-            options,
-            tracingOptions,
-            shouldFetchTrace,
-            traceSnapshots,
-          );
+          const { response: unblockingResponse, transformResult: unblockingTransform } =
+            await this.sendPrompt(
+              unblockingResult.unblockingPrompt,
+              prompt,
+              vars,
+              filters,
+              provider,
+              roundNum,
+              context,
+              options,
+              tracingOptions,
+              shouldFetchTrace,
+              traceSnapshots,
+            );
 
+          if (unblockingTransform?.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
+          }
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue

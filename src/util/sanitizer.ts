@@ -125,6 +125,19 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+
+  // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
+  // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to
+  // 'awssecretaccesskey' while the documented provider config field
+  // `secretAccessKey` collapses to 'secretaccesskey'. These are first-class,
+  // documented Bedrock config fields (see site/docs/providers/aws-bedrock.md),
+  // so an inline credential otherwise reaches logs and shared configs in clear text.
+  'secretaccesskey',
+  'awssecretaccesskey',
+  'sessiontoken',
+  'awssessiontoken',
+  'accesskeyid',
+  'awsaccesskeyid',
   'authorization',
   'auth',
   'bearer',

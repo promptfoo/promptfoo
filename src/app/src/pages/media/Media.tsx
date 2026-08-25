@@ -78,6 +78,18 @@ export default function Media() {
   const [isDeepLinkLoading, setIsDeepLinkLoading] = useState(false);
   const [showBulkDownloadConfirm, setShowBulkDownloadConfirm] = useState(false);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+
+  // The bulk-download loop awaits a timer between files, so it can outlive the
+  // component. Abort it on unmount and record that we are gone, so the loop stops
+  // promptly and its finally block does not set state on an unmounted component.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      downloadAbortRef.current?.abort();
+    };
+  }, []);
 
   // Eval search state — lifted here so the server-side search can be debounced
   const [evalSearchQuery, setEvalSearchQuery] = useState('');
@@ -432,16 +444,34 @@ export default function Media() {
 
         setDownloadProgress({ current: i + 1, total: itemsToDownload.length, currentFile: '' });
 
-        // Delay between downloads to avoid overwhelming the browser
-        await new Promise((r) => setTimeout(r, 200));
+        // Delay between downloads to avoid overwhelming the browser. Resolve early on
+        // abort so a cancel or an unmount does not leave this timer pending.
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 200);
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { once: true },
+          );
+        });
       }
     } finally {
-      setIsDownloading(false);
-      setDownloadProgress({ current: 0, total: 0, currentFile: '' });
-      // Exit selection mode after download
-      if (isSelectionMode) {
-        setIsSelectionMode(false);
-        setSelectedHashes(new Set());
+      // Only the loop that still owns downloadAbortRef resets the UI, and only while
+      // mounted. A user cancel keeps the same controller, so it still resets here; a
+      // newer download replaces the controller and owns the state from then on; an
+      // unmount clears isMountedRef and nothing is set at all.
+      const supersededByNewerDownload = downloadAbortRef.current?.signal !== signal;
+      if (isMountedRef.current && !supersededByNewerDownload) {
+        setIsDownloading(false);
+        setDownloadProgress({ current: 0, total: 0, currentFile: '' });
+        // Exit selection mode after download
+        if (isSelectionMode) {
+          setIsSelectionMode(false);
+          setSelectedHashes(new Set());
+        }
       }
     }
   }, [items, isSelectionMode, selectedHashes, recordEvent]);

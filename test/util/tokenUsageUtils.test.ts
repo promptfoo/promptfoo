@@ -106,6 +106,52 @@ describe('tokenUsageUtils', () => {
       expect(target.total).toBe(30);
     });
 
+    it('derives omitted totals for target, attacker, grading, and generation buckets', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateTokenUsage(target, {
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+        attacker: { prompt: 30, completion: 20, numRequests: 3 },
+        assertions: { prompt: 15, completion: 10, numRequests: 1 },
+        generation: { prompt: 25, completion: 15, numRequests: 4 },
+      });
+
+      expect(target).toMatchObject({
+        total: 100,
+        attacker: { total: 50 },
+        assertions: { total: 25 },
+        generation: { total: 40 },
+      });
+    });
+
+    it('preserves explicit zero totals and does not recharge cached-only usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateTokenUsage(target, {
+        total: 0,
+        prompt: 30,
+        completion: 20,
+        cached: 50,
+        numRequests: 0,
+        assertions: { prompt: 10, completion: 5, cached: 15, numRequests: 0 },
+        attacker: { total: 0, prompt: 7, completion: 3, cached: 10, numRequests: 0 },
+      });
+
+      expect(target.total).toBe(0);
+      expect(target.assertions?.total).toBe(0);
+      expect(target.attacker?.total).toBe(0);
+    });
+
+    it('derives fresh usage when provider-side prompt caching covers only part of a request', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateTokenUsage(target, { prompt: 30, completion: 20, cached: 15, numRequests: 0 });
+
+      expect(target).toMatchObject({ total: 50, cached: 15, numRequests: 0 });
+    });
+
     it('should handle undefined update gracefully', () => {
       const target: TokenUsage = createEmptyTokenUsage();
       const originalTarget = { ...target };
@@ -222,7 +268,7 @@ describe('tokenUsageUtils', () => {
         completion: 7,
       });
 
-      expect(target.total).toBe(10);
+      expect(target.total).toBe(22);
       expect(target.prompt).toBe(5);
       expect(target.completion).toBe(7);
       expect(target.cached).toBe(0); // addNumbers converts undefined to 0

@@ -1,5 +1,11 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
@@ -26,6 +32,7 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
@@ -286,7 +293,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
+    options: {
+      id?: string;
+      label?: string;
+      config?: AnthropicMessageOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
     super(modelName, options);
     if (
@@ -477,6 +489,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return 'anthropic';
   }
 
+  // Compatible gateways can assign arbitrary model aliases. Dedicated passthrough providers
+  // may override this when they guarantee requests reach Anthropic without alias translation.
+  protected allowsClaudeGenerationFallback(): boolean {
+    return (
+      URL.canParse(this.anthropic.baseURL) &&
+      new URL(this.anthropic.baseURL).hostname.toLowerCase() === 'api.anthropic.com'
+    );
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -627,9 +648,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort) as
-      | Anthropic.Messages.ThinkingConfigParam
-      | undefined;
+    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {
+      allowGenerationFallback: samplingParamsDeprecated,
+    }) as Anthropic.Messages.ThinkingConfigParam | undefined;
     const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolved);
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
@@ -721,7 +742,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
     // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
     // controls reasoning depth on these models.
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback: this.allowsClaudeGenerationFallback(),
+    });
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const {
@@ -851,9 +874,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
-      max_tokens:
+      // resolvedThinking, not the raw config: a sampling-deprecated model has already had
+      // its manual budget converted to adaptive, and there is nothing left to clamp against.
+      max_tokens: clampMaxTokensForThinkingBudget(
         config.max_tokens ??
-        getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+          getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+        resolvedThinking,
+      ),
       messages: extractedMessages,
       stream: shouldStream,
       ...(omitTemperature
@@ -946,17 +973,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const cache = await getCache();
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(
       {
         ...cacheKeyParams,
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
+    const shouldUseResponseCache =
+      isCacheEnabled() &&
+      config.mcp?.enabled !== true &&
+      !this.hasCustomHeaders() &&
+      Object.keys(config.headers ?? {}).length === 0;
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
@@ -1021,7 +1059,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       if (shouldUseResponseCache) {
         try {
-          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+          await this.setCachedResponse(
+            cache,
+            cacheKey,
+            ephemeralCacheKey,
+            cacheClearGeneration,
+            getCacheTtlMs(),
+            JSON.stringify(resolvedMessage),
+          );
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
