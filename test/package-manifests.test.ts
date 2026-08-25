@@ -445,6 +445,7 @@ describe('package manifests', () => {
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
