@@ -749,6 +749,9 @@ async function runRedteamConversation({
               goal: test?.metadata?.goal as string | undefined,
             },
           );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           if (lastTransformResult.error) {
             logger.warn('[IterativeTree] Transform failed, skipping attempt', {
@@ -1248,9 +1251,7 @@ async function runRedteamConversation({
     context,
     options,
   );
-  if (finalTargetResponse.tokenUsage) {
-    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
-  }
+  accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,

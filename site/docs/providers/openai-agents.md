@@ -175,7 +175,7 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
@@ -186,7 +186,9 @@ providers:
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 
@@ -408,6 +410,11 @@ providers:
           status: shipped
           tracking: ABC123
 ```
+
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for side-effect-free mock handoffs.
 
 ## Tracing
 
