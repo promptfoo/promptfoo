@@ -522,6 +522,29 @@ describe('Provider Registry', () => {
       ).rejects.toThrow('Unknown Anthropic model type or model name');
     });
 
+    it('resolves the anthropic shorthand for models not yet in the catalog', async () => {
+      // The shorthand used to require an exact ANTHROPIC_MODELS entry, so every new Claude
+      // release broke `anthropic:<model>` until promptfoo shipped a catalog update — while
+      // `anthropic:messages:<model>` worked fine for the same id.
+      const factory = providerMap.find((f) => f.test('anthropic:claude-haiku-5'));
+      const options = { ...mockProviderOptions, id: undefined };
+      for (const model of ['claude-haiku-5', 'claude-some-future-model-9']) {
+        const provider = await factory!.create(`anthropic:${model}`, options, mockContext);
+        expect(provider.id()).toBe(`anthropic:${model}`);
+      }
+    });
+
+    it('still rejects an anthropic shorthand that is not shaped like a Claude id', async () => {
+      // The shape check is what keeps a typo failing at config load rather than as a
+      // request-time 404.
+      const factory = providerMap.find((f) => f.test('anthropic:sonnet-5'));
+      for (const bad of ['sonnet-5', 'gpt-4', 'claude']) {
+        await expect(
+          factory!.create(`anthropic:${bad}`, mockProviderOptions, mockContext),
+        ).rejects.toThrow('Unknown Anthropic model type or model name');
+      }
+    });
+
     it('should handle azure providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('azure:chat:gpt-4'));
       expect(factory).toBeDefined();

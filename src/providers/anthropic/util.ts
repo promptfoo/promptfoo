@@ -377,6 +377,21 @@ export function isDisabledThinkingRejectedAtEffort(
   );
 }
 
+/**
+ * Whether a bare Anthropic model id has the shape of a Claude model.
+ *
+ * Used by the `anthropic:<model>` shorthand so a model released after this build still
+ * resolves instead of being rejected at config load. Anthropic is the authority on which
+ * ids exist and returns a clear `not_found_error` for one that does not, so gating the
+ * shorthand on a local catalog only delays that answer to the next promptfoo release.
+ *
+ * The shape check is what keeps a genuine typo (`anthropic:sonnet-5`) failing at config
+ * load with the usage message, rather than surfacing as a request-time 404.
+ */
+export function looksLikeClaudeModelId(modelId: string): boolean {
+  return /^claude-[a-z0-9]/i.test(modelId);
+}
+
 export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
