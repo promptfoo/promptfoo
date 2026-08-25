@@ -7,13 +7,13 @@ Compare Codex Security standard and deep scans across models and reasoning setti
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.1.18
 ```
 
-Use Node.js `^22.13.0`, `^24.0.0`, or `^26.0.0`. Authenticate with an existing Codex login or set `OPENAI_API_KEY` or `CODEX_API_KEY` before running the eval:
+Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`. Installing both packages together ensures Promptfoo can load the SDK from its own installation. Authenticate with an existing Codex login or set `OPENAI_API_KEY` or `CODEX_API_KEY` before running the local CLI:
 
 ```bash
-promptfoo eval --no-cache
+npx promptfoo eval --no-cache
 ```
 
 ## Evaluate scan models and depth

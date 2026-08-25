@@ -18,13 +18,13 @@ The Codex Security provider runs the `@openai/codex-security` SDK directly as a 
 
 ## Installation and authentication
 
-Promptfoo declares the SDK as an optional dependency. Install it manually if optional dependencies were omitted:
+Promptfoo declares the SDK as an optional dependency. If optional dependencies were omitted, install Promptfoo and the SDK together so they share the same installation:
 
 ```bash
-npm install @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.1.18
 ```
 
-The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. The SDK supports Node.js `^22.13.0`, `^24.0.0`, and `^26.0.0`. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.18`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -95,7 +95,7 @@ To start with the included intentionally vulnerable fixture:
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.1.18
 npx promptfoo eval --no-cache
 ```
 
@@ -242,7 +242,7 @@ tests:
 
 - **Zero findings with partial coverage:** Inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
 - **Deep scan cost appears too low:** Install SDK version `0.1.18` or newer. Earlier versions can omit independently launched discovery and deduplication workers from token and cost totals.
-- **SDK fails to load:** Use a supported even-numbered Node.js release: `^22.13.0`, `^24.0.0`, or `^26.0.0`.
+- **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
 - **Output directory is rejected:** Choose an artifact directory outside the target repository, and use a distinct directory for each provider or eval row.
 - **Diff scan fails:** Set `base_ref`, or use `working_tree: true`; do not combine `working_tree` with `head_ref`.
