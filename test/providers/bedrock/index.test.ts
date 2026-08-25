@@ -3262,6 +3262,61 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('counts cached prompt tokens and reports the cache breakdown', async () => {
+      // The hand-rolled reader counted only input_tokens, so a cached prompt reported 100
+      // instead of 1200 — while calculateBedrockInvokeModelCost billed from the very same
+      // cache fields, leaving cost and usage disagreeing about one response.
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 100,
+            cache_read_input_tokens: 900,
+            cache_creation_input_tokens: 200,
+            output_tokens: 50,
+          },
+        },
+        'Test prompt',
+      );
+      expect(result).toEqual({
+        prompt: 1200,
+        completion: 50,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 900, cacheCreationInputTokens: 200 },
+      });
+    });
+
+    it('reports Claude thinking tokens as reasoning', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 50,
+            output_tokens_details: { thinking_tokens: 30 },
+          },
+        },
+        'Test prompt',
+      );
+      expect(result.completionDetails).toEqual({ reasoning: 30 });
+    });
+
+    it('still accepts the alternate prompt_tokens/completion_tokens names', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { prompt_tokens: 15, completion_tokens: 25 } },
+        'Test prompt',
+      );
+      expect(result).toEqual({ prompt: 15, completion: 25, total: 40, numRequests: 1 });
+    });
+
+    it('treats a zero input_tokens count as zero rather than missing', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { input_tokens: 0, output_tokens: 7 } },
+        'Test prompt',
+      );
+      expect(result.prompt).toBe(0);
+      expect(result.total).toBe(7);
+    });
+
     it('should handle string token counts in Claude Messages', async () => {
       const mockResponse = {
         usage: {
