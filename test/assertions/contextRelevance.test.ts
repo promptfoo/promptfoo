@@ -158,7 +158,7 @@ describe('handleContextRelevance', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.7 when none is specified', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect relevance' };
     vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -193,7 +193,7 @@ describe('handleContextRelevance', () => {
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'test query',
       'test context',
-      0,
+      0.7,
       {},
       undefined,
     );
@@ -296,9 +296,90 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0.7, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });
+  });
+
+  it('should pass not-context-relevance when relevance is below the default threshold', async () => {
+    const mockResult = { pass: false, score: 0.3, reason: 'Relevance 0.30 is < 0.7' };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('irrelevant context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance' },
+      test: { vars: { query: 'What is the capital of France?', context: 'irrelevant context' }, options: {} },
+      output: 'test output', prompt: 'test prompt', baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'What is the capital of France?', context: 'irrelevant context' },
+        test: { vars: { query: 'What is the capital of France?', context: 'irrelevant context' }, options: {} },
+        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true, outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBeCloseTo(0.7);
+    expect(result.reason).toBe('Assertion passed');
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'What is the capital of France?', 'irrelevant context', 0.7, {}, undefined,
+    );
+  });
+
+  it('should fail not-context-relevance when relevance is above the default threshold', async () => {
+    const mockResult = { pass: true, score: 0.9, reason: 'Context is highly relevant' };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance' },
+      test: { vars: { query: 'What is the capital of France?', context: 'test context' }, options: {} },
+      output: 'test output', prompt: 'test prompt', baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        test: { vars: { query: 'What is the capital of France?', context: 'test context' }, options: {} },
+        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true, outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(result.reason).toBe('Relevance 0.90 is >= 0.7');
+  });
+
+  it('should not invert grader errors for not-context-relevance', async () => {
+    const mockResult = {
+      pass: false, score: 0, reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance' },
+      test: { vars: { query: 'q', context: 'c' }, options: {} },
+      output: 'out', prompt: 'p', baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'p', vars: { query: 'q', context: 'c' },
+        test: { vars: { query: 'q', context: 'c' }, options: {} },
+        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true, outputString: 'out',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });

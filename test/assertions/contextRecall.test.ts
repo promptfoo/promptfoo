@@ -127,7 +127,7 @@ describe('handleContextRecall', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.7 when none is specified', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -162,7 +162,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
-      0,
+      0.7,
       {},
       { context: 'test context' },
       undefined,
@@ -212,7 +212,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.7,
       {},
       {},
       undefined,
@@ -259,7 +259,7 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0.7, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
@@ -318,5 +318,98 @@ describe('handleContextRecall', () => {
     await expect(handleContextRecall(params)).rejects.toThrow(
       'context-recall assertion requires a prompt',
     );
+  });
+
+  it('should pass not-context-recall when recall is below the default threshold', async () => {
+    const mockResult = { pass: false, score: 0.3, reason: 'Recall 0.30 is < 0.7' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'Missing fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'incomplete context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'incomplete context' },
+        test: { vars: { context: 'incomplete context' }, options: {} },
+        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output', outputString: 'test output',
+      provider: mockProvider, providerResponse: {} as ProviderResponse,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBeCloseTo(0.7);
+    expect(result.reason).toBe('Assertion passed');
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'incomplete context', 'Missing fact', 0.7, {}, { context: 'incomplete context' }, undefined,
+    );
+  });
+
+  it('should fail not-context-recall when recall is above the default threshold', async () => {
+    const mockResult = { pass: true, score: 0.9, reason: 'Context contains expected information' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'Expected fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output', outputString: 'test output',
+      provider: mockProvider, providerResponse: {} as ProviderResponse,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(result.reason).toBe('Recall 0.90 is >= 0.7');
+  });
+
+  it('should not invert grader errors for not-context-recall', async () => {
+    const mockResult = {
+      pass: false, score: 0, reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'val',
+      prompt: 'p',
+      test: { vars: { context: 'ctx' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'p', vars: { context: 'ctx' },
+        test: { vars: { context: 'ctx' }, options: {} },
+        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'out', outputString: 'out',
+      provider: mockProvider, providerResponse: {} as ProviderResponse,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });
