@@ -266,15 +266,14 @@ function isPlainRecord(value: object): boolean {
 async function loadNestedFileVars(
   value: unknown,
   varName: string,
-  seen: WeakSet<object> = new WeakSet(),
+  seen: WeakMap<object, unknown> = new WeakMap(),
 ): Promise<unknown> {
-  // Vars can be self-referential (the evaluator logs circular structures on
-  // error paths); revisiting one would recurse until the stack blows.
-  if (value !== null && typeof value === 'object') {
-    if (seen.has(value)) {
-      return value;
-    }
-    seen.add(value);
+  // Vars can be self-referential, and a YAML anchor can put the same object under
+  // several keys. Each input object is mapped to its output container *before* we
+  // descend into it, so a repeat visit returns the same processed container: cycles
+  // terminate, aliases stay aliases, and every reachable reference is still loaded.
+  if (value !== null && typeof value === 'object' && seen.has(value)) {
+    return seen.get(value);
   }
 
   // Sequential rather than Promise.all: a dataset-shaped var can hold hundreds of
@@ -282,6 +281,7 @@ async function loadNestedFileVars(
   // loader is sequential too.
   if (Array.isArray(value)) {
     const items: unknown[] = [];
+    seen.set(value, items);
     for (const item of value) {
       items.push(await loadNestedFileVars(item, varName, seen));
     }
@@ -317,11 +317,12 @@ async function loadNestedFileVars(
     if (!isPlainRecord(value)) {
       return value;
     }
-    const entries: [string, unknown][] = [];
+    const result: Record<string, unknown> = {};
+    seen.set(value, result);
     for (const [key, nested] of Object.entries(value)) {
-      entries.push([key, await loadNestedFileVars(nested, varName, seen)]);
+      result[key] = await loadNestedFileVars(nested, varName, seen);
     }
-    return Object.fromEntries(entries);
+    return result;
   }
 
   return value;

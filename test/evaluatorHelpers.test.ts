@@ -391,6 +391,18 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('loop');
     });
 
+    it('should load file references under every alias of a shared object', async () => {
+      const prompt = toPrompt('{{ cfg.a.report }} {{ cfg.b.report }}');
+      const shared = { report: 'file://report.txt' };
+      const vars = { cfg: { a: shared, b: shared } };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValue('quarterly numbers');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('quarterly numbers quarterly numbers');
+    });
+
     it('should surface an error when a nested file reference does not exist', async () => {
       const prompt = toPrompt('{{ cfg.report }}');
       const vars = { cfg: { report: 'file://missing.txt' } };
