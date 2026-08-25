@@ -2210,6 +2210,51 @@ describe('ClaudeCodeSDKProvider', () => {
         });
       });
 
+      it('preserves task and todo tools when all tools are allowed', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { allow_all_tools: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.allowedTools).toBeUndefined();
+        expect(callArgs.options.env.CLAUDE_CODE_ENABLE_TODO_TOOLS).toBe('1');
+      });
+
+      it('honors an explicit task-tool opt-out when all tools are allowed', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            allow_all_tools: true,
+            env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.allowedTools).toBeUndefined();
+        expect(callArgs.options.env.CLAUDE_CODE_ENABLE_TODO_TOOLS).toBe('0');
+      });
+
+      it('does not enable task tools for restricted tool configurations', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { working_dir: './test-dir' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.allowedTools).toEqual(FS_READONLY_ALLOWED_TOOLS);
+        expect(callArgs.options.env.CLAUDE_CODE_ENABLE_TODO_TOOLS).toBeUndefined();
+      });
+
       it('should handle allowed tools configuration', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -3051,6 +3096,12 @@ describe('ClaudeCodeSDKProvider', () => {
           // Create a mock hook callback
           const mockHookCallback = vi.fn().mockResolvedValue({ continue: true });
           const hooks = {
+            Notification: [
+              {
+                matcher: 'permission_prompt',
+                hooks: [mockHookCallback],
+              },
+            ],
             PreToolUse: [
               {
                 matcher: 'Bash',
@@ -3068,6 +3119,7 @@ describe('ClaudeCodeSDKProvider', () => {
           await provider.callApi('Test prompt');
 
           const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks.Notification).toBe(hooks.Notification);
           expect(callArgs.options.hooks.PreToolUse).toBe(hooks.PreToolUse);
           expect(callArgs.options.hooks.PostToolUse).toEqual([
             expect.objectContaining({ matcher: 'TaskOutput' }),
