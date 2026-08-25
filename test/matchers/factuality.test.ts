@@ -214,6 +214,22 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('marks a provider failure as a grader error, not a criterion failure', async () => {
+    const grading = {};
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      error: 'rate limit exceeded',
+      output: undefined,
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesFactuality('in', 'exp', 'out', grading);
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
   it('should fail when JSON has invalid category', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
@@ -231,6 +247,8 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
+      // an invalid grader category is a grader failure, not a criterion failure
+      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
