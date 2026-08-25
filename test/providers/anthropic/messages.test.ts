@@ -3166,6 +3166,63 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
+  describe('thinking budget vs max_tokens', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-sonnet-4-5',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    it('raises the default max_tokens above a manual thinking budget', async () => {
+      // Anthropic 400s on max_tokens <= budget_tokens. The default here is 2048 once
+      // thinking consumes tokens, so an 8000-token budget used to fail the request.
+      const provider = createProvider('claude-sonnet-4-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 8000 } },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as any;
+      expect(params.max_tokens).toBe(9024);
+      expect(params.max_tokens).toBeGreaterThan(params.thinking.budget_tokens);
+    });
+
+    it('leaves an explicit max_tokens that already clears the budget', async () => {
+      const provider = createProvider('claude-sonnet-4-5', {
+        config: { max_tokens: 20000, thinking: { type: 'enabled', budget_tokens: 8000 } },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      expect((createSpy.mock.calls[0][0] as any).max_tokens).toBe(20000);
+    });
+
+    it('does not inflate max_tokens when the budget was converted to adaptive', async () => {
+      // Opus 5 is sampling-deprecated: the manual budget is normalized away, so there is
+      // nothing to clamp against and the default must stand.
+      const provider = createProvider('claude-opus-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 8000 } },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as any;
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params.max_tokens).toBe(2048);
+    });
+  });
+
   describe('Opus 4.7 temperature handling', () => {
     const mockResp = {
       content: [{ type: 'text', text: 'ok' }],

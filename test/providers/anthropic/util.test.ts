@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
@@ -2030,6 +2031,31 @@ describe('Anthropic utilities', () => {
         'claude-opus-4-5-20251101',
       ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('raises max_tokens above a manual thinking budget', () => {
+      // Anthropic rejects max_tokens <= thinking.budget_tokens with a 400. Only the Vertex
+      // path used to enforce this, so the same config errored on the direct API.
+      expect(clampMaxTokensForThinkingBudget(2048, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9024,
+      );
+    });
+
+    it('leaves max_tokens alone when it already clears the budget', () => {
+      expect(clampMaxTokensForThinkingBudget(9000, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9000,
+      );
+    });
+
+    it('leaves max_tokens alone when there is no manual budget to clear', () => {
+      for (const thinking of [
+        undefined,
+        { type: 'adaptive' },
+        { type: 'disabled' },
+        { type: 'enabled' },
+      ]) {
+        expect(clampMaxTokensForThinkingBudget(1024, thinking as any)).toBe(1024);
       }
     });
 

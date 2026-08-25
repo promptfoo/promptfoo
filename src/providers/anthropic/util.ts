@@ -392,6 +392,30 @@ export function looksLikeClaudeModelId(modelId: string): boolean {
   return /^claude-[a-z0-9]/i.test(modelId);
 }
 
+/**
+ * Raise `max_tokens` above a manual thinking budget.
+ *
+ * Anthropic rejects any request where `max_tokens <= thinking.budget_tokens` with
+ * "`max_tokens` must be greater than `thinking.budget_tokens`" — thinking draws from the
+ * same output budget as the answer, so a budget at or above the cap leaves no room to reply.
+ * The rule is the API's, not a platform's, so every Claude route needs it: a user who sets
+ * `thinking: { type: 'enabled', budget_tokens: 8000 }` and leaves `max_tokens` at the
+ * provider default otherwise gets a 400 rather than a longer think.
+ *
+ * Headroom of 1024 above the budget matches what the Vertex path has always used. Callers
+ * keep their own `max_tokens` defaults, which legitimately differ per platform; this only
+ * enforces the floor.
+ */
+export function clampMaxTokensForThinkingBudget(
+  maxTokens: number,
+  thinking: { type?: string; budget_tokens?: number } | undefined,
+): number {
+  if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
+    return maxTokens;
+  }
+  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+}
+
 export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
