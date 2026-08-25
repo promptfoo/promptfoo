@@ -590,6 +590,10 @@ describe('ProviderConfigEditor', () => {
 
     it.each([
       {
+        config: { operation: 'fix-finding', repository: '/repos/service' },
+        expectedError: 'Unsupported Codex Security operation',
+      },
+      {
         config: { operation: 'security-scan', repository: '' },
         expectedError: 'Repository path is required',
       },
@@ -766,6 +770,25 @@ describe('ProviderConfigEditor', () => {
 
     await user.selectOptions(screen.getByLabelText('Security operation'), 'security-scan');
     expect(screen.getByLabelText('Security operation')).toHaveValue('security-scan');
+  });
+
+  it('requires unsupported imported security operations to be replaced with a native operation', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <StatefulCodexSecurityEditor initialConfig={{ operation: 'fix-finding' }} />,
+    );
+
+    const operation = screen.getByLabelText('Security operation');
+    expect(operation).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Unsupported security operation' })).toBeDisabled();
+
+    await user.selectOptions(operation, 'security-scan');
+
+    expect(operation).toHaveValue('security-scan');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      operation: 'security-scan',
+    });
   });
 
   it('clears legacy config.model when the inline model is edited or removed', async () => {

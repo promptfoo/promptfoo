@@ -203,7 +203,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const provider = new OpenAICodexSecurityProvider();
 
       expect(await provider.callApi('Scan')).toEqual({
-        error: expect.stringContaining('npm install @openai/codex-security'),
+        error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
       });
     });
 
@@ -215,6 +215,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toContain('Failed to load @openai/codex-security');
       expect(response.error).toContain('even-numbered Node.js');
+      expect(response.error).toContain('^22.22.0');
     });
 
     it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
@@ -305,7 +306,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response.error).toContain('package is incompatible (0.1.8)');
-      expect(response.error).toContain('npm install @openai/codex-security@^0.1.18');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
       expect(mockRun).not.toHaveBeenCalled();
     });
   });

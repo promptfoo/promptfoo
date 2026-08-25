@@ -6,7 +6,9 @@ import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetCo
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
-import CodexSecurityConfiguration from './CodexSecurityConfiguration';
+import CodexSecurityConfiguration, {
+  CODEX_SECURITY_OPERATION_OPTIONS,
+} from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
@@ -366,6 +368,14 @@ function ProviderConfigEditor({
         !provider.id.startsWith('openai:codex-security:')
       ) {
         errors.push('Codex Security provider ID must start with openai:codex-security');
+      }
+      if (
+        provider.config.operation !== undefined &&
+        !CODEX_SECURITY_OPERATION_OPTIONS.some(
+          (option) => option.value === provider.config.operation,
+        )
+      ) {
+        errors.push('Unsupported Codex Security operation');
       }
       const repository = provider.config.repository ?? provider.config.working_dir;
       if (typeof repository !== 'string' || !repository.trim()) {

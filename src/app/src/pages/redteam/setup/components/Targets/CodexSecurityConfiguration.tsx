@@ -14,7 +14,7 @@ interface CodexSecurityConfigurationProps {
 
 const PROVIDER_PREFIX = 'openai:codex-security';
 
-const OPERATION_OPTIONS = [
+export const CODEX_SECURITY_OPERATION_OPTIONS = [
   { value: 'security-scan', label: 'Standard security scan' },
   { value: 'deep-security-scan', label: 'Deep security scan' },
   { value: 'security-diff-scan', label: 'Git diff security scan' },
@@ -31,7 +31,12 @@ export default function CodexSecurityConfiguration({
   updateCustomTarget,
 }: CodexSecurityConfigurationProps) {
   const config = selectedTarget.config ?? {};
-  const operation = typeof config.operation === 'string' ? config.operation : 'security-scan';
+  const operation =
+    typeof config.operation === 'string'
+      ? CODEX_SECURITY_OPERATION_OPTIONS.some((option) => option.value === config.operation)
+        ? config.operation
+        : ''
+      : 'security-scan';
   const model = selectedTarget.id.startsWith(`${PROVIDER_PREFIX}:`)
     ? selectedTarget.id.slice(PROVIDER_PREFIX.length + 1)
     : typeof config.model === 'string'
@@ -133,8 +138,8 @@ export default function CodexSecurityConfiguration({
             <p className="font-semibold">Codex Security SDK</p>
             <p className="mt-1">
               Compare repository scans, finding validation, model reasoning, and estimated cost.
-              Install <code>@openai/codex-security@^0.1.18</code> and use an existing Codex login or
-              OpenAI API key.
+              Install <code>promptfoo</code> and <code>@openai/codex-security@^0.1.18</code>{' '}
+              together, then use an existing Codex login or OpenAI API key.
             </p>
           </AlertDescription>
         </AlertContent>
@@ -149,7 +154,12 @@ export default function CodexSecurityConfiguration({
             value={operation}
             onChange={(event) => updateOperation(event.target.value)}
           >
-            {OPERATION_OPTIONS.map((option) => (
+            {operation === '' && (
+              <option value="" disabled>
+                Unsupported security operation
+              </option>
+            )}
+            {CODEX_SECURITY_OPERATION_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

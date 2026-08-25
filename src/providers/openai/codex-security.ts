@@ -182,9 +182,9 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`Failed to load @openai/codex-security.
 
-      The package requires a supported even-numbered Node.js release: ^22.13.0, ^24.0.0, or ^26.0.0.
-      Reinstall it with:
-        npm install @openai/codex-security
+      Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.0, ^24.0.0, or ^26.0.0.
+      Reinstall them together with:
+        npm install promptfoo @openai/codex-security
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
     );
@@ -195,8 +195,8 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
       Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for finding validation and accurate deep-worker cost tracking.
-      Upgrade it with:
-        npm install @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+      Install the compatible SDK alongside Promptfoo with:
+        npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
     );
@@ -205,10 +205,10 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
   throw new Error(
     dedent`The @openai/codex-security package is required but not installed.
 
-    Install it with:
-      npm install @openai/codex-security
+    Install it alongside Promptfoo with:
+      npm install promptfoo @openai/codex-security
 
-    Requires Node.js ^22.13.0, ^24.0.0, or ^26.0.0.
+    Requires Node.js ^22.22.0, ^24.0.0, or ^26.0.0.
     See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
   );
 }
