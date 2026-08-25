@@ -1057,7 +1057,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
         {
           model: 'claude-3-7-sonnet-20250219',
-          max_tokens: 2048,
+          max_tokens: 3072,
           messages: [
             {
               role: 'user',
@@ -3192,6 +3192,17 @@ describe('AnthropicMessagesProvider', () => {
       const params = createSpy.mock.calls[0][0] as any;
       expect(params.max_tokens).toBe(9024);
       expect(params.max_tokens).toBeGreaterThan(params.thinking.budget_tokens);
+    });
+
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      const provider = createProvider('claude-sonnet-4-5', {
+        config: { max_tokens: 8000, thinking: { type: 'enabled', budget_tokens: 8000 } },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      expect(createSpy.mock.calls[0][0].max_tokens).toBe(9024);
     });
 
     it('leaves an explicit max_tokens that already clears the budget', async () => {

@@ -3674,6 +3674,20 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expect(getRequestData().max_tokens).toBe(6024);
     });
 
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 5000,
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().max_tokens).toBe(6024);
+    });
+
     it('should use explicit max_tokens when it exceeds budget_tokens', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: {

@@ -766,6 +766,21 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(77);
     });
 
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          max_tokens: 8000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
+        },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+
+      expect(params.max_tokens).toBe(9024);
+    });
+
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',

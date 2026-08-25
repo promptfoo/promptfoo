@@ -2042,6 +2042,12 @@ describe('Anthropic utilities', () => {
       );
     });
 
+    it('raises max_tokens when it exactly matches the manual thinking budget', () => {
+      expect(clampMaxTokensForThinkingBudget(8000, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9024,
+      );
+    });
+
     it('leaves max_tokens alone when it already clears the budget', () => {
       expect(clampMaxTokensForThinkingBudget(9000, { type: 'enabled', budget_tokens: 8000 })).toBe(
         9000,
