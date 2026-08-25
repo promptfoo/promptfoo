@@ -82,8 +82,10 @@ Anthropic does not publish `-latest` aliases — `claude-sonnet-4-5-latest` retu
 parentheses above: `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`.
 Claude 4.6 and newer are already unversioned IDs, so there is nothing to shorten.
 
-Rows without a parenthetical have no alias; several of them are retired on the direct
-Anthropic API and remain listed for cost attribution on historical evals.
+Rows without a parenthetical have no alias. Availability also differs by platform:
+Claude 4, 4.1, 3.7, and 3.5 no longer resolve on the direct Anthropic API, while several
+of them are still served by Bedrock, Vertex, and OpenRouter. The rows stay listed both
+for those platforms and for cost attribution on historical evals.
 
 :::
 
@@ -104,6 +106,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
+| Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
 | Claude 4 Opus     | claude-opus-4-20250514                         | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
 | Claude 4 Sonnet   | claude-sonnet-4-20250514                       | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219                     | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
