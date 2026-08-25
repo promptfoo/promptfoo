@@ -127,6 +127,22 @@ describe('BedrockTokenProvider', () => {
     expect(generateToken).toHaveBeenCalledTimes(2);
   });
 
+  it('retries generator construction after a recoverable failure', async () => {
+    // A cached rejection would pin every later request to the first error, so a user who
+    // installs the optional package (or fixes their credential chain) would still be broken
+    // until the process restarted.
+    getTokenProvider.mockImplementationOnce(() => {
+      throw new Error('transient construction failure');
+    });
+    getTokenProvider.mockReturnValue(generateToken);
+    const provider = new BedrockTokenProvider({}, undefined, 'us-east-1');
+
+    await expect(provider.getToken()).rejects.toThrow(
+      'Unable to load Amazon Bedrock token generation support',
+    );
+    await expect(provider.getToken()).resolves.toBe('generated-token');
+  });
+
   it('rejects partial static credentials with an actionable error', async () => {
     const provider = new BedrockTokenProvider({}, { AWS_ACCESS_KEY_ID: 'access-key' }, 'us-east-1');
 

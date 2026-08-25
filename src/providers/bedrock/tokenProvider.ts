@@ -79,7 +79,15 @@ export class BedrockTokenProvider {
   }
 
   private async getTokenGenerator(): Promise<BedrockTokenGenerator> {
-    this.tokenGenerator ??= this.createTokenGenerator();
+    // Cache the generator, but never cache a construction failure. Both failure modes
+    // here are recoverable without restarting the process — the optional
+    // @aws/bedrock-token-generator package can be installed, and the credential chain
+    // can become ready — so a rejected promise must not pin every later request to the
+    // same error. This mirrors the generation lock below, which also releases on failure.
+    this.tokenGenerator ??= this.createTokenGenerator().catch((error) => {
+      this.tokenGenerator = undefined;
+      throw error;
+    });
     return this.tokenGenerator;
   }
 
