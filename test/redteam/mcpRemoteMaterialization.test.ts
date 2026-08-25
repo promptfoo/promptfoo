@@ -203,6 +203,7 @@ describe('materializeMcpToolCallRemote', () => {
         value: 'Find clean energy companies.',
       }),
     ).rejects.toMatchObject({
+      cause: expect.any(Error),
       message: expect.stringContaining('Remote MCP materialization failed'),
       tokenUsage,
     });
@@ -213,9 +214,8 @@ describe('materializeMcpToolCallRemote', () => {
       key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
     );
     const tokenUsage = { prompt: 12, completion: 4, total: 16, numRequests: 1 };
-    vi.mocked(fetchWithCache).mockRejectedValueOnce(
-      Object.assign(new Error('Remote request failed'), { tokenUsage }),
-    );
+    const upstreamError = Object.assign(new Error('Remote request failed'), { tokenUsage });
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(upstreamError);
 
     await expect(
       materializeMcpToolCallRemote({
@@ -223,6 +223,7 @@ describe('materializeMcpToolCallRemote', () => {
         value: 'Find clean energy companies.',
       }),
     ).rejects.toMatchObject({
+      cause: upstreamError,
       message: expect.stringContaining('Remote MCP materialization failed'),
       tokenUsage,
     });

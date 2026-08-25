@@ -167,7 +167,9 @@ export async function materializeMcpToolCallRemote(
     if (err instanceof Error && err.name === 'AbortError') {
       throw err;
     }
-    const materializationError = new Error(`Remote MCP materialization failed: ${String(err)}`);
+    const materializationError = new Error(`Remote MCP materialization failed: ${String(err)}`, {
+      cause: err,
+    });
     const failedTokenUsage = tokenUsage ?? getErrorTokenUsage(err);
     if (failedTokenUsage) {
       Object.assign(materializationError, { tokenUsage: failedTokenUsage });
