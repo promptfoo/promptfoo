@@ -20,10 +20,13 @@ export function getProviderType(providerId?: string): string | undefined {
   }
 
   // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
-  if (providerId.includes(':')) {
-    return providerId.split(':')[0];
+  const providerType = providerId.includes(':') ? providerId.split(':')[0] : providerId;
+  if (providerType === 'https') {
+    return 'http';
+  }
+  if (providerType === 'ws' || providerType === 'wss') {
+    return 'websocket';
   }
 
-  // Direct provider types
-  return providerId;
+  return providerType;
 }

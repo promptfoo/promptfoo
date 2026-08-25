@@ -3489,8 +3489,8 @@ describe('ClaudeCodeSDKProvider', () => {
           const provider = new ClaudeCodeSDKProvider({
             config: {
               ask_user_question: { behavior: 'first_option' },
-              // @ts-ignore Intentionally exercise an out-of-band null permission response across SDK versions.
-              can_use_tool: canUseTool,
+              // Intentionally exercises an out-of-band null permission response across SDK versions.
+              can_use_tool: canUseTool as any,
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
