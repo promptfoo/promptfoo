@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
+  clampMaxTokensForThinkingBudget,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
@@ -1656,6 +1657,11 @@ export const BEDROCK_MODEL = {
           normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
+      // max_tokens was resolved above, before the thinking config was known. Anthropic
+      // rejects a budget at or above the cap, so raise the floor now that both are settled.
+      if (typeof params.max_tokens === 'number') {
+        params.max_tokens = clampMaxTokensForThinkingBudget(params.max_tokens, thinking);
+      }
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }

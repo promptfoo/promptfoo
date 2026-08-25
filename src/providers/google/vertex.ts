@@ -17,6 +17,7 @@ import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
   isSamplingParamsDeprecatedClaudeModel,
@@ -363,14 +364,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     if (!maxTokens) {
       maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
-    // Claude requires max_tokens >= budget_tokens when thinking is enabled
-    if (
-      thinkingConfig?.type === 'enabled' &&
-      thinkingConfig.budget_tokens &&
-      maxTokens < thinkingConfig.budget_tokens
-    ) {
-      maxTokens = thinkingConfig.budget_tokens + 1024;
-    }
+    maxTokens = clampMaxTokensForThinkingBudget(maxTokens, thinkingConfig);
 
     // Newer Claude models deprecate manual sampling controls at the model
     // level — the underlying Anthropic API returns 400 for any request that

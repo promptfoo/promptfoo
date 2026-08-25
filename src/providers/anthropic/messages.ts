@@ -32,6 +32,7 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
@@ -873,9 +874,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
-      max_tokens:
+      // resolvedThinking, not the raw config: a sampling-deprecated model has already had
+      // its manual budget converted to adaptive, and there is nothing left to clamp against.
+      max_tokens: clampMaxTokensForThinkingBudget(
         config.max_tokens ??
-        getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+          getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+        resolvedThinking,
+      ),
       messages: extractedMessages,
       stream: shouldStream,
       ...(omitTemperature
