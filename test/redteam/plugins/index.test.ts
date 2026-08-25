@@ -244,6 +244,10 @@ describe('Plugins', () => {
       const generationUsage = {};
       const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
       const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+      expect(plugin).toBeDefined();
+      if (!plugin) {
+        throw new Error('Expected the SSRF plugin to be registered');
+      }
       const options = {
         provider,
         purpose: 'test',
@@ -253,7 +257,7 @@ describe('Plugins', () => {
         delayMs: 0,
       };
 
-      await Promise.all([plugin?.action(options), plugin?.action(options)]);
+      await Promise.all([plugin.action(options), plugin.action(options)]);
 
       expect(generationUsage).toMatchObject(tokenUsage);
     });
