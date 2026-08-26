@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
+import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
@@ -145,6 +149,33 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
           numRequests: 1,
           completionDetails: { reasoning: 3 },
         },
+      });
+    });
+
+    it('retains fresh attacker tokens when the target response is reused from cache', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: { prompt: 20, completion: 8, total: 28, numRequests: 1 },
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'cached target response',
+        cached: true,
+        tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+      const normalizedUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(normalizedUsage, result);
+
+      expect(result.cached).toBe(true);
+      expect(normalizedUsage).toMatchObject({
+        total: 0,
+        cached: 75,
+        numRequests: 0,
+        attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
       });
     });
 

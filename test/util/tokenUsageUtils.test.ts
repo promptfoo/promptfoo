@@ -320,6 +320,42 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('preserves independently incurred attacker usage when the target response is cached', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          attacker: {
+            total: 28,
+            prompt: 20,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 3 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 100,
+        numRequests: 0,
+        attacker: {
+          total: 28,
+          prompt: 20,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
+
     it('counts a cached target turn as one probe when fresh grading still runs', () => {
       const target = createEmptyTokenUsage();
 

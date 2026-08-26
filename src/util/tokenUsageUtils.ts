@@ -340,6 +340,7 @@ export function accumulateResponseTokenUsage(
     accumulateTokenUsage(target, {
       cached: Math.max(response.tokenUsage?.cached ?? 0, reportedTotal),
       numRequests: countAsRequest && options?.countCachedAsRequest ? 1 : 0,
+      ...(response.tokenUsage?.attacker && { attacker: response.tokenUsage.attacker }),
     });
     return;
   }
