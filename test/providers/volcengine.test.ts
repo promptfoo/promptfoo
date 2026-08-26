@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateVolcengineCost,
   createVolcengineProvider,
@@ -250,5 +250,78 @@ describe('VolcengineProvider', () => {
     expect(json.model).toBe('doubao-seed-2-1-pro-260628');
     expect(json.config.apiKey).toBeUndefined();
     expect(json.config.temperature).toBe(0.5);
+  });
+});
+
+describe('VolcengineProvider.callApi', () => {
+  const RATE = 6.737012;
+  const model = 'doubao-seed-2-1-pro-260628';
+
+  const withSuper = async (superResponse: any) => {
+    const provider = new VolcengineProvider(model, { config: {} });
+    vi.spyOn(
+      Object.getPrototypeOf(Object.getPrototypeOf(provider)) as any,
+      'callApi',
+    ).mockResolvedValue(superResponse);
+    return provider.callApi('hi');
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes through an errored response untouched', async () => {
+    const r = await withSuper({ error: 'boom' });
+    expect(r).toEqual({ error: 'boom' });
+  });
+
+  it('passes through an empty response untouched', async () => {
+    const r = await withSuper(undefined);
+    expect(r).toBeUndefined();
+  });
+
+  it('computes cost from token usage', async () => {
+    const r = await withSuper({
+      output: 'ok',
+      tokenUsage: { prompt: 1000000, completion: 1000000 },
+    });
+    expect(r.cost).toBeCloseTo(36.0 / RATE / 1e6 / 1e-6, 4);
+  });
+
+  it('reads cached_tokens from an object raw payload', async () => {
+    const r = await withSuper({
+      output: 'ok',
+      tokenUsage: { prompt: 1000000, completion: 1000000 },
+      raw: { usage: { prompt_tokens_details: { cached_tokens: 500000 } } },
+    });
+    // 500k cached at cache_read, 500k fresh at input, 1M output
+    expect(r.cost).toBeCloseTo(33.6 / RATE / 1e6 / 1e-6, 4);
+  });
+
+  it('reads cached_tokens from a stringified raw payload', async () => {
+    const r = await withSuper({
+      output: 'ok',
+      tokenUsage: { prompt: 1000000, completion: 1000000 },
+      raw: JSON.stringify({ usage: { prompt_tokens_details: { cached_tokens: 500000 } } }),
+    });
+    expect(r.cost).toBeCloseTo(33.6 / RATE / 1e6 / 1e-6, 4);
+  });
+
+  it('ignores an unparseable raw payload', async () => {
+    const r = await withSuper({
+      output: 'ok',
+      tokenUsage: { prompt: 1000000, completion: 1000000 },
+      raw: 'not json',
+    });
+    expect(r.cost).toBeCloseTo(36.0 / RATE / 1e6 / 1e-6, 4);
+  });
+
+  it('does not recompute cost for a cached response', async () => {
+    const r = await withSuper({
+      output: 'ok',
+      cached: true,
+      tokenUsage: { prompt: 1000, completion: 1000 },
+    });
+    expect(r.cost).toBeUndefined();
   });
 });
