@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPProvider } from '../../src/providers/mcp';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../src/types';
@@ -164,11 +168,87 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+    const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(response).toMatchObject({
       output: 'ok',
       tokenUsage: {
+        numRequests: 1,
         attacker: { total: 10, prompt: 7, completion: 3, cached: 10, numRequests: 1 },
-        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+        incurredTokenUsage: {
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+        },
+      },
+    });
+    expect(target.calls).toHaveLength(1);
+
+    const evaluationUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(evaluationUsage, response);
+    expect(evaluationUsage).toMatchObject({
+      numRequests: 1,
+      incurredTokenUsage: { numRequests: 1, attacker: { total: 0, numRequests: 0 } },
+    });
+  });
+
+  it('preserves fresh target tokens and requests when cached materialization is merged', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce({
+      ...remoteMaterializedCall({ completion: 3, numRequests: 1, prompt: 7, total: 10 }),
+      cached: true,
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    vi.spyOn(target, 'callApi').mockResolvedValueOnce({
+      output: 'target response',
+      tokenUsage: { total: 21, prompt: 14, completion: 7 },
+    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      output: 'target response',
+      tokenUsage: {
+        total: 21,
+        prompt: 14,
+        completion: 7,
+        numRequests: 1,
+        attacker: { total: 10, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 21,
+          prompt: 14,
+          completion: 7,
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+        },
+      },
+    });
+  });
+
+  it('does not incur a cached target request when materialization is also cached', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce({
+      ...remoteMaterializedCall({ completion: 3, numRequests: 1, prompt: 7, total: 10 }),
+      cached: true,
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    vi.spyOn(target, 'callApi').mockResolvedValueOnce({
+      output: 'cached target response',
+      cached: true,
+      tokenUsage: { total: 21, prompt: 14, completion: 7 },
+    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      output: 'cached target response',
+      tokenUsage: {
+        total: 21,
+        cached: 21,
+        numRequests: 1,
+        attacker: { total: 10, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 0, numRequests: 0 },
+        },
       },
     });
   });
@@ -289,9 +369,11 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
     expect(response.tokenUsage).toMatchObject({
+      numRequests: 1,
       attacker: { total: 13, prompt: 9, completion: 4, cached: 13, numRequests: 1 },
-      incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+      incurredTokenUsage: { numRequests: 1, attacker: { total: 0, numRequests: 0 } },
     });
+    expect(target.calls).toHaveLength(1);
   });
 
   it('does not confuse a fully prompt-cached local request with a cached response', async () => {
@@ -386,10 +468,73 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(response).toMatchObject({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
       tokenUsage: {
+        numRequests: 0,
         attacker: { total: 13, prompt: 9, completion: 4, numRequests: 1 },
       },
     });
     expect(target.calls).toHaveLength(0);
+  });
+
+  it('does not invent target probes when cached materialization returns invalid output', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output: 'invalid cached tool call',
+        cached: true,
+        tokenUsage: { prompt: 9, completion: 4, total: 13 },
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+    const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(response).toMatchObject({
+      error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: {
+        numRequests: 0,
+        attacker: { total: 13, cached: 13, numRequests: 1 },
+        incurredTokenUsage: {
+          numRequests: 0,
+          attacker: { total: 0, numRequests: 0 },
+        },
+      },
+    });
+    expect(target.calls).toHaveLength(0);
+
+    const evaluationUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(evaluationUsage, response);
+    expect(evaluationUsage).toMatchObject({
+      numRequests: 0,
+      incurredTokenUsage: { numRequests: 0 },
+    });
+  });
+
+  it('counts an attempted target probe when cached materialization precedes a target error', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce({
+      ...remoteMaterializedCall({ completion: 3, numRequests: 1, prompt: 7, total: 10 }),
+      cached: true,
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const targetCall = vi
+      .spyOn(target, 'callApi')
+      .mockRejectedValueOnce(new Error('Target provider failed'));
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      error: expect.stringContaining('Target provider failed'),
+      tokenUsage: {
+        numRequests: 1,
+        attacker: { total: 10, numRequests: 1 },
+        incurredTokenUsage: {
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+        },
+      },
+    });
+    expect(targetCall).toHaveBeenCalledTimes(1);
   });
 
   it('returns a materialization error when the wrapped provider call fails', async () => {

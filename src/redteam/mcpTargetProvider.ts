@@ -1,6 +1,11 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { accumulateAttackerTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 import { materializeMcpToolCallRemote } from './extraction/util';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
@@ -30,12 +35,14 @@ type McpProviderWithTools = ApiProvider & {
 function mergeMaterializationTokenUsage(
   response: ProviderResponse,
   materializationUsage: MaterializationUsage | undefined,
+  targetWasCalled: boolean,
 ): ProviderResponse {
   if (!materializationUsage?.tokenUsage) {
     return response;
   }
 
-  const tokenUsage = { ...(response.tokenUsage ?? {}) };
+  const tokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(tokenUsage, response, { countAsRequest: targetWasCalled });
   accumulateAttackerTokenUsage(tokenUsage, materializationUsage);
 
   return {
@@ -95,6 +102,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
     }
 
     let materializationUsage: MaterializationUsage | undefined;
+    let targetWasCalled = false;
 
     try {
       const intentValue =
@@ -170,15 +178,16 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }
         : undefined;
 
+      targetWasCalled = true;
       const response = await this.target.callApi(materializedPrompt, materializedContext, options);
-      return mergeMaterializationTokenUsage(response, materializationUsage);
+      return mergeMaterializationTokenUsage(response, materializationUsage, targetWasCalled);
     } catch (error) {
       const errorResponse: ProviderResponse = {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
-      return mergeMaterializationTokenUsage(errorResponse, materializationUsage);
+      return mergeMaterializationTokenUsage(errorResponse, materializationUsage, targetWasCalled);
     }
   }
 
