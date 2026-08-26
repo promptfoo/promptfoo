@@ -126,7 +126,6 @@ export const ProviderEnvOverridesSchema = z.object({
   VERTEX_PROJECT_ID: z.string().optional(),
   VERTEX_PUBLISHER: z.string().optional(),
   VERTEX_REGION: z.string().optional(),
-  VOLCENGINE_API_KEY: z.string().optional(),
   VOYAGE_API_BASE_URL: z.string().optional(),
   VOYAGE_API_KEY: z.string().optional(),
   WATSONX_AI_APIKEY: z.string().optional(),

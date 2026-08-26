@@ -257,13 +257,13 @@ describe('VolcengineProvider.callApi', () => {
   const RATE = 6.737012;
   const model = 'doubao-seed-2-1-pro-260628';
 
-  const withSuper = async (superResponse: any) => {
+  const withSuper = async (superResponse: any, context?: any) => {
     const provider = new VolcengineProvider(model, { config: {} });
     vi.spyOn(
       Object.getPrototypeOf(Object.getPrototypeOf(provider)) as any,
       'callApi',
     ).mockResolvedValue(superResponse);
-    return provider.callApi('hi');
+    return provider.callApi('hi', context);
   };
 
   afterEach(() => {
@@ -288,32 +288,28 @@ describe('VolcengineProvider.callApi', () => {
     expect(r.cost).toBeCloseTo(36.0 / RATE / 1e6 / 1e-6, 4);
   });
 
-  it('reads cached_tokens from an object raw payload', async () => {
+  it('prices cache hits from normalized tokenUsage', async () => {
     const r = await withSuper({
       output: 'ok',
-      tokenUsage: { prompt: 1000000, completion: 1000000 },
-      raw: { usage: { prompt_tokens_details: { cached_tokens: 500000 } } },
+      tokenUsage: {
+        prompt: 1000000,
+        completion: 1000000,
+        completionDetails: { cacheReadInputTokens: 500000 },
+      },
     });
     // 500k cached at cache_read, 500k fresh at input, 1M output
     expect(r.cost).toBeCloseTo(33.6 / RATE / 1e6 / 1e-6, 4);
   });
 
-  it('reads cached_tokens from a stringified raw payload', async () => {
-    const r = await withSuper({
-      output: 'ok',
-      tokenUsage: { prompt: 1000000, completion: 1000000 },
-      raw: JSON.stringify({ usage: { prompt_tokens_details: { cached_tokens: 500000 } } }),
-    });
-    expect(r.cost).toBeCloseTo(33.6 / RATE / 1e6 / 1e-6, 4);
-  });
-
-  it('ignores an unparseable raw payload', async () => {
-    const r = await withSuper({
-      output: 'ok',
-      tokenUsage: { prompt: 1000000, completion: 1000000 },
-      raw: 'not json',
-    });
-    expect(r.cost).toBeCloseTo(36.0 / RATE / 1e6 / 1e-6, 4);
+  it('lets a prompt-level cost override win', async () => {
+    const r = await withSuper(
+      {
+        output: 'ok',
+        tokenUsage: { prompt: 1000000, completion: 1000000 },
+      },
+      { prompt: { config: { cost: 1.0 / 1e6 } } },
+    );
+    expect(r.cost).toBeCloseTo(2.0);
   });
 
   it('does not recompute cost for a cached response', async () => {
@@ -323,5 +319,38 @@ describe('VolcengineProvider.callApi', () => {
       tokenUsage: { prompt: 1000, completion: 1000 },
     });
     expect(r.cost).toBeUndefined();
+  });
+});
+
+describe('createVolcengineProvider routing', () => {
+  it('defaults the model for the bare provider ID', () => {
+    expect(createVolcengineProvider('volcengine').id()).toBe(
+      'volcengine:doubao-seed-2-1-pro-260628',
+    );
+  });
+
+  it('defaults the model for a trailing colon', () => {
+    expect(createVolcengineProvider('volcengine:').id()).toBe(
+      'volcengine:doubao-seed-2-1-pro-260628',
+    );
+  });
+
+  it('throws on sub-types this provider does not implement', () => {
+    expect(() => createVolcengineProvider('volcengine:embedding:doubao-embedding')).toThrow(
+      /only.*chat models/i,
+    );
+  });
+
+  it('still accepts a model name containing a colon', () => {
+    expect(createVolcengineProvider('volcengine:doubao-seed-evolving').id()).toBe(
+      'volcengine:doubao-seed-evolving',
+    );
+  });
+});
+
+describe('calculateVolcengineCost zero tokens', () => {
+  it('prices a response with zero completion tokens', () => {
+    const cost = calculateVolcengineCost('doubao-seed-2-1-pro-260628', {}, 1000000, 0);
+    expect(cost).toBeCloseTo(6.0 / 6.737012);
   });
 });

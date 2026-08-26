@@ -1307,7 +1307,8 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('volcengine:'),
+    test: (providerPath: string) =>
+      providerPath === 'volcengine' || providerPath.startsWith('volcengine:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

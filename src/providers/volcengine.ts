@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateCost, clampCachedTokens } from './shared';
@@ -173,7 +174,9 @@ export function calculateVolcengineCost(
   completionTokens?: number,
   cachedTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  // 0 is a valid token count (e.g. a response that stops before emitting any
+  // completion), so only missing / non-finite values should skip pricing.
+  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) {
     return undefined;
   }
 
@@ -214,12 +217,27 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
     // Extract the nested config
     const volcengineConfig = providerOptions.config?.config;
 
+    // registry.ts hands us the whole ProviderOptions as `config`, so pull out the
+    // OpenAI options and drop the wrapper keys (id/label/env/nested config).
+    // Spreading them wholesale would leave a nested `config.apiKey` that toJSON()
+    // does not scrub.
+    const { config: _nested, ...outerConfig } = (providerOptions.config ?? {}) as Record<
+      string,
+      any
+    >;
+    delete outerConfig.id;
+    delete outerConfig.label;
+    delete outerConfig.env;
+
     super(modelName, {
       ...providerOptions,
       config: {
         apiKeyEnvar: 'ARK_API_KEY',
-        apiBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-        ...providerOptions.config,
+        apiBaseUrl:
+          (providerOptions.env as any)?.ARK_API_BASE_URL ||
+          getEnvString('ARK_API_BASE_URL') ||
+          'https://ark.cn-beijing.volces.com/api/v3',
+        ...outerConfig,
         ...volcengineConfig,
       },
     });
@@ -253,29 +271,17 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
       return response;
     }
 
-    // Extract cache hit information if available
-    let cachedTokens = 0;
-    if (typeof response.raw === 'string') {
-      try {
-        const rawData = JSON.parse(response.raw);
-        if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-          cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-        }
-      } catch (err) {
-        logger.debug(`Failed to parse raw response for cache info: ${err}`);
-      }
-    } else if (typeof response.raw === 'object' && response.raw !== null) {
-      const rawData = response.raw;
-      if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-        cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-      }
-    }
+    // The OpenAI adapter normalizes Ark's usage.prompt_tokens_details.cached_tokens
+    // onto tokenUsage.completionDetails.cacheReadInputTokens; it does not surface the
+    // upstream body, so read the normalized field.
+    const cachedTokens = response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0;
 
-    // Calculate cost with cache information
+    // Calculate cost with cache information. Prompt-level cost overrides win over the
+    // provider config so per-test pricing stays authoritative.
     if (response.tokenUsage && !response.cached) {
       response.cost = calculateVolcengineCost(
         this.modelName,
-        this.config || {},
+        { ...(this.config || {}), ...(context?.prompt?.config ?? {}) },
         response.tokenUsage.prompt,
         response.tokenUsage.completion,
         cachedTokens,
@@ -286,11 +292,34 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
   }
 }
 
+// Sub-types this provider does not implement. Ark's embedding and image endpoints
+// have different request shapes, so route them to a clear error instead of silently
+// POSTing to /chat/completions.
+const UNSUPPORTED_SUBTYPES = new Set([
+  'embedding',
+  'embeddings',
+  'image',
+  'images',
+  'moderation',
+  'realtime',
+  'responses',
+]);
+
 export function createVolcengineProvider(
   providerPath: string,
   options: VolcengineProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':') || 'doubao-seed-2-1-pro-260628';
+  const rest = splits.slice(1);
+
+  if (rest.length > 1 && UNSUPPORTED_SUBTYPES.has(rest[0])) {
+    throw new Error(
+      `Unsupported Volcengine provider type: ${rest[0]}. The volcengine provider only ` +
+        `supports chat models, e.g. volcengine:doubao-seed-2-1-pro-260628`,
+    );
+  }
+
+  // `volcengine` and `volcengine:` both fall back to the default chat model.
+  const modelName = rest.join(':') || 'doubao-seed-2-1-pro-260628';
   return new VolcengineProvider(modelName, options);
 }

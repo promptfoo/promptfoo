@@ -542,9 +542,6 @@
         "VERTEX_REGION": {
           "type": "string"
         },
-        "VOLCENGINE_API_KEY": {
-          "type": "string"
-        },
         "VOYAGE_API_BASE_URL": {
           "type": "string"
         },
@@ -2026,9 +2023,6 @@
                       "type": "string"
                     },
                     "VERTEX_REGION": {
-                      "type": "string"
-                    },
-                    "VOLCENGINE_API_KEY": {
                       "type": "string"
                     },
                     "VOYAGE_API_BASE_URL": {
