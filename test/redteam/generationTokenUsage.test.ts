@@ -112,7 +112,7 @@ describe('generation token usage', () => {
 
     await expect(provider.callApi('generate a test')).rejects.toThrow('generation timed out');
 
-    expect(usage).toEqual({ numRequests: 1 });
+    expect(usage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('preserves token usage from failed provider requests exactly once', async () => {

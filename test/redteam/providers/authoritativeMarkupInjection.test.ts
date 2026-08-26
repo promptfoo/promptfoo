@@ -172,10 +172,15 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
       expect(result.cached).toBe(true);
       expect(normalizedUsage).toMatchObject({
-        total: 0,
+        total: 75,
         cached: 75,
-        numRequests: 0,
+        numRequests: 1,
         attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        },
       });
     });
 

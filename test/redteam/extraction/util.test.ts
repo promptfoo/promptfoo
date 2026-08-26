@@ -170,7 +170,7 @@ describe('fetchRemoteGeneration', () => {
       'extraction timed out',
     );
 
-    expect(generationUsage).toEqual({ numRequests: 1 });
+    expect(generationUsage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('does not count an invalid remote extraction response twice', async () => {

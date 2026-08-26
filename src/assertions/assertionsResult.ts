@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
-import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -78,10 +77,53 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
 }
 
 function accumulateNormalizedAssertionTokenUsage(
-  target: AssertionTokenUsage,
+  target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
-  accumulateTokenUsage(target, update);
+  const trackIncurredUsage = Boolean(target.incurredTokenUsage || update.incurredTokenUsage);
+  if (trackIncurredUsage && !target.incurredTokenUsage) {
+    target.incurredTokenUsage = cloneAssertionTokenUsage(target);
+  }
+
+  for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+    target[field] = (target[field] ?? 0) + (update[field] ?? 0);
+  }
+
+  if (update.completionDetails) {
+    const currentDetails = target.completionDetails;
+    const incomingDetails = update.completionDetails;
+    target.completionDetails = {
+      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+      acceptedPrediction:
+        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+      rejectedPrediction:
+        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+      cacheReadInputTokens:
+        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
+      cacheCreationInputTokens:
+        (currentDetails?.cacheCreationInputTokens ?? 0) +
+        (incomingDetails.cacheCreationInputTokens ?? 0),
+    };
+  }
+
+  if (trackIncurredUsage && target.incurredTokenUsage) {
+    accumulateNormalizedAssertionTokenUsage(
+      target.incurredTokenUsage,
+      update.incurredTokenUsage ?? cloneAssertionTokenUsage(update),
+    );
+  }
+}
+
+function cloneAssertionTokenUsage(
+  tokenUsage: NonNullable<GradingResult['tokensUsed']>,
+): NonNullable<NonNullable<GradingResult['tokensUsed']>['incurredTokenUsage']> {
+  const { incurredTokenUsage: _incurredTokenUsage, ...assertionUsage } = tokenUsage;
+  return {
+    ...assertionUsage,
+    ...(assertionUsage.completionDetails && {
+      completionDetails: { ...assertionUsage.completionDetails },
+    }),
+  };
 }
 
 function mergeScoringMetadata(
@@ -151,7 +193,7 @@ function mergeScoringTokenUsage(
       completionDetails: { ...baseTokensUsed.completionDetails },
     }),
     ...(baseTokensUsed?.incurredTokenUsage && {
-      incurredTokenUsage: cloneTokenUsageBreakdown(baseTokensUsed.incurredTokenUsage),
+      incurredTokenUsage: cloneAssertionTokenUsage(baseTokensUsed.incurredTokenUsage),
     }),
   };
   const scorerUsedTokens =
