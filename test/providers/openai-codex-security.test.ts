@@ -9,6 +9,7 @@ import {
   OpenAICodexSecurityProvider,
 } from '../../src/providers/openai/codex-security';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -448,6 +449,39 @@ describe('OpenAICodexSecurityProvider', () => {
           reasoning: 3,
           cacheReadInputTokens: 50,
           cacheCreationInputTokens: 20,
+        },
+      });
+    });
+
+    it('distinguishes SDK prompt-cache tokens from cached Promptfoo scan responses', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: { operation: 'deep-security-scan' },
+      });
+
+      const freshResponse = await provider.callApi('Run a complete deep scan');
+      const tokenUsage = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(tokenUsage, { ...freshResponse, cached: true });
+      accumulateResponseTokenUsage(tokenUsage, freshResponse);
+
+      expect(freshResponse).toMatchObject({
+        cached: false,
+        cost: 0.012,
+        tokenUsage: { total: 140, cached: 25 },
+      });
+      expect(tokenUsage).toMatchObject({
+        total: 280,
+        prompt: 200,
+        completion: 80,
+        cached: 165,
+        numRequests: 2,
+        incurredTokenUsage: {
+          total: 140,
+          prompt: 100,
+          completion: 40,
+          cached: 25,
+          numRequests: 1,
+          completionDetails: { reasoning: 12, cacheReadInputTokens: 25 },
         },
       });
     });

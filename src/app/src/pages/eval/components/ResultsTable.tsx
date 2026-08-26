@@ -19,7 +19,11 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { getPrimaryTokenUsageLabel, getTokenUsageTotal } from '@app/utils/tokenUsage';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -713,6 +717,7 @@ function renderTokenMetrics({
   const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
   const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
   const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
 
   if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
     return null;
@@ -768,6 +773,20 @@ function renderTokenMetrics({
             ? null
             : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
         </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
       ) : null}
       <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
