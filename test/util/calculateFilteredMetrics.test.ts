@@ -148,6 +148,8 @@ describe('calculateFilteredMetrics', () => {
         gradingUsage,
         gradingCached = false,
         responseCached = false,
+        cost = 0,
+        incurredCost,
       }: {
         testIdx: number;
         promptIdx?: number;
@@ -155,6 +157,8 @@ describe('calculateFilteredMetrics', () => {
         gradingUsage?: TokenUsage;
         gradingCached?: boolean;
         responseCached?: boolean;
+        cost?: number;
+        incurredCost?: number;
       },
     ) {
       await eval_.addResult({
@@ -165,7 +169,12 @@ describe('calculateFilteredMetrics', () => {
         provider: { id: 'test-provider', label: 'test' },
         prompt: { raw: 'Test prompt', label: 'Test prompt' },
         vars: { test: 'value' },
-        response: { output: 'test output', ...(responseCached && { cached: true }), tokenUsage },
+        response: {
+          output: 'test output',
+          ...(responseCached && { cached: true }),
+          ...(incurredCost !== undefined && { incurredCost }),
+          tokenUsage,
+        },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -179,10 +188,95 @@ describe('calculateFilteredMetrics', () => {
           ...(gradingCached && { metadata: { cachedResponse: true } }),
         },
         namedScores: {},
-        cost: 0,
+        cost,
         metadata: {},
       });
     }
+
+    it.each([
+      {
+        label: 'a cached result with zero incurred cost',
+        results: [{ cost: 0.5, incurredCost: 0, responseCached: true }],
+        expectedCost: 0.5,
+        expectedIncurredCost: 0,
+      },
+      {
+        label: 'a legacy cached result without incurred cost',
+        results: [{ cost: 0.5, responseCached: true }],
+        expectedCost: 0.5,
+        expectedIncurredCost: 0,
+      },
+      {
+        label: 'a fresh legacy result before a cached result',
+        results: [{ cost: 0.25 }, { cost: 0.5, incurredCost: 0, responseCached: true }],
+        expectedCost: 0.75,
+        expectedIncurredCost: 0.25,
+      },
+      {
+        label: 'a fresh legacy result after a cached result',
+        results: [{ cost: 0.5, responseCached: true }, { cost: 0.25 }],
+        expectedCost: 0.75,
+        expectedIncurredCost: 0.25,
+      },
+      {
+        label: 'a partially incurred composite result',
+        results: [{ cost: 0.5, incurredCost: 0.25, responseCached: true }],
+        expectedCost: 0.5,
+        expectedIncurredCost: 0.25,
+      },
+    ])(
+      'preserves logical and incurred costs for filtered rows containing $label',
+      async ({ results, expectedCost, expectedIncurredCost }) => {
+        const eval_ = await EvalFactory.create({ numResults: 0 });
+        for (const [testIdx, result] of results.entries()) {
+          await addTokenResult(eval_, {
+            testIdx,
+            tokenUsage: { total: 10, numRequests: 1 },
+            ...result,
+          });
+        }
+        await addTokenResult(eval_, {
+          testIdx: results.length,
+          cost: 99,
+          incurredCost: 99,
+          tokenUsage: { total: 10, numRequests: 1 },
+        });
+
+        const metrics = await calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${eval_.id} AND test_idx < ${results.length}`,
+        });
+
+        expect(metrics[0].cost).toBeCloseTo(expectedCost);
+        expect(metrics[0].incurredCost).toBeCloseTo(expectedIncurredCost);
+      },
+    );
+
+    it('does not add incurred cost when all filtered results use legacy fresh accounting', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        cost: 0.25,
+        tokenUsage: { total: 10, numRequests: 1 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        cost: 0.5,
+        incurredCost: 0,
+        responseCached: true,
+        tokenUsage: { total: 10, numRequests: 1 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 0`,
+      });
+
+      expect(metrics[0].cost).toBeCloseTo(0.25);
+      expect(metrics[0]).not.toHaveProperty('incurredCost');
+    });
 
     it('should aggregate token usage correctly', async () => {
       const eval_ = await EvalFactory.create({
