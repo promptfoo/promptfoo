@@ -1026,4 +1026,5 @@ For API-key-backed skill runs that avoid personal Codex config, set `CODEX_HOME_
 
 - [OpenAI Platform Documentation](https://platform.openai.com/docs/)
 - [Standard OpenAI provider](/docs/providers/openai/) - For text-only interactions
+- [Codex Security SDK provider](/docs/providers/openai-codex-security/) - Managed security scans, finding validation, cost, and coverage comparisons
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/) - Alternative agentic provider

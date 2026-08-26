@@ -160,7 +160,7 @@ export default function AddProviderDialog({
                   provider={provider as RedteamProviderOptions}
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
-                  validateAll={shouldValidate}
+                  validateAll={shouldValidate || providerType === 'codex-security'}
                   onValidationRequest={handleValidationRequest}
                   providerType={providerType}
                   mode="eval"
@@ -201,6 +201,9 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return undefined;
   }
 
+  if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
+    return 'codex-security';
+  }
   if (id.startsWith('openai:')) {
     return 'openai';
   }

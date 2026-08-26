@@ -26,11 +26,12 @@ providers:
 
 Keep this provider separate from the Codex SDK provider. They share Codex concepts, but they expose different runtime contracts.
 
-| Surface           | Best for                                      | Runtime                                              | Promptfoo provider                                 |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
-| Codex SDK         | CI, automation, simple agentic coding evals   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)        |
-| Codex app-server  | Rich-client protocol behavior and event evals | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop` |
-| Codex Desktop app | Interactive human work in the desktop product | Native app process and UI                            | Not attached directly                              |
+| Surface            | Best for                                                      | Runtime                                              | Promptfoo provider                                    |
+| ------------------ | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| Codex SDK          | CI, automation, simple agentic coding evals                   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)           |
+| Codex Security SDK | Repository scans, validated findings, scan cost, and coverage | `@openai/codex-security` library                     | [`openai:codex-security`](./openai-codex-security.md) |
+| Codex app-server   | Rich-client protocol behavior and event evals                 | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop`    |
+| Codex Desktop app  | Interactive human work in the desktop product                 | Native app process and UI                            | Not attached directly                                 |
 
 Use this provider when the thing being tested depends on app-server-only behavior such as approval request payloads, streamed item notifications, app connector events, plugin/skill metadata, or thread lifecycle operations. Use the SDK provider when you only need final Codex output, thread reuse, structured output, and traced shell/MCP/search/file steps.
 

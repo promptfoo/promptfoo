@@ -115,6 +115,13 @@ const allProviderOptions = [
     recommended: true,
   },
   {
+    value: 'codex-security',
+    label: 'Codex Security SDK',
+    description: 'Evaluate security scans, finding validation, model reasoning, and cost',
+    tag: 'agents',
+    recommended: true,
+  },
+  {
     value: 'langchain',
     label: 'LangChain',
     description: 'Popular framework for LLM applications',
@@ -938,6 +945,21 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'openai-agents-sdk',
+      );
+    } else if (value === 'codex-security') {
+      setProvider(
+        {
+          id: 'openai:codex-security:gpt-5.6-luna',
+          config: {
+            operation: 'security-scan',
+            repository: '',
+            auth: 'auto',
+            model_reasoning_effort: 'high',
+            max_cost_usd: 1,
+          },
+          label: currentLabel ?? 'Codex Security SDK',
+        },
+        'codex-security',
       );
     } else if (value === 'pydantic-ai') {
       setProvider(
