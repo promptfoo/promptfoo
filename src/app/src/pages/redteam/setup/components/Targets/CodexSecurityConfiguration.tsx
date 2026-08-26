@@ -66,9 +66,9 @@ export default function CodexSecurityConfiguration({
       : typeof config.working_dir === 'string'
         ? config.working_dir
         : '';
-  const configuredReasoning = config.model_reasoning_effort ?? config.reasoning_effort ?? 'high';
-  const reasoning = CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === configuredReasoning)
-    ? configuredReasoning
+  const reasoningValue = config.model_reasoning_effort ?? config.reasoning_effort ?? 'high';
+  const reasoning = CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === reasoningValue)
+    ? reasoningValue
     : '';
   const configuredAuth = config.auth ?? 'auto';
   const auth = CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === configuredAuth)
