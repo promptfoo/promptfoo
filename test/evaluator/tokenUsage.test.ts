@@ -208,6 +208,125 @@ describeEvaluator('evaluator token usage', () => {
     });
   });
 
+  it.each(['cached-first', 'fresh-first'] as const)(
+    'preserves mixed cached and fresh grading in summaries and filtered metrics (%s)',
+    async (ordering) => {
+      const targetProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('fresh-target-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Fresh target response',
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        }),
+      };
+      const cachedGradingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-grading-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Cached grading result' }),
+          cached: true,
+          tokenUsage: {
+            total: 37,
+            prompt: 23,
+            completion: 14,
+            numRequests: 1,
+            completionDetails: { reasoning: 9 },
+          },
+        }),
+      };
+      const freshGradingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('fresh-grading-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+          tokenUsage: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        }),
+      };
+      const gradingProviders =
+        ordering === 'cached-first'
+          ? [cachedGradingProvider, freshGradingProvider]
+          : [freshGradingProvider, cachedGradingProvider];
+      const testSuite: TestSuite = {
+        providers: [targetProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [
+          {
+            assert: gradingProviders.map((provider, index) => ({
+              type: 'llm-rubric' as const,
+              value: `Grading criterion ${index}`,
+              provider,
+            })),
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      const [filteredMetrics] = await evalRecord.getFilteredMetrics({});
+
+      for (const tokenUsage of [
+        summary.stats.tokenUsage,
+        summary.results[0].tokenUsage,
+        evalRecord.prompts[0].metrics?.tokenUsage,
+      ]) {
+        expect(tokenUsage).toMatchObject({
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 60,
+            prompt: 38,
+            completion: 22,
+            cached: 37,
+            numRequests: 2,
+            completionDetails: { reasoning: 13 },
+          },
+          incurredTokenUsage: {
+            total: 100,
+            numRequests: 1,
+            assertions: {
+              total: 23,
+              prompt: 15,
+              completion: 8,
+              numRequests: 1,
+              completionDetails: { reasoning: 4 },
+            },
+          },
+        });
+      }
+      expect(summary.results[0].gradingResult?.tokensUsed).toMatchObject({
+        total: 60,
+        cached: 37,
+        numRequests: 2,
+        completionDetails: { reasoning: 13 },
+        incurredTokenUsage: {
+          total: 23,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      expect(filteredMetrics.tokenUsage).toMatchObject({
+        total: 100,
+        numRequests: 1,
+        assertions: {
+          total: 60,
+          prompt: 38,
+          completion: 22,
+          cached: 37,
+          numRequests: 2,
+        },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+        },
+      });
+    },
+  );
+
   it('retains fresh attacker usage when a strategy reuses a cached target response', async () => {
     const strategyProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-strategy-provider'),

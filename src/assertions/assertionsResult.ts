@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
+import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -16,7 +17,7 @@ export const DEFAULT_TOKENS_USED = {
 };
 
 type AssertionTokenUsage = typeof DEFAULT_TOKENS_USED &
-  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails'>;
+  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails' | 'incurredTokenUsage'>;
 
 interface ParentAssertionSet {
   index: number;
@@ -57,14 +58,15 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
   if (result.metadata?.cachedResponse === true) {
     const reportedTotal =
       tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
-    const { completionDetails: _cachedCompletionDetails, ...cachedTokensUsed } = tokensUsed;
+    const logicalTotal = reportedTotal || (tokensUsed.cached ?? 0);
     return {
-      ...cachedTokensUsed,
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: Math.max(tokensUsed.cached ?? 0, reportedTotal),
-      numRequests: 0,
+      ...tokensUsed,
+      total: logicalTotal,
+      prompt: tokensUsed.prompt ?? 0,
+      completion: tokensUsed.completion ?? 0,
+      cached: Math.max(tokensUsed.cached ?? 0, logicalTotal),
+      numRequests: Math.max(tokensUsed.numRequests ?? 0, 1),
+      incurredTokenUsage: { ...DEFAULT_TOKENS_USED },
     };
   }
 
@@ -79,28 +81,7 @@ function accumulateNormalizedAssertionTokenUsage(
   target: AssertionTokenUsage,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
-  for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
-    target[field] += update[field] ?? 0;
-  }
-
-  if (!update.completionDetails) {
-    return;
-  }
-
-  const currentDetails = target.completionDetails;
-  const incomingDetails = update.completionDetails;
-  target.completionDetails = {
-    reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-    acceptedPrediction:
-      (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-    rejectedPrediction:
-      (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-    cacheReadInputTokens:
-      (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
-    cacheCreationInputTokens:
-      (currentDetails?.cacheCreationInputTokens ?? 0) +
-      (incomingDetails.cacheCreationInputTokens ?? 0),
-  };
+  accumulateTokenUsage(target, update);
 }
 
 function mergeScoringMetadata(
@@ -168,6 +149,9 @@ function mergeScoringTokenUsage(
     numRequests: baseTokensUsed?.numRequests ?? 0,
     ...(baseTokensUsed?.completionDetails && {
       completionDetails: { ...baseTokensUsed.completionDetails },
+    }),
+    ...(baseTokensUsed?.incurredTokenUsage && {
+      incurredTokenUsage: cloneTokenUsageBreakdown(baseTokensUsed.incurredTokenUsage),
     }),
   };
   const scorerUsedTokens =
