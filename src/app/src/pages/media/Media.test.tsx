@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockIntersectionObserver } from '@app/tests/browserMocks';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -404,6 +404,46 @@ describe('Media page URL state machine', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(mediaItemHooks.fetchMediaItemByHash).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
+  });
+
+  it('deep-link error: ignores a retry response after filters clear the requested hash', async () => {
+    const user = userEvent.setup();
+    const recoveredItem = makeItem('recovered', 'Recovered item');
+    let resolveRetry!: (
+      result: Awaited<ReturnType<typeof mediaItemHooks.fetchMediaItemByHash>>,
+    ) => void;
+    const pendingRetry = new Promise<
+      Awaited<ReturnType<typeof mediaItemHooks.fetchMediaItemByHash>>
+    >((resolve) => {
+      resolveRetry = resolve;
+    });
+
+    mockApiResponses();
+    vi.spyOn(mediaItemHooks, 'fetchMediaItemByHash')
+      .mockResolvedValueOnce({ item: null, error: 'server_error' })
+      .mockReturnValueOnce(pendingRetry);
+
+    renderMedia('/media?hash=recovered');
+
+    expect(
+      await screen.findByText('Server error while loading media item. Please try again later.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await user.click(screen.getByRole('tab', { name: /Videos/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('type=video');
+      expect(screen.getByTestId('location')).not.toHaveTextContent('hash=');
+    });
+
+    await act(async () => {
+      resolveRetry({ item: recoveredItem, error: null });
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).not.toHaveTextContent('hash=');
     expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
   });
 

@@ -460,7 +460,7 @@ describe('package manifests', () => {
       agentPackage.optionalDependencies ?? {},
     )) {
       expect(binaryVersion).toBe(agentVersion);
-      const resolvedBinaryVersion = packageLock.packages[`node_modules/${binaryName}`].version;
+      const resolvedBinaryVersion = packageLock.packages[`node_modules/${binaryName}`]?.version;
       expect(resolvedBinaryVersion).toBeDefined();
       expect(satisfies(resolvedBinaryVersion!, agentVersion!)).toBe(true);
     }

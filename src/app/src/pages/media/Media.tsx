@@ -113,15 +113,20 @@ export default function Media() {
   // - 'cleared': user explicitly closed/cleared selection (remove hash from URL)
   const lastInternalSelectionRef = useRef<string | null | 'cleared'>(null);
   const lastResolvedDeepLinkRef = useRef<string | null>(null);
+  const deepLinkRequestGenerationRef = useRef(0);
 
-  const resolveDeepLinkByHash = useCallback(async (hash: string, isCancelled?: () => boolean) => {
+  const resolveDeepLinkByHash = useCallback(async (hash: string) => {
+    const requestGeneration = ++deepLinkRequestGenerationRef.current;
+    const isCancelled = () =>
+      requestGeneration !== deepLinkRequestGenerationRef.current || !isMountedRef.current;
+
     setDeepLinkError(null);
     setDeepLinkErrorCode(null);
     setIsDeepLinkLoading(true);
 
     try {
       const result = await fetchMediaItemByHash(hash);
-      if (isCancelled?.() || !isMountedRef.current) {
+      if (isCancelled()) {
         return;
       }
 
@@ -138,14 +143,14 @@ export default function Media() {
       setDeepLinkErrorCode(result.error);
       setDeepLinkError(result.error ? DEEP_LINK_ERROR_MESSAGES[result.error] : null);
     } catch {
-      if (isCancelled?.() || !isMountedRef.current) {
+      if (isCancelled()) {
         return;
       }
 
       setDeepLinkErrorCode('network_error');
       setDeepLinkError(DEEP_LINK_ERROR_MESSAGES.network_error);
     } finally {
-      if (!isCancelled?.() && isMountedRef.current) {
+      if (!isCancelled()) {
         setIsDeepLinkLoading(false);
       }
     }
@@ -325,10 +330,9 @@ export default function Media() {
     // Only fetch if we're done loading and the item wasn't found in the current list
     if (!isLoading) {
       // Item not in current list, fetch by hash directly
-      let cancelled = false;
-      void resolveDeepLinkByHash(hashParam, () => cancelled);
+      void resolveDeepLinkByHash(hashParam);
       return () => {
-        cancelled = true;
+        deepLinkRequestGenerationRef.current += 1;
         setIsDeepLinkLoading(false);
       };
     }
