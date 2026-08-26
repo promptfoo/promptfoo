@@ -240,7 +240,7 @@ describe('extractGoalFromPrompt', () => {
     );
 
     expect(result).toBeNull();
-    expect(usage).toEqual({ numRequests: 1 });
+    expect(usage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('should return null on HTTP error', async () => {

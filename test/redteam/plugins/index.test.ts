@@ -266,7 +266,7 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
-      expect(generationUsage).toEqual({ numRequests: 1 });
+      expect(generationUsage).toMatchObject({ total: 0, numRequests: 1 });
     });
   });
 
