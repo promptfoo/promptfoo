@@ -90,6 +90,54 @@ describe('matchesSelectBest', () => {
     }
   });
 
+  it.each([
+    { label: 'valid verdict', response: { output: '0' } },
+    { label: 'invalid verdict', response: { output: 'not a verdict' } },
+    { label: 'provider error', response: { error: 'comparison provider failed', output: '' } },
+  ])('preserves mixed cached and incurred comparison usage for a $label', async ({ response }) => {
+    const provider = createMockProvider({
+      id: 'mixed-cache-select-best-provider',
+      response: {
+        ...response,
+        tokenUsage: {
+          total: 100,
+          prompt: 70,
+          completion: 30,
+          cached: 70,
+          numRequests: 2,
+          completionDetails: { reasoning: 9 },
+          incurredTokenUsage: {
+            total: 30,
+            prompt: 20,
+            completion: 10,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+    });
+
+    const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
+
+    for (const gradingResult of result) {
+      expect(gradingResult.tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 70,
+        completion: 30,
+        cached: 70,
+        numRequests: 2,
+        completionDetails: { reasoning: 9 },
+        incurredTokenUsage: {
+          total: 30,
+          prompt: 20,
+          completion: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+    }
+  });
+
   it('should keep reserved criteria and outputs vars ahead of user vars', async () => {
     const provider = createSelectBestProvider('0');
     const grading: GradingConfig = {
