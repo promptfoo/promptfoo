@@ -320,11 +320,21 @@ async function loadNestedFileVars(
     }
     const result: Record<string, unknown> = Object.create(Object.getPrototypeOf(value));
     seen.set(value, result);
-    for (const [key, nested] of Object.entries(value)) {
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || descriptor.get || descriptor.set) {
+        // Accessor properties are copied through by descriptor, not invoked: calling
+        // a getter here would snapshot (and possibly side-effect) it just to look for
+        // file refs, and plain data vars from JSON/YAML never carry accessors anyway.
+        if (descriptor) {
+          Object.defineProperty(result, key, descriptor);
+        }
+        continue;
+      }
       // defineProperty rather than assignment: an own `__proto__` key (e.g. from
       // JSON.parse) must be copied as a data property, not fed to the legacy setter.
       Object.defineProperty(result, key, {
-        value: await loadNestedFileVars(nested, varName, seen),
+        value: await loadNestedFileVars(descriptor.value, varName, seen),
         enumerable: true,
         writable: true,
         configurable: true,
@@ -496,7 +506,11 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (value && typeof value === 'object') {
+    } else if (value && typeof value === 'object' && !varName.startsWith('_')) {
+      // Underscore-prefixed vars (e.g. `_conversation`) are runtime-injected, not
+      // user config — `_conversation` in particular holds prior model output, and
+      // dereferencing `file://` strings inside untrusted output would let a model
+      // pull local file contents into later prompts.
       vars[varName] = (await loadNestedFileVars(value, varName, nestedSeen)) as VarValue;
     }
   }

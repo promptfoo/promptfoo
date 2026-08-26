@@ -450,6 +450,39 @@ describe('evaluatorHelpers', () => {
       await expect(renderPrompt(prompt, vars, {})).rejects.toThrow('ENOENT');
     });
 
+    it('should not dereference file paths inside the _conversation var', async () => {
+      const prompt = toPrompt('{{ topic }}');
+      const conversation = [
+        { input: 'first turn', output: 'see file:///etc/passwd for details' },
+        { input: 'file://secrets.txt', output: 'ok' },
+      ];
+      const vars: Record<string, any> = { topic: 'safety', _conversation: conversation };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(vars._conversation).toBe(conversation);
+      expect(vars._conversation[0].output).toBe('see file:///etc/passwd for details');
+      expect(renderedPrompt).toBe('safety');
+    });
+
+    it('should copy accessor properties by descriptor without invoking the getter', async () => {
+      const prompt = toPrompt('{{ cfg.report }}');
+      const getter = vi.fn(() => 'computed');
+      const cfg: Record<string, any> = { report: 'file://report.txt' };
+      Object.defineProperty(cfg, 'lazy', { get: getter, enumerable: true, configurable: true });
+      const vars: Record<string, any> = { cfg };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('quarterly numbers');
+      expect(getter).not.toHaveBeenCalled();
+      const descriptor = Object.getOwnPropertyDescriptor(vars.cfg, 'lazy');
+      expect(descriptor?.get).toBe(getter);
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {
