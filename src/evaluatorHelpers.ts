@@ -307,7 +307,8 @@ async function loadNestedFileVars(
     logger.debug(`Loading nested file reference in var ${varName} from file: ${filePath}`);
     const contents = await fs.readFile(filePath, 'utf8');
 
-    if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    const lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.yaml') || lowerPath.endsWith('.yml')) {
       return JSON.stringify(loadYaml(contents) as string | object);
     }
     return contents.trim();
@@ -317,10 +318,17 @@ async function loadNestedFileVars(
     if (!isPlainRecord(value)) {
       return value;
     }
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(Object.getPrototypeOf(value));
     seen.set(value, result);
     for (const [key, nested] of Object.entries(value)) {
-      result[key] = await loadNestedFileVars(nested, varName, seen);
+      // defineProperty rather than assignment: an own `__proto__` key (e.g. from
+      // JSON.parse) must be copied as a data property, not fed to the legacy setter.
+      Object.defineProperty(result, key, {
+        value: await loadNestedFileVars(nested, varName, seen),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return result;
   }
@@ -353,6 +361,10 @@ export async function renderPrompt(
   let basePrompt = prompt.raw;
 
   // Load files
+  // One memo map across every var: two top-level vars pointing at the same object
+  // (or a YAML anchor shared between them) must clone once, so identity and cycles
+  // spanning top-level roots survive.
+  const nestedSeen = new WeakMap<object, unknown>();
   for (const [varName, value] of Object.entries(vars)) {
     if (skipRenderVars?.includes(varName)) {
       continue;
@@ -485,7 +497,7 @@ export async function renderPrompt(
       }
       vars[varName] = javascriptOutput.output;
     } else if (value && typeof value === 'object') {
-      vars[varName] = (await loadNestedFileVars(value, varName)) as VarValue;
+      vars[varName] = (await loadNestedFileVars(value, varName, nestedSeen)) as VarValue;
     }
   }
 

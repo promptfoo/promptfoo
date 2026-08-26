@@ -396,11 +396,47 @@ describe('evaluatorHelpers', () => {
       const shared = { report: 'file://report.txt' };
       const vars = { cfg: { a: shared, b: shared } };
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValue('quarterly numbers');
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
 
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('quarterly numbers quarterly numbers');
+    });
+
+    it('should clone an object shared between two top-level vars only once', async () => {
+      const prompt = toPrompt('{{ a.report }} {{ b.report }}');
+      const shared = { report: 'file://report.txt' };
+      const vars = { a: shared, b: shared };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('quarterly numbers quarterly numbers');
+      expect(vars.a).toBe(vars.b);
+    });
+
+    it('should parse nested yaml references with uppercase extensions', async () => {
+      const prompt = toPrompt('{{ cfg.settings }}');
+      const vars = { cfg: { settings: 'file://settings.YAML' } };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('retries: 3\nmode: strict\n');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
+    });
+
+    it('should keep an own __proto__ key as a data property when cloning', async () => {
+      const prompt = toPrompt('{{ cfg.name }}');
+      const vars: Record<string, any> = {
+        cfg: JSON.parse('{"name":"x","__proto__":{"injected":"yes"}}'),
+      };
+
+      await renderPrompt(prompt, vars, {});
+
+      expect(Object.prototype.hasOwnProperty.call(vars.cfg, '__proto__')).toBe(true);
+      expect((vars.cfg as any).injected).toBeUndefined();
     });
 
     it('should surface an error when a nested file reference does not exist', async () => {
