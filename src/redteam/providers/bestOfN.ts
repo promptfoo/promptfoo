@@ -200,13 +200,21 @@ export default class BestOfNProvider implements ApiProvider {
       );
 
       if (successfulResponse) {
-        (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        return successfulResponse;
+        const aggregatedResponse = successfulResponse as ProviderResponse;
+        aggregatedResponse.tokenUsage = targetTokenUsage;
+        if (aggregatedResponse.cached && (targetTokenUsage.numRequests ?? 0) > 0) {
+          aggregatedResponse.cached = false;
+        }
+        return aggregatedResponse;
       }
       if (lastResponse) {
-        (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        (lastResponse as ProviderResponse).metadata = {
-          ...((lastResponse as ProviderResponse).metadata ?? {}),
+        const aggregatedResponse = lastResponse as ProviderResponse;
+        aggregatedResponse.tokenUsage = targetTokenUsage;
+        if (aggregatedResponse.cached && (targetTokenUsage.numRequests ?? 0) > 0) {
+          aggregatedResponse.cached = false;
+        }
+        aggregatedResponse.metadata = {
+          ...(aggregatedResponse.metadata ?? {}),
           sessionIds,
         };
       }

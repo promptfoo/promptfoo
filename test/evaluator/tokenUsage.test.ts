@@ -28,74 +28,75 @@ describeEvaluator('evaluator token usage', () => {
     });
   });
 
-  it.each([
-    1, 2,
-  ])('counts fresh grading as one probe without recharging a cached target at concurrency %i', async (maxConcurrency) => {
-    const cachedTargetProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('cached-target-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Cached target response',
+  it.each([1, 2])(
+    'counts fresh grading as one probe without recharging a cached target at concurrency %i',
+    async (maxConcurrency) => {
+      const cachedTargetProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('cached-target-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Cached target response',
+          cached: true,
+          tokenUsage: {
+            total: 295,
+            prompt: 201,
+            completion: 94,
+            cached: 12,
+            numRequests: 1,
+            completionDetails: { reasoning: 8 },
+          },
+        }),
+      };
+      const gradingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('fresh-grading-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [cachedTargetProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'llm-rubric',
+                value: 'The response should be useful',
+                provider: gradingProvider,
+              },
+            ],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, { maxConcurrency });
+      const summary = await evalRecord.toEvaluateSummary();
+
+      for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
+        expect(tokenUsage).toMatchObject({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 295,
+          numRequests: 1,
+          completionDetails: { reasoning: 0 },
+          assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        });
+      }
+      expect(summary.results[0].response).toMatchObject({
         cached: true,
         tokenUsage: {
-          total: 295,
-          prompt: 201,
-          completion: 94,
-          cached: 12,
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 295,
           numRequests: 1,
-          completionDetails: { reasoning: 8 },
+          completionDetails: { reasoning: 0 },
         },
-      }),
-    };
-    const gradingProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('fresh-grading-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
-        tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [cachedTargetProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'The response should be useful',
-              provider: gradingProvider,
-            },
-          ],
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency });
-    const summary = await evalRecord.toEvaluateSummary();
-
-    for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
-      expect(tokenUsage).toMatchObject({
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 295,
-        numRequests: 1,
-        completionDetails: { reasoning: 0 },
-        assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
       });
-    }
-    expect(summary.results[0].response).toMatchObject({
-      cached: true,
-      tokenUsage: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 295,
-        numRequests: 1,
-        completionDetails: { reasoning: 0 },
-      },
-    });
-  });
+    },
+  );
 
   it('does not count a probe when both target and grading responses are cached', async () => {
     const cachedTargetProvider: ApiProvider = {
@@ -147,6 +148,68 @@ describeEvaluator('evaluator token usage', () => {
       cached: 295,
       numRequests: 0,
     });
+  });
+
+  it('counts cached target turns as probes when comparison grading runs afterward', async () => {
+    const matchers = await import('../../src/matchers/comparison');
+    const freshComparison = {
+      pass: true,
+      score: 1,
+      reason: 'Fresh comparison grade',
+      tokensUsed: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+    };
+    const matchesSelectBestSpy = vi
+      .spyOn(matchers, 'matchesSelectBest')
+      .mockResolvedValue([freshComparison, { ...freshComparison }]);
+    const cachedTargetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Cached target response',
+        cached: true,
+        tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
+      }),
+    };
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [cachedTargetProvider],
+        prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+        tests: [
+          {
+            assert: [
+              { type: 'contains', value: 'Cached' },
+              { type: 'select-best', value: 'choose the best response' },
+            ],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.tokenUsage).toMatchObject({
+        total: 0,
+        cached: 590,
+        numRequests: 2,
+        assertions: { total: 26, numRequests: 2 },
+      });
+      for (const result of summary.results) {
+        expect(result.tokenUsage).toMatchObject({
+          total: 0,
+          cached: 295,
+          numRequests: 1,
+          assertions: { total: 13, numRequests: 1 },
+        });
+        expect(result.response?.tokenUsage).toMatchObject({
+          total: 0,
+          cached: 295,
+          numRequests: 1,
+        });
+      }
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
   });
 
   it('does not treat untrusted provider metadata as a cached grading response', async () => {

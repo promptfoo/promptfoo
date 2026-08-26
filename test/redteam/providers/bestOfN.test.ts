@@ -132,6 +132,72 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     );
   });
 
+  it('preserves fresh target usage when a cached candidate finishes after a fresh candidate', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'Fresh candidate failed',
+        error: 'Candidate was rejected',
+        tokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Cached candidate succeeded',
+        cached: true,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(false);
+    expect(result.tokenUsage).toMatchObject({
+      total: 60,
+      prompt: 40,
+      completion: 20,
+      cached: 100,
+      numRequests: 1,
+    });
+  });
+
+  it('keeps an aggregate cached when every candidate response was cached', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'First cached candidate failed',
+        error: 'Candidate was rejected',
+        cached: true,
+        tokenUsage: { total: 80, prompt: 50, completion: 30, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Second cached candidate succeeded',
+        cached: true,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toMatchObject({ total: 0, cached: 180, numRequests: 0 });
+  });
+
+  it('preserves fresh target usage when the final failed candidate was cached', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        error: 'Fresh candidate was rejected',
+        tokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        error: 'Cached candidate was rejected',
+        cached: true,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(false);
+    expect(result.tokenUsage).toMatchObject({ total: 60, cached: 100, numRequests: 1 });
+  });
+
   it('should re-throw AbortError and not swallow it', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',
