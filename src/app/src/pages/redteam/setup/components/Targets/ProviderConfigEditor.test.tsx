@@ -594,6 +594,26 @@ describe('ProviderConfigEditor', () => {
         expectedError: 'Unsupported Codex Security operation',
       },
       {
+        config: { operation: 'security-scan', repository: '/repos/service', auth: 'oauth' },
+        expectedError: 'Unsupported Codex Security authentication method',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          model_reasoning_effort: 'extreme',
+        },
+        expectedError: 'Unsupported Codex Security reasoning effort',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          reasoning_effort: 'extreme',
+        },
+        expectedError: 'Unsupported Codex Security reasoning effort',
+      },
+      {
         config: { operation: 'security-scan', repository: '' },
         expectedError: 'Repository path is required',
       },
@@ -788,6 +808,33 @@ describe('ProviderConfigEditor', () => {
     expect(operation).toHaveValue('security-scan');
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
       operation: 'security-scan',
+    });
+  });
+
+  it('requires unsupported imported authentication and reasoning settings to be corrected', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ auth: 'oauth', model_reasoning_effort: 'extreme' }}
+      />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    const auth = screen.getByLabelText('Authentication');
+    expect(reasoning).toHaveValue('');
+    expect(auth).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Unsupported reasoning effort' })).toBeDisabled();
+    expect(
+      screen.getByRole('option', { name: 'Unsupported authentication method' }),
+    ).toBeDisabled();
+
+    await user.selectOptions(reasoning, 'high');
+    await user.selectOptions(auth, 'chatgpt');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      auth: 'chatgpt',
+      model_reasoning_effort: 'high',
     });
   });
 

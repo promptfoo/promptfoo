@@ -7,7 +7,9 @@ import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CodexSecurityConfiguration, {
+  CODEX_SECURITY_AUTH_OPTIONS,
   CODEX_SECURITY_OPERATION_OPTIONS,
+  CODEX_SECURITY_REASONING_OPTIONS,
 } from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -376,6 +378,21 @@ function ProviderConfigEditor({
         )
       ) {
         errors.push('Unsupported Codex Security operation');
+      }
+      if (
+        provider.config.auth !== undefined &&
+        !CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === provider.config.auth)
+      ) {
+        errors.push('Unsupported Codex Security authentication method');
+      }
+      if (
+        [provider.config.model_reasoning_effort, provider.config.reasoning_effort].some(
+          (effort) =>
+            effort !== undefined &&
+            !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
+        )
+      ) {
+        errors.push('Unsupported Codex Security reasoning effort');
       }
       const repository = provider.config.repository ?? provider.config.working_dir;
       if (typeof repository !== 'string' || !repository.trim()) {

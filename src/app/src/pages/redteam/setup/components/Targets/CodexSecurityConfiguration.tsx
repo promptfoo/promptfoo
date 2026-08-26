@@ -21,7 +21,21 @@ export const CODEX_SECURITY_OPERATION_OPTIONS = [
   { value: 'validation', label: 'Validate a finding' },
 ] as const;
 
-const REASONING_OPTIONS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+export const CODEX_SECURITY_REASONING_OPTIONS = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
+
+export const CODEX_SECURITY_AUTH_OPTIONS = [
+  { value: 'auto', label: 'Automatic' },
+  { value: 'chatgpt', label: 'Existing Codex / ChatGPT login' },
+  { value: 'api-key', label: 'OpenAI API key' },
+] as const;
 
 const SELECT_CLASS_NAME =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background';
@@ -52,6 +66,14 @@ export default function CodexSecurityConfiguration({
       : typeof config.working_dir === 'string'
         ? config.working_dir
         : '';
+  const configuredReasoning = config.model_reasoning_effort ?? config.reasoning_effort ?? 'high';
+  const reasoning = CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === configuredReasoning)
+    ? configuredReasoning
+    : '';
+  const configuredAuth = config.auth ?? 'auto';
+  const auth = CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === configuredAuth)
+    ? configuredAuth
+    : '';
   const [scopedPaths, setScopedPaths] = useState(() =>
     Array.isArray(config.paths) ? config.paths.join(', ') : '',
   );
@@ -220,7 +242,7 @@ export default function CodexSecurityConfiguration({
           <select
             id="codex-security-reasoning"
             className={SELECT_CLASS_NAME}
-            value={config.model_reasoning_effort ?? config.reasoning_effort ?? 'high'}
+            value={reasoning}
             onChange={(event) =>
               updateCanonicalSetting(
                 'model_reasoning_effort',
@@ -229,7 +251,12 @@ export default function CodexSecurityConfiguration({
               )
             }
           >
-            {REASONING_OPTIONS.map((effort) => (
+            {reasoning === '' && (
+              <option value="" disabled>
+                Unsupported reasoning effort
+              </option>
+            )}
+            {CODEX_SECURITY_REASONING_OPTIONS.map((effort) => (
               <option key={effort} value={effort}>
                 {effort}
               </option>
@@ -242,12 +269,19 @@ export default function CodexSecurityConfiguration({
           <select
             id="codex-security-auth"
             className={SELECT_CLASS_NAME}
-            value={config.auth ?? 'auto'}
+            value={auth}
             onChange={(event) => updateCustomTarget('auth', event.target.value)}
           >
-            <option value="auto">Automatic</option>
-            <option value="chatgpt">Existing Codex / ChatGPT login</option>
-            <option value="api-key">OpenAI API key</option>
+            {auth === '' && (
+              <option value="" disabled>
+                Unsupported authentication method
+              </option>
+            )}
+            {CODEX_SECURITY_AUTH_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
 

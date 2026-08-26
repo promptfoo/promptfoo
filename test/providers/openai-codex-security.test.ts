@@ -9,7 +9,10 @@ import {
   OpenAICodexSecurityProvider,
 } from '../../src/providers/openai/codex-security';
 import { providerRegistry } from '../../src/providers/providerRegistry';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
