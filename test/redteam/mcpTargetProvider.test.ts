@@ -351,6 +351,26 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.calls).toHaveLength(0);
   });
 
+  it('preserves paid remote materialization usage when inference fails', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockRejectedValueOnce(
+      Object.assign(new Error('Remote MCP materialization failed'), {
+        tokenUsage: { prompt: 12, completion: 4, total: 16, numRequests: 1 },
+      }),
+    );
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+    const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(response).toMatchObject({
+      error: expect.stringContaining('Remote MCP materialization failed'),
+      tokenUsage: {
+        attacker: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+      },
+    });
+    expect(target.calls).toHaveLength(0);
+  });
+
   it('returns a materialization error when the wrapped provider call fails', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
       remoteMaterializedCall(),
