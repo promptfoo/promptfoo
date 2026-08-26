@@ -10,7 +10,9 @@ import { loadYaml } from '../util/yamlLoad';
 const clone = Clone();
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
-  // Deep copy
+  // Deep copy. Omit live ApiProvider instances: rfdc does not copy prototype
+  // methods, and SDK clients (e.g. Anthropic) contain circular refs that make
+  // the default clone recurse until it blows the stack.
   const ret = clone({
     ...test,
     ...(test.options &&
@@ -23,6 +25,9 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
     ...(test.provider && {
       provider: undefined,
     }),
+    ...(test.assert && {
+      assert: undefined,
+    }),
   });
 
   // Assertion provider overrides test provider
@@ -30,6 +35,9 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   // NOTE: Clone does not copy functions so we set the provider again
   if (test.provider) {
     ret.provider = test.provider;
+  }
+  if (test.assert) {
+    ret.assert = test.assert;
   }
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
