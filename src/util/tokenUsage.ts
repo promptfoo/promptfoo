@@ -64,7 +64,9 @@ export class TokenUsageTracker {
   ): void {
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };
-    accumulateResponseTokenUsage(updated, response);
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, response);
+    accumulateTokenUsage(updated, accounting.incurredTokenUsage ?? accounting);
     this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,

@@ -24,7 +24,7 @@ import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
-  accumulateGradingRequest,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
@@ -991,16 +991,16 @@ export default class EvalResult {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
     if (this.gradingResult) {
-      accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed, {
+      accumulateGradingTokenUsage(tokenUsage, this.gradingResult.tokensUsed, {
         cached: this.gradingResult.metadata?.cachedResponse,
       });
-      if (this.response?.cached && (tokenUsage.assertions.numRequests ?? 0) > 0) {
-        tokenUsage.numRequests = Math.max(tokenUsage.numRequests ?? 0, 1);
-      }
     }
 
     return {
       cost: this.cost,
+      ...(this.response?.incurredCost !== undefined && {
+        incurredCost: this.response.incurredCost,
+      }),
       description: this.description || undefined,
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult ? null : this.gradingResult,

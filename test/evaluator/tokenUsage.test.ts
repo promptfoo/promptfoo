@@ -29,13 +29,14 @@ describeEvaluator('evaluator token usage', () => {
   });
 
   it.each([1, 2])(
-    'counts fresh grading as one probe without recharging a cached target at concurrency %i',
+    'separates cached target footprint from fresh grading at concurrency %i',
     async (maxConcurrency) => {
       const cachedTargetProvider: ApiProvider = {
         id: vi.fn().mockReturnValue('cached-target-provider'),
         callApi: vi.fn().mockResolvedValue({
           output: 'Cached target response',
           cached: true,
+          cost: 0.29,
           tokenUsage: {
             total: 295,
             prompt: 201,
@@ -75,30 +76,41 @@ describeEvaluator('evaluator token usage', () => {
 
       for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
         expect(tokenUsage).toMatchObject({
-          total: 0,
-          prompt: 0,
-          completion: 0,
+          total: 295,
+          prompt: 201,
+          completion: 94,
           cached: 295,
           numRequests: 1,
-          completionDetails: { reasoning: 0 },
+          completionDetails: { reasoning: 8 },
           assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            numRequests: 0,
+            assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          },
         });
       }
       expect(summary.results[0].response).toMatchObject({
         cached: true,
+        cost: 0.29,
+        incurredCost: 0,
         tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
+          total: 295,
+          prompt: 201,
+          completion: 94,
           cached: 295,
           numRequests: 1,
-          completionDetails: { reasoning: 0 },
+          completionDetails: { reasoning: 8 },
+          incurredTokenUsage: { total: 0, numRequests: 0 },
         },
       });
+      expect(summary.results[0]).toMatchObject({ cost: 0.29, incurredCost: 0 });
     },
   );
 
-  it('does not count a probe when both target and grading responses are cached', async () => {
+  it('preserves logical target and grading calls when both responses are cached', async () => {
     const cachedTargetProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -137,16 +149,22 @@ describeEvaluator('evaluator token usage', () => {
 
     for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
       expect(tokenUsage).toMatchObject({
-        total: 0,
+        total: 295,
         cached: 295,
-        numRequests: 0,
-        assertions: { total: 0, cached: 37, numRequests: 0 },
+        numRequests: 1,
+        assertions: { total: 37, cached: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 0, numRequests: 0 },
+        },
       });
     }
     expect(summary.results[0].response?.tokenUsage).toMatchObject({
-      total: 0,
+      total: 295,
       cached: 295,
-      numRequests: 0,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
     });
   });
 
@@ -182,14 +200,19 @@ describeEvaluator('evaluator token usage', () => {
 
     for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
       expect(tokenUsage).toMatchObject({
-        total: 0,
+        total: 295,
         cached: 295,
-        numRequests: 0,
+        numRequests: 1,
         attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 28, numRequests: 1 },
+        },
       });
     }
     expect(summary.results[0].response?.tokenUsage).toMatchObject({
-      total: 0,
+      total: 295,
       cached: 295,
       attacker: { total: 28, numRequests: 1 },
     });
@@ -233,14 +256,19 @@ describeEvaluator('evaluator token usage', () => {
     expect(gradingProvider.callApi).toHaveBeenCalledTimes(1);
     for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
       expect(tokenUsage).toMatchObject({
-        total: 0,
+        total: 295,
         cached: 295,
         numRequests: 1,
         assertions: { total: 0, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 0, numRequests: 1 },
+        },
       });
     }
     expect(summary.results[0].response?.tokenUsage).toMatchObject({
-      total: 0,
+      total: 295,
       cached: 295,
       numRequests: 1,
     });
@@ -285,20 +313,30 @@ describeEvaluator('evaluator token usage', () => {
       const summary = await evalRecord.toEvaluateSummary();
 
       expect(summary.stats.tokenUsage).toMatchObject({
-        total: 0,
+        total: 590,
         cached: 590,
         numRequests: 2,
         assertions: { total: 26, numRequests: 2 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 26, numRequests: 2 },
+        },
       });
       for (const result of summary.results) {
         expect(result.tokenUsage).toMatchObject({
-          total: 0,
+          total: 295,
           cached: 295,
           numRequests: 1,
           assertions: { total: 13, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 0,
+            numRequests: 0,
+            assertions: { total: 13, numRequests: 1 },
+          },
         });
         expect(result.response?.tokenUsage).toMatchObject({
-          total: 0,
+          total: 295,
           cached: 295,
           numRequests: 1,
         });
@@ -373,16 +411,12 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.stats.tokenUsage.assertions).toMatchObject({
-      total: 0,
-      cached: 37,
-      numRequests: 0,
-    });
-    expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
-      total: 0,
-      cached: 37,
-      numRequests: 0,
-    });
+    for (const tokenUsage of [summary.stats.tokenUsage, summary.results[0].tokenUsage]) {
+      expect(tokenUsage).toMatchObject({
+        assertions: { total: 37, cached: 37, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+    }
     expect(summary.results[0].gradingResult?.componentResults?.[0]?.metadata).toMatchObject({
       graderError: true,
       cachedResponse: true,
@@ -415,7 +449,7 @@ describeEvaluator('evaluator token usage', () => {
       registers: {},
     });
 
-    expect(results[0].tokenUsage).toEqual({
+    expect(results[0].tokenUsage).toMatchObject({
       total: 10, // Only provider tokens, NOT assertion tokens
       prompt: 5, // Only provider tokens
       completion: 5, // Only provider tokens
@@ -501,7 +535,7 @@ describeEvaluator('evaluator token usage', () => {
     const summary = await evalRecord.toEvaluateSummary();
 
     // Verify main totals only include provider tokens, NOT assertion tokens
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(summary.stats.tokenUsage).toMatchObject({
       total: 100, // Only provider tokens
       prompt: 60,
       completion: 40,

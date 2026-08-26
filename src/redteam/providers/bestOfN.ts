@@ -202,7 +202,10 @@ export default class BestOfNProvider implements ApiProvider {
       if (successfulResponse) {
         const aggregatedResponse = successfulResponse as ProviderResponse;
         aggregatedResponse.tokenUsage = targetTokenUsage;
-        if (aggregatedResponse.cached && (targetTokenUsage.numRequests ?? 0) > 0) {
+        if (
+          aggregatedResponse.cached &&
+          (targetTokenUsage.incurredTokenUsage?.numRequests ?? 0) > 0
+        ) {
           aggregatedResponse.cached = false;
         }
         return aggregatedResponse;
@@ -210,7 +213,10 @@ export default class BestOfNProvider implements ApiProvider {
       if (lastResponse) {
         const aggregatedResponse = lastResponse as ProviderResponse;
         aggregatedResponse.tokenUsage = targetTokenUsage;
-        if (aggregatedResponse.cached && (targetTokenUsage.numRequests ?? 0) > 0) {
+        if (
+          aggregatedResponse.cached &&
+          (targetTokenUsage.incurredTokenUsage?.numRequests ?? 0) > 0
+        ) {
           aggregatedResponse.cached = false;
         }
         aggregatedResponse.metadata = {

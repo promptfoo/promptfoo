@@ -150,11 +150,12 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
     expect(result.cached).toBe(false);
     expect(result.tokenUsage).toMatchObject({
-      total: 60,
-      prompt: 40,
-      completion: 20,
+      total: 160,
+      prompt: 105,
+      completion: 55,
       cached: 100,
-      numRequests: 1,
+      numRequests: 2,
+      incurredTokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
     });
   });
 
@@ -176,7 +177,12 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
 
     expect(result.cached).toBe(true);
-    expect(result.tokenUsage).toMatchObject({ total: 0, cached: 180, numRequests: 0 });
+    expect(result.tokenUsage).toMatchObject({
+      total: 180,
+      cached: 180,
+      numRequests: 2,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('preserves fresh target usage when the final failed candidate was cached', async () => {
@@ -195,7 +201,12 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
 
     expect(result.cached).toBe(false);
-    expect(result.tokenUsage).toMatchObject({ total: 60, cached: 100, numRequests: 1 });
+    expect(result.tokenUsage).toMatchObject({
+      total: 160,
+      cached: 100,
+      numRequests: 2,
+      incurredTokenUsage: { total: 60, numRequests: 1 },
+    });
   });
 
   it('should re-throw AbortError and not swallow it', async () => {

@@ -103,6 +103,7 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -378,6 +379,7 @@ export class ProgressBarManager {
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
+  options?: { cached?: boolean },
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
     if (!metrics.tokenUsage.assertions) {
@@ -386,6 +388,25 @@ function updateAssertionMetrics(
 
     // Accumulate assertion tokens using the specialized assertion function
     accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
+
+    if (metrics.tokenUsage.incurredTokenUsage) {
+      const reportedTotal =
+        assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
+      const cachedTokens = assertionTokens.cached ?? 0;
+      const cachedResponse =
+        options?.cached === true ||
+        (options?.cached === undefined &&
+          assertionTokens.numRequests === 0 &&
+          cachedTokens > 0 &&
+          reportedTotal <= cachedTokens);
+      if (!cachedResponse) {
+        metrics.tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
+        accumulateAssertionTokenUsage(
+          metrics.tokenUsage.incurredTokenUsage.assertions,
+          assertionTokens.incurredTokenUsage ?? assertionTokens,
+        );
+      }
+    }
   }
 }
 
@@ -592,18 +613,9 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage) {
     row.tokenUsage = createEmptyTokenUsage();
   }
-  if (!row.tokenUsage.assertions) {
-    row.tokenUsage.assertions = createEmptyAssertions();
-  }
-  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
+  accumulateGradingTokenUsage(row.tokenUsage, checkResult.tokensUsed, {
     cached: checkResult.metadata?.cachedResponse,
   });
-  if (row.response?.cached && (row.tokenUsage.assertions.numRequests ?? 0) > 0) {
-    row.tokenUsage.numRequests = Math.max(row.tokenUsage.numRequests ?? 0, 1);
-    if (row.response.tokenUsage) {
-      row.response.tokenUsage.numRequests = row.tokenUsage.numRequests;
-    }
-  }
   row.gradingResult = checkResult;
 }
 
@@ -1233,6 +1245,7 @@ function createEvaluateResult({
     namedScores: {},
     latencyMs: response.latencyMs ?? latencyMs,
     cost: response.cost,
+    ...(response.incurredCost !== undefined && { incurredCost: response.incurredCost }),
     metadata: {
       ...test.metadata,
       ...response.metadata,
@@ -1254,15 +1267,22 @@ function createEvaluateResult({
   return ret;
 }
 
-/** Persist only avoided usage for cached targets so later metric refreshes remain accurate. */
+/** Persist both the logical evaluation footprint and the work actually incurred. */
 function normalizeCachedTargetResponse(response: ProviderResponse): ProviderResponse {
-  if (!response.cached) {
+  if (!response.cached && !response.tokenUsage) {
     return response;
   }
 
   const tokenUsage = createEmptyTokenUsage();
   accumulateResponseTokenUsage(tokenUsage, response);
-  return { ...response, tokenUsage };
+  return {
+    ...response,
+    tokenUsage,
+    ...(response.cost !== undefined &&
+      (response.cached || response.incurredCost !== undefined) && {
+        incurredCost: response.incurredCost ?? (response.cached ? 0 : response.cost),
+      }),
+  };
 }
 
 function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
@@ -2070,10 +2090,13 @@ function mergeComparisonTokenUsage(
   updateAssertionMetrics(
     { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
     gradingResult.tokensUsed,
+    { cached: gradingResult.metadata?.cachedResponse },
   );
 
   if (resultHasModelGradedAssertion(result)) {
-    updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed);
+    updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed, {
+      cached: gradingResult.metadata?.cachedResponse,
+    });
   }
 }
 
@@ -3378,12 +3401,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean,
     wasScore: number,
     metrics: CompletedPrompt['metrics'] | undefined,
+    gradingCached?: boolean,
   ): void {
     if (metrics) {
       metrics.assertPassCount += passed ? 1 : 0;
       metrics.assertFailCount += passed ? 0 : 1;
       if (tokensUsed) {
-        updateAssertionMetrics(metrics, tokensUsed);
+        updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
       }
       if (!passed && result.score !== wasScore) {
         metrics.score += result.score - wasScore;
@@ -3481,9 +3505,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     if (row.gradingResult?.tokensUsed) {
-      updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+      accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
+        cached: row.gradingResult.metadata?.cachedResponse,
+      });
     }
 
+    if (row.incurredCost !== undefined || metrics.incurredCost !== undefined) {
+      metrics.incurredCost =
+        (metrics.incurredCost ?? metrics.cost) + (row.incurredCost ?? row.cost ?? 0);
+    }
     metrics.cost += row.cost || 0;
   }
 
@@ -4439,6 +4469,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       wasSuccess,
       wasScore,
       metrics,
+      gradingResult.metadata?.cachedResponse,
     );
     if (
       result.response?.cached &&
