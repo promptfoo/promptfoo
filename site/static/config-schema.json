@@ -191,6 +191,12 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ARK_API_BASE_URL": {
+          "type": "string"
+        },
+        "ARK_API_KEY": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -534,6 +540,9 @@
           "type": "string"
         },
         "VERTEX_REGION": {
+          "type": "string"
+        },
+        "VOLCENGINE_API_KEY": {
           "type": "string"
         },
         "VOYAGE_API_BASE_URL": {
@@ -1668,6 +1677,12 @@
                     "ANTHROPIC_CUSTOM_HEADERS": {
                       "type": "string"
                     },
+                    "ARK_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ARK_API_KEY": {
+                      "type": "string"
+                    },
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
@@ -2011,6 +2026,9 @@
                       "type": "string"
                     },
                     "VERTEX_REGION": {
+                      "type": "string"
+                    },
+                    "VOLCENGINE_API_KEY": {
                       "type": "string"
                     },
                     "VOYAGE_API_BASE_URL": {

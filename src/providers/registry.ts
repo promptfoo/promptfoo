@@ -106,6 +106,7 @@ import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
+import { createVolcengineProvider } from './volcengine';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -1301,6 +1302,19 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createVercelProvider(providerPath, {
         ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('volcengine:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVolcengineProvider(providerPath, {
+        config: providerOptions,
         env: context.env,
       });
     },
