@@ -13,7 +13,7 @@ function createProvider(callApi: ApiProvider['callApi']): ApiProvider {
 }
 
 describe('generation token usage', () => {
-  it('does not count cached provider responses or their historical token usage', async () => {
+  it('preserves cached generation in the logical footprint without incurring usage', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(
       createProvider(
@@ -28,7 +28,14 @@ describe('generation token usage', () => {
 
     await provider.callApi('generate a test');
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 30,
+      prompt: 20,
+      completion: 10,
+      cached: 30,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it.each([false, undefined])(
@@ -103,6 +110,38 @@ describe('generation token usage', () => {
     });
   });
 
+  it('keeps fresh generation incurred when cached responses follow it', async () => {
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(
+      createProvider(
+        vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'fresh generation',
+            tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'cached generation',
+            cached: true,
+            tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 1 },
+          }),
+      ),
+      usage,
+    );
+
+    await provider.callApi('generate the first test');
+    await provider.callApi('generate the second test');
+
+    expect(usage).toMatchObject({
+      total: 50,
+      prompt: 32,
+      completion: 18,
+      cached: 30,
+      numRequests: 2,
+      incurredTokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+    });
+  });
+
   it('counts failed provider requests even when token usage is unavailable', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(
@@ -130,7 +169,7 @@ describe('generation token usage', () => {
     expect(usage).toMatchObject({ total: 14, prompt: 9, completion: 5, numRequests: 1 });
   });
 
-  it('applies the same cache rules to specialized generation providers', async () => {
+  it('preserves cached specialized generation without incurring usage', async () => {
     const usage: TokenUsage = {};
     const parent = trackGenerationTokenUsage(
       createProvider(vi.fn().mockResolvedValue({ output: 'unused' })),
@@ -149,10 +188,15 @@ describe('generation token usage', () => {
 
     await specialized.callApi('generate a specialized test');
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 45,
+      cached: 45,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
-  it('ignores cached direct remote generation responses', () => {
+  it('preserves cached direct remote generation without incurring usage', () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(
       createProvider(vi.fn().mockResolvedValue({ output: 'unused' })),
@@ -164,6 +208,11 @@ describe('generation token usage', () => {
       tokenUsage: { total: 40, numRequests: 2 },
     });
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 40,
+      cached: 40,
+      numRequests: 2,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 });

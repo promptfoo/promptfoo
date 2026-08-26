@@ -255,7 +255,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.cleanupCalls).toBe(1);
   });
 
-  it('does not charge cached local materialization responses as new attacker calls', async () => {
+  it('preserves cached local materialization in logical but not incurred attacker usage', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
@@ -270,10 +270,9 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
     const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
-    expect(response.tokenUsage?.attacker).toMatchObject({
-      total: 0,
-      cached: 13,
-      numRequests: 0,
+    expect(response.tokenUsage).toMatchObject({
+      attacker: { total: 13, cached: 13, numRequests: 1 },
+      incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
     });
   });
 

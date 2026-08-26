@@ -200,7 +200,7 @@ describe('Plugins', () => {
       expect(generationUsage).toMatchObject(tokenUsage);
     });
 
-    it('does not charge cached remote plugin responses again', async () => {
+    it('preserves cached remote plugin usage without incurring it again', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
       vi.mocked(fetchWithCache).mockResolvedValue({
@@ -225,7 +225,12 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
-      expect(generationUsage).toEqual({});
+      expect(generationUsage).toMatchObject({
+        total: 28,
+        cached: 28,
+        numRequests: 2,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
     });
 
     it('preserves usage reported by failed remote generation requests', async () => {

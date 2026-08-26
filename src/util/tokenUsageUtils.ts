@@ -248,9 +248,18 @@ export function accumulateAttackerTokenUsage(
   }
 
   const { assertions, incurredTokenUsage, ...attackerUsage } = response.tokenUsage ?? {};
+  const reportedTotal =
+    attackerUsage.total ?? (attackerUsage.prompt ?? 0) + (attackerUsage.completion ?? 0);
+  const cachedTokens = attackerUsage.cached ?? 0;
+  const cachedResponse =
+    response.cached === true ||
+    (response.cached === undefined &&
+      attackerUsage.numRequests === 0 &&
+      cachedTokens > 0 &&
+      reportedTotal <= cachedTokens);
   const attackerAccounting = createEmptyTokenUsage();
   accumulateResponseTokenUsage(attackerAccounting, {
-    cached: response.cached,
+    cached: cachedResponse,
     tokenUsage: {
       ...attackerUsage,
       ...(incurredTokenUsage && {
@@ -270,9 +279,9 @@ export function accumulateAttackerTokenUsage(
   const actualAttacker = cloneTokenUsageBreakdown(incurredAttacker ?? logicalAttacker);
   delete actualAttacker.assertions;
   const actualAssertions =
-    incurredTokenUsage?.assertions ?? (response.cached ? undefined : assertions);
+    incurredTokenUsage?.assertions ?? (cachedResponse ? undefined : assertions);
   const trackIncurredUsage = Boolean(
-    target.incurredTokenUsage || incurredTokenUsage || response.cached,
+    target.incurredTokenUsage || incurredTokenUsage || cachedResponse,
   );
 
   accumulateTokenUsage(target, {

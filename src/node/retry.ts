@@ -196,6 +196,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       namedScoresCount: Record<string, number>;
       namedScoreWeights?: Record<string, number>;
       cost: number;
+      incurredCost?: number;
     }
   >();
 
@@ -247,6 +248,11 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
+        const incurredCost = result.response?.incurredCost;
+        if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+          metrics.incurredCost =
+            (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+        }
         metrics.cost += result.cost || 0;
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {

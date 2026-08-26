@@ -1148,6 +1148,36 @@ describe('evaluator', () => {
       expect(eval1.getStats().tokenUsage.generation).toBeUndefined();
     });
 
+    it('preserves cached generation separately from incurred target usage', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: {
+              total: 40,
+              prompt: 25,
+              completion: 15,
+              cached: 40,
+              numRequests: 1,
+              incurredTokenUsage: { total: 0, numRequests: 0 },
+            },
+          },
+        },
+      });
+      eval1.prompts = [{ metrics: { tokenUsage: { total: 10, numRequests: 1 } } }] as any;
+
+      expect(eval1.getStats().tokenUsage).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 40, cached: 40, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          numRequests: 1,
+          generation: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
