@@ -110,6 +110,46 @@ describeEvaluator('evaluator token usage', () => {
     },
   );
 
+  it('preserves logical and incurred costs from mixed-cache composite target responses', async () => {
+    const mixedTargetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('mixed-cache-target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Cached winning response after a fresh candidate',
+        cost: 0.16,
+        incurredCost: 0.06,
+        tokenUsage: {
+          total: 160,
+          prompt: 105,
+          completion: 55,
+          cached: 100,
+          numRequests: 2,
+          incurredTokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+        },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mixedTargetProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'contains', value: 'winning response' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0]).toMatchObject({
+      cost: 0.16,
+      incurredCost: 0.06,
+      response: { cost: 0.16, incurredCost: 0.06 },
+      tokenUsage: {
+        total: 160,
+        numRequests: 2,
+        incurredTokenUsage: { total: 60, numRequests: 1 },
+      },
+    });
+    expect(evalRecord.prompts[0].metrics).toMatchObject({ cost: 0.16, incurredCost: 0.06 });
+  });
+
   it('preserves logical target and grading calls when both responses are cached', async () => {
     const cachedTargetProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-provider'),

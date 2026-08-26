@@ -80,6 +80,8 @@ export default class BestOfNProvider implements ApiProvider {
 
     const targetProvider: ApiProvider = context.originalProvider;
     const targetTokenUsage = createEmptyTokenUsage();
+    let targetCost: number | undefined;
+    let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
@@ -180,6 +182,12 @@ export default class BestOfNProvider implements ApiProvider {
             }
             lastResponse = response;
             accumulateResponseTokenUsage(targetTokenUsage, response);
+            if (response.cost !== undefined) {
+              targetCost = (targetCost ?? 0) + response.cost;
+              incurredTargetCost =
+                (incurredTargetCost ?? 0) +
+                (response.incurredCost ?? (response.cached ? 0 : response.cost));
+            }
             currentStep++;
             if (!response.error) {
               successfulResponse = response;
@@ -199,8 +207,8 @@ export default class BestOfNProvider implements ApiProvider {
         },
       );
 
-      if (successfulResponse) {
-        const aggregatedResponse = successfulResponse as ProviderResponse;
+      const aggregatedResponse = (successfulResponse ?? lastResponse) as ProviderResponse | null;
+      if (aggregatedResponse) {
         aggregatedResponse.tokenUsage = targetTokenUsage;
         if (
           aggregatedResponse.cached &&
@@ -208,30 +216,30 @@ export default class BestOfNProvider implements ApiProvider {
         ) {
           aggregatedResponse.cached = false;
         }
+
+        if (targetCost !== undefined) {
+          aggregatedResponse.cost = targetCost;
+          if (incurredTargetCost !== targetCost || aggregatedResponse.incurredCost !== undefined) {
+            aggregatedResponse.incurredCost = incurredTargetCost;
+          }
+        }
+
+        if (!successfulResponse) {
+          aggregatedResponse.metadata = {
+            ...(aggregatedResponse.metadata ?? {}),
+            sessionIds,
+          };
+        }
+
         return aggregatedResponse;
       }
-      if (lastResponse) {
-        const aggregatedResponse = lastResponse as ProviderResponse;
-        aggregatedResponse.tokenUsage = targetTokenUsage;
-        if (
-          aggregatedResponse.cached &&
-          (targetTokenUsage.incurredTokenUsage?.numRequests ?? 0) > 0
-        ) {
-          aggregatedResponse.cached = false;
-        }
-        aggregatedResponse.metadata = {
-          ...(aggregatedResponse.metadata ?? {}),
+
+      return {
+        error: 'All candidates failed',
+        metadata: {
           sessionIds,
-        };
-      }
-      return (
-        lastResponse || {
-          error: 'All candidates failed',
-          metadata: {
-            sessionIds,
-          },
-        }
-      );
+        },
+      };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
       if (err instanceof Error && err.name === 'AbortError') {
