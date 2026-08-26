@@ -335,7 +335,7 @@ describe('handleContextRecall', () => {
       baseType: 'context-recall',
       assertionValueContext: {
         prompt: 'test prompt',
-        vars: { context: 'incomplete context' },
+        vars: { context: 'test context' },
         test: { vars: { context: 'incomplete context' }, options: {} },
         logProbs: undefined, provider: mockProvider, providerResponse: undefined,
       },
@@ -348,7 +348,7 @@ describe('handleContextRecall', () => {
     expect(result.score).toBeCloseTo(0.7);
     expect(result.reason).toBe('Assertion passed');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
-      'incomplete context', 'Missing fact', 0.7, {}, { context: 'incomplete context' }, undefined,
+      'test context', 'Missing fact', 0.7, {}, { context: 'incomplete context' }, undefined,
     );
   });
 
