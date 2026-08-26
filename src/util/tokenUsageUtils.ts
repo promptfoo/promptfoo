@@ -247,7 +247,12 @@ export function accumulateAttackerTokenUsage(
     return;
   }
 
-  const { assertions, incurredTokenUsage, ...attackerUsage } = response.tokenUsage ?? {};
+  const {
+    assertions,
+    incurredTokenUsage: reportedIncurredTokenUsage,
+    ...attackerUsage
+  } = response.tokenUsage ?? {};
+  const incurredTokenUsage = response.cached ? undefined : reportedIncurredTokenUsage;
   const attackerAccounting = createEmptyTokenUsage();
   accumulateResponseTokenUsage(attackerAccounting, {
     cached: response.cached,

@@ -193,8 +193,22 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
   it('preserves fresh target tokens and requests when cached materialization is merged', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce({
-      ...remoteMaterializedCall({ completion: 3, numRequests: 1, prompt: 7, total: 10 }),
+      prompt: JSON.stringify(searchCompaniesCall),
       cached: true,
+      tokenUsage: {
+        total: 10,
+        prompt: 7,
+        completion: 3,
+        numRequests: 1,
+        assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          prompt: 7,
+          completion: 3,
+          numRequests: 1,
+          assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        },
+      },
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
@@ -212,12 +226,14 @@ describe('maybeWrapMcpProviderForRedteam', () => {
         completion: 7,
         numRequests: 1,
         attacker: { total: 10, numRequests: 1 },
+        assertions: { total: 5, numRequests: 1 },
         incurredTokenUsage: {
           total: 21,
           prompt: 14,
           completion: 7,
           numRequests: 1,
           attacker: { total: 0, numRequests: 0 },
+          assertions: { total: 0, numRequests: 0 },
         },
       },
     });
@@ -360,7 +376,19 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       callApi: async () => ({
         output: JSON.stringify(searchCompaniesCall),
         cached: true,
-        tokenUsage: { prompt: 9, completion: 4, total: 13 },
+        tokenUsage: {
+          prompt: 9,
+          completion: 4,
+          total: 13,
+          assertions: { total: 5, numRequests: 1 },
+          incurredTokenUsage: {
+            prompt: 9,
+            completion: 4,
+            total: 13,
+            numRequests: 1,
+            assertions: { total: 5, numRequests: 1 },
+          },
+        },
       }),
     });
 
@@ -371,7 +399,12 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(response.tokenUsage).toMatchObject({
       numRequests: 1,
       attacker: { total: 13, prompt: 9, completion: 4, cached: 13, numRequests: 1 },
-      incurredTokenUsage: { numRequests: 1, attacker: { total: 0, numRequests: 0 } },
+      assertions: { total: 5, numRequests: 1 },
+      incurredTokenUsage: {
+        numRequests: 1,
+        attacker: { total: 0, numRequests: 0 },
+        assertions: { total: 0, numRequests: 0 },
+      },
     });
     expect(target.calls).toHaveLength(1);
   });
@@ -482,7 +515,17 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       callApi: async () => ({
         output: 'invalid cached tool call',
         cached: true,
-        tokenUsage: { prompt: 9, completion: 4, total: 13 },
+        tokenUsage: {
+          prompt: 9,
+          completion: 4,
+          total: 13,
+          assertions: { total: 5, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 13,
+            numRequests: 1,
+            assertions: { total: 5, numRequests: 1 },
+          },
+        },
       }),
     });
 
@@ -495,9 +538,11 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       tokenUsage: {
         numRequests: 0,
         attacker: { total: 13, cached: 13, numRequests: 1 },
+        assertions: { total: 5, numRequests: 1 },
         incurredTokenUsage: {
           numRequests: 0,
           attacker: { total: 0, numRequests: 0 },
+          assertions: { total: 0, numRequests: 0 },
         },
       },
     });

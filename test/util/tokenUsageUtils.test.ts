@@ -523,6 +523,74 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('discards historical incurred attacker and grading usage without losing fresh target work', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 21, prompt: 14, completion: 7 },
+      });
+
+      accumulateAttackerTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 10,
+          prompt: 7,
+          completion: 3,
+          numRequests: 1,
+          assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 10,
+            prompt: 7,
+            completion: 3,
+            numRequests: 1,
+            assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 21,
+        prompt: 14,
+        completion: 7,
+        numRequests: 1,
+        attacker: { total: 10, prompt: 7, completion: 3, numRequests: 1 },
+        assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 21,
+          prompt: 14,
+          completion: 7,
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+          assertions: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
+    it('preserves explicit incurred attacker and grading usage for fresh composite responses', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: {
+          total: 10,
+          numRequests: 2,
+          assertions: { total: 5, numRequests: 2 },
+          incurredTokenUsage: {
+            total: 6,
+            numRequests: 1,
+            assertions: { total: 2, numRequests: 1 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        attacker: { total: 10, numRequests: 2 },
+        assertions: { total: 5, numRequests: 2 },
+        incurredTokenUsage: {
+          attacker: { total: 6, numRequests: 1 },
+          assertions: { total: 2, numRequests: 1 },
+        },
+      });
+    });
+
     it('requires explicit cache provenance for normalized attacker usage', () => {
       const target = createEmptyTokenUsage();
 
