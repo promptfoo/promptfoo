@@ -264,7 +264,96 @@ describe('retryCommand', () => {
       'Skipping result with invalid promptIdx: 99',
       expect.objectContaining({ resultId: 'invalid-prompt-result' }),
     );
+    expect(prompts[0].metrics).not.toHaveProperty('incurredCost');
   });
+
+  it.each([
+    {
+      label: 'cached result without actual cost',
+      costs: [{ logical: 0.5, incurred: 0, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result without incurred cost',
+      costs: [{ logical: 0.5, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'fresh legacy result before a cached result',
+      costs: [
+        { logical: 0.25, cached: false },
+        { logical: 0.5, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'fresh legacy result after a cached result',
+      costs: [
+        { logical: 0.5, incurred: 0, cached: true },
+        { logical: 0.25, cached: false },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'legacy cached result before a newer cached result',
+      costs: [
+        { logical: 0.5, cached: true },
+        { logical: 0.25, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result after a newer cached result',
+      costs: [
+        { logical: 0.25, incurred: 0, cached: true },
+        { logical: 0.5, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'partially incurred composite result',
+      costs: [{ logical: 0.5, incurred: 0.25, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0.25,
+    },
+  ])(
+    'preserves logical and incurred cost when retrying a $label',
+    async ({ costs, expectedLogicalCost, expectedIncurredCost }) => {
+      const prompts = [{}] as any[];
+      const evalRecord = createEval({
+        persisted: true,
+        prompts,
+        fetchResultsBatched: vi.fn(async function* () {
+          yield costs.map(({ logical, incurred, cached }, index) => ({
+            id: `retried-result-${index}`,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            cost: logical,
+            namedScores: {},
+            response: {
+              cached,
+              ...(incurred !== undefined && { incurredCost: incurred }),
+            },
+          })) as any[];
+        }),
+      });
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(prompts[0].metrics).toMatchObject({
+        cost: expectedLogicalCost,
+        incurredCost: expectedIncurredCost,
+      });
+      expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
+    },
+  );
 
   it.each([
     {
