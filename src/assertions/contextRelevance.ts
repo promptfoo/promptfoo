@@ -63,6 +63,7 @@ export const handleContextRelevance = async ({
         : `Relevance ${result.score.toFixed(2)} is >= 0.7`
       : result.reason,
     metadata: {
+      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
     },
   };

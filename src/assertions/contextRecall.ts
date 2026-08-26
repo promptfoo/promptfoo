@@ -59,6 +59,7 @@ export const handleContextRecall = async ({
         : `Recall ${result.score.toFixed(2)} is >= 0.7`
       : result.reason,
     metadata: {
+      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
     },
   };
