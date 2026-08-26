@@ -10,6 +10,7 @@ export interface MCPServerConfig {
   url?: string; // URL for remote server (not currently supported)
   auth?: MCPServerAuth; // Authentication configuration
   headers?: Record<string, string>; // Additional HTTP headers for URL-based servers
+  env?: Record<string, string>; // Environment variables passed to stdio-type servers
 }
 
 // Bearer token authentication

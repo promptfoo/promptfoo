@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  transformMCPConfigToClaudeCode,
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
@@ -580,5 +581,67 @@ describe('transformMCPToolsToGoogle', () => {
 
     expect(parameters?.type).toBe('OBJECT');
     expect(parameters?.properties).toEqual({});
+  });
+});
+
+describe('transformMCPConfigToClaudeCode', () => {
+  it('forwards per-server env for command-type stdio servers', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      servers: [
+        {
+          name: 'local-tools',
+          command: 'npx',
+          args: ['-y', 'my-mcp-server'],
+          env: { API_TOKEN: 'tok-1', REGION: 'us-east-1' },
+        },
+      ],
+    });
+
+    expect(servers['local-tools']).toEqual({
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', 'my-mcp-server'],
+      env: { API_TOKEN: 'tok-1', REGION: 'us-east-1' },
+    });
+  });
+
+  it('forwards per-server env for path-type stdio servers', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      servers: [{ name: 'scripted', path: './server.js', env: { DEBUG: '1' } }],
+    });
+
+    expect(servers['scripted']).toEqual({
+      type: 'stdio',
+      command: process.execPath,
+      args: ['./server.js'],
+      env: { DEBUG: '1' },
+    });
+  });
+
+  it('omits the env key entirely when the server has no env map', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      servers: [{ command: 'npx', args: ['-y', 'plain-server'] }],
+    });
+
+    const out = servers['npx'] as Record<string, unknown>;
+    expect(out).toMatchObject({ type: 'stdio', command: 'npx', args: ['-y', 'plain-server'] });
+    expect('env' in out).toBe(false);
+  });
+
+  it('reads a single `server` entry the same way as `servers`', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      server: { name: 'solo', command: 'node', args: ['srv.js'], env: { KEY: 'v' } },
+    });
+
+    expect(servers['solo']).toEqual({
+      type: 'stdio',
+      command: 'node',
+      args: ['srv.js'],
+      env: { KEY: 'v' },
+    });
   });
 });
