@@ -45,6 +45,8 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
 
+const TOKEN_MARKER = 'token';
+
 /**
  * Matches keys that count tokens rather than carry one, so counters from any
  * instrumentation stay readable: `prompt.tokens` and `response.tokens` from the tracing
@@ -53,25 +55,48 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
  */
 const TOKEN_COUNT_KEY_PATTERN = /tokens$|(?:^|[^a-z0-9])token_?counts?(?:[^a-z0-9]|$)/;
 
-function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
-  // A count is a number. Anything else under the same key could be a credential.
-  return typeof value === 'number' && TOKEN_COUNT_KEY_PATTERN.test(lowerKey);
+/**
+ * Lowercasing on its own destroys the camel-case boundary, so `promptTokenCount`
+ * would read as `prompttokencount` and match neither branch of the pattern. Insert the
+ * boundary first.
+ */
+function toBoundaryKey(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
+function isTokenCountAttribute(key: string, lowerKey: string, value: unknown): boolean {
+  // A count is a number. Anything else under the same key could be a credential,
+  // including under a well-known usage key.
+  if (typeof value !== 'number') {
+    return false;
+  }
+  return (
+    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) || TOKEN_COUNT_KEY_PATTERN.test(toBoundaryKey(key))
+  );
 }
 
 function isSensitiveAttributeKey(key: string, value: unknown): boolean {
   const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) || isTokenCountAttribute(lowerKey, value)) {
+  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
+
+  const matchedMarkers = SENSITIVE_ATTRIBUTE_KEYS.filter(
+    (sensitiveKey, index) =>
+      lowerKey.includes(sensitiveKey) ||
+      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index]),
+  );
+
+  if (matchedMarkers.length === 0) {
     return false;
   }
 
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
+  // Only the `token` marker can be waived, and only for a count. A key such as
+  // `authorization.tokens` or `api_key.token_count` also names credential material, so it
+  // stays redacted whatever its value.
+  if (matchedMarkers.some((marker) => marker !== TOKEN_MARKER)) {
+    return true;
+  }
 
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
+  return !isTokenCountAttribute(key, lowerKey, value);
 }
 
 export function sanitizeTraceAttributes(

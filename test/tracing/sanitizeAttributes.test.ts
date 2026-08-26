@@ -75,6 +75,39 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
+  it('keeps redacting keys that name other credential material', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'authorization.tokens': 150,
+        'api_key.token_count': 42,
+        'secret.tokens': 7,
+      }),
+    ).toEqual({
+      'authorization.tokens': '<redacted>',
+      'api_key.token_count': '<redacted>',
+      'secret.tokens': '<redacted>',
+    });
+  });
+
+  it('preserves camelCase token counters', () => {
+    expect(
+      sanitizeTraceAttributes({
+        promptTokenCount: 150,
+        completionTokenCount: 85,
+        totalTokenCount: 235,
+      }),
+    ).toEqual({ promptTokenCount: 150, completionTokenCount: 85, totalTokenCount: 235 });
+  });
+
+  it('redacts well-known usage keys that do not hold a number', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'gen_ai.usage.input_tokens': '150',
+        'gen_ai.usage.output_tokens': 85,
+      }),
+    ).toEqual({ 'gen_ai.usage.input_tokens': '<redacted>', 'gen_ai.usage.output_tokens': 85 });
+  });
+
   it('lets explicit redactions override token counters', () => {
     expect(
       sanitizeTraceAttributes(
