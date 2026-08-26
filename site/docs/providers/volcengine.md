@@ -84,7 +84,7 @@ Model pricing is converted from official CNY rates (元 / 1M tokens) at the exch
 - **`doubao-seed-2-1-turbo-260628`**
   - High-performance, low-latency flagship model
   - 256K context window, up to 256K output tokens
-  - Input: $0.4453/1M (cache miss), $0.0891/1M (cache hit) | Output: $2.226/1M
+  - Input: $0.4453/1M (cache miss), $0.0891/1M (cache hit) | Output: $2.2265/1M
 
 - **`doubao-seed-2-0-pro-260215`**
   - 256K context window, up to 128K output tokens
@@ -125,7 +125,7 @@ Model pricing is converted from official CNY rates (元 / 1M tokens) at the exch
 - **`deepseek-v4-flash-ga-260731`**
   - DeepSeek-V4-Flash hosted on Volcengine Ark
   - 1024K context window, up to 384K output tokens
-  - Input: $0.1484/1M (cache miss), $0.0297/1M (cache hit) | Output: $0.2969/1M
+  - Input: $0.4453/1M (cache miss), $0.0148/1M (cache hit) | Output: $1.3359/1M
 
 ## Example Usage
 

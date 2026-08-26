@@ -195,7 +195,11 @@ export function calculateVolcengineCost(
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  // Fall through the input overrides for cached tokens too, otherwise a user who
+  // sets `cost`/`inputCost` gets their rate on fresh tokens but the built-in rate
+  // on cached ones.
+  const cacheReadCost =
+    config.cacheReadCost ?? config.inputCost ?? config.cost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
   const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
@@ -284,9 +288,15 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
     // Calculate cost with cache information. Prompt-level cost overrides win over the
     // provider config so per-test pricing stays authoritative.
     if (response.tokenUsage && !response.cached) {
+      const mergedConfig = { ...(this.config || {}), ...(context?.prompt?.config ?? {}) };
+      // passthrough.model overrides the model actually sent (see OpenAiChatCompletionProvider),
+      // so bill against that rather than the provider path's model.
+      const passthroughModel = (mergedConfig.passthrough as { model?: unknown } | undefined)?.model;
+      const billingModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
+
       response.cost = calculateVolcengineCost(
-        this.modelName,
-        { ...(this.config || {}), ...(context?.prompt?.config ?? {}) },
+        billingModel,
+        mergedConfig,
         response.tokenUsage.prompt,
         response.tokenUsage.completion,
         cachedTokens,

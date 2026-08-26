@@ -79,8 +79,8 @@ describe('calculateVolcengineCost', () => {
       1000000,
       500000,
     );
-    // 1.0 * 0.5 + cache_read * 0.5 + 3.0
-    const expected = 0.5 + (1.2 / 6.737012) * 0.5 + 3.0;
+    // inputCost applies to fresh and cached prompt tokens alike: 1.0 * 0.5 + 1.0 * 0.5 + 3.0
+    const expected = 0.5 + 0.5 + 3.0;
     expect(cost).toBeCloseTo(expected);
   });
 
@@ -352,5 +352,32 @@ describe('calculateVolcengineCost zero tokens', () => {
   it('prices a response with zero completion tokens', () => {
     const cost = calculateVolcengineCost('doubao-seed-2-1-pro-260628', {}, 1000000, 0);
     expect(cost).toBeCloseTo(6.0 / 6.737012);
+  });
+});
+
+describe('cost override edge cases', () => {
+  const RATE = 6.737012;
+
+  it('applies an inputCost override to cached tokens too', () => {
+    const cost = calculateVolcengineCost(
+      'doubao-seed-2-1-pro-260628',
+      { inputCost: 1.0 / 1e6 },
+      1000000,
+      1000000,
+      500000,
+    );
+    // 500k fresh + 500k cached both at the override, output from the model table
+    expect(cost).toBeCloseTo(0.5 + 0.5 + 30.0 / RATE);
+  });
+
+  it('still honors an explicit cacheReadCost over the input override', () => {
+    const cost = calculateVolcengineCost(
+      'doubao-seed-2-1-pro-260628',
+      { inputCost: 1.0 / 1e6, cacheReadCost: 0.1 / 1e6 },
+      1000000,
+      1000000,
+      500000,
+    );
+    expect(cost).toBeCloseTo(0.5 + 0.05 + 30.0 / RATE);
   });
 });
