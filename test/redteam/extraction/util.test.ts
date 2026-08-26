@@ -161,7 +161,37 @@ describe('fetchRemoteGeneration', () => {
     expect(generationUsage).toEqual({});
   });
 
-  it('counts failed remote extraction requests without token usage', async () => {
+  it('records a coalesced extraction request only once', async () => {
+    const response = {
+      data: {
+        task: 'entities',
+        result: ['shared entity'],
+        tokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce({ ...response, coalesced: true });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await Promise.all([
+      fetchRemoteGeneration('entities', ['same prompt'], undefined, provider),
+      fetchRemoteGeneration('entities', ['same prompt'], undefined, provider),
+    ]);
+
+    expect(generationUsage).toMatchObject({
+      total: 18,
+      prompt: 12,
+      completion: 6,
+      numRequests: 1,
+    });
+  });
+
+  it('does not invent model requests when extraction fails without token usage', async () => {
     vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('extraction timed out'));
     const generationUsage = {};
     const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
@@ -170,7 +200,7 @@ describe('fetchRemoteGeneration', () => {
       'extraction timed out',
     );
 
-    expect(generationUsage).toEqual({ numRequests: 1 });
+    expect(generationUsage).toEqual({});
   });
 
   it('does not count an invalid remote extraction response twice', async () => {
