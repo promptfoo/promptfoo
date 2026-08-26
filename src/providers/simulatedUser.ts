@@ -198,7 +198,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+  ): Promise<{ messages: Message[]; response: ProviderResponse }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -214,7 +214,7 @@ export class SimulatedUser implements ApiProvider {
     if (response.error) {
       return {
         messages,
-        error: response.error,
+        response,
       };
     }
 
@@ -222,8 +222,24 @@ export class SimulatedUser implements ApiProvider {
     logger.debug(`User: ${content}`);
     return {
       messages: [...messages, { role: 'user', content }],
-      tokenUsage: response.tokenUsage,
+      response,
     };
+  }
+
+  /**
+   * Accumulate usage for the model that simulates the user. Red-team subclasses can
+   * override this hook to keep attack generation separate from target usage.
+   */
+  protected accumulateSimulatedUserTokenUsage(
+    tokenUsage: TokenUsage,
+    response: ProviderResponse,
+  ): void {
+    accumulateResponseTokenUsage(tokenUsage, response);
+  }
+
+  /** Preserve logical target usage while separately recording cache-missed requests. */
+  private accumulateTargetTokenUsage(tokenUsage: TokenUsage, response: ProviderResponse): void {
+    accumulateResponseTokenUsage(tokenUsage, response);
   }
 
   private async sendMessageToAgent(
@@ -322,6 +338,8 @@ export class SimulatedUser implements ApiProvider {
       );
       agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
 
+      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
+
       // Check for errors from agent response
       if (agentResponse.error) {
         return {
@@ -331,28 +349,28 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
-      // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
+      // The simulated-user provider generates the next attack turn and may signal completion.
       const userResult = await this.sendMessageToUser(messages, userProvider);
 
+      this.accumulateSimulatedUserTokenUsage(tokenUsage, userResult.response);
+
       // Check for errors from remote generation disable
-      if (userResult.error) {
+      if (userResult.response.error) {
         return {
-          error: userResult.error,
+          error: userResult.response.error,
           tokenUsage,
         };
       }
 
-      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
-      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
+      const { messages: messagesToUser } = userResult;
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
-      // Check whether the judge has determined that the instruction goal is satisfied.
+      // Check whether the simulated user has determined that the instruction goal is satisfied.
       if (
         lastMessage.content &&
         typeof lastMessage.content === 'string' &&
@@ -370,6 +388,8 @@ export class SimulatedUser implements ApiProvider {
         context,
       );
 
+      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
+
       // Check for errors from agent response
       if (agentResponse.error) {
         return {
@@ -379,8 +399,6 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
-
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     return this.serializeOutput(

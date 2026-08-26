@@ -210,6 +210,46 @@ describe('redteamInit', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('offers current Gemini models for AI Studio and Vertex targets', async () => {
+    await redteamInit(undefined);
+
+    const modelPrompt = vi
+      .mocked(select)
+      .mock.calls.find(([options]) => options.message.includes('Choose a model to target'));
+
+    expect(modelPrompt?.[0].choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
+        expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
+      ]),
+    );
+  });
+
+  it.each(['vertex:gemini-3.7-flash', 'vertex:gemini-3.6-flash', 'vertex:gemini-3.5-flash-lite'])(
+    'configures the global Vertex region for %s',
+    async (modelName) => {
+      vi.mocked(select)
+        .mockReset()
+        .mockResolvedValueOnce('prompt_model_chatbot')
+        .mockResolvedValueOnce('now')
+        .mockResolvedValueOnce(modelName)
+        .mockResolvedValueOnce('default')
+        .mockResolvedValueOnce('default');
+
+      await redteamInit(undefined);
+
+      const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
+        targets: Array<{ id: string; config: { region: string } }>;
+      };
+
+      expect(config.targets[0]).toMatchObject({ id: modelName, config: { region: 'global' } });
+    },
+  );
+
   it('offers supported Anthropic targets instead of retired Opus 4.1', async () => {
     vi.mocked(confirm).mockResolvedValue(false);
 
