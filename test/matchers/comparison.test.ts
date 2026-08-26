@@ -49,6 +49,47 @@ describe('matchesSelectBest', () => {
     });
   });
 
+  it('preserves cache provenance and logical token usage for cached comparison responses', async () => {
+    const provider = createMockProvider({
+      id: 'cached-select-best-provider',
+      response: {
+        output: '0',
+        cached: true,
+        tokenUsage: { total: 30, prompt: 18, completion: 12, numRequests: 1 },
+      },
+    });
+
+    const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
+
+    for (const gradingResult of result) {
+      expect(gradingResult).toMatchObject({
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 30, prompt: 18, completion: 12, cached: 30, numRequests: 1 },
+      });
+    }
+  });
+
+  it('preserves cache provenance when a cached comparison response is malformed', async () => {
+    const provider = createMockProvider({
+      id: 'cached-invalid-select-best-provider',
+      response: {
+        output: 'not a verdict',
+        cached: true,
+        tokenUsage: { total: 30, prompt: 18, completion: 12, numRequests: 1 },
+      },
+    });
+
+    const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
+
+    for (const gradingResult of result) {
+      expect(gradingResult).toMatchObject({
+        pass: false,
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 30, cached: 30 },
+      });
+    }
+  });
+
   it('should keep reserved criteria and outputs vars ahead of user vars', async () => {
     const provider = createSelectBestProvider('0');
     const grading: GradingConfig = {

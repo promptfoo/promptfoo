@@ -346,6 +346,133 @@ describeEvaluator('evaluator token usage', () => {
     }
   });
 
+  it('preserves fresh grading when a cached comparison creates the first incurred-usage split', async () => {
+    const freshTargetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('fresh-target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Fresh target response',
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          completionDetails: { reasoning: 2 },
+        },
+      }),
+    };
+    const freshGradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('fresh-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+        tokenUsage: {
+          total: 20,
+          prompt: 12,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+      }),
+    };
+    const cachedComparisonProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-comparison-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: '0',
+        cached: true,
+        tokenUsage: {
+          total: 30,
+          prompt: 18,
+          completion: 12,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      }),
+    };
+    const matchers = await import('../../src/matchers/comparison');
+    const matchComparison = matchers.matchesSelectBest;
+    const matchesSelectBestSpy = vi
+      .spyOn(matchers, 'matchesSelectBest')
+      .mockImplementation((criteria, outputs, _grading, vars, context) =>
+        matchComparison(criteria, outputs, { provider: cachedComparisonProvider }, vars, context),
+      );
+    const testSuite: TestSuite = {
+      providers: [freshTargetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'The response should be useful',
+              provider: freshGradingProvider,
+            },
+            { type: 'select-best', value: 'choose the best response' },
+          ],
+        },
+      ],
+    };
+    try {
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(cachedComparisonProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(summary.stats.tokenUsage).toMatchObject({
+        total: 200,
+        numRequests: 2,
+        assertions: { total: 100, cached: 60, numRequests: 4 },
+        incurredTokenUsage: {
+          total: 200,
+          numRequests: 2,
+          assertions: { total: 40, numRequests: 2 },
+        },
+      });
+
+      for (const prompt of evalRecord.prompts) {
+        expect(prompt.metrics?.tokenUsage).toMatchObject({
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 50,
+            cached: 30,
+            numRequests: 2,
+            completionDetails: { reasoning: 7 },
+          },
+          incurredTokenUsage: {
+            total: 100,
+            numRequests: 1,
+            assertions: {
+              total: 20,
+              numRequests: 1,
+              completionDetails: { reasoning: 3 },
+            },
+          },
+        });
+      }
+
+      for (const result of summary.results) {
+        expect(result.tokenUsage).toMatchObject({
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 50, cached: 30, numRequests: 2 },
+          incurredTokenUsage: {
+            total: 100,
+            numRequests: 1,
+            assertions: { total: 20, numRequests: 1 },
+          },
+        });
+        expect(result.gradingResult?.tokensUsed).toMatchObject({
+          total: 50,
+          cached: 30,
+          numRequests: 2,
+          incurredTokenUsage: { total: 20, numRequests: 1 },
+        });
+      }
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
+  });
+
   it('does not treat untrusted provider metadata as a cached grading response', async () => {
     const gradingProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('fresh-grading-provider'),

@@ -105,6 +105,7 @@ import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
+  cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -382,6 +383,20 @@ function updateAssertionMetrics(
   options?: { cached?: boolean },
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
+    const reportedTotal =
+      assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
+    const cachedTokens = assertionTokens.cached ?? 0;
+    const cachedResponse =
+      options?.cached === true ||
+      (options?.cached === undefined &&
+        assertionTokens.numRequests === 0 &&
+        cachedTokens > 0 &&
+        reportedTotal <= cachedTokens);
+
+    if (cachedResponse && !metrics.tokenUsage.incurredTokenUsage) {
+      metrics.tokenUsage.incurredTokenUsage = cloneTokenUsageBreakdown(metrics.tokenUsage);
+    }
+
     if (!metrics.tokenUsage.assertions) {
       metrics.tokenUsage.assertions = createEmptyAssertions();
     }
@@ -389,23 +404,12 @@ function updateAssertionMetrics(
     // Accumulate assertion tokens using the specialized assertion function
     accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
 
-    if (metrics.tokenUsage.incurredTokenUsage) {
-      const reportedTotal =
-        assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
-      const cachedTokens = assertionTokens.cached ?? 0;
-      const cachedResponse =
-        options?.cached === true ||
-        (options?.cached === undefined &&
-          assertionTokens.numRequests === 0 &&
-          cachedTokens > 0 &&
-          reportedTotal <= cachedTokens);
-      if (!cachedResponse) {
-        metrics.tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
-        accumulateAssertionTokenUsage(
-          metrics.tokenUsage.incurredTokenUsage.assertions,
-          assertionTokens.incurredTokenUsage ?? assertionTokens,
-        );
-      }
+    if (metrics.tokenUsage.incurredTokenUsage && !cachedResponse) {
+      metrics.tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
+      accumulateAssertionTokenUsage(
+        metrics.tokenUsage.incurredTokenUsage.assertions,
+        assertionTokens.incurredTokenUsage ?? assertionTokens,
+      );
     }
   }
 }
@@ -2087,11 +2091,21 @@ function mergeComparisonTokenUsage(
     prompt: 0,
     completion: 0,
   };
-  updateAssertionMetrics(
-    { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
-    gradingResult.tokensUsed,
-    { cached: gradingResult.metadata?.cachedResponse },
-  );
+  const rowTokensUsed = result.gradingResult.tokensUsed;
+  const rowMetrics = {
+    tokenUsage: {
+      assertions: rowTokensUsed,
+      ...(rowTokensUsed.incurredTokenUsage && {
+        incurredTokenUsage: { assertions: rowTokensUsed.incurredTokenUsage },
+      }),
+    },
+  };
+  updateAssertionMetrics(rowMetrics, gradingResult.tokensUsed, {
+    cached: gradingResult.metadata?.cachedResponse,
+  });
+  if (rowMetrics.tokenUsage.incurredTokenUsage?.assertions) {
+    rowTokensUsed.incurredTokenUsage = rowMetrics.tokenUsage.incurredTokenUsage.assertions;
+  }
 
   if (resultHasModelGradedAssertion(result)) {
     updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed, {

@@ -67,7 +67,7 @@ function addNumbers(a: number | undefined, b: number | undefined): number {
 }
 
 /** Copy a usage breakdown without allowing the incurred view to recurse. */
-function cloneTokenUsageBreakdown(
+export function cloneTokenUsageBreakdown(
   usage: Partial<TokenUsage>,
 ): NonNullable<TokenUsage['incurredTokenUsage']> {
   const { incurredTokenUsage: _incurredTokenUsage, ...breakdown } = usage;
