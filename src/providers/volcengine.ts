@@ -176,7 +176,12 @@ export function calculateVolcengineCost(
 ): number | undefined {
   // 0 is a valid token count (e.g. a response that stops before emitting any
   // completion), so only missing / non-finite values should skip pricing.
-  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) {
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
     return undefined;
   }
 
