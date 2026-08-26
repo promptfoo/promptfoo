@@ -270,25 +270,55 @@ describe('retryCommand', () => {
   it.each([
     {
       label: 'cached result without actual cost',
-      costs: [{ logical: 0.5, incurred: 0 }],
+      costs: [{ logical: 0.5, incurred: 0, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result without incurred cost',
+      costs: [{ logical: 0.5, cached: true }],
       expectedLogicalCost: 0.5,
       expectedIncurredCost: 0,
     },
     {
       label: 'fresh legacy result before a cached result',
-      costs: [{ logical: 0.25 }, { logical: 0.5, incurred: 0 }],
+      costs: [
+        { logical: 0.25, cached: false },
+        { logical: 0.5, incurred: 0, cached: true },
+      ],
       expectedLogicalCost: 0.75,
       expectedIncurredCost: 0.25,
     },
     {
       label: 'fresh legacy result after a cached result',
-      costs: [{ logical: 0.5, incurred: 0 }, { logical: 0.25 }],
+      costs: [
+        { logical: 0.5, incurred: 0, cached: true },
+        { logical: 0.25, cached: false },
+      ],
       expectedLogicalCost: 0.75,
       expectedIncurredCost: 0.25,
     },
     {
+      label: 'legacy cached result before a newer cached result',
+      costs: [
+        { logical: 0.5, cached: true },
+        { logical: 0.25, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result after a newer cached result',
+      costs: [
+        { logical: 0.25, incurred: 0, cached: true },
+        { logical: 0.5, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
       label: 'partially incurred composite result',
-      costs: [{ logical: 0.5, incurred: 0.25 }],
+      costs: [{ logical: 0.5, incurred: 0.25, cached: true }],
       expectedLogicalCost: 0.5,
       expectedIncurredCost: 0.25,
     },
@@ -300,7 +330,7 @@ describe('retryCommand', () => {
         persisted: true,
         prompts,
         fetchResultsBatched: vi.fn(async function* () {
-          yield costs.map(({ logical, incurred }, index) => ({
+          yield costs.map(({ logical, incurred, cached }, index) => ({
             id: `retried-result-${index}`,
             promptIdx: 0,
             success: true,
@@ -308,6 +338,7 @@ describe('retryCommand', () => {
             cost: logical,
             namedScores: {},
             response: {
+              cached,
               ...(incurred !== undefined && { incurredCost: incurred }),
             },
           })) as any[];

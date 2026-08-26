@@ -523,17 +523,31 @@ describe('tokenUsageUtils', () => {
       });
     });
 
-    it('recognizes normalized cached attacker usage without an outer cache flag', () => {
+    it('requires explicit cache provenance for normalized attacker usage', () => {
       const target = createEmptyTokenUsage();
 
       accumulateAttackerTokenUsage(target, {
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 32, numRequests: 0 },
+        tokenUsage: { total: 32, prompt: 32, completion: 0, cached: 32, numRequests: 0 },
       });
 
       expect(target).toMatchObject({
         numRequests: 0,
-        attacker: { total: 32, cached: 32, numRequests: 1 },
-        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+        attacker: { total: 32, prompt: 32, cached: 32, numRequests: 0 },
+      });
+      expect(target).not.toHaveProperty('incurredTokenUsage');
+    });
+
+    it('keeps fully prompt-cached attacker usage incurred when tracking actual work', () => {
+      const target = createEmptyTokenUsage();
+      target.incurredTokenUsage = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 32, prompt: 32, completion: 0, cached: 32, numRequests: 0 },
+      });
+
+      expect(target).toMatchObject({
+        attacker: { total: 32, prompt: 32, cached: 32 },
+        incurredTokenUsage: { attacker: { total: 32, prompt: 32, cached: 32 } },
       });
     });
 

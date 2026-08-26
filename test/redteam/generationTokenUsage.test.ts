@@ -38,6 +38,74 @@ describe('generation token usage', () => {
     });
   });
 
+  it('does not replay historical incurred usage from cached composite generation', async () => {
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(
+      createProvider(
+        vi.fn().mockResolvedValue({
+          output: 'cached composite generation',
+          cached: true,
+          tokenUsage: {
+            total: 30,
+            prompt: 20,
+            completion: 10,
+            numRequests: 1,
+            incurredTokenUsage: {
+              total: 30,
+              prompt: 20,
+              completion: 10,
+              numRequests: 1,
+              assertions: { total: 7, numRequests: 1 },
+            },
+          },
+        }),
+      ),
+      usage,
+    );
+
+    await provider.callApi('generate a test');
+
+    expect(usage).toMatchObject({
+      total: 30,
+      prompt: 20,
+      completion: 10,
+      cached: 30,
+      numRequests: 1,
+      incurredTokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        numRequests: 0,
+        assertions: { total: 0, numRequests: 0 },
+      },
+    });
+  });
+
+  it('retains explicit incurred accounting for fresh composite generation', async () => {
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(
+      createProvider(
+        vi.fn().mockResolvedValue({
+          output: 'fresh composite generation',
+          tokenUsage: {
+            total: 30,
+            numRequests: 2,
+            incurredTokenUsage: { total: 12, numRequests: 1 },
+          },
+        }),
+      ),
+      usage,
+    );
+
+    await provider.callApi('generate a test');
+
+    expect(usage).toMatchObject({
+      total: 30,
+      numRequests: 2,
+      incurredTokenUsage: { total: 12, numRequests: 1 },
+    });
+  });
+
   it.each([false, undefined])(
     'counts reported zero-token generation requests when cached is %s',
     async (cached) => {
@@ -206,6 +274,30 @@ describe('generation token usage', () => {
     recordGenerationTokenUsage(provider, {
       cached: true,
       tokenUsage: { total: 40, numRequests: 2 },
+    });
+
+    expect(usage).toMatchObject({
+      total: 40,
+      cached: 40,
+      numRequests: 2,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
+  });
+
+  it('discards historical incurred accounting from cached remote generation', () => {
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(
+      createProvider(vi.fn().mockResolvedValue({ output: 'unused' })),
+      usage,
+    );
+
+    recordGenerationTokenUsage(provider, {
+      cached: true,
+      tokenUsage: {
+        total: 40,
+        numRequests: 2,
+        incurredTokenUsage: { total: 25, numRequests: 1 },
+      },
     });
 
     expect(usage).toMatchObject({

@@ -1459,7 +1459,6 @@ describe('retry command', () => {
           response: {
             output: 'cached target response',
             cached: true,
-            incurredCost: 0,
             tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
           },
           gradingResult: {

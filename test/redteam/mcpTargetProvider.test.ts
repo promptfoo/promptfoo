@@ -155,6 +155,24 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
   });
 
+  it('preserves cached remote materialization without incurring attacker usage', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce({
+      ...remoteMaterializedCall({ completion: 3, numRequests: 1, prompt: 7, total: 10 }),
+      cached: true,
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
+      output: 'ok',
+      tokenUsage: {
+        attacker: { total: 10, prompt: 7, completion: 3, cached: 10, numRequests: 1 },
+        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+      },
+    });
+  });
+
   it('passes linked cloud target context to remote materialization', async () => {
     promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(
       remoteMaterializedCall(),
@@ -271,9 +289,33 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
     expect(response.tokenUsage).toMatchObject({
-      attacker: { total: 13, cached: 13, numRequests: 1 },
+      attacker: { total: 13, prompt: 9, completion: 4, cached: 13, numRequests: 1 },
       incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
     });
+  });
+
+  it('does not confuse a fully prompt-cached local request with a cached response', async () => {
+    promptfooProviderMocks.materializeMcpToolCallRemote.mockResolvedValueOnce(undefined);
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output: JSON.stringify(searchCompaniesCall),
+        cached: false,
+        tokenUsage: { prompt: 13, completion: 0, total: 13, cached: 13, numRequests: 0 },
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
+    const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
+
+    expect(response.tokenUsage?.attacker).toMatchObject({
+      total: 13,
+      prompt: 13,
+      cached: 13,
+      numRequests: 0,
+    });
+    expect(response.tokenUsage).not.toHaveProperty('incurredTokenUsage');
   });
 
   it('returns a materialization error when inference provider is unavailable', async () => {

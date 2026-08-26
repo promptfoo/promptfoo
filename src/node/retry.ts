@@ -248,7 +248,8 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
-        const incurredCost = result.response?.incurredCost;
+        const incurredCost =
+          result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
         if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
           metrics.incurredCost =
             (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
