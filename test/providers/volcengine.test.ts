@@ -190,18 +190,14 @@ describe('VOLCENGINE_CHAT_MODELS', () => {
     expect(model!.cost.cache_read).toBeCloseTo(0.04 / 6.737012 / 1e6);
   });
 
-  it('should have correct aliases for doubao models', () => {
-    const aliasPro = VOLCENGINE_CHAT_MODELS.find((m) => m.id === 'doubao-seed-2-1-pro');
-    expect(aliasPro).toBeDefined();
-    expect(aliasPro!.cost.input).toBeCloseTo(6.0 / 6.737012 / 1e6);
-
-    const aliasTurbo = VOLCENGINE_CHAT_MODELS.find((m) => m.id === 'doubao-seed-2-1-turbo');
-    expect(aliasTurbo).toBeDefined();
-    expect(aliasTurbo!.cost.input).toBeCloseTo(3.0 / 6.737012 / 1e6);
-
-    const aliasLite = VOLCENGINE_CHAT_MODELS.find((m) => m.id === 'doubao-seed-2-0-lite');
-    expect(aliasLite).toBeDefined();
-    expect(aliasLite!.cost.input).toBeCloseTo(0.6 / 6.737012 / 1e6);
+  it('should only list fully versioned model IDs', () => {
+    // Ark rejects the short console names (doubao-seed-2.1-pro etc.) with
+    // InvalidEndpointOrModel.NotFound; doubao-seed-evolving is the one
+    // unversioned alias it resolves.
+    const unversioned = VOLCENGINE_CHAT_MODELS.filter(
+      (m) => m.id !== 'doubao-seed-evolving' && !/-\d{6}$/.test(m.id),
+    );
+    expect(unversioned).toEqual([]);
   });
 });
 

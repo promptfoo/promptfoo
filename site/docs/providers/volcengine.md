@@ -75,54 +75,54 @@ Model pricing is converted from official CNY rates (元 / 1M tokens) at the exch
   - Supports deep thinking, multimodal understanding, and tool calling
   - Input: $0.8906/1M (cache miss), $0.1781/1M (cache hit) | Output: $4.453/1M
 
-- **`doubao-seed-2-1-pro-260628`** (Alias: `doubao-seed-2-1-pro`)
+- **`doubao-seed-2-1-pro-260628`**
   - Flagship model for complex reasoning, text generation, and multimodal tasks
   - 256K context window, up to 256K output tokens
   - Supports deep thinking, structured output (`json_schema`), and tool calling
   - Input: $0.8906/1M (cache miss), $0.1781/1M (cache hit) | Output: $4.453/1M
 
-- **`doubao-seed-2-1-turbo-260628`** (Alias: `doubao-seed-2-1-turbo`)
+- **`doubao-seed-2-1-turbo-260628`**
   - High-performance, low-latency flagship model
   - 256K context window, up to 256K output tokens
   - Input: $0.4453/1M (cache miss), $0.0891/1M (cache hit) | Output: $2.226/1M
 
-- **`doubao-seed-2-0-pro-260215`** (Alias: `doubao-seed-2-0-pro`)
+- **`doubao-seed-2-0-pro-260215`**
   - 256K context window, up to 128K output tokens
   - Input: $0.4750/1M (cache miss), $0.0950/1M (cache hit) | Output: $2.3749/1M
 
-- **`doubao-seed-2-0-lite-260428`** (Alias: `doubao-seed-2-0-lite`)
+- **`doubao-seed-2-0-lite-260428`**
   - Lightweight, high-throughput model (up to 30,000 RPM)
   - 256K context window, up to 128K output tokens
   - Input: $0.0891/1M (cache miss), $0.0178/1M (cache hit) | Output: $0.5344/1M
 
-- **`doubao-seed-2-0-mini-260428`** (Alias: `doubao-seed-2-0-mini`)
+- **`doubao-seed-2-0-mini-260428`**
   - Ultra-lightweight model for high-concurrency tasks
   - 256K context window, up to 128K output tokens
   - Input: $0.0297/1M (cache miss), $0.0059/1M (cache hit) | Output: $0.2969/1M
 
-- **`doubao-seed-2-0-code-preview-260215`** (Alias: `doubao-seed-2-0-code`)
+- **`doubao-seed-2-0-code-preview-260215`**
   - Specialized code generation model
   - 256K context window, up to 128K output tokens
   - Input: $0.4750/1M (cache miss), $0.0950/1M (cache hit) | Output: $2.3749/1M
 
-- **`doubao-seed-character-260628`** (Alias: `doubao-seed-character`)
+- **`doubao-seed-character-260628`**
   - Role-play and persona-specialized model
   - 128K context window, up to 32K output tokens
   - Input: $0.1187/1M (cache miss), $0.0237/1M (cache hit) | Output: $0.2969/1M
 
 ### Hosted Models
 
-- **`glm-5-2-260617`** (Alias: `glm-5.2`)
+- **`glm-5-2-260617`**
   - GLM-5.2 hosted on Volcengine Ark
   - 1024K context window, up to 128K output tokens
   - Input: $1.1875/1M (cache miss), $0.2969/1M (cache hit) | Output: $4.1561/1M
 
-- **`deepseek-v4-pro-ga-260813`** (Alias: `deepseek-v4-pro`)
+- **`deepseek-v4-pro-ga-260813`**
   - DeepSeek-V4-Pro hosted on Volcengine Ark
   - 1024K context window, up to 384K output tokens
   - Input: $1.3359/1M (cache miss), $0.0445/1M (cache hit) | Output: $4.0077/1M
 
-- **`deepseek-v4-flash-ga-260731`** (Alias: `deepseek-v4-flash`)
+- **`deepseek-v4-flash-ga-260731`**
   - DeepSeek-V4-Flash hosted on Volcengine Ark
   - 1024K context window, up to 384K output tokens
   - Input: $0.1484/1M (cache miss), $0.0297/1M (cache hit) | Output: $0.2969/1M

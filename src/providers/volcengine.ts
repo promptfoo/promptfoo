@@ -12,14 +12,21 @@ type VolcengineProviderOptions = Omit<ProviderOptions, 'config'> & {
     config?: VolcengineConfig;
   };
 };
-
 /**
- * Exchange rate: 1 USD = 6.737012 CNY (as of 2026-08-26, source: https://open.er-api.com/v6/latest/USD)
- * Volcengine Ark charges in CNY per 1M tokens.
- * For models with tiered pricing by context length (e.g. 32k/128k/256k), base tier pricing is used.
+ * Volcengine Ark publishes prices in CNY per 1M tokens.
+ * Exchange rate: 1 USD = 6.737012 CNY (2026-08-26, source: https://open.er-api.com/v6/latest/USD)
+ * Price source: https://www.volcengine.com/docs/82379/1544106
+ *
+ * Ark tiers several models by input length (32k / 128k / 256k); the base tier is
+ * used here.
+ *
+ * Every ID below was verified against POST /api/v3/chat/completions on 2026-08-26.
+ * Ark only resolves fully versioned IDs -- the short names shown in the console
+ * (e.g. "doubao-seed-2.1-pro") return InvalidEndpointOrModel.NotFound.
+ * "doubao-seed-evolving" is the sole unversioned alias that resolves.
  */
 export const VOLCENGINE_CHAT_MODELS = [
-  // Doubao Seed Evolving (Coding & Agent model, 1024k context)
+  // Rolling alias, 1024k context
   {
     id: 'doubao-seed-evolving',
     cost: {
@@ -28,7 +35,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 1.2 / 6.737012 / 1e6,
     },
   },
-  // Doubao Seed 2.1 Pro (Flagship pro model, 256k context)
+  // Flagship, 256k context
   {
     id: 'doubao-seed-2-1-pro-260628',
     cost: {
@@ -37,23 +44,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 1.2 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-1-pro',
-    cost: {
-      input: 6.0 / 6.737012 / 1e6,
-      output: 30.0 / 6.737012 / 1e6,
-      cache_read: 1.2 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.1-pro',
-    cost: {
-      input: 6.0 / 6.737012 / 1e6,
-      output: 30.0 / 6.737012 / 1e6,
-      cache_read: 1.2 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed 2.1 Turbo (Fast turbo model, 256k context)
+  // Faster tier, 256k context
   {
     id: 'doubao-seed-2-1-turbo-260628',
     cost: {
@@ -62,23 +53,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.6 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-1-turbo',
-    cost: {
-      input: 3.0 / 6.737012 / 1e6,
-      output: 15.0 / 6.737012 / 1e6,
-      cache_read: 0.6 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.1-turbo',
-    cost: {
-      input: 3.0 / 6.737012 / 1e6,
-      output: 15.0 / 6.737012 / 1e6,
-      cache_read: 0.6 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed 2.0 Pro (256k context)
+  // 256k context
   {
     id: 'doubao-seed-2-0-pro-260215',
     cost: {
@@ -87,23 +62,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.64 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-0-pro',
-    cost: {
-      input: 3.2 / 6.737012 / 1e6,
-      output: 16.0 / 6.737012 / 1e6,
-      cache_read: 0.64 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.0-pro',
-    cost: {
-      input: 3.2 / 6.737012 / 1e6,
-      output: 16.0 / 6.737012 / 1e6,
-      cache_read: 0.64 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed 2.0 Lite (Lightweight, 256k context, high throughput)
+  // 256k context
   {
     id: 'doubao-seed-2-0-lite-260428',
     cost: {
@@ -112,6 +71,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.12 / 6.737012 / 1e6,
     },
   },
+  // 256k context
   {
     id: 'doubao-seed-2-0-lite-260215',
     cost: {
@@ -120,23 +80,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.12 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-0-lite',
-    cost: {
-      input: 0.6 / 6.737012 / 1e6,
-      output: 3.6 / 6.737012 / 1e6,
-      cache_read: 0.12 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.0-lite',
-    cost: {
-      input: 0.6 / 6.737012 / 1e6,
-      output: 3.6 / 6.737012 / 1e6,
-      cache_read: 0.12 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed 2.0 Mini (Ultra-lightweight, 256k context)
+  // 256k context
   {
     id: 'doubao-seed-2-0-mini-260428',
     cost: {
@@ -145,6 +89,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.04 / 6.737012 / 1e6,
     },
   },
+  // 256k context
   {
     id: 'doubao-seed-2-0-mini-260215',
     cost: {
@@ -153,23 +98,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.04 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-0-mini',
-    cost: {
-      input: 0.2 / 6.737012 / 1e6,
-      output: 2.0 / 6.737012 / 1e6,
-      cache_read: 0.04 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.0-mini',
-    cost: {
-      input: 0.2 / 6.737012 / 1e6,
-      output: 2.0 / 6.737012 / 1e6,
-      cache_read: 0.04 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed 2.0 Code (Code specialization, 256k context)
+  // Coding preview, 256k context
   {
     id: 'doubao-seed-2-0-code-preview-260215',
     cost: {
@@ -178,23 +107,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.64 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-2-0-code',
-    cost: {
-      input: 3.2 / 6.737012 / 1e6,
-      output: 16.0 / 6.737012 / 1e6,
-      cache_read: 0.64 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'doubao-seed-2.0-code',
-    cost: {
-      input: 3.2 / 6.737012 / 1e6,
-      output: 16.0 / 6.737012 / 1e6,
-      cache_read: 0.64 / 6.737012 / 1e6,
-    },
-  },
-  // Doubao Seed Character (Role-play specialization, 128k context)
+  // Roleplay-tuned, 128k context
   {
     id: 'doubao-seed-character-260628',
     cost: {
@@ -203,15 +116,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.16 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'doubao-seed-character',
-    cost: {
-      input: 0.8 / 6.737012 / 1e6,
-      output: 2.0 / 6.737012 / 1e6,
-      cache_read: 0.16 / 6.737012 / 1e6,
-    },
-  },
-  // GLM-5.2 hosted on Volcengine Ark (1024k context)
+  // Zhipu GLM hosted on Ark, 1024k context
   {
     id: 'glm-5-2-260617',
     cost: {
@@ -220,23 +125,7 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 2.0 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'glm-5.2',
-    cost: {
-      input: 8.0 / 6.737012 / 1e6,
-      output: 28.0 / 6.737012 / 1e6,
-      cache_read: 2.0 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'glm-5-2',
-    cost: {
-      input: 8.0 / 6.737012 / 1e6,
-      output: 28.0 / 6.737012 / 1e6,
-      cache_read: 2.0 / 6.737012 / 1e6,
-    },
-  },
-  // DeepSeek-V4-Pro hosted on Volcengine Ark (1024k context)
+  // DeepSeek hosted on Ark, 1024k context
   {
     id: 'deepseek-v4-pro-ga-260813',
     cost: {
@@ -245,41 +134,27 @@ export const VOLCENGINE_CHAT_MODELS = [
       cache_read: 0.3 / 6.737012 / 1e6,
     },
   },
+  // DeepSeek hosted on Ark, 1024k context
   {
     id: 'deepseek-v4-pro-260425',
     cost: {
-      input: 9.0 / 6.737012 / 1e6,
-      output: 27.0 / 6.737012 / 1e6,
-      cache_read: 0.3 / 6.737012 / 1e6,
+      input: 12.0 / 6.737012 / 1e6,
+      output: 24.0 / 6.737012 / 1e6,
+      cache_read: 1.0 / 6.737012 / 1e6,
     },
   },
-  {
-    id: 'deepseek-v4-pro',
-    cost: {
-      input: 9.0 / 6.737012 / 1e6,
-      output: 27.0 / 6.737012 / 1e6,
-      cache_read: 0.3 / 6.737012 / 1e6,
-    },
-  },
-  // DeepSeek-V4-Flash hosted on Volcengine Ark (1024k context)
+  // DeepSeek hosted on Ark, 1024k context
   {
     id: 'deepseek-v4-flash-ga-260731',
     cost: {
-      input: 1.0 / 6.737012 / 1e6,
-      output: 2.0 / 6.737012 / 1e6,
-      cache_read: 0.2 / 6.737012 / 1e6,
+      input: 3.0 / 6.737012 / 1e6,
+      output: 9.0 / 6.737012 / 1e6,
+      cache_read: 0.1 / 6.737012 / 1e6,
     },
   },
+  // DeepSeek hosted on Ark, 1024k context
   {
     id: 'deepseek-v4-flash-260425',
-    cost: {
-      input: 1.0 / 6.737012 / 1e6,
-      output: 2.0 / 6.737012 / 1e6,
-      cache_read: 0.2 / 6.737012 / 1e6,
-    },
-  },
-  {
-    id: 'deepseek-v4-flash',
     cost: {
       input: 1.0 / 6.737012 / 1e6,
       output: 2.0 / 6.737012 / 1e6,
