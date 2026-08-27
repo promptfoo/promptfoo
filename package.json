@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.0",
+  "version": "0.122.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -116,7 +116,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.11"
+      "@asamuzakjp/css-color": "6.0.7"
     },
     "storybook": {
       "esbuild": "0.28.2"
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.232",
+    "@anthropic-ai/claude-agent-sdk": "0.3.233",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.232",
+    "@anthropic-ai/claude-agent-sdk": "0.3.233",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -297,17 +297,18 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
+    "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.18",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.15.46",
-    "@swc/core-darwin-arm64": "^1.15.46",
-    "@swc/core-darwin-x64": "^1.15.46",
-    "@swc/core-linux-x64-gnu": "^1.15.46",
-    "@swc/core-linux-x64-musl": "^1.15.46",
-    "@swc/core-win32-x64-msvc": "^1.15.46",
+    "@swc/core": "^1.16.0",
+    "@swc/core-darwin-arm64": "^1.16.0",
+    "@swc/core-darwin-x64": "^1.16.0",
+    "@swc/core-linux-x64-gnu": "^1.16.0",
+    "@swc/core-linux-x64-musl": "^1.16.0",
+    "@swc/core-win32-x64-msvc": "^1.16.0",
     "google-auth-library": "^11.0.2",
     "hono": "^4.13.2",
     "ibm-cloud-sdk-core": "^5.6.0",
@@ -323,8 +324,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.117.1",
-    "@apidevtools/json-schema-ref-parser": "^15.5.1",
-    "@hono/node-server": "2.1.0",
+    "@apidevtools/json-schema-ref-parser": "^16.0.0",
+    "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",
@@ -372,7 +373,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "5.2.3",
+    "js-yaml": "5.3.0",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",

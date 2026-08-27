@@ -44,6 +44,7 @@ import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from 
 import { getGoalRubric } from './prompts';
 import {
   accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callTargetProvider,
   getGraderAssertionValue,
@@ -289,9 +290,7 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
             targetId: this.config.targetId,
           });
-          if (unblockingResult.attempted || unblockingResult.tokenUsage) {
-            accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
-          }
+          accumulateUnblockingTokenUsage(totalTokenUsage, unblockingResult);
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -320,6 +319,9 @@ export default class GoatProvider implements ApiProvider {
                   goal: context?.test?.metadata?.goal as string | undefined,
                 },
               );
+              if (transformResult.tokenUsage) {
+                accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+              }
               if (transformResult.error) {
                 logger.warn('[GOAT] Transform failed for unblocking prompt', {
                   error: transformResult.error,
@@ -534,6 +536,9 @@ export default class GoatProvider implements ApiProvider {
               goal: context?.test?.metadata?.goal as string | undefined,
             },
           );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           // Skip turn if transform failed
           if (lastTransformResult.error) {

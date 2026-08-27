@@ -37,6 +37,7 @@ The OpenAI provider supports the following model formats:
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
 - `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.5`
+- `openai:codex-security` - runs Codex Security scans and finding validation, with optional inline model selection
 - `openai:codex-app-server` / `openai:codex-desktop` - runs the experimental Codex app-server protocol for rich-client event, approval, sandbox, skill, plugin, and thread lifecycle evals
 
 The `openai:<endpoint>:<model name>` construction is useful for newly released or custom models.
@@ -1700,6 +1701,20 @@ the output of a function tool call.
 
 This requires defining your config in a JavaScript file instead of YAML.
 
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal
+guard: the resolved path must stay inside the config's `basePath` (typically
+the directory containing your config). Paths that escape the base directory
+(e.g. `file:///etc/cb.js` when `basePath` is `~/projects/myeval`) are
+rejected with `Path traversal rejected: ...`.
+
+Move callback files into your project, or set
+`PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to opt out (not recommended —
+the guard mitigates malicious callback paths supplied via shared configs).
+
+:::
+
 ```js
 module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   prompts: 'Please add the following numbers together: {{a}} and {{b}}',
@@ -2807,6 +2822,20 @@ providers:
 ```
 
 See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.
+
+### Codex Security SDK
+
+Use the [OpenAI Codex Security SDK provider](/docs/providers/openai-codex-security) to compare standard, deep, and diff scans; validate findings; and track model reasoning, repository coverage, SDK-reported token usage, and estimated scan cost.
+
+```yaml
+providers:
+  - id: openai:codex-security:gpt-5.6-sol
+    config:
+      operation: deep-security-scan
+      repository: ./service
+      model_reasoning_effort: high
+      max_cost_usd: 2
+```
 
 ### Codex App Server
 

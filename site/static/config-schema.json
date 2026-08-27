@@ -188,6 +188,9 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ANTHROPIC_CUSTOM_HEADERS": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -1660,6 +1663,9 @@
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ANTHROPIC_CUSTOM_HEADERS": {
                       "type": "string"
                     },
                     "ATLASCLOUD_API_KEY": {
