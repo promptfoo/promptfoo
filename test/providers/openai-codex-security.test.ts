@@ -61,7 +61,7 @@ function createScanResult(overrides: Record<string, unknown> = {}) {
       },
     },
     cost: {
-      model: 'gpt-5.6-sol',
+      model: 'gpt-5.6-terra',
       inputTokens: 100,
       cachedInputTokens: 25,
       cacheWriteInputTokens: 10,
@@ -373,6 +373,38 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
 
+    it('prefers the final turn model over scan cost and configured models', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: { model: 'gpt-5.6-luna' },
+      });
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.metadata?.model).toBe('gpt-5.6-sol');
+    });
+
+    it('falls back to the scan cost model when the final turn omits its model', async () => {
+      mockRun.mockResolvedValue(createScanResult({ turnResult: {} }));
+      const provider = new OpenAICodexSecurityProvider({
+        config: { model: 'gpt-5.6-luna' },
+      });
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.metadata?.model).toBe('gpt-5.6-terra');
+    });
+
+    it('falls back to the configured model when the scan omits model details', async () => {
+      mockRun.mockResolvedValue(createScanResult({ turnResult: {}, cost: null }));
+      const provider = new OpenAICodexSecurityProvider({
+        config: { model: 'gpt-5.6-luna' },
+      });
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.metadata?.model).toBe('gpt-5.6-luna');
+    });
+
     it('forwards deep-scan worker and stopping controls only for deep scans', async () => {
       const provider = new OpenAICodexSecurityProvider({
         config: {
@@ -582,6 +614,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.cost).toBe(0.004);
       expect(response.tokenUsage).toMatchObject({ prompt: 90, completion: 30, total: 120 });
       expect(response.metadata).toMatchObject({
+        model: 'gpt-5.6-terra',
         progress: { phase: 'validation', completed: 4 },
         warnings: ['One generated proof of concept was skipped.'],
       });
@@ -596,6 +629,23 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.tokenUsage).toBeUndefined();
       expect(response.cost).toBeUndefined();
     });
+
+    it.each([
+      { description: 'input', usage: { input_tokens: 42 }, expectedUsage: { prompt: 42 } },
+      { description: 'output', usage: { output_tokens: 17 }, expectedUsage: { completion: 17 } },
+    ])(
+      'preserves $description-only token usage without inventing a total',
+      async ({ usage, expectedUsage }) => {
+        mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: { usage } }));
+        const provider = new OpenAICodexSecurityProvider();
+
+        const response = await provider.callApi('Scan');
+
+        expect(response.tokenUsage).toEqual(expectedUsage);
+        expect(response.tokenUsage).not.toHaveProperty('total');
+        expect(response.cost).toBeUndefined();
+      },
+    );
 
     it('renders provider configuration variables for each eval row', async () => {
       const provider = new OpenAICodexSecurityProvider({
