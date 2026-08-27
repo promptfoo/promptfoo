@@ -9,7 +9,8 @@ Design notes:
 - Deterministic rules (stdlib only, no external dependencies).
 - Missing `ok` annotations are fail-closed: actions without `ok` mark
   `data_quality=low` and rule 3 fails, so unannotated retry loops cannot pass.
-- Rules 11 (vocabulary) and 12 (closing signature) are documented heuristics.
+- Rules 11 (repeated-term cap) and 12 (closing signature) are documented
+  heuristics.
 - Thresholds are centralized in THRESHOLDS; values are initial estimates
   pending calibration (see README).
 """
@@ -44,8 +45,14 @@ def _load_session(context: dict[str, Any]) -> list[dict[str, Any]]:
         steps = raw.get("steps") if isinstance(raw, dict) else raw
     else:
         try:
-            steps = json.loads(raw).get("steps")
-        except (ValueError, TypeError, KeyError):
+            parsed = json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+        if isinstance(parsed, dict):
+            steps = parsed.get("steps")
+        elif isinstance(parsed, list):
+            steps = parsed
+        else:
             return []
     return steps if isinstance(steps, list) else []
 
@@ -58,10 +65,7 @@ def _count(text: str, kws) -> int:
 
 def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     if not steps:
-        return {
-            "comps": [{"pass": False, "score": 0.0, "reason": "empty session trace"}],
-            "quality": "low",
-        }
+        return {"comps": [], "quality": "low"}
 
     actions = [s for s in steps if s.get("kind") == "action"]
     tool_actions = [s for s in actions if s.get("tool")]
@@ -77,28 +81,21 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     T = THRESHOLDS
     out: list[dict[str, Any]] = []
 
-    # 1 Anticipation: first tool action preceded by plan/intent
+    # 1 Anticipation: a plan/intent step appears before the first tool action
     first_act = next(
         (i for i, s in enumerate(steps) if s.get("kind") == "action" and s.get("tool")),
         None,
     )
     if first_act is None:
         ante = {"pass": True, "score": 1.0, "reason": "no tool actions to anticipate"}
-    elif first_act == 0:
-        ante = {
-            "pass": False,
-            "score": 0.0,
-            "reason": "first action without prior intent declaration",
-        }
     else:
-        prev = steps[first_act - 1]
-        ok_ = prev.get("kind") in _PLAN_KINDS
+        declared = any(steps[j].get("kind") in _PLAN_KINDS for j in range(first_act))
         ante = {
-            "pass": ok_,
-            "score": 1.0 if ok_ else 0.0,
+            "pass": declared,
+            "score": 1.0 if declared else 0.0,
             "reason": "intent declared before first action"
-            if ok_
-            else "first action not preceded by intent",
+            if declared
+            else "no intent declaration before first action",
         }
     out.append(ante)
 
@@ -125,8 +122,8 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         err_retries: dict[str, int] = {}
         for s in fails:
             key = (
-                str(s.get("tool")) + "|" + str(s.get("text", ""))[:60]
-            )  # (tool, text) error identity
+                str(s.get("tool")) + "|" + str(s.get("text", ""))
+            )  # full error identity
             err_retries[key] = err_retries.get(key, 0) + 1
         worst = max(err_retries.values()) if err_retries else 0
         ok_ = worst <= T["max_retries"]
@@ -233,7 +230,7 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
 
-    # 11 SolidDrawing: heuristic (documented) — vocabulary stability
+    # 11 SolidDrawing: heuristic (documented) — cap on repeated English terms
     import re
 
     terms = re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text)
@@ -248,13 +245,14 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
             "score": 1.0 if ok_ else 0.0,
             "reason": f"repeated terms={len(repeated)} (heuristic)"
             if ok_
-            else "vocabulary drift suspected (heuristic)",
+            else f"repeated-term cap exceeded: {len(repeated)} > {T['max_repeated_terms']} (heuristic)",
         }
     )
 
-    # 12 Appeal: consistent closing signature
+    # 12 Appeal: closing signature in the final step
     closers = ("done", "完成", "summary", "总结", "next steps", "下一步")
-    appeal = any(c in text.lower() for c in closers)
+    final_text = str(steps[-1].get("text", "")).lower()
+    appeal = any(c in final_text for c in closers)
     out.append(
         {
             "pass": appeal,

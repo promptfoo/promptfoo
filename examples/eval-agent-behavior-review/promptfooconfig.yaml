@@ -1,11 +1,12 @@
-# Agent Behavior Review — promptfoo demo config
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Deterministic agent behavior presentation grader demo
 # Runs the 12-principle behavior-presentation grader against two agent
 # session traces (stiff should FAIL / improved should PASS).
 # Note: the grader reads `vars.session` and ignores the LLM `output`;
 # `providers: echo` is used only so the example runs with zero API keys.
 
 prompts:
-  - "Review the agent session below for behavior quality."
+  - 'Review the agent session below for behavior quality.'
 
 providers:
   - echo

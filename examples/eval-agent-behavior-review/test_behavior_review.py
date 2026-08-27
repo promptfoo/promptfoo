@@ -40,6 +40,16 @@ class TestAnticipation(unittest.TestCase):
             dim(run({"steps": [{"kind": "plan", "text": "p"}, act()]}), 0)["pass"]
         )
 
+    def test_plan_with_interleaved_message_still_passes(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                {"kind": "message", "text": "explaining context"},
+                act(),
+            ]
+        }
+        self.assertTrue(dim(run(s), 0)["pass"])
+
 
 class TestStaging(unittest.TestCase):
     def test_opens_with_action_fails(self):
@@ -80,6 +90,18 @@ class TestSquashStretch(unittest.TestCase):
         r = run(s)
         self.assertFalse(dim(r, 2)["pass"])
         self.assertIn("data_quality", r["reason"])
+
+    def test_distinct_errors_not_merged_into_retry(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                act(text="error: file a.txt not found", ok=False),
+                act(text="error: file b.txt not found", ok=False),
+                act(text="error: file c.txt not found", ok=False),
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        self.assertTrue(dim(run(s), 2)["pass"])
 
 
 class TestPoseToPose(unittest.TestCase):
@@ -264,6 +286,17 @@ class TestAppeal(unittest.TestCase):
             )["pass"]
         )
 
+    def test_mid_trace_closer_does_not_rescue(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                act(),
+                {"kind": "message", "text": "done for now"},
+                {"kind": "message", "text": "continuing regardless"},
+            ]
+        }
+        self.assertFalse(dim(run(s), 11)["pass"])
+
 
 class TestOverall(unittest.TestCase):
     def test_improved_session_passes(self):
@@ -352,6 +385,21 @@ class TestOverall(unittest.TestCase):
 
     def test_empty_session_fails(self):
         self.assertFalse(run({"steps": []})["pass"])
+
+    def test_serialized_list_session_is_graded(self):
+        steps = [
+            {"kind": "plan", "text": "p"},
+            act(),
+            {"kind": "report", "text": "done"},
+        ]
+        r = br.get_assert("", {"vars": {"session": json.dumps(steps)}})
+        self.assertEqual(len(r["componentResults"]), 12)
+
+    def test_missing_session_reports_no_trace(self):
+        r = br.get_assert("", {"vars": {}})
+        self.assertFalse(r["pass"])
+        self.assertEqual(r["componentResults"], [])
+        self.assertIn("no session trace", r["reason"])
 
 
 if __name__ == "__main__":

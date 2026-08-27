@@ -2,8 +2,8 @@
 
 A deterministic grader with 12 checks for how an agent presents its behavior:
 intent declared before actions, conclusions up front, retries converging,
-steady pacing, stable vocabulary. The rules map to Disney's 12 animation
-principles.
+steady pacing, repetition kept in check. The rules map to Disney's 12
+animation principles.
 
 You can run this example with:
 
@@ -35,11 +35,13 @@ The two demo cases show a stiff session (should FAIL) and an improved session
 (should PASS). Input is a session trace JSON passed via `vars.session`:
 
 ```json
-{"steps": [
-  {"kind": "plan", "text": "I will read the file then verify", "topic": "a"},
-  {"kind": "action", "text": "read file", "tool": "read", "ok": true, "topic": "a"},
-  {"kind": "report", "text": "summary: done", "topic": "a"}
-]}
+{
+  "steps": [
+    { "kind": "plan", "text": "I will read the file then verify", "topic": "a" },
+    { "kind": "action", "text": "read file", "tool": "read", "ok": true, "topic": "a" },
+    { "kind": "report", "text": "summary: done", "topic": "a" }
+  ]
+}
 ```
 
 Step kinds: `plan` / `intent` / `action` / `verify` / `report` / `message`.
@@ -47,20 +49,20 @@ Tool calls map to `action` with `ok` (success/failure); `topic` is optional.
 
 ## Principle → Rule mapping (12 dimensions)
 
-| # | Principle | Programmatic check | Threshold |
-|---|---|---|---|
-| 1 | Anticipation | first tool action preceded by plan/intent | — |
-| 2 | Staging | session opens with intent/plan | — |
-| 3 | Squash & Stretch | same-(tool,text) error retries converge | ≤2 |
-| 4 | Pose to Pose | long runs (>6 steps) have a mid-session verify | mid ≠ end |
-| 5 | Follow Through | session ends with verify/report | — |
-| 6 | Slow In/Out | plan-in AND verify-out | — |
-| 7 | Arcs | topic runs (consecutive distinct topics) | ≤2 |
-| 8 | Secondary Action | aux-marker occurrences (confidence/warning/note:/备选) | ≤3 |
-| 9 | Timing | long runs (>8 steps) emit intermediate feedback | — |
-| 10 | Exaggeration | emphasis occurrences (**,!!!,强调,critical,warning:) | ≤3 |
-| 11 | Solid Drawing | repeated-term count (heuristic, English-token) | ≤5 |
-| 12 | Appeal | structured closing signature present | — |
+| #   | Principle        | Programmatic check                                     | Threshold |
+| --- | ---------------- | ------------------------------------------------------ | --------- |
+| 1   | Anticipation     | plan/intent appears before the first tool action       | —         |
+| 2   | Staging          | session opens with intent/plan                         | —         |
+| 3   | Squash & Stretch | same-(tool,text) error retries converge                | ≤2        |
+| 4   | Pose to Pose     | long runs (>6 steps) have a mid-session verify         | mid ≠ end |
+| 5   | Follow Through   | session ends with verify/report                        | —         |
+| 6   | Slow In/Out      | plan-in AND verify-out                                 | —         |
+| 7   | Arcs             | topic runs (consecutive distinct topics)               | ≤2        |
+| 8   | Secondary Action | aux-marker occurrences (confidence/warning/note:/备选) | ≤3        |
+| 9   | Timing           | long runs (>8 steps) emit intermediate feedback        | —         |
+| 10  | Exaggeration     | emphasis occurrences (**,!!!,强调,critical,warning:)   | ≤3        |
+| 11  | Solid Drawing    | repeated-term count (heuristic, English-token)         | ≤5        |
+| 12  | Appeal           | closing signature in the final step                    | —         |
 
 The grader returns a promptfoo `GradingResult` with 12 `componentResults`,
 `namedScores`, and an overall score (pass >= 0.7). Missing `ok` annotations
