@@ -1,0 +1,42 @@
+# Agent Behavior Review — promptfoo demo config
+# Runs the 12-principle behavior-presentation grader against two agent
+# session traces (stiff should FAIL / improved should PASS).
+# Note: the grader reads `vars.session` and ignores the LLM `output`;
+# `providers: echo` is used only so the example runs with zero API keys.
+
+prompts:
+  - "Review the agent session below for behavior quality."
+
+providers:
+  - echo
+
+tests:
+  - vars:
+      session: |
+        {
+          "steps": [
+            {"kind": "action", "text": "wrote file", "tool": "write", "ts": 0.0, "ok": true, "topic": "a"},
+            {"kind": "action", "text": "read file", "tool": "read", "ts": 1.0, "ok": false, "topic": "a"},
+            {"kind": "action", "text": "read file", "tool": "read", "ts": 2.0, "ok": false, "topic": "a"},
+            {"kind": "action", "text": "read file", "tool": "read", "ts": 3.0, "ok": false, "topic": "a"},
+            {"kind": "action", "text": "read file", "tool": "read", "ts": 4.0, "ok": false, "topic": "a"},
+            {"kind": "message", "text": "done", "ts": 5.0, "topic": "a"}
+          ]
+        }
+    assert:
+      - type: python
+        value: file://behavior_review.py
+  - vars:
+      session: |
+        {
+          "steps": [
+            {"kind": "plan", "text": "I will read the file then verify output", "ts": 0.0, "topic": "a"},
+            {"kind": "action", "text": "read file", "tool": "read", "ts": 1.0, "ok": true, "topic": "a"},
+            {"kind": "action", "text": "read file retry once", "tool": "read", "ts": 2.0, "ok": true, "topic": "a"},
+            {"kind": "verify", "text": "checking result integrity", "ts": 3.0, "topic": "a"},
+            {"kind": "report", "text": "summary: file read ok. next steps: none.", "ts": 4.0, "topic": "a"}
+          ]
+        }
+    assert:
+      - type: python
+        value: file://behavior_review.py
