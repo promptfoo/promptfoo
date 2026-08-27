@@ -21,15 +21,25 @@ const TokenUsageCoreSchema = z.object({
 });
 
 /** Target usage with independent generation, attacker, and assertion breakdowns. */
-export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
+const TokenUsageBreakdownSchema = TokenUsageCoreSchema.extend({
   attacker: TokenUsageCoreSchema.optional(),
   assertions: TokenUsageCoreSchema.optional(),
   generation: TokenUsageCoreSchema.optional(),
 });
 
+/**
+ * The root describes the full evaluation footprint, including replayed responses.
+ * The optional incurred view contains only requests executed during this run.
+ */
+export const BaseTokenUsageSchema = TokenUsageBreakdownSchema.extend({
+  incurredTokenUsage: TokenUsageBreakdownSchema.optional(),
+});
+
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
-export type NormalizedTokenUsage = Required<Omit<TokenUsage, 'attacker' | 'generation'>> &
-  Pick<TokenUsage, 'attacker' | 'generation'>;
+export type NormalizedTokenUsage = Required<
+  Omit<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>
+> &
+  Pick<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 

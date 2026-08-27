@@ -350,6 +350,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
           Learn more: ${docsUrl}
         `,
+        tokenUsage: { numRequests: 0 },
       };
     }
 

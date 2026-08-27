@@ -1,4 +1,8 @@
-import { accumulateResponseTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../types/index';
 
@@ -9,6 +13,7 @@ type GenerationUsageRecorder = (response: GenerationUsageResponse) => void;
 type TrackedGenerationProvider = ApiProvider & {
   [generationUsageRecorder]?: GenerationUsageRecorder;
 };
+const recordedGenerationErrors = new WeakMap<object, WeakSet<GenerationUsageRecorder>>();
 
 function trackProvider<T extends ApiProvider>(provider: T, record: GenerationUsageRecorder): T {
   const callApi = provider.callApi.bind(provider);
@@ -45,9 +50,18 @@ export function trackGenerationTokenUsage<T extends ApiProvider>(
   tokenUsage: TokenUsage,
 ): T {
   return trackProvider(provider, (response) => {
-    if (!response.cached) {
-      accumulateResponseTokenUsage(tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(
+      tokenUsage,
+      response.cached
+        ? {
+            ...response,
+            tokenUsage: {
+              ...response.tokenUsage,
+              incurredTokenUsage: createEmptyTokenUsage(),
+            },
+          }
+        : response,
+    );
   });
 }
 
@@ -66,4 +80,24 @@ export function recordGenerationTokenUsage(
   response: GenerationUsageResponse,
 ): void {
   (provider as TrackedGenerationProvider)[generationUsageRecorder]?.(response);
+}
+
+/** Preserve usage reported by a failed remote generation request. */
+export function recordFailedGenerationTokenUsage(provider: ApiProvider, error: unknown): void {
+  const tokenUsage = getErrorTokenUsage(error);
+  const record = (provider as TrackedGenerationProvider)[generationUsageRecorder];
+  if (!tokenUsage || !record) {
+    return;
+  }
+
+  if (error && typeof error === 'object') {
+    const recorders = recordedGenerationErrors.get(error) ?? new WeakSet<GenerationUsageRecorder>();
+    if (recorders.has(record)) {
+      return;
+    }
+    recorders.add(record);
+    recordedGenerationErrors.set(error, recorders);
+  }
+
+  record({ tokenUsage });
 }

@@ -319,9 +319,15 @@ describe('package manifests', () => {
   });
 
   it('keeps jsdom on a release the supported Node floor can install', () => {
-    const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
-      'package.json',
-    );
+    const rootPackageJson = readPackageJson<
+      PackageManifest & {
+        engines?: Record<string, string>;
+        overrides?: Record<string, Record<string, string> | string>;
+      }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { engines?: Record<string, string>; version?: string }>;
+    }>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -336,14 +342,42 @@ describe('package manifests', () => {
     const jsdomCap = renovateConfig.packageRules?.find((rule) =>
       rule.matchPackageNames?.includes('jsdom'),
     )?.allowedVersions;
+    const cssColorCap = renovateConfig.packageRules?.find((rule) =>
+      rule.matchPackageNames?.includes('@asamuzakjp/css-color'),
+    )?.allowedVersions;
+    const jsdomOverrides = rootPackageJson.overrides?.jsdom;
+    const cssColorOverride =
+      typeof jsdomOverrides === 'object' ? jsdomOverrides['@asamuzakjp/css-color'] : undefined;
+    const lockedCssColor = packageLock.packages['node_modules/@asamuzakjp/css-color'];
 
     expect(nodeFloor, 'the root manifest must declare a Node floor').toBeDefined();
+    expect(cssColorOverride, 'jsdom must pin its CSS color parser').toBeDefined();
+    expect(
+      lockedCssColor,
+      'the jsdom CSS color parser must be present in the lockfile',
+    ).toBeDefined();
+    expect(lockedCssColor?.version, 'the parser override and lockfile must agree').toBe(
+      cssColorOverride,
+    );
+    expect(
+      lockedCssColor?.engines?.node,
+      'the parser must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      satisfies(nodeFloor!.version, lockedCssColor!.engines!.node!),
+      'the jsdom CSS color parser must install on the minimum supported Node version',
+    ).toBe(true);
 
     if (nodeFloor!.compare('22.22.2') < 0) {
       expect(
         jsdomCap,
         'Renovate must hold jsdom below 30 while the Node floor is below 22.22.2',
       ).toBe('<30');
+      expect(
+        cssColorCap,
+        'Renovate must hold the jsdom CSS color parser below 7 while the Node floor is below 22.22.2',
+      ).toBe('<7');
+      expect(satisfies(cssColorOverride!, cssColorCap!)).toBe(true);
 
       for (const manifestPath of ['src/app/package.json', 'site/package.json']) {
         const range = readPackageJson<PackageManifest>(manifestPath).devDependencies?.jsdom;
@@ -445,11 +479,14 @@ describe('package manifests', () => {
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
+    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
+    expect(resolvedSdkVersion).toBeDefined();
+    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
     expect(agentPackage.version).toBe(agentVersion);
 
     for (const [binaryName, binaryVersion] of Object.entries(
@@ -501,6 +538,26 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps Google Cloud metadata dependencies on the supported Node 22 floor', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = 'gcp-metadata';
+    const dependencyRange = packageJson.dependencies?.[dependencyName];
+
+    expect(dependencyRange).toBeDefined();
+    expect(minVersion(dependencyRange!)?.compare('9.0.2')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.overrides?.mongoose?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.0.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
@@ -542,14 +599,14 @@ describe('package manifests', () => {
       const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
 
       expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
-      expect(minVersion(optionalRange!)?.compare('1.15.46')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(optionalRange!)?.compare('1.16.0')).toBeGreaterThanOrEqual(0);
       expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
       expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
       expect(
         minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-          '1.15.46',
+          '1.16.0',
         ),
       ).toBeGreaterThanOrEqual(0);
     }
@@ -576,14 +633,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.12.34')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.2')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.12.34',
+        '4.13.2',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -658,14 +715,14 @@ describe('package manifests', () => {
     expect(adapterVersion).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(minVersion(adapterVersion!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(adapterVersion!)?.compare('2.1.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.[adapterName]).toBe(adapterVersion);
     expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
-    expect(minVersion(lockedAdapter.version!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.1.1')).toBeGreaterThanOrEqual(0);
     expect(lockedAdapter.engines?.node).toBe('>=20');
 
     for (const manifestPath of [
@@ -928,6 +985,10 @@ describe('package manifests', () => {
         `${manifestPath} must declare a valid js-yaml semver range`,
       ).not.toBeNull();
       expect(
+        minVersion(declaredVersion as string)?.compare('5.3.0'),
+        `${manifestPath} must include the aliased-merge validation fix`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(
         subset(declaredVersion as string, PATCHED_JS_YAML_RANGE),
         `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
       ).toBe(true);
@@ -952,20 +1013,48 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'package.json',
+    );
     const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
+      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
     }>('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
     const parserTransportRange = parser?.dependencies?.undici;
+    const parserTransport =
+      packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
 
     expect(
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
+      parserRange,
+    );
+    expect(parser?.version, 'the parser must resolve in the root lockfile').toBeDefined();
+    expect(satisfies(parser.version as string, parserRange as string)).toBe(true);
+    expect(
+      packageJson.engines?.node,
+      'the root must declare its supported Node range',
+    ).toBeDefined();
+    expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
+    expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(
+      parserTransport?.version,
+      'the parser must resolve its private HTTP transport',
+    ).toBeDefined();
+    expect(satisfies(parserTransport.version as string, parserTransportRange as string)).toBe(true);
+    expect(
+      parserTransport.engines?.node,
+      'the HTTP transport must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
+    ).toBe(true);
     expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
   });
 

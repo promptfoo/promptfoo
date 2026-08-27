@@ -11,7 +11,7 @@ prompts:
 
 providers:
   - openai:o4-mini
-  - anthropic:claude-sonnet-4-20250514
+  - anthropic:claude-sonnet-4-6
   - google:gemini-2.5-flash
 
 tests:
