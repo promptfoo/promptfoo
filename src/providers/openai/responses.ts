@@ -7,11 +7,6 @@ import {
 } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import {
-  buildChatSpanContext,
-  extractProviderResponseAttributes,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
@@ -30,6 +25,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
+import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
 import {
@@ -807,6 +803,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        regionalProcessing: this.modelName.startsWith('openai.'),
         serviceTier,
       },
     );
@@ -1046,13 +1043,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
-  // through the Responses wire format override this so traces attribute to the
-  // actual provider system.
-  protected getGenAISystem(): string {
-    return 'openai';
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1094,7 +1084,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, openaiApiType: 'responses' },
       () =>
         this.callApiInternal(context, {
           ...resolved,

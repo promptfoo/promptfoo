@@ -494,5 +494,55 @@ describe('Snowflake Cortex Provider', () => {
       });
       expect(deleteFromCache).toHaveBeenCalledOnce();
     });
+
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      // A 200 response with an empty `choices` array (soft moderation block,
+      // upstream hiccup, or n>1 edge cases). Before the fix this made
+      // `data.choices[0]` undefined and `.message` threw an opaque TypeError.
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [],
+          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+        },
+        // Served from cache: the malformed-response return must preserve the
+        // cached flag so downstream skips provider delays / live-call metrics.
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('Malformed response data');
+      expect(result.cached).toBe(true);
+    });
+
+    it('returns a clean error instead of crashing when the response has no choices field', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('Malformed response data');
+      expect(result.cached).toBe(false);
+    });
   });
 });

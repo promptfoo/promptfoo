@@ -780,38 +780,55 @@ describe('OpenRouter', () => {
       }
     });
 
-    it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
-      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+    it.each([
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1///',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/?api-version=2026-08-18',
+        expectedUrl:
+          'https://proxy.example.com/openrouter/api/v1/chat/completions?api-version=2026-08-18',
+      },
+    ])(
+      'should normalize the request URL for apiBaseUrl $apiBaseUrl',
+      async ({ apiBaseUrl, expectedUrl }) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
-      try {
-        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1/';
-        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
-          config: {
-            apiBaseUrl: customApiBaseUrl,
-          },
-        });
+        try {
+          const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+            config: {
+              apiBaseUrl,
+            },
+          });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          );
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        await provider.callApi('Test prompt');
+          await provider.callApi('Test prompt');
 
-        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
-      } finally {
-        restoreEnv();
-      }
-    });
+          const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+          expect(provider.config.apiBaseUrl).toBe(apiBaseUrl);
+          expect(url).toBe(expectedUrl);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should combine apiBaseUrl override with passthrough options on the request body', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
@@ -846,6 +863,65 @@ describe('OpenRouter', () => {
         const body = JSON.parse((init as RequestInit | undefined)?.body as string);
         expect(body.route).toBe('fallback');
         expect(body.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        // A 200 response with an empty `choices` array (soft moderation block,
+        // upstream hiccup, or n>1 edge cases). Before the fix this made
+        // `data.choices[0]` undefined and `.message` threw an opaque TypeError.
+        const response = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.output).toBeUndefined();
+        // The malformed-response return must carry the cache-hit status so
+        // downstream doesn't treat a cached failure as a live provider call.
+        expect(result.cached).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('returns a clean error instead of crashing when the response has no choices field', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.cached).toBe(false);
       } finally {
         restoreEnv();
       }

@@ -1,32 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isVegasBannerLive, VEGAS_BANNER_EXPIRY } from '../../data/announcementBar';
 import { events, formatEventDate, getEventBySlug } from '../../data/events';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
 
 const SITE_ROOT = path.resolve(__dirname, '../../..');
 
-/**
- * These assertions cover *facts and promises*, not design devices. Booth numbers, dates,
- * and the OpenAI/Promptfoo relationship are the things that send a real person walking
- * across a convention centre or that misstate a corporate relationship, so they get
- * asserted. Headings, section names, and ASCII art are free to change without a test
- * edit.
- */
+// Preserve historical dates, booth identity, and public promises as the pages become recaps.
 const BLACKHAT_BOOTH = 'Booth #2967';
 const DEFCON_BOOTH = 'Booth #1412';
+const EVENT_REFERENCE_CASES = events.map((event) => [event.id, event] as const);
+const LIVE_EVENT_INVITE =
+  /\b(?:find (?:us|the team|promptfoo)|where to find us|visit (?:us|openai booth)|see promptfoo test|stop by|attending black hat|our booth (?:opens|is open)|what we're demoing|wait for the conference|register now|rsvp)\b/i;
 
-/**
- * Promptfoo is part of OpenAI and demos at OpenAI's booth — OpenAI is the exhibitor of
- * record in the Black Hat directory. Every one of these framings inverts or muddies that
- * hierarchy, so none of them may appear in rendered copy, `<Head>` metadata, alt text, or
- * aria labels. (`@docusaurus/Head` is stubbed as a fragment in `vitest.config.ts`, so its
- * children land in the container and `innerHTML` sees meta/alt/aria values too.)
- */
+// OpenAI was the exhibitor. Promptfoo is part of OpenAI, not a second company sharing a stand.
 const BANNED_BRAND_STRINGS = [
   /with OpenAI/i,
   /OpenAI presence/i,
@@ -35,11 +25,10 @@ const BANNED_BRAND_STRINGS = [
 ];
 
 describe('Vegas 2026 event data', () => {
-  // The 2026 entries all end at 18:00 PDT, which is past midnight UTC. Reading that back
-  // through `new Date(...).getDate()` on a UTC build host rendered the end date a day
-  // late, so the events index disagreed with every string on the event page itself.
-  // (Generic date-helper coverage lives in `src/data/events.test.ts`; this only pins the
-  // two Vegas ranges, which are the ones printed on the pages below.)
+  // Vegas event dates carry explicit Pacific offsets. Reinterpreting them in the build
+  // host's timezone can shift the displayed conference dates, so the events index must
+  // agree with the dates printed on each page. Generic date-helper coverage lives in
+  // `site/src/data/events.test.ts`; this pins the two Vegas ranges.
   const zones = ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati', 'Asia/Tokyo'];
 
   // vi.stubEnv/unstubAllEnvs rather than assigning process.env.TZ directly: it is the
@@ -84,6 +73,15 @@ describe('Vegas 2026 event data', () => {
     expect(getEventBySlug('defcon-2026')?.booth).toBe(DEFCON_BOOTH);
   });
 
+  it.each(['blackhat-2026', 'defcon-2026'])('%s card reads as a recap', (slug) => {
+    const event = getEventBySlug(slug);
+    expect(event).toBeDefined();
+
+    const copy = `${event!.description} ${event!.fullDescription ?? ''}`;
+    expect(copy).not.toMatch(LIVE_EVENT_INVITE);
+    expect(copy).not.toMatch(/\b(?:runs Aug|is open)\b/i);
+  });
+
   it.each(['blackhat-2026', 'defcon-2026'])('%s card copy names the OpenAI booth', (slug) => {
     const event = getEventBySlug(slug);
     expect(event).toBeDefined();
@@ -104,6 +102,13 @@ describe('Vegas 2026 event data', () => {
 
     expect(copy).toMatch(/Aug(?:ust)?\.?\s*4\s*[–-]\s*6/i);
     expect(copy).not.toMatch(/Aug(?:ust)?\.?\s*5\s*[–-]\s*6/i);
+  });
+
+  it('dates DEF CON booth demos Aug 7-9, not the full conference window', () => {
+    const event = getEventBySlug('defcon-2026');
+    const copy = `${event!.description} ${event!.fullDescription ?? ''}`;
+
+    expect(copy).toMatch(/Aug(?:ust)?\.?\s*7\s*[–-]\s*9/i);
   });
 
   // `Event.highlights` is rendered by nothing in src/components or src/pages/events —
@@ -131,9 +136,7 @@ describe('events data references resolve', () => {
   // A dead cardImage path renders a broken tile on /events/ and a 404 og:image on share —
   // EventCard only falls back to its placeholder when the field is absent, and the
   // Docusaurus build does not validate static asset paths.
-  it.each(
-    events.map((e) => [e.id, e] as const),
-  )('%s resolves its assets and page', (_id, event) => {
+  it.each(EVENT_REFERENCE_CASES)('%s resolves its assets and page', (_id, event) => {
     for (const key of ['cardImage', 'heroImage'] as const) {
       const assetPath = event[key];
       if (assetPath) {
@@ -162,6 +165,8 @@ describe.each([
     dates: /August 1\s*[–-]\s*6, 2026/,
     venue: /Mandalay Bay/,
     crossLink: /DEF CON 34/,
+    boothDates: /Business Hall and booth:\s*Aug 4-6/i,
+    metadataDates: 'August 4-6, 2026',
   },
   {
     name: 'DEF CON 34',
@@ -170,8 +175,12 @@ describe.each([
     dates: /August 6\s*[–-]\s*9, 2026/,
     venue: /West Hall/,
     crossLink: /Black Hat/,
+    boothDates: /Booth #1412:\s*Aug 7-9/i,
+    metadataDates: 'August 7-9, 2026',
   },
-])('$name page', ({ Component, boothNumber, dates, venue, crossLink }) => {
+])('$name page', (page) => {
+  const { Component, boothNumber, dates, venue, crossLink, boothDates, metadataDates } = page;
+
   it('shows the booth number, dates, and venue', () => {
     const { container } = render(<Component />);
     const text = container.textContent ?? '';
@@ -179,6 +188,14 @@ describe.each([
     expect(text).toMatch(new RegExp(`booth\\s*#?${boothNumber}`, 'i'));
     expect(text).toMatch(dates);
     expect(text).toMatch(venue);
+  });
+
+  it('labels the conference dates separately from the public booth dates', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(/Conference:\s*August/i);
+    expect(text).toMatch(boothDates);
   });
 
   // The exhibitor of record is OpenAI. The pages must say whose booth it is, and must say
@@ -196,14 +213,82 @@ describe.each([
 
   it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
     const { container } = render(<Component />);
-    // innerHTML rather than textContent so meta descriptions, alt text, and aria labels
-    // are covered too.
+    // Include alt text and aria labels. Social metadata is checked separately below.
     expect(container.innerHTML).not.toMatch(banned);
   });
 
   it('links to the other half of the Vegas run', () => {
     render(<Component />);
     expect(screen.getAllByText(crossLink).length).toBeGreaterThan(0);
+  });
+
+  it('marks the event as finished and removes expired booth invitations', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(/past event/i);
+    expect(text).toMatch(/has ended/i);
+    expect(text).toMatch(/request a demo/i);
+    expect(container.innerHTML).not.toMatch(LIVE_EVENT_INVITE);
+    expect(screen.queryByRole('list', { name: /booth hours/i })).not.toBeInTheDocument();
+  });
+
+  it('renders consistent archival social descriptions', () => {
+    render(<Component />);
+    const ogDescription = document
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute('content');
+    const twitterDescription = document
+      .querySelector('meta[name="twitter:description"]')
+      ?.getAttribute('content');
+
+    expect(ogDescription).toContain(`OpenAI booth #${boothNumber}`);
+    expect(ogDescription).toContain(metadataDates);
+    expect(ogDescription).not.toMatch(LIVE_EVENT_INVITE);
+    expect(twitterDescription).toBe(ogDescription);
+    for (const banned of BANNED_BRAND_STRINGS) {
+      expect(ogDescription).not.toMatch(banned);
+    }
+  });
+
+  it('does not promise appearances by other OpenAI security teams', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).not.toMatch(/also at the booth/i);
+    expect(text).not.toMatch(/meet the teams behind/i);
+  });
+
+  it('keeps visitor copy direct and free of speculative event claims', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).not.toMatch(/no party this year|very tired team|skip the line|draw a line/i);
+  });
+
+  it('does not publish internal booth shifts or handoffs', () => {
+    const { container } = render(<Component />);
+
+    expect(container.textContent ?? '').not.toMatch(/\b(?:shifts?|staffing|handoffs?)\b/i);
+  });
+
+  it('preserves the old section anchor and scrolls to the recap without matchMedia', () => {
+    const mediaWindow: { matchMedia: typeof window.matchMedia | undefined } = window;
+    const originalMatchMedia = mediaWindow.matchMedia;
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+
+    mediaWindow.matchMedia = undefined;
+
+    try {
+      render(<Component />);
+      expect(document.getElementById('find-us')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', { name: /event recap/i }));
+
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+    } finally {
+      mediaWindow.matchMedia = originalMatchMedia;
+      scrollTo.mockRestore();
+    }
   });
 
   it('has exactly one h1', () => {
@@ -271,43 +356,22 @@ describe('DEF CON 34 page specifics', () => {
     expect(linkedCta || labelledCta).toBe(true);
   });
 
-  // Daybreak is OpenAI's cyber defense initiative, not a parent product line that
-  // Promptfoo sits under. No public source establishes that hierarchy.
-  it('does not present Daybreak as an umbrella over Promptfoo', () => {
+  it('describes Daybreak accurately without placing Promptfoo under the initiative', () => {
     const { container } = render(<Defcon2026 />);
-    expect(container.innerHTML).not.toMatch(/umbrella/i);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(/Daybreak brings together OpenAI's cyber-defense work/i);
+    expect(text).toMatch(/Codex Security/i);
+    expect(text).toMatch(/Promptfoo tests deployed agents/i);
+    expect(text).not.toMatch(/three adjacent efforts|not a hierarchy|Daybreak umbrella/i);
   });
 });
 
 describe('announcement bar', () => {
-  // The banner is the highest-traffic copy surface on the site and it is plain config, so
-  // the brand-hierarchy rules are checked against the file itself.
   const configSource = fs.readFileSync(path.join(SITE_ROOT, 'docusaurus.config.ts'), 'utf-8');
 
-  it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
-    expect(configSource).not.toMatch(banned);
-  });
-
-  // Aug 1-9 spans both conference windows and implies a continuous booth presence across
-  // a week we do not staff continuously.
-  it('does not advertise a continuous Aug 1-9 presence', () => {
-    expect(configSource).not.toMatch(/Aug(?:ust)?\.?\s*1\s*[–-]\s*9/i);
-  });
-
-  // The expiry date itself no longer lives in the config: `src/data/announcementBar.ts`
-  // owns it, so the Node-side build decision and the client-side `src/theme/AnnouncementBar`
-  // wrapper (which retires the bar on the visitor's clock, since nothing rebuilds this site
-  // on a schedule) cannot drift apart. Assert the config still consults it, and that the
-  // date it consults actually clears both conference windows.
-  it('is closeable and expires after the conferences', () => {
-    expect(configSource).toMatch(/isCloseable:\s*true/);
-    expect(configSource).toMatch(/isVegasBannerLive\(/);
-
-    const defcon = getEventBySlug('defcon-2026');
-    expect(defcon).toBeDefined();
-    expect(Date.parse(defcon?.endDate ?? '')).toBeLessThan(VEGAS_BANNER_EXPIRY);
-
-    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY - 1)).toBe(true);
-    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY)).toBe(false);
+  it('does not configure the retired Vegas announcements', () => {
+    expect(configSource).not.toMatch(/vegas-2026|events-evergreen|isVegasBannerLive/);
+    expect(configSource).not.toMatch(/\/events\/(?:blackhat|defcon)-2026/);
   });
 });

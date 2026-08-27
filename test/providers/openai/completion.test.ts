@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -34,6 +35,31 @@ describe('OpenAI Provider', () => {
       severity: 'info',
     };
 
+    function recordSpanAttributes() {
+      const attributes: Record<string, unknown> = {};
+      const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (
+          name: string,
+          options: { attributes: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          attributes.spanName = name;
+          Object.assign(attributes, options.attributes);
+          return callback({
+            setAttribute: (key: string, value: unknown) => {
+              attributes[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          });
+        },
+      } as any);
+
+      return { attributes, restore: () => getTracer.mockRestore() };
+    }
+
     it('should reject a Codex-only completion passthrough model override before dispatch', async () => {
       const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
         config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
@@ -56,27 +82,176 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it('records standard text-completion model attributes and token usage', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003').callApi('Test prompt', {
+          prompt: { raw: 'Test prompt', label: 'completion prompt' },
+          testIdx: 7,
+          vars: {},
+        });
+
+        expect(attributes).toMatchObject({
+          spanName: 'text_completion text-davinci-003',
+          'gen_ai.operation.name': 'text_completion',
+          'gen_ai.provider.name': 'openai',
+          'gen_ai.request.model': 'text-davinci-003',
+          'gen_ai.request.max_tokens': 1024,
+          'gen_ai.request.temperature': 0,
+          'gen_ai.request.top_p': 1,
+          'gen_ai.request.stop_sequences': ['<|im_end|>', '<|endoftext|>'],
+          'gen_ai.request.presence_penalty': 0,
+          'gen_ai.request.frequency_penalty': 0,
+          'gen_ai.usage.input_tokens': 5,
+          'gen_ai.usage.output_tokens': 5,
+          'promptfoo.test.index': 7,
+          'promptfoo.usage.total_tokens': 10,
+        });
+      } finally {
+        restore();
+      }
+    });
+
+    it('records completion request parameters after passthrough overrides are applied', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+          config: {
+            max_tokens: 50,
+            temperature: 0.2,
+            stop: ['configured-stop'],
+            presence_penalty: 0.1,
+            frequency_penalty: 0.2,
+            passthrough: {
+              max_tokens: 120,
+              temperature: 0.8,
+              top_p: 0.6,
+              stop: ['passthrough-stop'],
+              presence_penalty: 0.7,
+              frequency_penalty: 0.9,
+            },
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(attributes).toMatchObject({
+          'gen_ai.request.max_tokens': requestBody.max_tokens,
+          'gen_ai.request.temperature': requestBody.temperature,
+          'gen_ai.request.top_p': requestBody.top_p,
+          'gen_ai.request.stop_sequences': requestBody.stop,
+          'gen_ai.request.presence_penalty': requestBody.presence_penalty,
+          'gen_ai.request.frequency_penalty': requestBody.frequency_penalty,
+        });
+        expect(requestBody).toMatchObject({
+          max_tokens: 120,
+          temperature: 0.8,
+          top_p: 0.6,
+          stop: ['passthrough-stop'],
+          presence_penalty: 0.7,
+          frequency_penalty: 0.9,
+        });
+      } finally {
+        restore();
+      }
+    });
+
+    it('records completion settings resolved from environment variables', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const restoreEnvironment = mockProcessEnv({
+        OPENAI_STOP: JSON.stringify(['environment-stop']),
+        OPENAI_PRESENCE_PENALTY: '0.35',
+        OPENAI_FREQUENCY_PENALTY: '0.65',
+      });
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003', {
+          config: { stop: ['configured-stop'] },
+        }).callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(attributes).toMatchObject({
+          'gen_ai.request.stop_sequences': requestBody.stop,
+          'gen_ai.request.presence_penalty': requestBody.presence_penalty,
+          'gen_ai.request.frequency_penalty': requestBody.frequency_penalty,
+        });
+        expect(requestBody).toMatchObject({
+          stop: ['environment-stop'],
+          presence_penalty: 0.35,
+          frequency_penalty: 0.65,
+        });
+      } finally {
+        restore();
+        restoreEnvironment();
+      }
+    });
+
+    it('normalizes a string completion stop sequence for OpenTelemetry', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003', {
+          config: { passthrough: { stop: 'passthrough-stop' } },
+        }).callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(requestBody.stop).toBe('passthrough-stop');
+        expect(attributes).toMatchObject({
+          'gen_ai.request.stop_sequences': ['passthrough-stop'],
+        });
+      } finally {
+        restore();
+      }
+    });
+
+    it('does not record completion stop sequences containing non-string values', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003', {
+          config: { passthrough: { stop: ['valid-stop', 123] } },
+        }).callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(requestBody.stop).toEqual(['valid-stop', 123]);
+        expect(attributes).not.toHaveProperty('gen_ai.request.stop_sequences');
+      } finally {
+        restore();
+      }
+    });
+
     it.each([
       ['babbage-002', 0.4, 0.4],
       ['davinci-002', 2, 2],
       ['ft:babbage-002:company::model', 1.6, 1.6],
       ['ft:davinci-002:company::model', 12, 12],
-    ])('should call and price supported Completions model %s', async (model, inputRate, outputRate) => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        ...mockResponse,
-        data: {
-          choices: [{ text: 'Test output' }],
-          usage: { total_tokens: 3_000, prompt_tokens: 2_000, completion_tokens: 1_000 },
-        },
-      });
+    ])(
+      'should call and price supported Completions model %s',
+      async (model, inputRate, outputRate) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...mockResponse,
+          data: {
+            choices: [{ text: 'Test output' }],
+            usage: { total_tokens: 3_000, prompt_tokens: 2_000, completion_tokens: 1_000 },
+          },
+        });
 
-      const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
-      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+        const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
+        const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
 
-      expect(request[0]).toContain('/completions');
-      expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
-      expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
-    });
+        expect(request[0]).toContain('/completions');
+        expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
+        expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
+      },
+    );
 
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
@@ -205,7 +380,7 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      expect(result.error).toContain('Cannot destructure property');
+      expect(result.error).toMatch(/^API call error:/);
     });
 
     it('should pass custom headers from config', async () => {

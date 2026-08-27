@@ -380,41 +380,41 @@ describe('runEval', () => {
       conversationId: '0:shared',
       promptIdx: 1,
     },
-  ])('keeps colon-delimited identifiers from colliding for $description', async ({
-    conversationId,
-    promptIdx,
-  }) => {
-    const conversations = {};
-    const promptTemplate =
-      '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
+  ])(
+    'keeps colon-delimited identifiers from colliding for $description',
+    async ({ conversationId, promptIdx }) => {
+      const conversations = {};
+      const promptTemplate =
+        '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
 
-    await runEval({
-      ...defaultOptions,
-      provider: mockProvider,
-      prompt: { raw: promptTemplate, label: 'first prompt', id: 'prompt:1' },
-      test: { metadata: { conversationId: 'shared' }, vars: { turn: 'first' } },
-      conversations,
-      registers: {},
-    });
+      await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'first prompt', id: 'prompt:1' },
+        test: { metadata: { conversationId: 'shared' }, vars: { turn: 'first' } },
+        conversations,
+        registers: {},
+      });
 
-    await runEval({
-      ...defaultOptions,
-      promptIdx,
-      provider: mockProvider,
-      prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
-      test: { metadata: { conversationId }, vars: { turn: 'second' } },
-      conversations,
-      registers: {},
-    });
+      await runEval({
+        ...defaultOptions,
+        promptIdx,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
+        test: { metadata: { conversationId }, vars: { turn: 'second' } },
+        conversations,
+        registers: {},
+      });
 
-    expect(mockProvider.callApi).toHaveBeenNthCalledWith(
-      2,
-      'now=second',
-      expect.anything(),
-      undefined,
-    );
-    expect(Object.keys(conversations)).toHaveLength(2);
-  });
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'now=second',
+        expect.anything(),
+        undefined,
+      );
+      expect(Object.keys(conversations)).toHaveLength(2);
+    },
+  );
 
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};

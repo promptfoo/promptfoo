@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -189,7 +189,13 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error",
+        // Disabled on the 2.5.5 upgrade. It cost 36s of a 45s `biome ci .` run on
+        // this repo (45.5s -> 9.5s with it off), which pushed the Style Check job
+        // past its timeout, and 4 of the 5 things it flagged were false positives:
+        // 2.5.5 does not unwrap `await` over `Promise<T> | null`, so it reports a
+        // resolved `string | null` as a promise in a conditional. Re-enable when
+        // upstream makes it cheaper and fixes the await-unwrapping.
+        "noMisusedPromises": "off",
         "noUselessTypeConversion": "error",
         "noIdenticalTestTitle": "error",
         "useReduceTypeParameter": "warn"
