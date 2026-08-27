@@ -59,9 +59,16 @@ const TOKEN_COUNT_KEY_PATTERN = /tokens$|(?:^|[^a-z0-9])token_?counts?(?:[^a-z0-
  * Lowercasing on its own destroys the camel-case boundary, so `promptTokenCount`
  * would read as `prompttokencount` and match neither branch of the pattern. Insert the
  * boundary first.
+ *
+ * Two passes, because an acronym needs the opposite rule: the first splits a lower or
+ * digit followed by an upper (`promptToken`), the second splits an upper run followed by
+ * a capitalised word (`LLMToken`, `OpenAIToken`).
  */
 function toBoundaryKey(key: string): string {
-  return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .toLowerCase();
 }
 
 function isTokenCountAttribute(key: string, lowerKey: string, value: unknown): boolean {

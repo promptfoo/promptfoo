@@ -99,6 +99,16 @@ describe('sanitizeTraceAttributes', () => {
     ).toEqual({ promptTokenCount: 150, completionTokenCount: 85, totalTokenCount: 235 });
   });
 
+  it('preserves acronym-prefixed token counters', () => {
+    expect(
+      sanitizeTraceAttributes({
+        LLMTokenCount: 150,
+        OpenAITokenCount: 85,
+        LLMTokens: 235,
+      }),
+    ).toEqual({ LLMTokenCount: 150, OpenAITokenCount: 85, LLMTokens: 235 });
+  });
+
   it('redacts well-known usage keys that do not hold a number', () => {
     expect(
       sanitizeTraceAttributes({
