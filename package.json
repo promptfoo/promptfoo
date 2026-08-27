@@ -116,7 +116,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.11"
+      "@asamuzakjp/css-color": "6.0.7"
     },
     "storybook": {
       "esbuild": "0.28.2"
