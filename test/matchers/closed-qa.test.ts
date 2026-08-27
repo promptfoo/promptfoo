@@ -89,6 +89,34 @@ describe('matchesClosedQa', () => {
     );
   });
 
+  it('marks a provider failure as a grader error, not a criterion failure', async () => {
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'rate limit exceeded',
+      output: undefined,
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesClosedQa('in', 'exp', 'out', grading);
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
+  it('marks a malformed grader answer as a grader error, not a criterion failure', async () => {
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'I cannot decide either way.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesClosedQa('in', 'exp', 'out', grading);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('malformed');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';
