@@ -7,23 +7,34 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
+import {
+  getProviderCallTracingContext,
+  type RateLimitRegistry,
+  wrapProviderWithRateLimiting,
+} from '../../scheduler';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
+  type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type GradingResult,
   isApiProvider,
   isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
+  type TokenUsage,
   type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import {
+  accumulateGradingResponseTokenUsage,
+  accumulateTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -35,6 +46,21 @@ import type { TransformContext, TransformFunction } from '../../types/transform'
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/** Count a blocking-analysis task as grading without treating it as a target or attacker call. */
+export function accumulateUnblockingTokenUsage(
+  totalTokenUsage: TokenUsage,
+  result: { attempted?: boolean; cached?: boolean; tokenUsage?: TokenUsage },
+): void {
+  if (!result.attempted && !result.tokenUsage) {
+    return;
+  }
+
+  accumulateGradingResponseTokenUsage(totalTokenUsage, {
+    cached: result.cached,
+    tokenUsage: result.tokenUsage?.assertions ?? result.tokenUsage,
+  });
+}
 
 /**
  * The subset of `loadApiProviders` inputs the redteam code actually supplies
@@ -464,6 +490,50 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+/** Invoke a red-team target with the same tracing behavior across every strategy. */
+export function callTargetProvider(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return targetProvider.callApi(targetPrompt, context, options);
+  }
+
+  return tracingContext.withProviderSpan(
+    { provider: targetProvider, callContext: context },
+    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+  );
+}
+
+/** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
+export function callGradingProvider(
+  provider: ApiProvider,
+  prompt: string,
+  callContext?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const invoke = (context?: CallApiContextParams) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke(callContext);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: callContext?.prompt.label ?? 'judge',
+      evalId: callContext?.evaluationId,
+      testIndex: callContext?.testIdx ?? tracingContext.testIndex,
+    },
+    () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
+  );
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -480,7 +550,7 @@ export async function getTargetResponse(
 
   try {
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
-    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
+    targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
@@ -556,6 +626,112 @@ export async function getTargetResponse(
     Note: Empty strings are valid output values.
     `,
   );
+}
+
+interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
+  id: string;
+  getResult: (
+    prompt: string,
+    output: string,
+    test: AtomicTestCase,
+    ...args: TArgs
+  ) => Promise<TResult>;
+}
+
+/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
+export function runRedteamGrader<TResult, TArgs extends unknown[]>(
+  grader: TraceableRedteamGrader<TResult, TArgs>,
+  prompt: string,
+  output: string,
+  test: AtomicTestCase,
+  ...args: TArgs
+): Promise<TResult> {
+  const invoke = () => grader.getResult(prompt, output, test, ...args);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke();
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: grader.id,
+      evalId: test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    invoke,
+  );
+}
+
+/** Preserve the latest verdict while retaining usage from every strategy grading turn. */
+export function accumulateGraderResult(
+  previous: GradingResult | undefined,
+  current: GradingResult,
+): GradingResult {
+  const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
+    if (!result.tokensUsed) {
+      return undefined;
+    }
+
+    const reportedTotal =
+      result.tokensUsed.total ??
+      (result.tokensUsed.prompt ?? 0) + (result.tokensUsed.completion ?? 0);
+    const cachedTokens = result.tokensUsed.cached ?? 0;
+    const cachedResponse =
+      result.metadata?.cachedResponse === true ||
+      (result.tokensUsed.numRequests === 0 && reportedTotal <= cachedTokens);
+
+    if (cachedResponse) {
+      return {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: cachedTokens || reportedTotal,
+        numRequests: 0,
+      };
+    }
+
+    return {
+      ...result.tokensUsed,
+      numRequests: 1,
+    };
+  };
+
+  if (!previous?.tokensUsed) {
+    const tokensUsed = normalizeGradingTaskUsage(current);
+    if (!tokensUsed) {
+      return current;
+    }
+
+    return {
+      ...current,
+      tokensUsed,
+    };
+  }
+
+  // The latest verdict can be cached even when the accumulated usage already
+  // contains fresh grading tasks from earlier turns.
+  const previousTokensUsed =
+    previous.metadata?.cachedResponse === true && (previous.tokensUsed.numRequests ?? 0) > 0
+      ? previous.tokensUsed
+      : normalizeGradingTaskUsage(previous);
+  if (!previousTokensUsed) {
+    return current;
+  }
+
+  const tokensUsed = {
+    ...previousTokensUsed,
+    numRequests: previous.tokensUsed.numRequests || previousTokensUsed.numRequests,
+    ...(previous.tokensUsed.completionDetails
+      ? { completionDetails: { ...previous.tokensUsed.completionDetails } }
+      : {}),
+  };
+
+  const currentTokensUsed = normalizeGradingTaskUsage(current);
+  if (currentTokensUsed) {
+    accumulateTokenUsage(tokensUsed, currentTokensUsed);
+  }
+
+  return { ...current, tokensUsed };
 }
 
 export interface Message {
@@ -751,7 +927,10 @@ export async function tryUnblocking({
   purpose?: string;
   targetId?: string;
 }): Promise<{
+  attempted?: boolean;
+  cached?: boolean;
   success: boolean;
+  tokenUsage?: TokenUsage;
   unblockingPrompt?: string;
 }> {
   try {
@@ -808,11 +987,16 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return {
+        attempted: true,
+        cached: response.cached,
+        success: false,
+        tokenUsage: response.tokenUsage,
+      };
     }
 
     const parsed = response.output as any;
@@ -823,13 +1007,19 @@ export async function tryUnblocking({
         `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
       );
       return {
+        attempted: true,
+        cached: response.cached,
         success: true,
+        tokenUsage: response.tokenUsage,
         unblockingPrompt: parsed.unblockingAnswer,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
+        attempted: true,
+        cached: response.cached,
         success: false,
+        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {

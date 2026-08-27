@@ -738,7 +738,7 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
-  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+  const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -776,6 +776,32 @@ function parseJsonGradingResponse(
   }
 
   return { parsed: parsed as Partial<GradingResult> };
+}
+
+function graderFailureFromResponse(
+  reason: string,
+  response: ProviderResponse,
+): Omit<GradingResult, 'assertion'> {
+  const failure = graderFail(reason, response.tokenUsage);
+  if (response.cached) {
+    return {
+      ...failure,
+      metadata: { ...failure.metadata, cachedResponse: true },
+    };
+  }
+
+  const usage = failure.tokensUsed;
+  if (
+    usage &&
+    !usage.numRequests &&
+    !(usage.total ?? 0) &&
+    !(usage.prompt ?? 0) &&
+    !(usage.completion ?? 0)
+  ) {
+    return { ...failure, tokensUsed: { ...usage, numRequests: 1 } };
+  }
+
+  return failure;
 }
 
 export async function runJsonGradingPrompt({
@@ -827,7 +853,7 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return graderFail(resp.error || 'No output', resp.tokenUsage);
+    return graderFailureFromResponse(resp.error || 'No output', resp);
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
@@ -860,6 +886,7 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
+  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
 
   return {
     assertion,
@@ -871,9 +898,10 @@ export async function runJsonGradingPrompt({
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
-      ...responseMetadata,
+      ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
+      ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };
 }
