@@ -217,10 +217,10 @@ function resolveConfigPath(value: string | undefined, configBasePath?: string): 
   return resolveAgenticWorkingDir(value, configBasePath ?? cliState.basePath);
 }
 
-function getTokenUsage(result: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
-  const usage = result.turnResult.usage;
+function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
+  const usage = result?.turnResult.usage;
   const values = usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : {};
-  const cost = result.cost ?? observedCost;
+  const cost = result?.cost ?? observedCost;
   const inputTokens =
     cost?.inputTokens ??
     (typeof values.input_tokens === 'number' ? values.input_tokens : undefined);
@@ -311,6 +311,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const observers: ScanObservers = { warnings: [] };
+
     try {
       const mergedConfig = { ...this.config, ...context?.prompt?.config };
       delete mergedConfig.provider;
@@ -368,6 +370,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           repository,
           operation,
           config,
+          observers,
           callOptions,
         );
       } finally {
@@ -379,8 +382,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         }
       }
     } catch (error) {
+      const observedCost = observers.cost;
+      const tokenUsage = observedCost ? getTokenUsage(undefined, observedCost) : undefined;
+
       return {
         error: `Codex Security operation failed: ${error instanceof Error ? error.message : String(error)}`,
+        ...(observedCost ? { cost: observedCost.estimatedUsd } : {}),
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -392,6 +400,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     repository: string,
     operation: 'security-scan' | 'deep-security-scan' | 'security-diff-scan',
     config: OpenAICodexSecurityConfig,
+    observers: ScanObservers,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const mode = operation === 'deep-security-scan' ? 'deep' : 'standard';
@@ -400,7 +409,6 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       return targetResult;
     }
 
-    const observers: ScanObservers = { warnings: [] };
     const options = this.buildScanOptions(
       prompt,
       mode,
