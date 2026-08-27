@@ -619,6 +619,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
+      // Accumulate executed MCP tool calls for metadata so assertions can
+      // inspect which tool was called, with which arguments, and what it returned.
+      const mcpToolCalls: Array<{
+        name: string;
+        args: unknown;
+        arguments?: unknown;
+        input?: unknown;
+        result?: unknown;
+        isError?: boolean;
+        toolCallId?: string;
+      }> = [];
+
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
         ? [message.function_call]
@@ -640,9 +652,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (isMcpErrorResult(mcpResult)) {
-                  results.push(
-                    `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`,
-                  );
+                  const errorMsg = getMcpErrorMessage(mcpResult);
+                  results.push(`MCP Tool Error (${functionName}): ${errorMsg}`);
+                  mcpToolCalls.push({
+                    name: functionName,
+                    args: parsedArgs,
+                    arguments: parsedArgs,
+                    input: parsedArgs,
+                    result: errorMsg,
+                    isError: true,
+                    toolCallId: functionCall.id ?? functionCall.call_id,
+                  });
                 } else {
                   // Normalize MCP content to a readable string
                   const normalizeContent = (content: any): string => {
@@ -679,12 +699,45 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
                   const content = normalizeContent(mcpResult?.content);
                   results.push(`MCP Tool Result (${functionName}): ${content}`);
+                  mcpToolCalls.push({
+                    name: functionName,
+                    args: parsedArgs,
+                    arguments: parsedArgs,
+                    input: parsedArgs,
+                    result: content,
+                    isError: false,
+                    toolCallId: functionCall.id ?? functionCall.call_id,
+                  });
                 }
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
+                const errorMsg = error instanceof Error ? error.message : String(error);
                 results.push(`MCP Tool Error (${functionName}): ${error}`);
+                try {
+                  const args = functionCall.arguments || functionCall.function?.arguments || '{}';
+                  const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+                  mcpToolCalls.push({
+                    name: functionName,
+                    args: parsedArgs,
+                    arguments: parsedArgs,
+                    input: parsedArgs,
+                    result: errorMsg,
+                    isError: true,
+                    toolCallId: functionCall.id ?? functionCall.call_id,
+                  });
+                } catch {
+                  mcpToolCalls.push({
+                    name: functionName,
+                    args: {},
+                    arguments: {},
+                    input: {},
+                    result: errorMsg,
+                    isError: true,
+                    toolCallId: functionCall.id ?? functionCall.call_id,
+                  });
+                }
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               }
@@ -728,6 +781,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 statusText,
                 headers: responseHeaders ?? {},
               },
+              ...(mcpToolCalls.length > 0
+                ? { toolCalls: mcpToolCalls, mcpToolCalls }
+                : {}),
             },
           };
         }
@@ -791,6 +847,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(Array.isArray(message.annotations) &&
             message.annotations.length > 0 && { annotations: message.annotations }),
           ...(citations.length > 0 && { citations }),
+          ...(mcpToolCalls.length > 0 ? { toolCalls: mcpToolCalls, mcpToolCalls } : {}),
         },
       };
     } catch (err) {

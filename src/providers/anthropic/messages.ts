@@ -343,14 +343,35 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     shouldStream: boolean;
-  }): Promise<{ error?: string; response: Anthropic.Messages.Message }> {
+  }): Promise<{
+    error?: string;
+    response: Anthropic.Messages.Message;
+    toolCalls: Array<{
+      name: string;
+      args: unknown;
+      arguments?: unknown;
+      input?: unknown;
+      result?: unknown;
+      isError?: boolean;
+      toolCallId?: string;
+    }>;
+    mcpToolCalls: Array<{
+      name: string;
+      args: unknown;
+      arguments?: unknown;
+      input?: unknown;
+      result?: unknown;
+      isError?: boolean;
+      toolCallId?: string;
+    }>;
+  }> {
     if (!this.mcpClient) {
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls: [], mcpToolCalls: [] };
     }
 
     const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
     if (mcpToolNames.size === 0) {
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls: [], mcpToolCalls: [] };
     }
 
     const maxToolCalls = getMaxMcpToolCalls(config);
@@ -358,13 +379,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
       // Return the model's initial response (which may contain tool_use
       // blocks) unchanged rather than treating unexecuted tools as an error.
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls: [], mcpToolCalls: [] };
     }
 
     let response = initialResponse;
     const responses = [initialResponse];
     let messages = params.messages;
     let executedMcpToolCalls = 0;
+    const mcpToolCalls: Array<{
+      name: string;
+      args: unknown;
+      arguments?: unknown;
+      input?: unknown;
+      result?: unknown;
+      isError?: boolean;
+      toolCallId?: string;
+    }> = [];
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
       const responseToolUses = response.content.filter(
@@ -373,20 +403,30 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
       if (toolUses.length === 0) {
-        return { response: withMergedAnthropicUsage(response, responses) };
+        return {
+          response: withMergedAnthropicUsage(response, responses),
+          toolCalls: mcpToolCalls,
+          mcpToolCalls,
+        };
       }
 
       if (toolUses.length !== responseToolUses.length) {
         logger.warn(
           'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
         );
-        return { response: withMergedAnthropicUsage(response, responses) };
+        return {
+          response: withMergedAnthropicUsage(response, responses),
+          toolCalls: mcpToolCalls,
+          mcpToolCalls,
+        };
       }
 
       if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
         return {
           response: withMergedAnthropicUsage(response, responses),
           error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+          toolCalls: mcpToolCalls,
+          mcpToolCalls,
         };
       }
 
@@ -394,6 +434,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolResultBlocks = await Promise.all(
         toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
       );
+
+      // Accumulate normalized history for ProviderResponse metadata so
+      // assertions can inspect which MCP tool was called, with which
+      // arguments, and what result it returned, round by round.
+      toolUses.forEach((toolUse, index) => {
+        const resultBlock = toolResultBlocks[index];
+        const args = coerceMcpToolInput(toolUse.input);
+        mcpToolCalls.push({
+          name: toolUse.name,
+          args,
+          arguments: args,
+          input: toolUse.input,
+          result: resultBlock.content,
+          isError: resultBlock.is_error ?? false,
+          toolCallId: toolUse.id,
+        });
+      });
 
       messages = [
         ...messages,
@@ -432,6 +489,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     return {
       response: withMergedAnthropicUsage(response, responses),
+      toolCalls: mcpToolCalls,
+      mcpToolCalls,
       ...(unresolvedToolUses.length > 0
         ? {
             error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
@@ -1038,13 +1097,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         });
       }
 
-      const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+      const {
+        error,
+        response: resolvedMessage,
+        toolCalls,
+        mcpToolCalls,
+      } = await this.resolveMcpToolUse({
         config,
         headers,
         initialResponse: initialMessage,
         params,
         shouldStream,
       });
+
+      const mcpMetadata =
+        mcpToolCalls && mcpToolCalls.length > 0 ? { toolCalls, mcpToolCalls } : undefined;
 
       if (error) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
@@ -1054,6 +1121,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
           cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+          ...(mcpMetadata ? { metadata: mcpMetadata } : {}),
         };
       }
 
@@ -1072,7 +1140,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
-      return this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false);
+      const built = this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false);
+      if (mcpMetadata) {
+        return {
+          ...built,
+          metadata: {
+            ...(built.metadata ?? {}),
+            ...mcpMetadata,
+          },
+        };
+      }
+      return built;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
