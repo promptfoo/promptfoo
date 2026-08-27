@@ -781,9 +781,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 statusText,
                 headers: responseHeaders ?? {},
               },
-              ...(mcpToolCalls.length > 0
-                ? { toolCalls: mcpToolCalls, mcpToolCalls }
-                : {}),
+              ...(mcpToolCalls.length > 0 ? { toolCalls: mcpToolCalls, mcpToolCalls } : {}),
             },
           };
         }

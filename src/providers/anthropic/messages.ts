@@ -1140,7 +1140,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
-      const built = this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false);
+      const built = this.buildMessageResponse(
+        resolvedMessage,
+        config,
+        processedOutputFormat,
+        false,
+      );
       if (mcpMetadata) {
         return {
           ...built,
