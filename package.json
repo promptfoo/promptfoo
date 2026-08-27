@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.0",
+  "version": "0.122.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -116,7 +116,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.11"
+      "@asamuzakjp/css-color": "6.0.7"
     },
     "storybook": {
       "esbuild": "0.28.2"
@@ -297,6 +297,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
+    "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.18",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",

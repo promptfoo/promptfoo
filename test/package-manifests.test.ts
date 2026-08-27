@@ -319,9 +319,15 @@ describe('package manifests', () => {
   });
 
   it('keeps jsdom on a release the supported Node floor can install', () => {
-    const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
-      'package.json',
-    );
+    const rootPackageJson = readPackageJson<
+      PackageManifest & {
+        engines?: Record<string, string>;
+        overrides?: Record<string, Record<string, string> | string>;
+      }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { engines?: Record<string, string>; version?: string }>;
+    }>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -336,14 +342,42 @@ describe('package manifests', () => {
     const jsdomCap = renovateConfig.packageRules?.find((rule) =>
       rule.matchPackageNames?.includes('jsdom'),
     )?.allowedVersions;
+    const cssColorCap = renovateConfig.packageRules?.find((rule) =>
+      rule.matchPackageNames?.includes('@asamuzakjp/css-color'),
+    )?.allowedVersions;
+    const jsdomOverrides = rootPackageJson.overrides?.jsdom;
+    const cssColorOverride =
+      typeof jsdomOverrides === 'object' ? jsdomOverrides['@asamuzakjp/css-color'] : undefined;
+    const lockedCssColor = packageLock.packages['node_modules/@asamuzakjp/css-color'];
 
     expect(nodeFloor, 'the root manifest must declare a Node floor').toBeDefined();
+    expect(cssColorOverride, 'jsdom must pin its CSS color parser').toBeDefined();
+    expect(
+      lockedCssColor,
+      'the jsdom CSS color parser must be present in the lockfile',
+    ).toBeDefined();
+    expect(lockedCssColor?.version, 'the parser override and lockfile must agree').toBe(
+      cssColorOverride,
+    );
+    expect(
+      lockedCssColor?.engines?.node,
+      'the parser must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      satisfies(nodeFloor!.version, lockedCssColor!.engines!.node!),
+      'the jsdom CSS color parser must install on the minimum supported Node version',
+    ).toBe(true);
 
     if (nodeFloor!.compare('22.22.2') < 0) {
       expect(
         jsdomCap,
         'Renovate must hold jsdom below 30 while the Node floor is below 22.22.2',
       ).toBe('<30');
+      expect(
+        cssColorCap,
+        'Renovate must hold the jsdom CSS color parser below 7 while the Node floor is below 22.22.2',
+      ).toBe('<7');
+      expect(satisfies(cssColorOverride!, cssColorCap!)).toBe(true);
 
       for (const manifestPath of ['src/app/package.json', 'site/package.json']) {
         const range = readPackageJson<PackageManifest>(manifestPath).devDependencies?.jsdom;

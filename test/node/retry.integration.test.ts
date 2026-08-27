@@ -1435,7 +1435,7 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.completion).toBe(50); // 20 + 30
     });
 
-    it('preserves cached and incurred grading usage when recalculating persisted results', async () => {
+    it('preserves cached usage and incurred costs when recalculating persisted results', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
       const db = await getDb();
       const mockProvider = { id: 'test-provider' };
@@ -1453,6 +1453,7 @@ describe('retry command', () => {
           provider: mockProvider,
           success: true,
           score: 1,
+          cost: 0.5,
           failureReason: ResultFailureReason.NONE,
           namedScores: {},
           response: {
@@ -1477,6 +1478,7 @@ describe('retry command', () => {
           provider: mockProvider,
           success: true,
           score: 1,
+          cost: 0.25,
           failureReason: ResultFailureReason.NONE,
           namedScores: {},
           response: {
@@ -1501,10 +1503,12 @@ describe('retry command', () => {
           provider: mockProvider,
           success: true,
           score: 1,
+          cost: 0.5,
           failureReason: ResultFailureReason.NONE,
           namedScores: {},
           response: {
             output: 'another fresh target response',
+            incurredCost: 0.25,
             tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
           },
           gradingResult: {
@@ -1532,6 +1536,7 @@ describe('retry command', () => {
 
       await recalculatePromptMetrics(evalRecord);
 
+      expect(evalRecord.prompts[0].metrics).toMatchObject({ cost: 1.25, incurredCost: 0.5 });
       expect(evalRecord.prompts[0].metrics?.tokenUsage).toMatchObject({
         total: 445,
         cached: 295,
@@ -1556,6 +1561,9 @@ describe('retry command', () => {
           },
         },
       });
+
+      const persistedEval = await Eval.findById(evalRecord.id);
+      expect(persistedEval?.prompts[0].metrics).toMatchObject({ cost: 1.25, incurredCost: 0.5 });
     });
 
     it('should skip results with invalid promptIdx', async () => {

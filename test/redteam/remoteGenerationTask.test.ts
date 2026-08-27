@@ -57,7 +57,7 @@ describe('postRemoteGenerationTask', () => {
     expect(usage).toMatchObject({ total: 30, prompt: 20, completion: 10, numRequests: 3 });
   });
 
-  it('does not count historical usage from a cached remote response', async () => {
+  it('preserves cached remote strategy usage without incurring it again', async () => {
     const usage: TokenUsage = {};
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: true,
@@ -68,7 +68,14 @@ describe('postRemoteGenerationTask', () => {
 
     await postRemoteGenerationTask({ task: 'citation' }, createTrackedContext(usage));
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 45,
+      prompt: 30,
+      completion: 15,
+      cached: 45,
+      numRequests: 2,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('records coalesced concurrent generation usage only for the request owner', async () => {

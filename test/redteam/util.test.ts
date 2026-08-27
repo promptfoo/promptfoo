@@ -195,7 +195,7 @@ describe('extractGoalFromPrompt', () => {
     expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
   });
 
-  it('does not count cached goal extraction responses', async () => {
+  it('preserves cached goal extraction usage without incurring it again', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: true,
       status: 200,
@@ -219,7 +219,12 @@ describe('extractGoalFromPrompt', () => {
       provider,
     );
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 17,
+      cached: 17,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('counts failed goal extraction requests without reported token usage', async () => {

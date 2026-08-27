@@ -142,7 +142,7 @@ describe('fetchRemoteGeneration', () => {
     expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
   });
 
-  it('does not count cached remote extraction responses', async () => {
+  it('preserves cached remote extraction usage without incurring it again', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
         task: 'entities',
@@ -158,7 +158,12 @@ describe('fetchRemoteGeneration', () => {
 
     await fetchRemoteGeneration('entities', ['prompt'], undefined, provider);
 
-    expect(generationUsage).toEqual({});
+    expect(generationUsage).toMatchObject({
+      total: 18,
+      cached: 18,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('counts failed remote extraction requests without token usage', async () => {
