@@ -61,6 +61,7 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { getVarValuesFingerprint } from './evaluatorRuntime';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
@@ -138,6 +139,18 @@ async function resolveReplayConfigs(
       : await resolveConfigs(providerFilterOptions, replayConfig, undefined, {
           basePath: configBasePath,
         });
+  const expectedFingerprint = evalRecord.runtimeOptions?.matrixValuesFingerprint;
+  if (expectedFingerprint !== undefined) {
+    const currentFingerprint = getVarValuesFingerprint(
+      [configs.config, configs.testSuite],
+      path.resolve(configBasePath || configs.basePath || process.cwd()),
+    );
+    if (currentFingerprint !== expectedFingerprint) {
+      throw new ConfigResolutionError(
+        `The $values files used by evaluation ${evalRecord.id} have changed. Restore the original files before ${action} this evaluation.`,
+      );
+    }
+  }
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -918,10 +931,15 @@ export async function doEval(
     }
 
     const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
+    const normalizedConfigBasePath = path.resolve(configBasePath || process.cwd());
+    const matrixValuesFingerprint =
+      resumeEval?.runtimeOptions?.matrixValuesFingerprint ??
+      getVarValuesFingerprint([config, testSuite], normalizedConfigBasePath);
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
       ...(configBasePath === undefined ? {} : { configBasePath: path.resolve(configBasePath) }),
+      ...(matrixValuesFingerprint === undefined ? {} : { matrixValuesFingerprint }),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -1285,6 +1303,7 @@ export async function doEval(
               await syncWatchPaths();
             } catch (error) {
               if (handleRecoverableWatchError(error)) {
+                await syncWatchPaths();
                 return;
               }
               throw error;

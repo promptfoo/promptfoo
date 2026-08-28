@@ -24,6 +24,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { getVarValuesFingerprint } from './evaluatorRuntime';
 
 import type { TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -87,6 +88,19 @@ async function resolveRetryConfigs(
       : await resolveConfigs(providerFilterOptions, originalEval.config, undefined, {
           basePath: configBasePath,
         });
+
+  const expectedFingerprint = originalEval.runtimeOptions?.matrixValuesFingerprint;
+  if (!cmdObj.config && expectedFingerprint !== undefined) {
+    const currentFingerprint = getVarValuesFingerprint(
+      [configs.config, configs.testSuite],
+      configBasePath || configs.basePath || process.cwd(),
+    );
+    if (currentFingerprint !== expectedFingerprint) {
+      throw new ConfigResolutionError(
+        `The $values files used by evaluation ${originalEval.id} have changed. Restore the original files before retrying this evaluation. Existing ERROR results were preserved.`,
+      );
+    }
+  }
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider

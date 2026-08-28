@@ -4,6 +4,7 @@ import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
+import { getVarValuesFingerprint } from '../../src/node/evaluatorRuntime';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -61,6 +62,10 @@ vi.mock('../../src/evaluator');
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
 vi.mock('../../src/models/evalMutation');
+vi.mock('../../src/node/evaluatorRuntime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/node/evaluatorRuntime')>()),
+  getVarValuesFingerprint: vi.fn().mockReturnValue(undefined),
+}));
 vi.mock('../../src/share');
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
@@ -120,6 +125,7 @@ describe('retryCommand', () => {
     cliState.maxConcurrency = undefined;
     vi.mocked(shouldShareResults).mockReturnValue(false);
     vi.mocked(isSharingEnabled).mockReturnValue(false);
+    vi.mocked(getVarValuesFingerprint).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -624,6 +630,26 @@ describe('retryCommand', () => {
       undefined,
       { basePath: '/workspace/configs' },
     );
+  });
+
+  it('preserves error results when file-backed matrix values changed', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        configBasePath: '/workspace/configs',
+        matrixValuesFingerprint: 'original-fingerprint',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(getVarValuesFingerprint).mockReturnValue('changed-fingerprint');
+
+    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
+      'The $values files used by evaluation eval-123 have changed',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it('preserves error results when the stored filter cannot be applied to the config', async () => {

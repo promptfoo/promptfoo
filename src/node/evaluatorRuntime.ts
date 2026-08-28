@@ -3,6 +3,7 @@ import path from 'path';
 
 import { getEnvBool } from '../envars';
 import { ConfigResolutionError } from '../util/config/load';
+import { sha256 } from '../util/createHash';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -21,6 +22,87 @@ import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 
 type LoadedVarValue = string | number | boolean | object | unknown[];
+
+function getVarValuesPaths(value: unknown, basePath: string): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => getVarValuesPaths(item, basePath));
+  }
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+
+  const reference = (value as Record<string, unknown>).$values;
+  if (typeof reference !== 'string' || !reference.startsWith('file://')) {
+    return [];
+  }
+
+  const { filePath: referencedPath } = parseFileUrl(reference);
+  return [
+    path.isAbsolute(referencedPath)
+      ? referencedPath
+      : path.resolve(basePath || process.cwd(), referencedPath),
+  ];
+}
+
+function getTestCaseVarValuesPaths(testCase: unknown, basePath: string): string[] {
+  if (typeof testCase !== 'object' || testCase === null) {
+    return [];
+  }
+  const vars = (testCase as { vars?: unknown }).vars;
+  return typeof vars === 'object' && vars !== null
+    ? Object.values(vars).flatMap((value) => getVarValuesPaths(value, basePath))
+    : [];
+}
+
+function getSuiteVarValuesPaths(
+  suite: { tests?: unknown; defaultTest?: unknown; scenarios?: unknown },
+  basePath: string,
+): string[] {
+  const testPaths = Array.isArray(suite.tests)
+    ? suite.tests.flatMap((testCase) => getTestCaseVarValuesPaths(testCase, basePath))
+    : [];
+  const defaultPaths = suite.defaultTest
+    ? getTestCaseVarValuesPaths(suite.defaultTest, basePath)
+    : [];
+  const scenarioPaths = Array.isArray(suite.scenarios)
+    ? suite.scenarios.flatMap((scenario) => {
+        if (typeof scenario !== 'object' || scenario === null) {
+          return [];
+        }
+        const { config, tests } = scenario as { config?: unknown; tests?: unknown };
+        return [config, tests].flatMap((entries) =>
+          Array.isArray(entries)
+            ? entries.flatMap((testCase) => getTestCaseVarValuesPaths(testCase, basePath))
+            : [],
+        );
+      })
+    : [];
+  return [...testPaths, ...defaultPaths, ...scenarioPaths];
+}
+
+export function getVarValuesFingerprint(
+  suites: Array<{ tests?: unknown; defaultTest?: unknown; scenarios?: unknown }>,
+  basePath: string,
+): string | undefined {
+  const paths = Array.from(
+    new Set(suites.flatMap((suite) => getSuiteVarValuesPaths(suite, basePath))),
+  ).sort();
+  if (paths.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const entries = paths.map((filePath) => [
+      path.relative(basePath, filePath),
+      fs.readFileSync(filePath, 'utf-8'),
+    ]);
+    return sha256(JSON.stringify(entries));
+  } catch (error) {
+    throw new ConfigResolutionError(
+      `Failed to fingerprint $values files: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 function isValidExpandedVarValue(value: unknown): value is LoadedVarValue {
   return (

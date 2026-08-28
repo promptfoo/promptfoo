@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import Eval from '../../src/models/eval';
-import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { getVarValuesFingerprint, nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { mockProcessEnv } from '../util/utils';
 
 import type { EvaluateResult, TestSuite } from '../../src/types/index';
@@ -21,6 +21,63 @@ describe('nodeEvaluatorRuntime', () => {
       // backoff (a no-op on POSIX, where these errors don't occur).
       fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
+  });
+
+  it('fingerprints file-backed matrix values and detects ordering changes', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
+    tempDirs.push(tempDir);
+    const valuesPath = path.join(tempDir, 'languages.yaml');
+    fs.writeFileSync(valuesPath, '- English\n- French\n');
+    const suite = {
+      tests: [{ vars: { language: { $values: 'file://languages.yaml' } } }],
+    };
+
+    const originalFingerprint = getVarValuesFingerprint([suite], tempDir);
+    fs.writeFileSync(valuesPath, '- French\n- English\n');
+
+    expect(getVarValuesFingerprint([suite], tempDir)).not.toBe(originalFingerprint);
+  });
+
+  it('includes mixed, default, and scenario matrix references in the fingerprint', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
+    tempDirs.push(tempDir);
+    for (const fileName of ['mixed.yaml', 'default.yaml', 'scenario.yaml']) {
+      fs.writeFileSync(path.join(tempDir, fileName), '- one\n- two\n');
+    }
+    const suite = {
+      tests: [
+        'file://external-tests.yaml',
+        { vars: { mixed: ['literal', { $values: 'file://mixed.yaml' }], scalar: 'value' } },
+      ],
+      defaultTest: { vars: { fallback: { $values: 'file://default.yaml' } } },
+      scenarios: [
+        null,
+        {
+          config: [{ vars: { scenario: { $values: 'file://scenario.yaml' } } }],
+          tests: [{ vars: { duplicate: { $values: 'file://mixed.yaml' } } }],
+        },
+      ],
+    };
+
+    const originalFingerprint = getVarValuesFingerprint([suite], tempDir);
+    fs.writeFileSync(path.join(tempDir, 'scenario.yaml'), '- changed\n');
+
+    expect(getVarValuesFingerprint([suite], tempDir)).not.toBe(originalFingerprint);
+  });
+
+  it('returns undefined without matrix references and wraps file read failures', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
+    tempDirs.push(tempDir);
+
+    expect(getVarValuesFingerprint([{ tests: [{ vars: { language: 'English' } }] }], tempDir)).toBe(
+      undefined,
+    );
+    expect(() =>
+      getVarValuesFingerprint(
+        [{ tests: [{ vars: { language: { $values: 'file://missing.yaml' } } }] }],
+        tempDir,
+      ),
+    ).toThrow('Failed to fingerprint $values files');
   });
 
   it.each([

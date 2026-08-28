@@ -29,6 +29,7 @@ import {
   EvalRunError,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
+import { getVarValuesFingerprint } from '../../src/node/evaluatorRuntime';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -69,6 +70,10 @@ vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
+}));
+vi.mock('../../src/node/evaluatorRuntime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/node/evaluatorRuntime')>()),
+  getVarValuesFingerprint: vi.fn().mockReturnValue(undefined),
 }));
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/shared', async (importOriginal) => {
@@ -206,6 +211,7 @@ describe('evalCommand', () => {
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
+    vi.mocked(getVarValuesFingerprint).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -583,17 +589,38 @@ describe('evalCommand', () => {
     const config = {
       prompts: [],
       providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
     } as UnifiedConfig;
     const testSuite = {
       prompts: [],
       providers: [],
     } as TestSuite;
 
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config,
-      testSuite,
-      basePath: path.resolve('/'),
-    });
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({ config, testSuite, basePath: '/suite' })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      });
     vi.mocked(evaluate)
       .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
       .mockRejectedValueOnce(new ConfigResolutionError('Failed to load $values'))
@@ -607,6 +634,12 @@ describe('evalCommand', () => {
       expect(onChange).toBeDefined();
 
       await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([
+        path.resolve('/suite', 'vars/regions.yaml'),
+      ]);
+      expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([
+        path.resolve('/suite', 'vars/languages.yaml'),
+      ]);
       await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to load $values');
@@ -1473,6 +1506,7 @@ describe('evalCommand', () => {
       basePath: 'configs',
     });
     let capturedEval: Eval | undefined;
+    vi.mocked(getVarValuesFingerprint).mockReturnValueOnce('matrix-fingerprint');
     vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
       capturedEval = evalRecord as Eval;
       return evalRecord as Eval;
@@ -1481,6 +1515,7 @@ describe('evalCommand', () => {
     await doEval({ write: false }, defaultConfig, undefined, {});
 
     expect(capturedEval?.runtimeOptions?.configBasePath).toBe(path.resolve('configs'));
+    expect(capturedEval?.runtimeOptions?.matrixValuesFingerprint).toBe('matrix-fingerprint');
   });
 
   it('should resume an existing eval with persisted prompts', async () => {
@@ -1535,6 +1570,35 @@ describe('evalCommand', () => {
         undefined,
         { basePath: '/suite/configs' },
       );
+    } finally {
+      findByIdSpy.mockRestore();
+    }
+  });
+
+  it('should reject resume when file-backed matrix values changed', async () => {
+    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+    resumeEval.runtimeOptions = {
+      configBasePath: '/suite/configs',
+      matrixValuesFingerprint: 'original-fingerprint',
+    };
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: { prompts: [], providers: [] },
+      basePath: '/suite/configs',
+    });
+    vi.mocked(getVarValuesFingerprint).mockReturnValueOnce('changed-fingerprint');
+
+    try {
+      await expect(
+        doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
+      ).rejects.toThrow('The $values files used by evaluation');
+      expect(evaluate).not.toHaveBeenCalled();
     } finally {
       findByIdSpy.mockRestore();
     }

@@ -321,6 +321,8 @@ export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   providerFilter?: string;
   /** @internal Base directory used to resolve relative file references during resume/retry. */
   configBasePath?: string;
+  /** @internal Fingerprint of file-backed matrix values used to guard replay ordering. */
+  matrixValuesFingerprint?: string;
 };
 
 const PromptMetricsSchema = z.object({
