@@ -116,6 +116,30 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
+    it.each(['OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'])(
+      'should normalize provider-level %s for chat requests',
+      async (envKey) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'Test output' } }],
+            usage: { total_tokens: 1, prompt_tokens: 1, completion_tokens: 0 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          env: { [envKey]: 'https://api.pzero.studio' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(mockFetchWithCache.mock.calls[0]?.[0]).toBe(
+          'https://api.pzero.studio/v1/chat/completions',
+        );
+      },
+    );
+
     it('should record GPT-5.6 cache writes in the chat span', async () => {
       const spanAttributes: Record<string, unknown> = {};
       const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({

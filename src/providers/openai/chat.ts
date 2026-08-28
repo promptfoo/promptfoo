@@ -100,6 +100,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private initializationPromise: Promise<void> | null = null;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
+  /**
+   * OpenAI-compatible chat endpoints conventionally expose the API under /v1.
+   * Providers with a root-based endpoint can opt out when their gateway does not
+   * use the OpenAI path layout.
+   */
+  protected shouldNormalizeApiBaseUrl(): boolean {
+    return true;
+  }
+
   constructor(
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -444,7 +453,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         deleteFromCache,
         headers: responseHeaders,
       } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(normalizeOpenAiApiBaseUrl(this.getApiUrl()), 'chat/completions'),
+        appendOpenAiApiPath(
+          this.shouldNormalizeApiBaseUrl()
+            ? normalizeOpenAiApiBaseUrl(this.getApiUrl())
+            : this.getApiUrl(),
+          'chat/completions',
+        ),
         {
           method: 'POST',
           headers: {

@@ -209,6 +209,10 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     });
   }
 
+  protected override shouldNormalizeApiBaseUrl(): boolean {
+    return false;
+  }
+
   /**
    * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
    * despite TrueFoundry's provider-account/model-name format

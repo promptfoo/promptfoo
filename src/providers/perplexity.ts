@@ -138,6 +138,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     this.usageTier = normalizedOptions.config?.usage_tier || 'medium';
   }
 
+  protected override shouldNormalizeApiBaseUrl(): boolean {
+    return false;
+  }
+
   /**
    * Override callApi to use our custom cost calculation
    */
