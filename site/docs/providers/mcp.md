@@ -523,6 +523,7 @@ For complete working examples, see:
 - [Basic MCP Red Team Testing](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp)
 - [MCP Authentication](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp-auth) - OAuth and other authentication methods
 - [Simple MCP Integration](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-mcp)
+- [Remote Search and Fetch with Parallel](https://github.com/promptfoo/promptfoo/tree/main/examples/parallel-search-mcp) - Live tool evals without a local server or API key
 
 You can initialize these examples with:
 
