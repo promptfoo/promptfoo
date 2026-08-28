@@ -657,12 +657,15 @@ Manage authentication for cloud features.
 
 Login to the promptfoo cloud.
 
-| Option                | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to log in to                                           |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
-| `-t, --team <team>`   | Team name, slug, or ID to use after login                                  |
+| Option                      | Description                                                                |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                           |
+| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>`       | Log in using an API key                                                    |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+
+For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
@@ -679,6 +682,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
+- API URL and effective auth header name (also shown if the account lookup fails)
 - App URL
 
 Example:
@@ -690,6 +694,8 @@ promptfoo auth whoami
 Output:
 
 ```
+API URL: https://api.promptfoo.app
+Auth header: Authorization
 Currently logged in as:
 User: user@company.com
 Organization: Acme Corp
