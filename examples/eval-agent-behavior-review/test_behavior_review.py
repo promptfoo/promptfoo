@@ -387,6 +387,57 @@ class TestReviewHardening(unittest.TestCase):
         self.assertFalse(r["pass"])
         self.assertEqual(r["componentResults"], [])
 
+    def test_unknown_kind_fails_closed(self):
+        # a misspelled "aciton" must not make the whole trace look action-free
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                {"kind": "aciton", "text": "boom", "ok": False},
+                {"kind": "aciton", "text": "boom", "ok": False},
+                {"kind": "aciton", "text": "boom", "ok": False},
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        r = run(s)
+        self.assertFalse(r["pass"])
+        self.assertEqual(r["componentResults"], [])
+
+    def test_tool_less_action_requires_anticipation(self):
+        s = {
+            "steps": [
+                {"kind": "action", "text": "a", "ok": True},
+                {"kind": "plan", "text": "p"},
+                act(),
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        self.assertFalse(dim(run(s), 0)["pass"])
+
+    def test_blank_plan_not_credited(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "   "},
+                act(),
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        r = run(s)
+        self.assertFalse(dim(r, 0)["pass"])  # anticipation
+        self.assertFalse(dim(r, 1)["pass"])  # staging
+        self.assertFalse(dim(r, 5)["pass"])  # slow-in/out
+
+    def test_short_session_reason_is_honest(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                act(),
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        r = run(s)
+        self.assertIn("not required", dim(r, 3)["reason"])
+        self.assertIn("not required", dim(r, 8)["reason"])
+
 
 class TestOverall(unittest.TestCase):
     def test_improved_session_passes(self):

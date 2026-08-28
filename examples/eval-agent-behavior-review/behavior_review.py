@@ -33,6 +33,16 @@ THRESHOLDS = {
 
 _PLAN_KINDS = {"plan", "intent"}
 _VERIFY_KINDS = {"verify", "report"}
+_VALID_KINDS = _PLAN_KINDS | _VERIFY_KINDS | {"action", "message"}
+
+
+def _has_content(s: dict[str, Any]) -> bool:
+    return bool(str(s.get("text", "")).strip())
+
+
+def _is_plan_step(s: dict[str, Any]) -> bool:
+    # an intent declaration must carry actual content, not just the kind tag
+    return s.get("kind") in _PLAN_KINDS and _has_content(s)
 
 
 def _load_session(context: dict[str, Any]) -> list[dict[str, Any]]:
@@ -55,7 +65,10 @@ def _load_session(context: dict[str, Any]) -> list[dict[str, Any]]:
         else:
             return []
     if not isinstance(steps, list) or not all(
-        isinstance(s, dict) and isinstance(s.get("kind"), str) for s in steps
+        isinstance(s, dict)
+        and isinstance(s.get("kind"), str)
+        and s.get("kind") in _VALID_KINDS
+        for s in steps
     ):
         return []
     return steps
@@ -84,15 +97,12 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     T = THRESHOLDS
     out: list[dict[str, Any]] = []
 
-    # 1 Anticipation: a plan/intent step appears before the first tool action
-    first_act = next(
-        (i for i, s in enumerate(steps) if s.get("kind") == "action" and s.get("tool")),
-        None,
-    )
+    # 1 Anticipation: a plan/intent step appears before the first action
+    first_act = action_idx[0] if action_idx else None
     if first_act is None:
-        ante = {"pass": True, "score": 1.0, "reason": "no tool actions to anticipate"}
+        ante = {"pass": True, "score": 1.0, "reason": "no actions to anticipate"}
     else:
-        declared = any(steps[j].get("kind") in _PLAN_KINDS for j in range(first_act))
+        declared = any(_is_plan_step(steps[j]) for j in range(first_act))
         ante = {
             "pass": declared,
             "score": 1.0 if declared else 0.0,
@@ -102,8 +112,8 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     out.append(ante)
 
-    # 2 Staging: session opens with plan/intent
-    opens_ok = bool(kinds) and kinds[0] in _PLAN_KINDS
+    # 2 Staging: session opens with a content-bearing plan/intent
+    opens_ok = bool(kinds) and _is_plan_step(steps[0])
     out.append(
         {
             "pass": opens_ok,
@@ -148,13 +158,19 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         for i in range(len(steps))
     )
     p2p = (not (len(steps) > T["long_session"])) or mid_verify
+    if len(steps) > T["long_session"]:
+        p2p_reason = (
+            "mid-session checkpoint present"
+            if mid_verify
+            else "long run without intermediate verification"
+        )
+    else:
+        p2p_reason = "short session, checkpoint not required"
     out.append(
         {
             "pass": p2p,
             "score": 1.0 if p2p else 0.0,
-            "reason": "mid-session checkpoint present"
-            if p2p
-            else "long run without intermediate verification",
+            "reason": p2p_reason,
         }
     )
 
@@ -171,7 +187,7 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     )
 
     # 6 SlowInOut: plan-in AND verify-out
-    sio = bool(kinds) and kinds[0] in _PLAN_KINDS and kinds[-1] in _VERIFY_KINDS
+    sio = bool(kinds) and _is_plan_step(steps[0]) and kinds[-1] in _VERIFY_KINDS
     out.append(
         {
             "pass": sio,
@@ -221,13 +237,17 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         for i in range(len(steps))
     )
     timing = (not (len(steps) > T["very_long_session"])) or mid_msgs
+    if len(steps) > T["very_long_session"]:
+        timing_reason = (
+            "intermediate feedback present" if mid_msgs else "long run silent until end"
+        )
+    else:
+        timing_reason = "short session, feedback not required"
     out.append(
         {
             "pass": timing,
             "score": 1.0 if timing else 0.0,
-            "reason": "intermediate feedback present"
-            if timing
-            else "long run silent until end",
+            "reason": timing_reason,
         }
     )
 

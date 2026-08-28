@@ -52,7 +52,7 @@ and accepts any non-null value (numeric ids like `0` included).
 
 | #   | Principle        | Programmatic check                                     | Threshold |
 | --- | ---------------- | ------------------------------------------------------ | --------- |
-| 1   | Anticipation     | plan/intent appears before the first tool action       | —         |
+| 1   | Anticipation     | plan/intent appears before the first action            | —         |
 | 2   | Staging          | session opens with intent/plan                         | —         |
 | 3   | Squash & Stretch | consecutive same-(tool,text) failures reset on success | ≤2        |
 | 4   | Pose to Pose     | long runs (>6 steps) verify between first/last action  | —         |
