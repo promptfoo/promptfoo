@@ -1,5 +1,4 @@
 import { getEnvString } from '../../envars';
-import { normalizeOpenAiApiBaseUrl } from './apiBaseUrl';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -111,7 +110,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       return `https://${this.config.apiHost}/v1`;
     }
     if (this.config.apiBaseUrl) {
-      return normalizeOpenAiApiBaseUrl(this.config.apiBaseUrl);
+      return this.config.apiBaseUrl;
     }
     const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (envApiHost) {

@@ -28,6 +28,7 @@ import {
   withGenAISpan,
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
+import { normalizeOpenAiApiBaseUrl } from './apiBaseUrl';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
@@ -443,7 +444,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         deleteFromCache,
         headers: responseHeaders,
       } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+        appendOpenAiApiPath(normalizeOpenAiApiBaseUrl(this.getApiUrl()), 'chat/completions'),
         {
           method: 'POST',
           headers: {
