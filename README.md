@@ -1,91 +1,112 @@
-# eval-agent-behavior-review (Agent Behavior Presentation Grader)
+Promptfoo: LLM evals & red teaming
 
-A deterministic grader with 12 checks for how an agent presents its behavior:
-intent declared before actions, conclusions up front, retries converging,
-steady pacing, repetition kept in check. The rules map to Disney's 12
-animation principles.
+<p align="center">
 
-You can run this example with:
+  
 
-```bash
-npx promptfoo@latest init --example eval-agent-behavior-review
-cd eval-agent-behavior-review
-```
+  
 
-## Purpose
+  
 
-Promptfoo's built-in assertions cover correctness, similarity, and LLM judges.
-This grader covers the orthogonal behavior-presentation dimension: an agent
-can complete a task correctly yet behave unreadably (no intent declaration,
-silent retry loops, conclusions buried in reasoning, vocabulary drift). The
-example ships a rule-based checker you can run in CI.
+  
 
-## Prerequisites
+  
 
-- Python 3.9+ available in your PATH
-- No API key needed: the config uses the `echo` provider
+</p>
 
-## Usage
+<p align="center">
 
-```bash
-promptfoo eval
-```
+  <code>promptfoo</code> is a CLI and library for evaluating and red-teaming LLM apps. Stop the trial-and-error approach - start shipping secure, reliable AI apps.
 
-The two demo cases show a stiff session (should FAIL) and an improved session
-(should PASS). Input is a session trace JSON passed via `vars.session`:
+</p>
 
-```json
-{
-  "steps": [
-    { "kind": "plan", "text": "I will read the file then verify", "topic": "a" },
-    { "kind": "action", "text": "read file", "tool": "read", "ok": true, "topic": "a" },
-    { "kind": "report", "text": "summary: done", "topic": "a" }
-  ]
-}
-```
+<p align="center">
 
-Step kinds: `plan` / `intent` / `action` / `verify` / `report` / `message`.
-Tool calls map to `action` with `ok` (success/failure); `topic` is optional
-and accepts any non-null value (numeric ids like `0` included).
+  Website ·
 
-## Principle → Rule mapping (12 dimensions)
+  Getting Started ·
 
-| #   | Principle        | Programmatic check                                     | Threshold |
-| --- | ---------------- | ------------------------------------------------------ | --------- |
-| 1   | Anticipation     | plan/intent appears before the first action            | —         |
-| 2   | Staging          | session opens with intent/plan                         | —         |
-| 3   | Squash & Stretch | consecutive same-(tool,text) failures reset on success | ≤2        |
-| 4   | Pose to Pose     | long runs (>6 steps) verify between first/last action  | —         |
-| 5   | Follow Through   | session ends with verify/report                        | —         |
-| 6   | Slow In/Out      | plan-in AND verify-out                                 | —         |
-| 7   | Arcs             | topic runs (consecutive distinct topics)               | ≤2        |
-| 8   | Secondary Action | aux-marker occurrences (confidence/warning/note:/备选) | ≤3        |
-| 9   | Timing           | long runs (>8 steps) give feedback after work starts   | —         |
-| 10  | Exaggeration     | emphasis occurrences (**,!!!,强调,critical,warning:)   | ≤3        |
-| 11  | Solid Drawing    | repeated-term count (heuristic, English-token)         | ≤5        |
-| 12  | Appeal           | closing signature in the final step                    | —         |
+  Red Teaming ·
 
-The grader returns a promptfoo `GradingResult` with 12 `componentResults`,
-`namedScores`, and an overall score (pass >= 0.7). Missing or non-boolean
-`ok` annotations are fail-closed: rule 3 fails, the result is marked
-`data_quality=low`, and low quality hard-fails the overall grade even when
-the other rules pass. Rules 11 and 12 are documented heuristics.
+  Documentation ·
 
-## Validation
+  Discord
 
-Two demo sessions ship with this example: the `stiff` case fails at 0.58 and
-the `improved` case passes at 1.00 (see Expected Results). Drop the grader
-into a CI gate on any session trace: set thresholds in `behavior_review.py`,
-then run `promptfoo eval` on your own labelled traces. Per-dimension
-calibration on a larger labelled set is a follow-up.
+</p>
 
-## Expected Results
+Promptfoo is now part of OpenAI. Promptfoo remains open source and MIT licensed. Read the company update.
 
-- `stiff` demo case: FAIL (score 0.58). First action without intent
-  declaration, silent retry loop x4, no closing report.
-- `improved` demo case: PASS (score 1.00)
+Quick Start
 
-## Learn More
+Requires Node.js >=22.22.0 for npm and npx usage. Node.js 24 LTS
 
-- [Python Assertions Documentation](https://www.promptfoo.dev/docs/configuration/expected-outputs/python/)
-- [Assertions and Grading](https://www.promptfoo.dev/docs/configuration/expected-outputs/)
+is recommended; see the runtime support guide.
+
+    npm install -g promptfoo
+    promptfoo init --example getting-started
+
+Also available via brew install promptfoo and pip install promptfoo. You can also use npx promptfoo@latest to run any command without installing.
+
+Most LLM providers require an API key. Set yours as an environment variable:
+
+    export OPENAI_API_KEY=sk-abc123
+
+Once you're in the example directory, run an eval and view results:
+
+    cd getting-started
+    promptfoo eval
+    promptfoo view
+
+See Getting Started (evals) or Red Teaming (vulnerability scanning) for more.
+
+What can you do with Promptfoo?
+
+- Test your prompts and models with automated evaluations
+- Secure your LLM apps with red teaming and vulnerability scanning
+- Compare models side-by-side (OpenAI, Anthropic, Azure, Bedrock, Ollama, and more)
+- Automate checks in CI/CD
+- Review pull requests for LLM-related security and compliance issues with code scanning
+- Share results with your team
+
+Here's what it looks like in action:
+
+
+
+It works on the command line too:
+
+
+
+It also can generate security vulnerability reports:
+
+
+
+Why Promptfoo?
+
+- Developer-first: Fast, with features like live reload and caching
+- Private: LLM evals run 100% locally - your prompts never leave your machine
+- Flexible: Works with any LLM API or programming language
+- Battle-tested: Powers LLM apps serving 10M+ users in production
+- Data-driven: Make decisions based on metrics, not gut feel
+- Open source: MIT licensed, with an active community
+
+Learn More
+
+- Getting Started
+- Full Documentation
+- Red Teaming Guide
+- CLI Usage
+- Node.js Package
+- Supported Models
+- Code Scanning Guide
+
+Contributing
+
+We welcome contributions! Check out our contributing guide to get started.
+
+Join our Discord community for help and discussion.
+
+<a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
+
+  
+
+</a>
