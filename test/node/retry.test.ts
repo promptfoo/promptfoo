@@ -604,6 +604,28 @@ describe('retryCommand', () => {
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
+  it('resolves a saved evaluation relative to its persisted config base path', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        providerFilter: 'selected-target',
+        configBasePath: '/workspace/configs',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(createEval());
+
+    await retryCommand(originalEval.id, {});
+
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { filterProviders: 'selected-target' },
+      originalEval.config,
+      undefined,
+      { basePath: '/workspace/configs' },
+    );
+  });
+
   it('preserves error results when the stored filter cannot be applied to the config', async () => {
     const originalEval = createEval({
       runtimeOptions: { providerFilter: '[' },

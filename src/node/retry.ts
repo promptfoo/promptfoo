@@ -79,9 +79,14 @@ async function resolveRetryConfigs(
     );
   }
 
+  const configBasePath = originalEval.runtimeOptions?.configBasePath;
   const configs = cmdObj.config
     ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
-    : await resolveConfigs(providerFilterOptions, originalEval.config);
+    : configBasePath === undefined
+      ? await resolveConfigs(providerFilterOptions, originalEval.config)
+      : await resolveConfigs(providerFilterOptions, originalEval.config, undefined, {
+          basePath: configBasePath,
+        });
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider

@@ -94,10 +94,12 @@ vi.mock('path', async () => {
 const chokidarMocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: any[]) => unknown>();
   const watcher = {
+    add: vi.fn(),
     on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
       handlers.set(event, handler);
       return watcher;
     }),
+    unwatch: vi.fn().mockResolvedValue(undefined),
   };
 
   return {
@@ -183,6 +185,8 @@ describe('evalCommand', () => {
         chokidarMocks.handlers.set(event, handler);
         return chokidarMocks.watcher;
       });
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
@@ -1411,6 +1415,68 @@ describe('evalCommand', () => {
 
     loggerInfoSpy.mockRestore();
     loggerErrorSpy.mockRestore();
+  });
+
+  it('should refresh watched matrix files after a config change', async () => {
+    const initialConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
+    } as UnifiedConfig;
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config: initialConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: initialConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      initialConfig,
+      undefined,
+      {},
+    );
+
+    await chokidarMocks.handlers.get('change')?.('/suite/promptfooconfig.yaml');
+
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith(['/suite/vars/regions.yaml']);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith(['/suite/vars/languages.yaml']);
+  });
+
+  it('stores an absolute config base path for replay', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: defaultConfig,
+      testSuite: { prompts: [], providers: [] },
+      basePath: 'configs',
+    });
+    let capturedEval: Eval | undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      capturedEval = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval({ write: false }, defaultConfig, undefined, {});
+
+    expect(capturedEval?.runtimeOptions?.configBasePath).toBe(path.resolve('configs'));
   });
 
   it('should resume an existing eval with persisted prompts', async () => {

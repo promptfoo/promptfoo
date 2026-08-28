@@ -41,7 +41,10 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeRuntimeOptionsForPersistence,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -506,7 +509,7 @@ export default class Eval {
           config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
-          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+          runtimeOptions: sanitizeRuntimeOptionsForPersistence(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
           isRedteam: config.redteam !== undefined,
         })
@@ -607,7 +610,7 @@ export default class Eval {
       author,
       createdAt,
       persisted: true,
-      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptionsForPersistence(opts?.runtimeOptions),
       durationMs: opts?.durationMs,
       generationDurationMs: opts?.generationDurationMs,
       evaluationDurationMs: opts?.evaluationDurationMs,
@@ -676,7 +679,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
-      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptionsForPersistence(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {
@@ -1582,7 +1585,7 @@ export default class Eval {
           results: {},
           prompts: newPrompts,
           vars: newVars,
-          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          runtimeOptions: sanitizeRuntimeOptionsForPersistence(this.runtimeOptions),
           isRedteam: newConfig.redteam !== undefined,
         })
         .run();

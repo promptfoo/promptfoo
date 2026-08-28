@@ -208,6 +208,7 @@ export function sanitizeRuntimeOptions(
   const sanitized = { ...options };
 
   delete sanitized.abortSignal;
+  delete sanitized.configBasePath;
 
   const sanitizedEntries = sanitized as Record<string, unknown>;
   for (const [key, value] of Object.entries(sanitizedEntries)) {
@@ -217,6 +218,22 @@ export function sanitizeRuntimeOptions(
   }
 
   return sanitized;
+}
+
+/**
+ * Sanitizes runtime options for local persistence, retaining state needed to replay an eval.
+ */
+export function sanitizeRuntimeOptionsForPersistence(
+  options?: EvalRuntimeOptions,
+): EvalRuntimeOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  return {
+    ...sanitizeRuntimeOptions(options),
+    ...(options.configBasePath !== undefined && { configBasePath: options.configBasePath }),
+  };
 }
 
 /**

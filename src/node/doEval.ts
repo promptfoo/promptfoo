@@ -327,6 +327,59 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let watcher: ReturnType<typeof chokidar.watch> | undefined;
+  let watchedPaths = new Set<string>();
+
+  const getCurrentWatchPaths = (): string[] => {
+    const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+    if (!config || !testSuite || configPaths.length === 0) {
+      return configPaths;
+    }
+
+    const basePath = path.resolve(_basePath || path.dirname(configPaths[0]));
+    const promptPaths = Array.isArray(config.prompts)
+      ? (config.prompts
+          .map((prompt) => {
+            if (typeof prompt === 'string' && prompt.startsWith('file://')) {
+              return path.resolve(basePath, prompt.slice('file://'.length));
+            } else if (typeof prompt === 'object' && prompt.id && prompt.id.startsWith('file://')) {
+              return path.resolve(basePath, prompt.id.slice('file://'.length));
+            }
+            return null;
+          })
+          .filter(Boolean) as string[])
+      : [];
+    const providerPaths = Array.isArray(config.providers)
+      ? (config.providers
+          .map((provider) =>
+            typeof provider === 'string' && provider.startsWith('file://')
+              ? path.resolve(basePath, provider.slice('file://'.length))
+              : null,
+          )
+          .filter(Boolean) as string[])
+      : [];
+    const varPaths = [config, testSuite].flatMap((suite) => getSuiteVarWatchPaths(suite, basePath));
+
+    return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
+  };
+
+  const syncWatchPaths = async (): Promise<void> => {
+    if (!watcher) {
+      return;
+    }
+
+    const nextPaths = new Set(getCurrentWatchPaths());
+    const addedPaths = [...nextPaths].filter((watchPath) => !watchedPaths.has(watchPath));
+    const removedPaths = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
+
+    if (addedPaths.length > 0) {
+      watcher.add(addedPaths);
+    }
+    if (removedPaths.length > 0) {
+      await watcher.unwatch(removedPaths);
+    }
+    watchedPaths = nextPaths;
+  };
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -864,12 +917,11 @@ export async function doEval(
       );
     }
 
+    const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
-      ...(resumeEval?.runtimeOptions?.configBasePath !== undefined || _basePath !== undefined
-        ? { configBasePath: resumeEval?.runtimeOptions?.configBasePath ?? _basePath }
-        : {}),
+      ...(configBasePath === undefined ? {} : { configBasePath: path.resolve(configBasePath) }),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -1218,35 +1270,9 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = _basePath || path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        const varPaths = [config, testSuite].flatMap((suite) =>
-          getSuiteVarWatchPaths(suite, basePath),
-        );
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        const watchPaths = getCurrentWatchPaths();
+        watchedPaths = new Set(watchPaths);
+        watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
 
         watcher
           .on('change', async (path) => {
@@ -1256,6 +1282,7 @@ export async function doEval(
             clearConfigCache();
             try {
               await runEvaluation();
+              await syncWatchPaths();
             } catch (error) {
               if (handleRecoverableWatchError(error)) {
                 return;
