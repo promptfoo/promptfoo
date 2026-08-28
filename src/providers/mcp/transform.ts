@@ -218,11 +218,21 @@ async function transformMCPServerConfigToClaudeCode(
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
   } else if (config.command) {
-    out = { type: 'stdio', command: config.command, args: config.args ?? [] };
+    out = {
+      type: 'stdio',
+      command: config.command,
+      args: config.args ?? [],
+      ...(config.env ? { env: config.env } : {}),
+    };
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
-    out = { type: 'stdio', command, args: [config.path] };
+    out = {
+      type: 'stdio',
+      command,
+      args: [config.path],
+      ...(config.env ? { env: config.env } : {}),
+    };
   } else {
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
