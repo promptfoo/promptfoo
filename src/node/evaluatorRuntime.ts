@@ -3,6 +3,7 @@ import path from 'path';
 
 import { getEnvBool } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
 import { preserveTracingCredentialReferences } from '../util/sanitizer';
@@ -33,7 +34,7 @@ export function loadVarValuesFromFile(
   varName: string,
   basePath: string,
 ): LoadedVarValue[] {
-  const referencedPath = reference.slice('file://'.length);
+  const { filePath: referencedPath } = parseFileUrl(reference);
   const resolvedPath = path.isAbsolute(referencedPath)
     ? referencedPath
     : path.resolve(basePath || process.cwd(), referencedPath);

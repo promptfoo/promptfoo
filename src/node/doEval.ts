@@ -48,6 +48,7 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import {
   printBorder,
   setupEnv,
@@ -181,6 +182,29 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function getVarWatchPaths(value: unknown, basePath: string): string[] {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return [path.resolve(basePath, parseFileUrl(value).filePath)];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => getVarWatchPaths(item, basePath));
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, '$values')
+  ) {
+    const reference = (value as Record<string, unknown>).$values;
+    return typeof reference === 'string' && reference.startsWith('file://')
+      ? [path.resolve(basePath, parseFileUrl(reference).filePath)]
+      : [];
+  }
+
+  return [];
 }
 
 function resolveSuggestionOptions(
@@ -1162,12 +1186,9 @@ export async function doEval(
                 if (typeof t === 'string' && t.startsWith('file://')) {
                   return path.resolve(basePath, t.slice('file://'.length));
                 } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return Object.values(t.vars).flatMap((v) => {
-                    if (typeof v === 'string' && v.startsWith('file://')) {
-                      return path.resolve(basePath, v.slice('file://'.length));
-                    }
-                    return [];
-                  });
+                  return Object.values(t.vars).flatMap((value) =>
+                    getVarWatchPaths(value, basePath),
+                  );
                 }
                 return [];
               })

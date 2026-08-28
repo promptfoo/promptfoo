@@ -198,7 +198,7 @@ resolved relative to the config file that starts the eval.
 - French
 ```
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       language:

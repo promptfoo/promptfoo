@@ -70,10 +70,14 @@ describe('generateVarCombinations', () => {
     ).toEqual([{ language: 'English' }, { language: 'French' }, { language: 'Spanish' }]);
   });
 
-  it('should load matrix values from an absolute file path', () => {
+  it('should load matrix values from an absolute file URL', () => {
     const { filePath } = createTempValuesFile('languages.yaml', '- English\n- French\n');
+    const fileUrl =
+      process.platform === 'win32'
+        ? `file:///${filePath.replace(/\\/g, '/')}`
+        : `file://${filePath}`;
 
-    expect(generateVarCombinations({ language: { $values: `file://${filePath}` } })).toEqual([
+    expect(generateVarCombinations({ language: { $values: fileUrl } })).toEqual([
       { language: 'English' },
       { language: 'French' },
     ]);

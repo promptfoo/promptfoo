@@ -1283,7 +1283,17 @@ describe('evalCommand', () => {
     const config = {
       prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
       providers: ['file://providers/provider.yaml'],
-      tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
+      tests: [
+        'file://vars/scenario.yaml',
+        {
+          vars: {
+            body: 'file://vars/body.txt',
+            inline: 'x',
+            languages: { $values: 'file://vars/languages.yaml' },
+            regions: [{ $values: 'file://vars/regions.yaml' }, 'custom'],
+          },
+        },
+      ],
     } as UnifiedConfig;
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config,
@@ -1312,6 +1322,8 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'providers/provider.yaml'),
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
+        path.resolve('/suite', 'vars/languages.yaml'),
+        path.resolve('/suite', 'vars/regions.yaml'),
       ]),
       { ignored: /^\./, persistent: true },
     );
