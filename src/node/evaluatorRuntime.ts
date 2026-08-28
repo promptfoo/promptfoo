@@ -23,119 +23,96 @@ import type EvalResult from '../models/evalResult';
 
 type LoadedVarValue = string | number | boolean | object | unknown[];
 
-function getVarValuesPaths(value: unknown, basePath: string): string[] {
+function getVarValuesFingerprintEntries(
+  value: unknown,
+  varName: string,
+  basePath: string,
+  cache: VarValuesFileCache,
+  location: string,
+): unknown[][] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => getVarValuesPaths(item, basePath));
+    return value.flatMap((item, index) => {
+      if (Array.isArray(item)) {
+        return [];
+      }
+      return getVarValuesFingerprintEntries(
+        item,
+        varName,
+        basePath,
+        cache,
+        `${location}[${index}]`,
+      );
+    });
   }
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-
   const reference = (value as Record<string, unknown>).$values;
   if (typeof reference !== 'string' || !reference.startsWith('file://')) {
     return [];
   }
-
   const { filePath: referencedPath } = parseFileUrl(reference);
+  const resolvedPath = path.isAbsolute(referencedPath)
+    ? referencedPath
+    : path.resolve(basePath || process.cwd(), referencedPath);
   return [
-    path.isAbsolute(referencedPath)
-      ? referencedPath
-      : path.resolve(basePath || process.cwd(), referencedPath),
+    [
+      location,
+      path.relative(basePath, resolvedPath),
+      loadVarValuesFromFile(value, varName, basePath, cache),
+    ],
   ];
 }
 
-function getTestCaseVarValuesPaths(testCase: unknown, basePath: string): string[] {
-  if (typeof testCase !== 'object' || testCase === null) {
-    return [];
-  }
-  const vars = (testCase as { vars?: unknown }).vars;
-  return typeof vars === 'object' && vars !== null
-    ? Object.values(vars).flatMap((value) => getVarValuesPaths(value, basePath))
-    : [];
-}
-
-function getSuiteVarValuesPaths(
-  suite: { tests?: unknown; defaultTest?: unknown; scenarios?: unknown },
-  basePath: string,
-): string[] {
-  const defaultVars =
-    typeof suite.defaultTest === 'object' && suite.defaultTest !== null
-      ? (suite.defaultTest as { vars?: unknown }).vars
-      : undefined;
-  const mergeVars = (...sources: unknown[]) => ({
-    vars: Object.assign(
-      {},
-      ...sources.filter(
-        (source): source is object =>
-          typeof source === 'object' && source !== null && !Array.isArray(source),
-      ),
-    ),
-  });
-  const directTests =
-    Array.isArray(suite.tests) && suite.tests.length > 0
-      ? suite.tests
-      : Array.isArray(suite.scenarios)
-        ? []
-        : [{}];
-  const testPaths = directTests.flatMap((testCase) =>
-    getTestCaseVarValuesPaths(
-      mergeVars(
-        defaultVars,
-        typeof testCase === 'object' && testCase !== null
-          ? (testCase as { vars?: unknown }).vars
-          : undefined,
-      ),
-      basePath,
-    ),
-  );
-  const scenarioPaths = Array.isArray(suite.scenarios)
-    ? suite.scenarios.flatMap((scenario) => {
-        if (typeof scenario !== 'object' || scenario === null) {
-          return [];
-        }
-        const { config, tests } = scenario as { config?: unknown; tests?: unknown };
-        if (!Array.isArray(config)) {
-          return [];
-        }
-        const scenarioTests = Array.isArray(tests) ? tests : [{}];
-        return config.flatMap((data) =>
-          scenarioTests.flatMap((testCase) =>
-            getTestCaseVarValuesPaths(
-              mergeVars(
-                defaultVars,
-                typeof data === 'object' && data !== null
-                  ? (data as { vars?: unknown }).vars
-                  : undefined,
-                typeof testCase === 'object' && testCase !== null
-                  ? (testCase as { vars?: unknown }).vars
-                  : undefined,
-              ),
-              basePath,
-            ),
-          ),
-        );
-      })
-    : [];
-  return [...testPaths, ...scenarioPaths];
-}
-
 export function getVarValuesFingerprint(
-  suites: Array<{ tests?: unknown; defaultTest?: unknown; scenarios?: unknown }>,
+  tests: Array<{ vars?: unknown; options?: { disableVarExpansion?: boolean } }>,
   basePath: string,
   cache: VarValuesFileCache = new Map(),
+  defaultDisableVarExpansion = false,
 ): string | undefined {
-  const paths = Array.from(
-    new Set(suites.flatMap((suite) => getSuiteVarValuesPaths(suite, basePath))),
-  ).sort();
-  if (paths.length === 0) {
+  if (getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION')) {
     return undefined;
   }
-
-  const entries = paths.map((filePath) => [
-    path.relative(basePath, filePath),
-    loadResolvedVarValues(filePath, '$values fingerprint', cache),
-  ]);
+  const entries = tests.flatMap((testCase, testIndex) => {
+    if ((testCase.options?.disableVarExpansion ?? defaultDisableVarExpansion) === true) {
+      return [];
+    }
+    const vars = testCase.vars;
+    if (typeof vars !== 'object' || vars === null || Array.isArray(vars)) {
+      return [];
+    }
+    return Object.entries(vars).flatMap(([varName, value], varIndex) =>
+      getVarValuesFingerprintEntries(
+        value,
+        varName,
+        basePath,
+        cache,
+        `${testIndex}:${varIndex}:${varName}`,
+      ),
+    );
+  });
+  if (entries.length === 0) {
+    return undefined;
+  }
   return sha256(JSON.stringify(entries));
+}
+
+function prepareVarValuesSnapshot(
+  tests: Parameters<typeof getVarValuesFingerprint>[0],
+  basePath: string,
+  cache: VarValuesFileCache,
+  defaultDisableVarExpansion: boolean,
+  expectedFingerprint?: string,
+  fingerprintError?: string,
+): string | undefined {
+  const fingerprint = getVarValuesFingerprint(tests, basePath, cache, defaultDisableVarExpansion);
+  if (expectedFingerprint !== undefined && fingerprint !== expectedFingerprint) {
+    throw new ConfigResolutionError(
+      fingerprintError ||
+        'The $values files used by this evaluation have changed. Restore the original files before replaying it.',
+    );
+  }
+  return fingerprint;
 }
 
 function isValidExpandedVarValue(value: unknown): value is LoadedVarValue {
@@ -219,6 +196,7 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
 }
 
 export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
+  prepareVarValuesSnapshot,
   resolveRuntimeTestSuite(testSuite) {
     if (!testSuite.tracing?.provider) {
       return testSuite;

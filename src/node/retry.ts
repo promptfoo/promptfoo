@@ -15,6 +15,7 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
+import { reapplyTestFilter } from '../util/eval/filterTests';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -24,7 +25,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { getVarValuesFingerprint } from './evaluatorRuntime';
 
 import type { TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -56,6 +56,29 @@ function assertRetryProviderFilterMatched(
   throw new ConfigResolutionError(
     `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
   );
+}
+
+function getMatrixReplayOptions(
+  originalEval: Eval,
+  cmdObj: RetryCommandOptions,
+  resolvedBasePath: string,
+): Pick<
+  InternalEvaluateOptions,
+  'expectedMatrixValuesFingerprint' | 'matrixValuesFingerprintError' | 'varValuesBasePath'
+> {
+  const expectedFingerprint = originalEval.runtimeOptions?.matrixValuesFingerprint;
+  const varValuesBasePath = cmdObj.config
+    ? resolvedBasePath
+    : originalEval.runtimeOptions?.configBasePath || resolvedBasePath;
+  return {
+    ...(expectedFingerprint === undefined
+      ? {}
+      : {
+          expectedMatrixValuesFingerprint: expectedFingerprint,
+          matrixValuesFingerprintError: `The $values files used by evaluation ${originalEval.id} have changed. Restore the original files before retrying this evaluation. Existing ERROR results were preserved.`,
+        }),
+    varValuesBasePath: varValuesBasePath || process.cwd(),
+  };
 }
 
 async function resolveRetryConfigs(
@@ -93,26 +116,16 @@ async function resolveRetryConfigs(
           basePath: configBasePath,
         });
 
-  const expectedFingerprint = originalEval.runtimeOptions?.matrixValuesFingerprint;
   const varValuesFileCache = new Map();
-  if (expectedFingerprint !== undefined) {
-    const currentFingerprint = getVarValuesFingerprint(
-      [configs.testSuite],
-      (cmdObj.config ? configs.basePath : configBasePath || configs.basePath) || process.cwd(),
-      varValuesFileCache,
-    );
-    if (currentFingerprint !== expectedFingerprint) {
-      throw new ConfigResolutionError(
-        `The $values files used by evaluation ${originalEval.id} have changed. Restore the original files before retrying this evaluation. Existing ERROR results were preserved.`,
-      );
-    }
-  }
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider
   // set matches the original even when an instantiated id or label diverges from its
   // raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+  if (originalEval.runtimeOptions?.testFilter) {
+    await reapplyTestFilter(configs.testSuite, originalEval.runtimeOptions.testFilter);
+  }
 
   assertRetryProviderFilterMatched(
     providerFilter,
@@ -379,10 +392,8 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config, varValuesFileCache } = await resolveRetryConfigs(
-    originalEval,
-    cmdObj,
-  );
+  const { basePath, testSuite, commandLineOptions, config, varValuesFileCache } =
+    await resolveRetryConfigs(originalEval, cmdObj);
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -428,6 +439,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    ...(originalEval.runtimeOptions?.filterRange === undefined
+      ? {}
+      : { filterRange: originalEval.runtimeOptions.filterRange }),
+    ...getMatrixReplayOptions(originalEval, cmdObj, basePath),
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
     varValuesFileCache,
   };

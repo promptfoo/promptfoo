@@ -32,53 +32,58 @@ describe('nodeEvaluatorRuntime', () => {
     tempDirs.push(tempDir);
     const valuesPath = path.join(tempDir, 'languages.yaml');
     fs.writeFileSync(valuesPath, '- English\n- French\n');
-    const suite = {
-      tests: [{ vars: { language: { $values: 'file://languages.yaml' } } }],
-    };
+    const tests = [{ vars: { language: { $values: 'file://languages.yaml' } } }];
 
-    const originalFingerprint = getVarValuesFingerprint([suite], tempDir);
+    const originalFingerprint = getVarValuesFingerprint(tests, tempDir);
     fs.writeFileSync(valuesPath, '- French\n- English\n');
 
-    expect(getVarValuesFingerprint([suite], tempDir)).not.toBe(originalFingerprint);
+    expect(getVarValuesFingerprint(tests, tempDir)).not.toBe(originalFingerprint);
   });
 
-  it('includes mixed, default, and scenario matrix references in the fingerprint', () => {
+  it('includes mixed matrix references and their declaration order in the fingerprint', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
     tempDirs.push(tempDir);
     for (const fileName of ['mixed.yaml', 'default.yaml', 'scenario.yaml']) {
       fs.writeFileSync(path.join(tempDir, fileName), '- one\n- two\n');
     }
-    const suite = {
-      tests: [
-        'file://external-tests.yaml',
-        { vars: { mixed: ['literal', { $values: 'file://mixed.yaml' }], scalar: 'value' } },
-      ],
-      defaultTest: { vars: { fallback: { $values: 'file://default.yaml' } } },
-      scenarios: [
-        null,
-        {
-          config: [{ vars: { scenario: { $values: 'file://scenario.yaml' } } }],
-          tests: [{ vars: { duplicate: { $values: 'file://mixed.yaml' } } }],
+    const tests = [
+      {
+        vars: {
+          mixed: ['literal', { $values: 'file://mixed.yaml' }],
+          fallback: { $values: 'file://default.yaml' },
+          scenario: { $values: 'file://scenario.yaml' },
         },
-      ],
-    };
+      },
+    ];
 
-    const originalFingerprint = getVarValuesFingerprint([suite], tempDir);
+    const originalFingerprint = getVarValuesFingerprint(tests, tempDir);
+    expect(
+      getVarValuesFingerprint(
+        [
+          {
+            vars: {
+              mixed: ['literal', { $values: 'file://scenario.yaml' }],
+              fallback: { $values: 'file://default.yaml' },
+              scenario: { $values: 'file://mixed.yaml' },
+            },
+          },
+        ],
+        tempDir,
+      ),
+    ).not.toBe(originalFingerprint);
     fs.writeFileSync(path.join(tempDir, 'scenario.yaml'), '- changed\n');
 
-    expect(getVarValuesFingerprint([suite], tempDir)).not.toBe(originalFingerprint);
+    expect(getVarValuesFingerprint(tests, tempDir)).not.toBe(originalFingerprint);
   });
 
   it('returns undefined without matrix references and wraps file read failures', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
     tempDirs.push(tempDir);
 
-    expect(getVarValuesFingerprint([{ tests: [{ vars: { language: 'English' } }] }], tempDir)).toBe(
-      undefined,
-    );
+    expect(getVarValuesFingerprint([{ vars: { language: 'English' } }], tempDir)).toBe(undefined);
     expect(() =>
       getVarValuesFingerprint(
-        [{ tests: [{ vars: { language: { $values: 'file://missing.yaml' } } }] }],
+        [{ vars: { language: { $values: 'file://missing.yaml' } } }],
         tempDir,
       ),
     ).toThrow('Failed to load $values');
@@ -92,7 +97,7 @@ describe('nodeEvaluatorRuntime', () => {
     const directive = { $values: 'file://languages.yaml' };
     const cache = new Map();
 
-    getVarValuesFingerprint([{ tests: [{ vars: { language: directive } }] }], tempDir, cache);
+    getVarValuesFingerprint([{ vars: { language: directive } }], tempDir, cache);
     fs.writeFileSync(valuesPath, '- German\n');
 
     expect(loadVarValuesFromFile(directive, 'language', tempDir, cache)).toEqual([
@@ -101,25 +106,41 @@ describe('nodeEvaluatorRuntime', () => {
     ]);
   });
 
-  it('ignores matrix references overridden by effective test variables', () => {
+  it('ignores matrix references when variable expansion is disabled', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
     tempDirs.push(tempDir);
-    fs.writeFileSync(path.join(tempDir, 'used.yaml'), '- English\n');
-    const directSuite = {
-      defaultTest: { vars: { language: { $values: 'file://missing-default.yaml' } } },
-      tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
-    };
-    const scenarioSuite = {
-      defaultTest: { vars: { language: { $values: 'file://missing-default.yaml' } } },
-      scenarios: [
-        {
-          config: [{ vars: { language: { $values: 'file://missing-scenario.yaml' } } }],
-          tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
-        },
-      ],
-    };
 
-    expect(() => getVarValuesFingerprint([directSuite, scenarioSuite], tempDir)).not.toThrow();
+    expect(
+      getVarValuesFingerprint(
+        [
+          {
+            vars: { language: { $values: 'file://missing.yaml' } },
+            options: { disableVarExpansion: true },
+          },
+        ],
+        tempDir,
+      ),
+    ).toBeUndefined();
+    expect(
+      getVarValuesFingerprint(
+        [{ vars: { language: { $values: 'file://missing.yaml' } } }],
+        tempDir,
+        new Map(),
+        true,
+      ),
+    ).toBeUndefined();
+
+    const restoreEnvironment = mockProcessEnv({ PROMPTFOO_DISABLE_VAR_EXPANSION: 'true' });
+    try {
+      expect(
+        getVarValuesFingerprint(
+          [{ vars: { language: { $values: 'file://missing.yaml' } } }],
+          tempDir,
+        ),
+      ).toBeUndefined();
+    } finally {
+      restoreEnvironment();
+    }
   });
 
   it.each([
@@ -224,8 +245,10 @@ describe('nodeEvaluatorRuntime', () => {
     const store = nodeEvaluatorRuntime.createEvaluationStore(evaluation);
 
     await store.appendResult(result);
+    store.setMatrixValuesFingerprint?.('matrix-fingerprint');
 
     expect(store.evaluation).toBe(evaluation);
     expect(addResult).toHaveBeenCalledWith(result);
+    expect(evaluation.runtimeOptions?.matrixValuesFingerprint).toBe('matrix-fingerprint');
   });
 });

@@ -44,7 +44,7 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { filterTests } from '../util/eval/filterTests';
+import { filterTests, reapplyTestFilter } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -61,7 +61,6 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { getVarValuesFingerprint } from './evaluatorRuntime';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
@@ -143,20 +142,7 @@ async function resolveReplayConfigs(
       : await resolveConfigs(providerFilterOptions, replayConfig, undefined, {
           basePath: configBasePath,
         });
-  const expectedFingerprint = evalRecord.runtimeOptions?.matrixValuesFingerprint;
   const varValuesFileCache = new Map();
-  if (expectedFingerprint !== undefined) {
-    const currentFingerprint = getVarValuesFingerprint(
-      [configs.testSuite],
-      path.resolve(configBasePath || configs.basePath || process.cwd()),
-      varValuesFileCache,
-    );
-    if (currentFingerprint !== expectedFingerprint) {
-      throw new ConfigResolutionError(
-        `The $values files used by evaluation ${evalRecord.id} have changed. Restore the original files before ${action} this evaluation.`,
-      );
-    }
-  }
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -775,7 +761,12 @@ export async function doEval(
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const configuredFilterSampleSeed =
+      cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const filterSampleSeed =
+      filterSample !== undefined && configuredFilterSampleSeed === undefined
+        ? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+        : configuredFilterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -787,9 +778,13 @@ export async function doEval(
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const persistedTestFilter = resumeEval?.runtimeOptions?.testFilter as FilterOptions | undefined;
+    let appliedTestFilter: FilterOptions | undefined;
 
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
+    if (persistedTestFilter) {
+      appliedTestFilter = persistedTestFilter;
+      await reapplyTestFilter(testSuite, persistedTestFilter);
+    } else if (!resumeEval) {
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
@@ -806,6 +801,7 @@ export async function doEval(
         sample: filterSample,
         sampleSeed: filterSampleSeed,
       };
+      appliedTestFilter = hasActiveTestFilter ? filterOptions : undefined;
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
         testSuite.tests.length === 0 &&
@@ -948,16 +944,24 @@ export async function doEval(
     const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
     const normalizedConfigBasePath = path.resolve(configBasePath || process.cwd());
     varValuesFileCache ??= new Map();
-    const matrixValuesFingerprint =
-      resumeEval?.runtimeOptions?.matrixValuesFingerprint ??
-      getVarValuesFingerprint([testSuite], normalizedConfigBasePath, varValuesFileCache);
+    options.expectedMatrixValuesFingerprint = resumeEval?.runtimeOptions?.matrixValuesFingerprint;
+    options.matrixValuesFingerprintError = resumeEval
+      ? `The $values files used by evaluation ${resumeEval.id} have changed. Restore the original files before replaying this evaluation.`
+      : undefined;
+    options.varValuesBasePath = normalizedConfigBasePath;
     options.varValuesFileCache = varValuesFileCache;
-    const { varValuesFileCache: _varValuesFileCache, ...persistableOptions } = options;
+    const {
+      expectedMatrixValuesFingerprint: _expectedMatrixValuesFingerprint,
+      matrixValuesFingerprintError: _matrixValuesFingerprintError,
+      varValuesBasePath: _varValuesBasePath,
+      varValuesFileCache: _varValuesFileCache,
+      ...persistableOptions
+    } = options;
     const runtimeOptions: EvalRuntimeOptions = {
       ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
       ...(configBasePath === undefined ? {} : { configBasePath: path.resolve(configBasePath) }),
-      ...(matrixValuesFingerprint === undefined ? {} : { matrixValuesFingerprint }),
+      ...(appliedTestFilter ? { testFilter: appliedTestFilter } : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -1052,7 +1056,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        filterRange: hasScenarios || (resumeEval && !persistedTestFilter) ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });

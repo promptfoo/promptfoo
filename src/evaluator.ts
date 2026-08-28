@@ -2688,7 +2688,7 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {}, undefined, varValuesFileCache);
+      : generateVarCombinations(testCase.vars || {}, options.varValuesBasePath, varValuesFileCache);
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
@@ -3373,6 +3373,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  runtime: EvaluatorRuntime<TEvaluation, TResult>;
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3382,6 +3383,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.testSuite = testSuite;
     this.store = store;
     this.options = options;
+    this.runtime = runtime;
     this.stats = {
       successes: 0,
       failures: 0,
@@ -4767,6 +4769,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
+  private async prepareMatrixValuesSnapshot(
+    tests: AtomicTestCase[],
+    testSuite: TestSuite,
+  ): Promise<void> {
+    const { options } = this;
+    const varValuesFileCache = options.varValuesFileCache ?? new Map();
+    options.varValuesFileCache = varValuesFileCache;
+    const matrixValuesFingerprint = this.runtime.prepareVarValuesSnapshot?.(
+      tests,
+      options.varValuesBasePath || cliState.basePath || process.cwd(),
+      varValuesFileCache,
+      getDefaultTest(testSuite)?.options?.disableVarExpansion === true,
+      options.expectedMatrixValuesFingerprint,
+      options.matrixValuesFingerprintError,
+    );
+    this.store.setMatrixValuesFingerprint?.(matrixValuesFingerprint);
+    if (this.store.persisted && this.store.setMatrixValuesFingerprint) {
+      await this.store.save();
+    }
+  }
+
   private async _runEvaluation(): Promise<TEvaluation> {
     const { options } = this;
     let { testSuite } = this;
@@ -4850,6 +4873,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (const varName of varNames) {
       vars.add(varName);
     }
+    await this.prepareMatrixValuesSnapshot(tests, testSuite);
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,

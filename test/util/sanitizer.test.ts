@@ -36,6 +36,7 @@ describe('sanitizeRuntimeOptions', () => {
         progressCallback: vi.fn(),
         providerFilter: 'selected-target',
         configBasePath: '/home/alice/private-project/configs',
+        testFilter: { errorsOnly: '/home/alice/private-project/results.json' },
       }),
     ).toEqual({ providerFilter: 'selected-target' });
   });
@@ -45,10 +46,12 @@ describe('sanitizeRuntimeOptions', () => {
       sanitizeRuntimeOptionsForPersistence({
         providerFilter: 'selected-target',
         configBasePath: '/workspace/configs',
+        testFilter: { firstN: 3 },
       }),
     ).toEqual({
       providerFilter: 'selected-target',
       configBasePath: '/workspace/configs',
+      testFilter: { firstN: 3 },
     });
   });
 });

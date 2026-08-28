@@ -323,6 +323,18 @@ export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   configBasePath?: string;
   /** @internal Fingerprint of file-backed matrix values used to guard replay ordering. */
   matrixValuesFingerprint?: string;
+  /** @internal Test selection applied before matrix expansion, replayed to preserve test indices. */
+  testFilter?: {
+    errorsOnly?: string;
+    failing?: string;
+    failingOnly?: string;
+    firstN?: number | string;
+    metadata?: string | string[];
+    pattern?: string;
+    range?: string;
+    sample?: number | string;
+    sampleSeed?: number;
+  };
 };
 
 const PromptMetricsSchema = z.object({

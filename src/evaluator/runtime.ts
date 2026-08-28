@@ -1,4 +1,5 @@
 import type {
+  AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
   TestSuite,
@@ -59,6 +60,7 @@ export interface EvaluationStore<
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;
   saveResult(result: TResult): Promise<void>;
+  setMatrixValuesFingerprint?(fingerprint: string | undefined): void;
   setDurationMs(durationMs: number): void;
   setVars(vars: string[]): void;
   toEvaluateResult(result: TResult | EvaluateResult): EvaluateResult;
@@ -83,4 +85,12 @@ export interface EvaluatorRuntime<
     outputPath: string | string[] | undefined,
     options: EvaluatorResultWriterOptions,
   ): EvaluatorResultWriter[];
+  prepareVarValuesSnapshot?(
+    tests: AtomicTestCase[],
+    basePath: string,
+    cache: VarValuesFileCache,
+    defaultDisableVarExpansion: boolean,
+    expectedFingerprint?: string,
+    fingerprintError?: string,
+  ): string | undefined;
 }

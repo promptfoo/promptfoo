@@ -9,7 +9,10 @@ import type { TokenUsage } from './shared';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  expectedMatrixValuesFingerprint?: string;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
+  matrixValuesFingerprintError?: string;
+  varValuesBasePath?: string;
   varValuesFileCache?: Map<string, VarValue[]>;
 };

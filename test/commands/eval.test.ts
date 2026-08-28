@@ -29,7 +29,6 @@ import {
   EvalRunError,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
-import { getVarValuesFingerprint } from '../../src/node/evaluatorRuntime';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -70,10 +69,6 @@ vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
-}));
-vi.mock('../../src/node/evaluatorRuntime', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/node/evaluatorRuntime')>()),
-  getVarValuesFingerprint: vi.fn().mockReturnValue(undefined),
 }));
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/shared', async (importOriginal) => {
@@ -211,7 +206,6 @@ describe('evalCommand', () => {
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
-    vi.mocked(getVarValuesFingerprint).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -1550,24 +1544,79 @@ describe('evalCommand', () => {
       basePath: 'configs',
     });
     let capturedEval: Eval | undefined;
-    vi.mocked(getVarValuesFingerprint).mockReturnValueOnce('matrix-fingerprint');
-    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord, options) => {
       capturedEval = evalRecord as Eval;
+      expect(options).toEqual(
+        expect.objectContaining({
+          varValuesBasePath: path.resolve('configs'),
+          varValuesFileCache: expect.any(Map),
+        }),
+      );
       return evalRecord as Eval;
     });
 
     await doEval({ write: false }, defaultConfig, undefined, {});
 
     expect(capturedEval?.runtimeOptions?.configBasePath).toBe(path.resolve('configs'));
-    expect(capturedEval?.runtimeOptions?.matrixValuesFingerprint).toBe('matrix-fingerprint');
     expect((capturedEval?.runtimeOptions as Record<string, unknown>)?.varValuesFileCache).toBe(
       undefined,
     );
-    expect(getVarValuesFingerprint).toHaveBeenCalledWith(
-      [expect.objectContaining({ prompts: [], providers: [] })],
-      path.resolve('configs'),
-      expect.any(Map),
+  });
+
+  it('persists deterministic test selection for replay', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ description: 'first' }, { description: 'second' }],
+    } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: config as TestSuite,
+      basePath: '/suite',
+    });
+    let capturedEval: Eval | undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      capturedEval = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval({ filterFirstN: 1, write: false }, config, defaultConfigPath, {});
+
+    expect(capturedEval?.runtimeOptions?.testFilter).toEqual(
+      expect.objectContaining({ firstN: 1 }),
     );
+  });
+
+  it('reapplies persisted test selection before resume evaluation', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ description: 'first' }, { description: 'second' }],
+    } as UnifiedConfig;
+    const resumeEval = new Eval(config);
+    resumeEval.runtimeOptions = { testFilter: { firstN: 1 } };
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: config as TestSuite,
+      basePath: '/suite',
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0]).toEqual(expect.objectContaining({ description: 'first' }));
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval(
+        { resume: 'eval-123', write: true } as Parameters<typeof doEval>[0],
+        config,
+        defaultConfigPath,
+        {},
+      );
+    } finally {
+      findByIdSpy.mockRestore();
+    }
   });
 
   it('should resume an existing eval with persisted prompts', async () => {
@@ -1627,7 +1676,7 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should reject resume when file-backed matrix values changed', async () => {
+  it('should pass the stored matrix fingerprint into resume evaluation', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.runtimeOptions = {
       configBasePath: '/suite/configs',
@@ -1639,7 +1688,18 @@ describe('evalCommand', () => {
       testSuite: { prompts: [], providers: [] },
       basePath: '/suite/configs',
     });
-    vi.mocked(getVarValuesFingerprint).mockReturnValueOnce('changed-fingerprint');
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord, options) => {
+      expect(options).toEqual(
+        expect.objectContaining({
+          expectedMatrixValuesFingerprint: 'original-fingerprint',
+          matrixValuesFingerprintError: expect.stringContaining(
+            'The $values files used by evaluation',
+          ),
+          varValuesBasePath: '/suite/configs',
+        }),
+      );
+      return evalRecord as Eval;
+    });
 
     try {
       await expect(
@@ -1649,8 +1709,7 @@ describe('evalCommand', () => {
           defaultConfigPath,
           {},
         ),
-      ).rejects.toThrow('The $values files used by evaluation');
-      expect(evaluate).not.toHaveBeenCalled();
+      ).resolves.toBe(resumeEval);
     } finally {
       findByIdSpy.mockRestore();
     }
