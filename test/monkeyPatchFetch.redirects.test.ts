@@ -136,17 +136,59 @@ describe('Cloud authentication across redirects', () => {
     },
   );
 
-  it('protects an explicitly supplied Cloud header at an alternate configured endpoint', async () => {
-    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://account.example.test');
+  it.each(['Bearer', 'bearer', 'BEARER  '])(
+    'protects an explicit Cloud credential at an alternate endpoint (%s)',
+    async (scheme) => {
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://account.example.test');
+      agent
+        .get(origin)
+        .intercept({ path: '/start', method: 'GET' })
+        .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
+      await expect(
+        request(`${origin}/start`, {
+          headers: { [headerName]: `${scheme} synthetic-cloud-key` },
+        }),
+      ).rejects.toThrow('Cloud authentication cannot follow a redirect to a different origin');
+      agent.assertNoPendingInterceptors();
+    },
+  );
+
+  it('protects a caller-supplied Cloud credential that differs from the saved key', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('previous-synthetic-key');
     agent
       .get(origin)
       .intercept({ path: '/start', method: 'GET' })
       .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
+
     await expect(
       request(`${origin}/start`, { headers: { [headerName]: credential } }),
     ).rejects.toThrow('Cloud authentication cannot follow a redirect to a different origin');
     agent.assertNoPendingInterceptors();
   });
+
+  it.each([
+    { session: 'logged in', apiKey: 'synthetic-cloud-key' },
+    { session: 'logged out', apiKey: undefined },
+  ])(
+    'preserves unrelated provider redirects with a shared header name when $session',
+    async ({ apiKey }) => {
+      const providerOrigin = 'https://provider.example.test';
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Provider-Auth');
+      agent
+        .get(providerOrigin)
+        .intercept({ path: '/start', method: 'GET' })
+        .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
+      echoHeaders('https://other.example.test');
+
+      const response = await request(`${providerOrigin}/start`, {
+        headers: { 'x-provider-auth': 'Bearer provider-key' },
+      });
+
+      expect(new Headers(await response.json()).get('X-Provider-Auth')).toBe('Bearer provider-key');
+      agent.assertNoPendingInterceptors();
+    },
+  );
 
   it.each(['Authorization', 'X-Provider-Auth'])('preserves existing %s handling', async (name) => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);

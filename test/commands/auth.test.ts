@@ -789,12 +789,12 @@ describe('auth command', () => {
       await whoamiCmd?.parseAsync(['node', 'test']);
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('API URL: https://api.example.com'),
-      );
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Auth header: Authorization'),
-      );
+      const messages = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => stripAnsi(String(message)))
+        .join('\n');
+      expect(messages).toContain('API URL: https://api.example.com');
+      expect(messages).toContain('Auth header: Authorization');
     });
 
     it('shows effective auth settings on failure without exposing URL credentials or the API key', async () => {
@@ -815,7 +815,7 @@ describe('auth command', () => {
 
       const messages = vi
         .mocked(logger.info)
-        .mock.calls.map(([message]) => message)
+        .mock.calls.map(([message]) => stripAnsi(String(message)))
         .join('\n');
       expect(messages).toContain('api.example.com');
       expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');

@@ -155,15 +155,29 @@ function setHeader(headers: HeadersInit | undefined, name: string, value: string
   return { ...(headers ?? {}), [name]: value };
 }
 
-function hasCustomCloudAuth(headers: HeadersInit | undefined, explicitCloudAuth = false): boolean {
-  const customBearerHeaders = Array.from(new Headers(headers))
-    .filter(([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value))
-    .map(([name]) => name);
-  // Explicit validation may use a new header before it is saved. Other callers
-  // protect only the configured Cloud header, leaving provider auth unchanged.
-  return (
-    customBearerHeaders.length > 0 &&
-    (explicitCloudAuth || customBearerHeaders.includes(getCloudAuthHeaderName().toLowerCase()))
+function hasCustomCloudAuth(
+  url: string | URL | Request,
+  headers: HeadersInit | undefined,
+  explicitCloudAuth = false,
+): boolean {
+  const customBearerHeaders = Array.from(new Headers(headers)).filter(
+    ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
+  );
+  if (customBearerHeaders.length === 0) {
+    return false;
+  }
+  // Explicit validation may use a new token/header before it is saved.
+  if (explicitCloudAuth) {
+    return true;
+  }
+  const headerName = getCloudAuthHeaderName().toLowerCase();
+  // Alternate Cloud endpoints must carry the saved credential, not just a
+  // matching header name that an unrelated provider might also use.
+  return customBearerHeaders.some(
+    ([name, value]) =>
+      name === headerName &&
+      (isPromptfooCloudApiHost(url) ||
+        value.replace(/^Bearer\s+/i, '') === cloudConfig.getApiKey()),
   );
 }
 
@@ -215,7 +229,9 @@ export async function monkeyPatchFetch(
       opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
     }
   }
-  if (hasCustomCloudAuth(getEffectiveHeaders(url, opts.headers), options?.skipCloudAuthInjection)) {
+  if (
+    hasCustomCloudAuth(url, getEffectiveHeaders(url, opts.headers), options?.skipCloudAuthInjection)
+  ) {
     opts.dispatcher = restrictCloudAuthRedirects(urlString, opts.dispatcher);
   }
   try {
