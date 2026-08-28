@@ -12,6 +12,7 @@ import {
   resolveTeamId,
 } from '../util/cloud';
 import { fetchWithProxy } from '../util/fetch/index';
+import { sanitizeUrl } from '../util/sanitizer';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
@@ -297,7 +298,7 @@ export function authCommand(program: Command) {
     )
     .option(
       '--auth-header-name <name>',
-      'The header name to use for Cloud API authentication (defaults to Authorization).',
+      'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
       // Strip a trailing slash from the --host flag so the login-time validate /
@@ -353,6 +354,9 @@ export function authCommand(program: Command) {
         }
 
         const apiHost = cloudConfig.getApiHost();
+        logger.info(dedent`
+            API URL: ${chalk.cyan(sanitizeUrl(apiHost))}
+            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
         });

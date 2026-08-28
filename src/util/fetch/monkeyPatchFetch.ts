@@ -5,6 +5,8 @@ import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
 import { sanitizeUrl } from '../sanitizer';
+import { restrictCloudAuthRedirects, unwrapCloudAuthRedirectError } from './cloudAuthRedirects';
+import type { Dispatcher } from 'undici';
 
 import type { FetchOptions } from './types';
 
@@ -153,6 +155,18 @@ function setHeader(headers: HeadersInit | undefined, name: string, value: string
   return { ...(headers ?? {}), [name]: value };
 }
 
+function hasCustomCloudAuth(headers: HeadersInit | undefined, explicitCloudAuth = false): boolean {
+  const customBearerHeaders = Array.from(new Headers(headers))
+    .filter(([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value))
+    .map(([name]) => name);
+  // Explicit validation may use a new header before it is saved. Other callers
+  // protect only the configured Cloud header, leaving provider auth unchanged.
+  return (
+    customBearerHeaders.length > 0 &&
+    (explicitCloudAuth || customBearerHeaders.includes(getCloudAuthHeaderName().toLowerCase()))
+  );
+}
+
 /**
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
@@ -166,7 +180,7 @@ export async function monkeyPatchFetch(
   const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
-  const opts: RequestInit = {
+  const opts: RequestInit & { dispatcher?: Pick<Dispatcher, 'dispatch'> } = {
     ...options,
   };
 
@@ -183,17 +197,8 @@ export async function monkeyPatchFetch(
     }
   }
 
-  // Attach the saved cloud credential only for cloud-bound requests, and never
-  // override an auth header the caller set explicitly — token validation/rotation
-  // sends the token being validated, not the saved one. The header name itself may
-  // be configured to something other than `Authorization` via
-  // `promptfoo auth login --auth-header-name` or PROMPTFOO_CLOUD_AUTH_HEADER.
-  // Only resolve the header name once we know a credential will actually be
-  // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
-  // Callers validating/rotating a not-yet-saved credential under a header name
-  // that may differ from the currently saved one set `skipCloudAuthInjection` to
-  // opt out entirely, rather than relying on header-name matching (which can't
-  // tell an old saved header apart from a new candidate one).
+  // Inject only at the configured Cloud origin and preserve caller-supplied credentials.
+  // Validation/rotation opts out because the candidate token/header may differ from the saved one.
   if (!options?.skipCloudAuthInjection) {
     const cloudAuth = getCloudBearerToken(url);
     if (cloudAuth) {
@@ -209,6 +214,9 @@ export async function monkeyPatchFetch(
     if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
       opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
     }
+  }
+  if (hasCustomCloudAuth(getEffectiveHeaders(url, opts.headers), options?.skipCloudAuthInjection)) {
+    opts.dispatcher = restrictCloudAuthRedirects(urlString, opts.dispatcher);
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
@@ -242,6 +250,6 @@ export async function monkeyPatchFetch(
         `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
       );
     }
-    throw e;
+    throw unwrapCloudAuthRedirectError(e);
   }
 }

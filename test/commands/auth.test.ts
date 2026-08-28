@@ -756,6 +756,10 @@ describe('auth command', () => {
   });
 
   describe('whoami', () => {
+    beforeEach(() => {
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+    });
+
     it('should show user info when logged in', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
@@ -785,6 +789,42 @@ describe('auth command', () => {
       await whoamiCmd?.parseAsync(['node', 'test']);
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('API URL: https://api.example.com'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Auth header: Authorization'),
+      );
+    });
+
+    it('shows effective auth settings on failure without exposing URL credentials or the API key', async () => {
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('synthetic-cloud-secret');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue(
+        'https://gateway-user:gateway-password@api.example.com?token=synthetic-query-secret',
+      );
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({ ok: false, status: 401, statusText: 'Unauthorized' }),
+      );
+
+      const whoamiCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'whoami');
+      await whoamiCmd?.parseAsync(['node', 'test']);
+
+      const messages = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => message)
+        .join('\n');
+      expect(messages).toContain('api.example.com');
+      expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
+      expect(messages).not.toContain('gateway-user');
+      expect(messages).not.toContain('gateway-password');
+      expect(messages).not.toContain('synthetic-query-secret');
+      expect(messages).not.toContain('synthetic-cloud-secret');
+      expect(process.exitCode).toBe(1);
+      process.exitCode = 0;
     });
 
     it('should handle not logged in state', async () => {
