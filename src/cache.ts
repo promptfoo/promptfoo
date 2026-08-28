@@ -845,7 +845,7 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
-  options = preserveCloudAuthRedirects(url, options);
+  const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -853,22 +853,28 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
+  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
+  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
+    ? 'fetch:cloud-auth:v3'
+    : 'fetch:v3';
   const cacheKey =
     cacheEnabled && !bust
       ? providedCacheKey
-        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, options, method, format, repeatIndex)
+        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -904,14 +910,14 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        fetchOptions,
         timeout,
         maxRetries,
         isIdempotent,

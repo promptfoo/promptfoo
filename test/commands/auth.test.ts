@@ -802,7 +802,7 @@ describe('auth command', () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');
       vi.mocked(cloudConfig.getApiKey).mockReturnValue('synthetic-cloud-secret');
       vi.mocked(cloudConfig.getApiHost).mockReturnValue(
-        'https://gateway-user:gateway-password@api.example.com?token=synthetic-query-secret',
+        'https://gateway-user:gateway-password@api.example.com/v1/01234567-89ab-4cde-8fab-0123456789ab?token=synthetic-query-secret',
       );
       vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
       vi.mocked(fetchWithProxy).mockResolvedValueOnce(
@@ -819,11 +819,13 @@ describe('auth command', () => {
         .mock.calls.map(([message]) => stripAnsi(String(message)))
         .join('\n');
       expect(messages).toContain('api.example.com');
+      expect(messages).toContain('/v1/%5BREDACTED%5D');
       expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
       expect(messages).not.toContain('gateway-user');
       expect(messages).not.toContain('gateway-password');
       expect(messages).not.toContain('synthetic-query-secret');
       expect(messages).not.toContain('synthetic-cloud-secret');
+      expect(messages).not.toContain('01234567-89ab-4cde-8fab-0123456789ab');
       expect(process.exitCode).toBe(1);
       process.exitCode = 0;
     });
@@ -834,7 +836,7 @@ describe('auth command', () => {
         vi.mocked(getUserEmail).mockReturnValue(null);
         vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
         vi.mocked(cloudConfig.getApiHost).mockReturnValue(
-          'https://gateway-user:gateway-password@api.example.com?token=synthetic-query-secret',
+          'https://gateway-user:gateway-password@api.example.com/v1/%74oken_privateTenantCredential123?token=synthetic-query-secret',
         );
         vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
 
@@ -849,6 +851,7 @@ describe('auth command', () => {
           .join('\n');
         expect(messages).toContain('API URL:');
         expect(messages).toContain('api.example.com');
+        expect(messages).toContain('/v1/%5BREDACTED%5D');
         expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
         expect(messages).toContain('Not logged in');
         expect(messages).toContain('promptfoo auth login');
@@ -856,6 +859,7 @@ describe('auth command', () => {
         expect(messages).not.toContain('gateway-password');
         expect(messages).not.toContain('synthetic-query-secret');
         expect(messages).not.toContain('synthetic-env-key');
+        expect(messages).not.toContain('privateTenantCredential123');
         expect(fetchWithProxy).not.toHaveBeenCalled();
       },
     );

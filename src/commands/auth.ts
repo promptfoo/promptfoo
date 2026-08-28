@@ -12,7 +12,7 @@ import {
   resolveTeamId,
 } from '../util/cloud';
 import { fetchWithProxy } from '../util/fetch/index';
-import { sanitizeUrl } from '../util/sanitizer';
+import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
@@ -350,7 +350,7 @@ export function authCommand(program: Command) {
 
         const apiHost = cloudConfig.getApiHost();
         logger.info(dedent`
-            API URL: ${chalk.cyan(sanitizeUrl(apiHost))}
+            API URL: ${chalk.cyan(sanitizeUrlForLogging(apiHost))}
             Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
 
         if (!email || !apiKey) {

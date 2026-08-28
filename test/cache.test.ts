@@ -1309,27 +1309,44 @@ describe('fetchWithCache', () => {
       }
     });
 
-    it.each(['explicit', 'injected'] as const)(
-      'isolates cached responses when %s Cloud redirect protection becomes active',
-      async (credentialSource) => {
+    it.each([
+      { credentialSource: 'explicit', cacheKey: undefined },
+      { credentialSource: 'injected', cacheKey: undefined },
+      { credentialSource: 'explicit', cacheKey: 'shared-safe-key' },
+      { credentialSource: 'injected', cacheKey: 'shared-safe-key' },
+    ])(
+      'isolates cached responses when $credentialSource Cloud redirect protection becomes active (cache key: $cacheKey)',
+      async ({ credentialSource, cacheKey }) => {
         const token = 'synthetic-cloud-token-for-cache-isolation';
         const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
         const requestOptions = { headers: { 'X-Promptfoo-Api-Key': `Bearer ${token}` } };
-        mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+        mockFetchWithRetries
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'unprotected' }))
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'protected' }));
+        const fetch = (options: RequestInit = requestOptions) =>
+          fetchWithCache('https://api.promptfoo.app/api/v1/task', options, 1000, 'json', {
+            cacheKey,
+          });
 
         try {
-          await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+          expect((await fetch()).data).toEqual({ data: 'unprotected' });
 
           mockProcessEnv({ PROMPTFOO_API_KEY: token });
           vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
-          await fetchWithCache(
-            'https://api.promptfoo.app/api/v1/task',
-            credentialSource === 'explicit' ? requestOptions : {},
-            1000,
-          );
+          const protectedOptions = credentialSource === 'explicit' ? requestOptions : {};
+          const protectedResult = await fetch(protectedOptions);
 
           // A response accepted before the credential was identified as Cloud auth
           // must not bypass the now-required redirect policy through a cache hit.
+          expect(protectedResult.cached).toBe(false);
+          expect(protectedResult.data).toEqual({ data: 'protected' });
+          expect((await fetch(protectedOptions)).cached).toBe(true);
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+          const unprotectedResult = await fetch();
+          expect(unprotectedResult.cached).toBe(true);
+          expect(unprotectedResult.data).toEqual({ data: 'unprotected' });
           expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
         } finally {
           restoreEnv();
