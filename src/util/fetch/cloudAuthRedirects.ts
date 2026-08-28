@@ -1,7 +1,7 @@
 import { getGlobalDispatcher } from 'undici';
 import type { Dispatcher } from 'undici';
 
-class CloudAuthRedirectError extends Error {
+export class CloudAuthRedirectError extends Error {
   constructor() {
     super(
       'Cloud authentication cannot follow a redirect to a different origin. Use the final API URL with promptfoo auth login --host.',

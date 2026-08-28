@@ -757,6 +757,7 @@ describe('auth command', () => {
 
   describe('whoami', () => {
     beforeEach(() => {
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     });
 
@@ -827,28 +828,37 @@ describe('auth command', () => {
       process.exitCode = 0;
     });
 
-    it('should handle not logged in state', async () => {
-      // Reset logger mock before test
-      vi.mocked(logger.info).mockClear();
+    it.each([undefined, 'synthetic-env-key'])(
+      'shows safe auth settings without a saved email (API key: %s)',
+      async (apiKey) => {
+        vi.mocked(getUserEmail).mockReturnValue(null);
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue(
+          'https://gateway-user:gateway-password@api.example.com?token=synthetic-query-secret',
+        );
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
 
-      vi.mocked(getUserEmail).mockReturnValue(null);
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+        const whoamiCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'whoami');
+        await whoamiCmd?.parseAsync(['node', 'test']);
 
-      const whoamiCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'whoami');
-      await whoamiCmd?.parseAsync(['node', 'test']);
-
-      // Get the actual logged message
-      const infoMessages = vi.mocked(logger.info).mock.calls.map((call) => call[0]);
-
-      // Verify it contains our expected text
-      expect(infoMessages).toHaveLength(1);
-      expect(infoMessages[0]).toContain('Not logged in');
-      expect(infoMessages[0]).toContain('promptfoo auth login');
-
-      // No telemetry is recorded in this case (as per implementation)
-    });
+        const messages = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => stripAnsi(String(message)))
+          .join('\n');
+        expect(messages).toContain('API URL:');
+        expect(messages).toContain('api.example.com');
+        expect(messages).toContain('Auth header: X-Promptfoo-Api-Key');
+        expect(messages).toContain('Not logged in');
+        expect(messages).toContain('promptfoo auth login');
+        expect(messages).not.toContain('gateway-user');
+        expect(messages).not.toContain('gateway-password');
+        expect(messages).not.toContain('synthetic-query-secret');
+        expect(messages).not.toContain('synthetic-env-key');
+        expect(fetchWithProxy).not.toHaveBeenCalled();
+      },
+    );
 
     it('should handle API error', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');

@@ -348,15 +348,16 @@ export function authCommand(program: Command) {
         const email = getUserEmail();
         const apiKey = cloudConfig.getApiKey();
 
+        const apiHost = cloudConfig.getApiHost();
+        logger.info(dedent`
+            API URL: ${chalk.cyan(sanitizeUrl(apiHost))}
+            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
+
         if (!email || !apiKey) {
           logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
           return;
         }
 
-        const apiHost = cloudConfig.getApiHost();
-        logger.info(dedent`
-            API URL: ${chalk.cyan(sanitizeUrl(apiHost))}
-            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
         });

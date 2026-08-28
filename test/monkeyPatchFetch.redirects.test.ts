@@ -1,7 +1,11 @@
 import { MockAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache, getCache } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import { fetchWithProxy, fetchWithRetries } from '../src/util/fetch/index';
 import { monkeyPatchFetch } from '../src/util/fetch/monkeyPatchFetch';
+import { sleep } from '../src/util/time';
+import { mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
 import type { FetchOptions } from '../src/util/fetch/types';
 
@@ -20,6 +24,8 @@ vi.mock('../src/logger', () => ({
   logRequestResponse: vi.fn(),
 }));
 
+vi.mock('../src/util/time', () => ({ sleep: vi.fn() }));
+
 const origin = 'https://cloud.example.test';
 const headerName = 'X-Promptfoo-Api-Key';
 const credential = 'Bearer synthetic-cloud-key';
@@ -33,9 +39,15 @@ const destinations = [
 
 describe('Cloud authentication across redirects', () => {
   let agent: MockAgent;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(sleep).mockResolvedValue(undefined);
+    restoreEnv = mockProcessEnv({
+      ...Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+      PROMPTFOO_CA_CERT_PATH: undefined,
+    });
     agent = new MockAgent();
     agent.disableNetConnect();
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(origin);
@@ -45,6 +57,7 @@ describe('Cloud authentication across redirects', () => {
 
   afterEach(async () => {
     await agent.close();
+    restoreEnv();
     vi.restoreAllMocks();
   });
 
@@ -59,6 +72,110 @@ describe('Cloud authentication across redirects', () => {
       .intercept({ path, method: 'GET' })
       .reply((request) => ({ statusCode: 200, data: JSON.stringify(request.headers) }));
   }
+
+  function changeSession(change: 'logout' | 'new host') {
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://new-cloud.example.test');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(
+      change === 'logout' ? undefined : 'new-synthetic-key',
+    );
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue(
+      change === 'logout' ? 'Authorization' : 'X-New-Cloud-Key',
+    );
+  }
+
+  describe.each(['logout', 'new host'] as const)('session changes: %s', (change) => {
+    it.each(['proxy', 'retries', 'cache'] as const)(
+      'keeps the original Cloud credential protected in the %s layer',
+      async (layer) => {
+        const firstRequest = agent.get(origin).intercept({ path: '/start', method: 'GET' });
+        if (layer === 'proxy') {
+          firstRequest.reply(503, '');
+        } else {
+          firstRequest.replyWithError(new Error('synthetic transient connection failure'));
+        }
+        vi.mocked(sleep).mockImplementationOnce(async () => changeSession(change));
+        agent
+          .get(origin)
+          .intercept({ path: '/start', method: 'GET' })
+          .reply(307, '', { headers: { location: 'https://other.example.test/landing' } });
+        echoHeaders('https://other.example.test');
+        const dispatch = vi.spyOn(agent, 'dispatch');
+        const options = { headers: { [headerName]: credential }, dispatcher: agent };
+        const response =
+          layer === 'proxy'
+            ? fetchWithProxy(`${origin}/start`, options)
+            : layer === 'retries'
+              ? fetchWithRetries(`${origin}/start`, options, 5000)
+              : fetchWithCache(`${origin}/start`, options, 5000, 'json', true);
+
+        await expect(response).rejects.toMatchObject({ name: 'CloudAuthRedirectError' });
+        expect(dispatch).toHaveBeenCalledTimes(2);
+        expect(sleep).toHaveBeenCalledTimes(1);
+        expect(options).not.toHaveProperty('restrictCloudAuthRedirects');
+        expect(options.headers[headerName]).toBe(credential);
+      },
+    );
+
+    it('captures Cloud auth before an asynchronous cache lookup', async () => {
+      const cacheRead = vi.spyOn(getCache(), 'get').mockImplementationOnce(async () => {
+        changeSession(change);
+        return undefined;
+      });
+      agent
+        .get(origin)
+        .intercept({ path: '/cache-start', method: 'GET' })
+        .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
+      echoHeaders('https://other.example.test');
+      const dispatch = vi.spyOn(agent, 'dispatch');
+      const options = { headers: { [headerName]: credential }, dispatcher: agent };
+
+      const result = await fetchWithCache(`${origin}/cache-start`, options, 5000, 'json', {
+        cacheKey: `cloud-auth-await-${change}`,
+      }).catch((error) => error);
+      expect(cacheRead).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ name: 'CloudAuthRedirectError' });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it.each(['explicit', 'injected'] as const)(
+      'captures %s Cloud auth before asynchronous body compression',
+      async (credentialSource) => {
+        agent
+          .get(origin)
+          .intercept({ path: '/start', method: 'POST' })
+          .reply(303, '', { headers: { location: 'https://other.example.test/landing' } });
+        echoHeaders('https://other.example.test');
+        const dispatch = vi.spyOn(agent, 'dispatch');
+        const response = request(`${origin}/start`, {
+          method: 'POST',
+          body: 'synthetic request body',
+          compress: true,
+          headers: credentialSource === 'explicit' ? { [headerName]: credential } : undefined,
+        });
+        changeSession(change);
+
+        await expect(response).rejects.toMatchObject({ name: 'CloudAuthRedirectError' });
+        expect(dispatch).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
+  it('does not retry a permanent Cloud redirect rejection', async () => {
+    agent
+      .get(origin)
+      .intercept({ path: '/start', method: 'GET' })
+      .reply(302, '', { headers: { location: 'https://other.example.test/landing' } })
+      .persist();
+    const dispatch = vi.spyOn(agent, 'dispatch');
+    const options = { dispatcher: agent, headers: {} };
+
+    await expect(fetchWithRetries(`${origin}/start`, options, 5000)).rejects.toMatchObject({
+      name: 'CloudAuthRedirectError',
+    });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
 
   describe.each(['saved', 'explicit', 'new login', 'rotation'] as const)(
     '%s credential',

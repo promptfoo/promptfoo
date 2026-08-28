@@ -155,22 +155,28 @@ function setHeader(headers: HeadersInit | undefined, name: string, value: string
   return { ...(headers ?? {}), [name]: value };
 }
 
-function hasCustomCloudAuth(
+function usesCustomCloudAuth(
   url: string | URL | Request,
   headers: HeadersInit | undefined,
   explicitCloudAuth = false,
 ): boolean {
-  const customBearerHeaders = Array.from(new Headers(headers)).filter(
+  const effectiveHeaders = new Headers(headers);
+  const customBearerHeaders = Array.from(effectiveHeaders).filter(
     ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
   );
-  if (customBearerHeaders.length === 0) {
-    return false;
-  }
   // Explicit validation may use a new token/header before it is saved.
   if (explicitCloudAuth) {
-    return true;
+    return customBearerHeaders.length > 0;
+  }
+  const cloudAuth = getCloudBearerToken(url);
+  if (customBearerHeaders.length === 0 && !cloudAuth) {
+    return false;
   }
   const headerName = getCloudAuthHeaderName().toLowerCase();
+  // Include the credential that will be injected when the request is dispatched.
+  if (cloudAuth && headerName !== 'authorization' && !effectiveHeaders.has(headerName)) {
+    return true;
+  }
   // Alternate Cloud endpoints must carry the saved credential, not just a
   // matching header name that an unrelated provider might also use.
   return customBearerHeaders.some(
@@ -179,6 +185,24 @@ function hasCustomCloudAuth(
       (isPromptfooCloudApiHost(url) ||
         value.replace(/^Bearer\s+/i, '') === cloudConfig.getApiKey()),
   );
+}
+
+/** Capture the Cloud redirect policy before any asynchronous work or retry. */
+export function preserveCloudAuthRedirects(
+  url: string | URL | Request,
+  options: FetchOptions = {},
+): FetchOptions {
+  if (
+    options.restrictCloudAuthRedirects ||
+    !usesCustomCloudAuth(
+      url,
+      getEffectiveHeaders(url, options.headers),
+      options.skipCloudAuthInjection,
+    )
+  ) {
+    return options;
+  }
+  return { ...options, restrictCloudAuthRedirects: true };
 }
 
 /**
@@ -194,9 +218,12 @@ export async function monkeyPatchFetch(
   const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
-  const opts: RequestInit & { dispatcher?: Pick<Dispatcher, 'dispatch'> } = {
-    ...options,
-  };
+  const {
+    restrictCloudAuthRedirects: restrictRedirects,
+    ...opts
+  }: FetchOptions & {
+    dispatcher?: Pick<Dispatcher, 'dispatch'>;
+  } = preserveCloudAuthRedirects(url, options);
 
   const originalBody = opts.body;
 
@@ -230,7 +257,12 @@ export async function monkeyPatchFetch(
     }
   }
   if (
-    hasCustomCloudAuth(url, getEffectiveHeaders(url, opts.headers), options?.skipCloudAuthInjection)
+    restrictRedirects ||
+    usesCustomCloudAuth(
+      url,
+      getEffectiveHeaders(url, opts.headers),
+      options?.skipCloudAuthInjection,
+    )
   ) {
     opts.dispatcher = restrictCloudAuthRedirects(urlString, opts.dispatcher);
   }
