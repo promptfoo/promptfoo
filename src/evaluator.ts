@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -25,7 +23,7 @@ import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
-import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
+import { loadVarValuesFromFile, nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -112,7 +110,6 @@ import {
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
-import { loadYaml } from './util/yamlLoad';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
@@ -1964,50 +1961,6 @@ function parseVarValuesFileReference(value: unknown, varName: string): VarValues
   return { $values: value.$values };
 }
 
-function isValidExpandedVarValue(value: unknown): value is VarValue {
-  return (
-    value !== null &&
-    value !== undefined &&
-    typeof value !== 'function' &&
-    typeof value !== 'symbol'
-  );
-}
-
-function loadVarValuesFromFile(
-  reference: VarValuesFileReference,
-  varName: string,
-  basePath: string,
-): VarValue[] {
-  const referencedPath = reference.$values.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(referencedPath)
-    ? referencedPath
-    : path.resolve(basePath || process.cwd(), referencedPath);
-
-  let parsed: unknown;
-  try {
-    parsed = loadYaml(fs.readFileSync(resolvedPath, 'utf-8'));
-  } catch (error) {
-    throw new Error(
-      `Failed to load $values for variable "${varName}" from ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error(
-      `$values file for variable "${varName}" must contain a top-level array: ${resolvedPath}`,
-    );
-  }
-
-  const invalidIndex = parsed.findIndex((value) => !isValidExpandedVarValue(value));
-  if (invalidIndex !== -1) {
-    throw new Error(
-      `$values file for variable "${varName}" contains an invalid value at index ${invalidIndex}: ${resolvedPath}`,
-    );
-  }
-
-  return parsed;
-}
-
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
   basePath: string = cliState.basePath || process.cwd(),
@@ -2020,11 +1973,15 @@ export function generateVarCombinations(
     const rawValue = vars[key];
 
     if (hasVarValuesKey(rawValue)) {
-      values = loadVarValuesFromFile(parseVarValuesFileReference(rawValue, key), key, basePath);
+      values = loadVarValuesFromFile(
+        parseVarValuesFileReference(rawValue, key).$values,
+        key,
+        basePath,
+      );
     } else if (Array.isArray(rawValue) && rawValue.some(hasVarValuesKey)) {
       values = rawValue.flatMap((value) =>
         hasVarValuesKey(value)
-          ? loadVarValuesFromFile(parseVarValuesFileReference(value, key), key, basePath)
+          ? loadVarValuesFromFile(parseVarValuesFileReference(value, key).$values, key, basePath)
           : [value as VarValue],
       );
     } else if (typeof rawValue === 'string' && rawValue.startsWith('file://')) {

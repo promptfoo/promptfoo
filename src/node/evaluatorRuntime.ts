@@ -1,8 +1,12 @@
+import fs from 'fs';
+import path from 'path';
+
 import { getEnvBool } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
 import { preserveTracingCredentialReferences } from '../util/sanitizer';
+import { loadYaml } from '../util/yamlLoad';
 import { EvalEvaluationStore } from './evaluationStore';
 
 import type {
@@ -12,6 +16,52 @@ import type {
 } from '../evaluator/runtime';
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
+
+type LoadedVarValue = string | number | boolean | object | unknown[];
+
+function isValidExpandedVarValue(value: unknown): value is LoadedVarValue {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value !== 'function' &&
+    typeof value !== 'symbol'
+  );
+}
+
+export function loadVarValuesFromFile(
+  reference: string,
+  varName: string,
+  basePath: string,
+): LoadedVarValue[] {
+  const referencedPath = reference.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(referencedPath)
+    ? referencedPath
+    : path.resolve(basePath || process.cwd(), referencedPath);
+
+  let parsed: unknown;
+  try {
+    parsed = loadYaml(fs.readFileSync(resolvedPath, 'utf-8'));
+  } catch (error) {
+    throw new Error(
+      `Failed to load $values for variable "${varName}" from ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `$values file for variable "${varName}" must contain a top-level array: ${resolvedPath}`,
+    );
+  }
+
+  const invalidIndex = parsed.findIndex((value) => !isValidExpandedVarValue(value));
+  if (invalidIndex !== -1) {
+    throw new Error(
+      `$values file for variable "${varName}" contains an invalid value at index ${invalidIndex}: ${resolvedPath}`,
+    );
+  }
+
+  return parsed;
+}
 
 function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[] {
   if (Array.isArray(outputPath)) {
