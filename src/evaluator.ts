@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -110,6 +112,7 @@ import {
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
+import { loadYaml } from './util/yamlLoad';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
@@ -1935,20 +1938,99 @@ export function formatVarsForDisplay(
   }
 }
 
+type VarValuesFileReference = { $values: string };
+
+function hasVarValuesKey(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, '$values')
+  );
+}
+
+function parseVarValuesFileReference(value: unknown, varName: string): VarValuesFileReference {
+  invariant(hasVarValuesKey(value), `Invalid $values reference for variable "${varName}"`);
+  const keys = Object.keys(value);
+  if (
+    keys.length !== 1 ||
+    typeof value.$values !== 'string' ||
+    !value.$values.startsWith('file://')
+  ) {
+    throw new Error(
+      `Invalid $values reference for variable "${varName}". Expected { $values: "file://path/to/values.yaml" } with no additional properties.`,
+    );
+  }
+  return { $values: value.$values };
+}
+
+function isValidExpandedVarValue(value: unknown): value is VarValue {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value !== 'function' &&
+    typeof value !== 'symbol'
+  );
+}
+
+function loadVarValuesFromFile(
+  reference: VarValuesFileReference,
+  varName: string,
+  basePath: string,
+): VarValue[] {
+  const referencedPath = reference.$values.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(referencedPath)
+    ? referencedPath
+    : path.resolve(basePath || process.cwd(), referencedPath);
+
+  let parsed: unknown;
+  try {
+    parsed = loadYaml(fs.readFileSync(resolvedPath, 'utf-8'));
+  } catch (error) {
+    throw new Error(
+      `Failed to load $values for variable "${varName}" from ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `$values file for variable "${varName}" must contain a top-level array: ${resolvedPath}`,
+    );
+  }
+
+  const invalidIndex = parsed.findIndex((value) => !isValidExpandedVarValue(value));
+  if (invalidIndex !== -1) {
+    throw new Error(
+      `$values file for variable "${varName}" contains an invalid value at index ${invalidIndex}: ${resolvedPath}`,
+    );
+  }
+
+  return parsed;
+}
+
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  basePath: string = cliState.basePath || process.cwd(),
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
-    let values: Array<string | object> = [];
+    let values: VarValue[] = [];
+    const rawValue = vars[key];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
-      const filePath = vars[key].slice('file://'.length);
+    if (hasVarValuesKey(rawValue)) {
+      values = loadVarValuesFromFile(parseVarValuesFileReference(rawValue, key), key, basePath);
+    } else if (Array.isArray(rawValue) && rawValue.some(hasVarValuesKey)) {
+      values = rawValue.flatMap((value) =>
+        hasVarValuesKey(value)
+          ? loadVarValuesFromFile(parseVarValuesFileReference(value, key), key, basePath)
+          : [value as VarValue],
+      );
+    } else if (typeof rawValue === 'string' && rawValue.startsWith('file://')) {
+      const filePath = rawValue.slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
-      const basePath = cliState.basePath || '';
       const filePaths =
         globSync(filePath, {
           cwd: basePath || process.cwd(),
@@ -1962,12 +2044,16 @@ export function generateVarCombinations(
         );
       }
     } else {
-      values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+      values = Array.isArray(rawValue) ? rawValue : [rawValue as VarValue];
     }
 
     // Check if it's an array but not a string array
-    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
-      values = [vars[key]];
+    if (
+      Array.isArray(rawValue) &&
+      !rawValue.some(hasVarValuesKey) &&
+      typeof rawValue[0] !== 'string'
+    ) {
+      values = [rawValue];
     }
 
     const newCombinations: Record<string, VarValue>[] = [];

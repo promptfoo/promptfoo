@@ -1,5 +1,9 @@
 import './setup';
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import { globSync } from 'glob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -9,8 +13,27 @@ import {
 } from '../../src/evaluator';
 import { type Prompt } from '../../src/types/index';
 
+const tempDirs: string[] = [];
+
+function createTempValuesFile(
+  fileName: string,
+  contents: string,
+): {
+  basePath: string;
+  filePath: string;
+} {
+  const basePath = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-var-values-'));
+  tempDirs.push(basePath);
+  const filePath = path.join(basePath, fileName);
+  fs.writeFileSync(filePath, contents);
+  return { basePath, filePath };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const tempDir of tempDirs.splice(0)) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 describe('generateVarCombinations', () => {
@@ -37,6 +60,64 @@ describe('generateVarCombinations', () => {
       { language: 'English', greeting: 'file://greeting2.txt' },
     ];
     expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should load matrix values from a relative YAML file', () => {
+    const { basePath } = createTempValuesFile('languages.yaml', '- English\n- French\n- Spanish\n');
+
+    expect(
+      generateVarCombinations({ language: { $values: 'file://languages.yaml' } }, basePath),
+    ).toEqual([{ language: 'English' }, { language: 'French' }, { language: 'Spanish' }]);
+  });
+
+  it('should flatten multiple value files alongside direct matrix values', () => {
+    const { basePath } = createTempValuesFile('primary.yaml', '- English\n- French\n');
+    fs.writeFileSync(path.join(basePath, 'secondary.json'), JSON.stringify(['Spanish', 'German']));
+
+    expect(
+      generateVarCombinations(
+        {
+          language: [
+            { $values: 'file://primary.yaml' },
+            'Klingon',
+            { $values: 'file://secondary.json' },
+          ],
+        },
+        basePath,
+      ),
+    ).toEqual([
+      { language: 'English' },
+      { language: 'French' },
+      { language: 'Klingon' },
+      { language: 'Spanish' },
+      { language: 'German' },
+    ]);
+  });
+
+  it('should preserve object values loaded from a matrix values file', () => {
+    const { basePath } = createTempValuesFile(
+      'users.yaml',
+      '- name: Alice\n  role: admin\n- name: Bob\n  role: viewer\n',
+    );
+
+    expect(generateVarCombinations({ user: { $values: 'file://users.yaml' } }, basePath)).toEqual([
+      { user: { name: 'Alice', role: 'admin' } },
+      { user: { name: 'Bob', role: 'viewer' } },
+    ]);
+  });
+
+  it('should reject value files without a top-level array', () => {
+    const { basePath, filePath } = createTempValuesFile('languages.yaml', 'language: English\n');
+
+    expect(() =>
+      generateVarCombinations({ language: { $values: 'file://languages.yaml' } }, basePath),
+    ).toThrow(`must contain a top-level array: ${filePath}`);
+  });
+
+  it('should reject malformed $values references', () => {
+    expect(() => generateVarCombinations({ language: [{ $values: 'languages.yaml' }] })).toThrow(
+      'Expected { $values: "file://path/to/values.yaml" }',
+    );
   });
 
   it('should correctly handle nested array variables', () => {
