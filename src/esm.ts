@@ -313,12 +313,6 @@ export async function importModule(modulePath: string, functionName?: string) {
       }
     }
 
-    // Log stack trace for debugging
-    const e = err as Error;
-    if (e.stack) {
-      logger.debug(e.stack);
-    }
-
     // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
     // (vs a dependency inside the file being missing).
     // This provides clearer error messages for users when their files don't exist.
@@ -327,23 +321,26 @@ export async function importModule(modulePath: string, functionName?: string) {
       const resolvedModulePath = safeResolve(loadPath);
       try {
         await fsPromises.access(resolvedModulePath);
-        // File exists - the error is about a missing dependency, log and preserve original error
-        logger.error(`ESM import failed: ${err}`);
-      } catch {
-        // File doesn't exist - normalize to ENOENT for clearer error message
-        // Don't log as error - this is expected during config file discovery
-        const enoentError = new Error(
-          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
-        ) as NodeJS.ErrnoException;
-        enoentError.code = 'ENOENT';
-        enoentError.path = resolvedModulePath;
-        throw enoentError;
+      } catch (accessError) {
+        if ((accessError as NodeJS.ErrnoException).code === 'ENOENT') {
+          // Expected during config discovery: normalize before logging any error or stack.
+          const enoentError = new Error(
+            `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+          ) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          enoentError.path = resolvedModulePath;
+          throw enoentError;
+        }
+        // Other access failures do not establish absence; preserve the import error below.
       }
-    } else {
-      // For all other errors (not file-not-found), log as error
-      logger.error(`ESM import failed: ${err}`);
     }
 
+    // Preserve diagnostics for missing dependencies and other real import failures.
+    const e = err as Error;
+    if (e.stack) {
+      logger.debug(e.stack);
+    }
+    logger.error(`ESM import failed: ${err}`);
     throw err;
   }
 }
