@@ -362,6 +362,31 @@ class TestReviewHardening(unittest.TestCase):
         }
         self.assertFalse(dim(run(s), 10)["pass"])
 
+    def test_action_without_tool_still_analyzed(self):
+        # exporters may omit the tool field; identical failures must still count
+        s = {
+            "steps": [{"kind": "plan", "text": "p"}]
+            + [{"kind": "action", "text": "boom", "ok": False} for _ in range(3)]
+            + [{"kind": "report", "text": "done"}]
+        }
+        self.assertFalse(dim(run(s), 2)["pass"])
+
+    def test_numeric_topic_zero_preserved(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p", "topic": 0},
+                {"kind": "action", "text": "a", "tool": "t", "ok": True, "topic": 1},
+                {"kind": "action", "text": "b", "tool": "t", "ok": True, "topic": 0},
+                {"kind": "report", "text": "done", "topic": 1},
+            ]
+        }
+        self.assertFalse(dim(run(s), 6)["pass"])  # 0 -> 1 -> 0 zig-zags
+
+    def test_non_string_kind_rejected(self):
+        r = run({"steps": [{"kind": ["plan"], "text": "x"}]})
+        self.assertFalse(r["pass"])
+        self.assertEqual(r["componentResults"], [])
+
 
 class TestOverall(unittest.TestCase):
     def test_improved_session_passes(self):

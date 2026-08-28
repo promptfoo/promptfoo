@@ -45,7 +45,8 @@ The two demo cases show a stiff session (should FAIL) and an improved session
 ```
 
 Step kinds: `plan` / `intent` / `action` / `verify` / `report` / `message`.
-Tool calls map to `action` with `ok` (success/failure); `topic` is optional.
+Tool calls map to `action` with `ok` (success/failure); `topic` is optional
+and accepts any non-null value (numeric ids like `0` included).
 
 ## Principle → Rule mapping (12 dimensions)
 

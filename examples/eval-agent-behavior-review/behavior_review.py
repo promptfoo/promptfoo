@@ -54,7 +54,9 @@ def _load_session(context: dict[str, Any]) -> list[dict[str, Any]]:
             steps = parsed
         else:
             return []
-    if not isinstance(steps, list) or not all(isinstance(s, dict) for s in steps):
+    if not isinstance(steps, list) or not all(
+        isinstance(s, dict) and isinstance(s.get("kind"), str) for s in steps
+    ):
         return []
     return steps
 
@@ -70,8 +72,7 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         return {"comps": [], "quality": "low"}
 
     actions = [s for s in steps if s.get("kind") == "action"]
-    tool_actions = [s for s in actions if s.get("tool")]
-    topics = [s.get("topic") for s in steps if s.get("topic")]
+    topics = [s.get("topic") for s in steps if s.get("topic") is not None]
     kinds = [s.get("kind") for s in steps]
     text = " ".join(str(s.get("text", "")) for s in steps)
     action_idx = [i for i, k in enumerate(kinds) if k == "action"]
@@ -123,10 +124,9 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     else:
         err_streak: dict[str, int] = {}
         worst = 0
-        for s in tool_actions:
-            key = (
-                str(s.get("tool")) + "|" + str(s.get("text", ""))
-            )  # full error identity
+        for s in actions:
+            tool = s.get("tool") or "action"  # fallback identity when tool is omitted
+            key = str(tool) + "|" + str(s.get("text", ""))  # full error identity
             if s.get("ok") is False:
                 err_streak[key] = err_streak.get(key, 0) + 1
                 worst = max(worst, err_streak[key])
