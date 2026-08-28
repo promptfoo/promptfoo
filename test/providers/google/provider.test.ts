@@ -313,6 +313,49 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'removes deprecated generation controls for %s',
+      async (modelName) => {
+        const latestProvider = new GoogleProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 128,
+              thinkingConfig: { thinkingLevel: 'MEDIUM' },
+              candidateCount: 2,
+            } as any,
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await latestProvider.callApi('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.generationConfig).toEqual({
+          maxOutputTokens: 128,
+          thinkingConfig: { thinkingLevel: 'MEDIUM' },
+        });
+      },
+    );
+
     it('should normalize Gemini TTS audio and default its generation config', async () => {
       const ttsProvider = new GoogleProvider('gemini-2.5-pro-preview-tts', {
         config: { apiKey: 'test-key' },
@@ -405,6 +448,22 @@ describe('GoogleProvider', () => {
         });
 
         expect(globalProvider.getApiHost()).toBe('aiplatform.googleapis.com');
+      });
+
+      it.each([
+        ['us', 'aiplatform.us.rep.googleapis.com'],
+        ['eu', 'aiplatform.eu.rep.googleapis.com'],
+      ])('should use the dedicated %s multi-region endpoint', (region, expectedHost) => {
+        const multiRegionProvider = new GoogleProvider('gemini-3.5-flash-lite', {
+          config: {
+            vertexai: true,
+            projectId: 'my-project',
+            region,
+          },
+        });
+
+        expect(multiRegionProvider.getApiHost()).toBe(expectedHost);
+        expect(multiRegionProvider.getApiEndpoint('generateContent')).toContain(expectedHost);
       });
 
       it('should call API using Google client for OAuth mode', async () => {
@@ -930,6 +989,30 @@ describe('GoogleProvider', () => {
       // gemini-pro: input 0.5/1e6, output 1.5/1e6
       // 10 prompt + 20 completion = 0.000035
       expect(result.cost).toBeCloseTo(0.000035, 10);
+    });
+
+    it('prices Vertex Flash-Lite using the resolved environment-configured region', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+        env: { VERTEX_REGION: 'eu' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(provider.getRegion()).toBe('eu');
+      expect(result.cost).toBeCloseTo(0.001705, 10);
     });
 
     it('should use Vertex-specific pricing when it differs from AI Studio', async () => {

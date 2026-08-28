@@ -69,6 +69,15 @@ const successResponse = {
 };
 
 describe('OpenAiResponsesProvider tracing', () => {
+  it('keeps OpenAI provider identity when a custom ID has an unrelated prefix', () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      id: 'customer:reviewer',
+      config: { apiKey: 'test-key' },
+    });
+
+    expect(provider['getGenAISystem']()).toBe('openai');
+  });
+
   it('emits a chat <model> span with request and response attributes', async () => {
     const spans = installTracerSpy();
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
@@ -85,12 +94,13 @@ describe('OpenAiResponsesProvider tracing', () => {
     const chatSpan = spans.find((span) => span.name === 'chat gpt-4o');
     expect(chatSpan).toBeDefined();
     expect(chatSpan?.attributes).toMatchObject({
-      'gen_ai.system': 'openai',
+      'gen_ai.provider.name': 'openai',
       'gen_ai.operation.name': 'chat',
       'gen_ai.request.model': 'gpt-4o',
+      'openai.api.type': 'responses',
       'promptfoo.provider.id': 'openai:gpt-4o',
     });
-    expect(chatSpan?.attributes['gen_ai.usage.total_tokens']).toBe(30);
+    expect(chatSpan?.attributes['promptfoo.usage.total_tokens']).toBe(30);
     expect(chatSpan?.ended).toBe(true);
     // SpanStatusCode.OK === 1
     expect(chatSpan?.status?.code).toBe(1);
@@ -120,7 +130,7 @@ describe('OpenAiResponsesProvider tracing', () => {
     expect(chatSpan).toBeDefined();
     // The reasoning-token detail must survive extractProviderResponseAttributes
     // and reach the span (it previously dropped tokenUsage.completionDetails).
-    expect(chatSpan?.attributes['gen_ai.usage.reasoning_tokens']).toBe(32);
+    expect(chatSpan?.attributes['gen_ai.usage.reasoning.output_tokens']).toBe(32);
     expect(chatSpan?.attributes['gen_ai.usage.output_tokens']).toBe(40);
   });
 

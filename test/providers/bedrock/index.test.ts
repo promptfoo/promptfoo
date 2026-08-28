@@ -676,6 +676,96 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('omits temperature for Claude Opus 5 on the reported Bedrock path', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', temperature: 0.5 },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-5',
+      );
+
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for unlisted Claude 5+ models on Bedrock invokeModel', async () => {
+      for (const modelName of [
+        'us.anthropic.claude-haiku-5',
+        'global.anthropic.claude-research-preview-6',
+      ]) {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBeUndefined();
+      }
+    });
+
+    it.each([
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+    ])(
+      'preserves sampling and manual thinking for Claude inference profile %s',
+      async (modelName) => {
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5, thinking },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBe(0.5);
+        expect(params.thinking).toEqual(thinking);
+      },
+    );
+
+    it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
+      // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
+      // `thinking` field, so the bare 1024 default would truncate ordinary answers.
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('keeps the 1024 default for Opus 5 when thinking is explicitly disabled', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('keeps the 1024 default for models that do not think by default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-4-8',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('lets an explicit max_tokens win over the thinking headroom default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', max_tokens: 77 },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(77);
+    });
+
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -713,30 +803,30 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
-    it.each([
-      { type: 'any' as const },
-      { type: 'tool' as const, name: 'get_weather' },
-    ])('omits forced tool choice for Claude Fable 5: %j', async (tool_choice) => {
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        {
-          region: 'us-east-1',
-          tools: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              input_schema: { type: 'object', properties: {} },
-            },
-          ],
-          tool_choice,
-        },
-        'hi',
-        undefined,
-        'anthropic.claude-fable-5',
-      );
+    it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(
+      'omits forced tool choice for Claude Fable 5: %j',
+      async (tool_choice) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          {
+            region: 'us-east-1',
+            tools: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather',
+                input_schema: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice,
+          },
+          'hi',
+          undefined,
+          'anthropic.claude-fable-5',
+        );
 
-      expect(params.tools).toHaveLength(1);
-      expect(params.tool_choice).toBeUndefined();
-    });
+        expect(params.tools).toHaveLength(1);
+        expect(params.tool_choice).toBeUndefined();
+      },
+    );
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
@@ -3172,6 +3262,61 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('counts cached prompt tokens and reports the cache breakdown', async () => {
+      // The hand-rolled reader counted only input_tokens, so a cached prompt reported 100
+      // instead of 1200 — while calculateBedrockInvokeModelCost billed from the very same
+      // cache fields, leaving cost and usage disagreeing about one response.
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 100,
+            cache_read_input_tokens: 900,
+            cache_creation_input_tokens: 200,
+            output_tokens: 50,
+          },
+        },
+        'Test prompt',
+      );
+      expect(result).toEqual({
+        prompt: 1200,
+        completion: 50,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 900, cacheCreationInputTokens: 200 },
+      });
+    });
+
+    it('reports Claude thinking tokens as reasoning', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 50,
+            output_tokens_details: { thinking_tokens: 30 },
+          },
+        },
+        'Test prompt',
+      );
+      expect(result.completionDetails).toEqual({ reasoning: 30 });
+    });
+
+    it('still accepts the alternate prompt_tokens/completion_tokens names', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { prompt_tokens: 15, completion_tokens: 25 } },
+        'Test prompt',
+      );
+      expect(result).toEqual({ prompt: 15, completion: 25, total: 40, numRequests: 1 });
+    });
+
+    it('treats a zero input_tokens count as zero rather than missing', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { input_tokens: 0, output_tokens: 7 } },
+        'Test prompt',
+      );
+      expect(result.prompt).toBe(0);
+      expect(result.total).toBe(7);
+    });
+
     it('should handle string token counts in Claude Messages', async () => {
       const mockResponse = {
         usage: {
@@ -3319,6 +3464,19 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
       /Anthropic Messages API/,
     );
+  });
+
+  it('maps Claude Opus 5 across the base and regional inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles`: Opus 5 exposes base +
+    // us./eu./global. only — unlike Opus 4.7/4.8 there is no `jp.` profile.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
+    expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
@@ -4863,15 +5021,11 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
   });
 
-  it.each([
-    'zai',
-    'minimax',
-    'moonshot',
-    'nvidia',
-    'writer',
-    'gemma',
-  ] as const)('maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT', (inferenceModelType) => {
-    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
-    expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
-  });
+  it.each(['zai', 'minimax', 'moonshot', 'nvidia', 'writer', 'gemma'] as const)(
+    'maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT',
+    (inferenceModelType) => {
+      const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
+      expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    },
+  );
 });

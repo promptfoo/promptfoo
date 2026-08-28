@@ -123,18 +123,18 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anthropic Claude** | `claude-fable-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
-| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                                                                                |
-| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                        |
-| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                             |
-| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                        |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                               |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                        |
-| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                       |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                    |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                           |
+| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                                                                                                 |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                                         |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                                              |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                                         |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                         |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                                        |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                            |
 
 For the complete list of models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
@@ -1012,6 +1012,7 @@ Available Claude deployments on Azure AI Foundry:
 | Model                        | Description       |
 | ---------------------------- | ----------------- |
 | `claude-fable-5`             | Claude Fable 5    |
+| `claude-opus-5`              | Claude Opus 5     |
 | `claude-opus-4-8`            | Claude Opus 4.8   |
 | `claude-opus-4-7`            | Claude Opus 4.7   |
 | `claude-opus-4-6-20260205`   | Claude Opus 4.6   |
@@ -1208,6 +1209,16 @@ Replace the assistant ID and deployment name with your actual values.
 ### Function Tools with Assistants
 
 Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
+
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal guard:
+the resolved path must stay inside the config's `basePath`. Move the callback
+file into your project or set `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to
+opt out. See [OpenAI provider docs](./openai.md#automatically-handling-function-tool-calls)
+for details.
+
+:::
 
 ```yaml
 providers:

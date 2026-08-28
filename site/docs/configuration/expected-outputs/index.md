@@ -139,7 +139,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
-| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)                |
+| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0             |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)              |
@@ -157,7 +157,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments               |
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order            |
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern          |
-| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content            |
+| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal  |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.

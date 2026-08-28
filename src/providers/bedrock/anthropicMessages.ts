@@ -1,9 +1,11 @@
+import { buildIsolatedAnthropicClientOptions } from '../anthropic/generic';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -30,6 +32,18 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock mantle host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(

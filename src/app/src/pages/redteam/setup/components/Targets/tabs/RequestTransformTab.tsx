@@ -14,6 +14,7 @@ interface RequestTransformTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 const highlightJS = (code: string): string => {
@@ -32,6 +33,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   defaultRequestTransform,
+  isTargetConfigInvalid,
 }) => {
   // Test dialog states
   const [testOpen, setTestOpen] = React.useState(false);
@@ -51,6 +53,9 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
+    if (isTargetConfigInvalid?.()) {
+      return { success: false, error: 'Invalid target configuration' };
+    }
     const response = await callApi('/providers/test-request-transform', {
       method: 'POST',
       headers: {
@@ -131,6 +136,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
           variant="outline"
           size="sm"
           onClick={() => setTestOpen(true)}
+          disabled={isTargetConfigInvalid?.()}
           className="absolute right-2 top-2 z-10"
         >
           <Play className="mr-1 size-4" />

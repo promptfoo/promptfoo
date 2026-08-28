@@ -352,6 +352,15 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should preserve colons in callback file paths', () => {
+    expect(parseFileUrl('file://callbacks/2026-05-27T12:00:00.js')).toEqual({
+      filePath: 'callbacks/2026-05-27T12:00:00.js',
+    });
+    expect(parseFileUrl('file://foo:bar/cb.js')).toEqual({
+      filePath: 'foo:bar/cb.js',
+    });
+  });
+
   it('should parse Python file URLs with function names', () => {
     const result = parseFileUrl('file://./path/to/file.py:function_name');
     expect(result).toEqual({
