@@ -15,6 +15,7 @@ import type {
   EvaluatorResultWriter,
   EvaluatorResultWriterOptions,
   EvaluatorRuntime,
+  VarValuesFileCache,
 } from '../evaluator/runtime';
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
@@ -31,14 +32,34 @@ function isValidExpandedVarValue(value: unknown): value is LoadedVarValue {
 }
 
 export function loadVarValuesFromFile(
-  reference: string,
+  value: unknown,
   varName: string,
   basePath: string,
+  cache?: VarValuesFileCache,
 ): LoadedVarValue[] {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof (value as Record<string, unknown>).$values !== 'string' ||
+    !(value as Record<string, string>).$values.startsWith('file://')
+  ) {
+    throw new ConfigResolutionError(
+      `Invalid $values reference for variable "${varName}". Expected { $values: "file://path/to/values.yaml" } with no additional properties.`,
+    );
+  }
+
+  const reference = (value as Record<string, string>).$values;
   const { filePath: referencedPath } = parseFileUrl(reference);
   const resolvedPath = path.isAbsolute(referencedPath)
     ? referencedPath
     : path.resolve(basePath || process.cwd(), referencedPath);
+
+  const cached = cache?.get(resolvedPath);
+  if (cached) {
+    return cached;
+  }
 
   let parsed: unknown;
   try {
@@ -62,6 +83,7 @@ export function loadVarValuesFromFile(
     );
   }
 
+  cache?.set(resolvedPath, parsed);
   return parsed;
 }
 

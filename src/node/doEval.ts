@@ -131,7 +131,13 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
+  const configBasePath = evalRecord.runtimeOptions?.configBasePath;
+  const configs =
+    configBasePath === undefined
+      ? await resolveConfigs(providerFilterOptions, replayConfig)
+      : await resolveConfigs(providerFilterOptions, replayConfig, undefined, {
+          basePath: configBasePath,
+        });
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -239,6 +245,23 @@ function getScenarioWatchPaths(scenario: unknown, basePath: string): string[] {
       ? entries.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
       : [],
   );
+}
+
+function getSuiteVarWatchPaths(
+  suite: { tests?: unknown; defaultTest?: unknown; scenarios?: unknown },
+  basePath: string,
+): string[] {
+  const testVarPaths = Array.isArray(suite.tests)
+    ? suite.tests.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
+    : [];
+  const defaultTestVarPaths = suite.defaultTest
+    ? getTestCaseWatchPaths(suite.defaultTest, basePath)
+    : [];
+  const scenarioVarPaths = Array.isArray(suite.scenarios)
+    ? suite.scenarios.flatMap((scenario) => getScenarioWatchPaths(scenario, basePath))
+    : [];
+
+  return [...testVarPaths, ...defaultTestVarPaths, ...scenarioVarPaths];
 }
 
 function resolveSuggestionOptions(
@@ -844,6 +867,9 @@ export async function doEval(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(resumeEval?.runtimeOptions?.configBasePath !== undefined || _basePath !== undefined
+        ? { configBasePath: resumeEval?.runtimeOptions?.configBasePath ?? _basePath }
+        : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -1192,7 +1218,7 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = path.dirname(configPaths[0]);
+        const basePath = _basePath || path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
           ? (config.prompts
               .map((p) => {
@@ -1214,16 +1240,9 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        const testVarPaths = Array.isArray(config.tests)
-          ? config.tests.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
-          : [];
-        const defaultTestVarPaths = config.defaultTest
-          ? getTestCaseWatchPaths(config.defaultTest, basePath)
-          : [];
-        const scenarioVarPaths = Array.isArray(config.scenarios)
-          ? config.scenarios.flatMap((scenario) => getScenarioWatchPaths(scenario, basePath))
-          : [];
-        const varPaths = [...testVarPaths, ...defaultTestVarPaths, ...scenarioVarPaths];
+        const varPaths = [config, testSuite].flatMap((suite) =>
+          getSuiteVarWatchPaths(suite, basePath),
+        );
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );

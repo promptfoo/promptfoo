@@ -1360,6 +1360,13 @@ describe('evalCommand', () => {
       testSuite: {
         prompts: [],
         providers: [],
+        tests: [
+          {
+            vars: {
+              importedLanguage: { $values: 'file://vars/imported-languages.yaml' },
+            },
+          },
+        ],
       },
       basePath: path.resolve('/suite'),
     });
@@ -1387,6 +1394,7 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/default-languages.yaml'),
         path.resolve('/suite', 'vars/scenario-config.yaml'),
         path.resolve('/suite', 'vars/scenario-test.yaml'),
+        path.resolve('/suite', 'vars/imported-languages.yaml'),
       ]),
       { ignored: /^\./, persistent: true },
     );
@@ -1416,6 +1424,7 @@ describe('evalCommand', () => {
       maxConcurrency: 2,
       delay: 0,
       providerFilter: 'selected-target',
+      configBasePath: '/suite/configs',
     };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1453,6 +1462,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        { basePath: '/suite/configs' },
       );
     } finally {
       findByIdSpy.mockRestore();

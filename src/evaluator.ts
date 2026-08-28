@@ -119,6 +119,7 @@ import type {
   EvaluationStoreResult,
   EvaluatorResultWriter,
   EvaluatorRuntime,
+  VarValuesFileCache,
 } from './evaluator/runtime';
 import type {
   EvalConversations,
@@ -1935,8 +1936,6 @@ export function formatVarsForDisplay(
   }
 }
 
-type VarValuesFileReference = { $values: string };
-
 function hasVarValuesKey(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === 'object' &&
@@ -1946,24 +1945,10 @@ function hasVarValuesKey(value: unknown): value is Record<string, unknown> {
   );
 }
 
-function parseVarValuesFileReference(value: unknown, varName: string): VarValuesFileReference {
-  invariant(hasVarValuesKey(value), `Invalid $values reference for variable "${varName}"`);
-  const keys = Object.keys(value);
-  if (
-    keys.length !== 1 ||
-    typeof value.$values !== 'string' ||
-    !value.$values.startsWith('file://')
-  ) {
-    throw new Error(
-      `Invalid $values reference for variable "${varName}". Expected { $values: "file://path/to/values.yaml" } with no additional properties.`,
-    );
-  }
-  return { $values: value.$values };
-}
-
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
   basePath: string = cliState.basePath || process.cwd(),
+  varValuesFileCache: VarValuesFileCache = new Map(),
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -1973,15 +1958,11 @@ export function generateVarCombinations(
     const rawValue = vars[key];
 
     if (hasVarValuesKey(rawValue)) {
-      values = loadVarValuesFromFile(
-        parseVarValuesFileReference(rawValue, key).$values,
-        key,
-        basePath,
-      );
+      values = loadVarValuesFromFile(rawValue, key, basePath, varValuesFileCache);
     } else if (Array.isArray(rawValue) && rawValue.some(hasVarValuesKey)) {
       values = rawValue.flatMap((value) =>
         hasVarValuesKey(value)
-          ? loadVarValuesFromFile(parseVarValuesFileReference(value, key).$values, key, basePath)
+          ? loadVarValuesFromFile(value, key, basePath, varValuesFileCache)
           : [value as VarValue],
       );
     } else if (typeof rawValue === 'string' && rawValue.startsWith('file://')) {
@@ -2579,6 +2560,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
+  const varValuesFileCache: VarValuesFileCache = new Map();
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
@@ -2598,6 +2580,7 @@ async function buildRunEvalOptions({
       runEvalOptions,
       testCase,
       testSuite,
+      varValuesFileCache,
     });
   }
 
@@ -2684,6 +2667,7 @@ function appendRunEvalOptionsForTestCase({
   runEvalOptions,
   testCase,
   testSuite,
+  varValuesFileCache,
 }: {
   concurrency: number;
   conversations: EvalConversations;
@@ -2697,13 +2681,14 @@ function appendRunEvalOptionsForTestCase({
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testSuite: TestSuite;
+  varValuesFileCache: VarValuesFileCache;
 }) {
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
   const promptSuffix = testCase.options?.suffix || getDefaultTest(testSuite)?.options?.suffix || '';
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(testCase.vars || {}, undefined, varValuesFileCache);
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);

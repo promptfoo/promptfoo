@@ -1,4 +1,12 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  CompletedPrompt,
+  EvaluateResult,
+  TestSuite,
+  UnifiedConfig,
+  VarValue,
+} from '../types/index';
+
+export type VarValuesFileCache = Map<string, VarValue[]>;
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,

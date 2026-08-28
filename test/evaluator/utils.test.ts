@@ -108,6 +108,17 @@ describe('generateVarCombinations', () => {
     ]);
   });
 
+  it('should cache each values file for an eval snapshot', () => {
+    const { basePath } = createTempValuesFile('languages.yaml', '- English\n- French\n');
+    const readFileSpy = vi.spyOn(fs, 'readFileSync');
+    const cache = new Map();
+
+    generateVarCombinations({ language: { $values: 'file://languages.yaml' } }, basePath, cache);
+    generateVarCombinations({ language: { $values: 'file://languages.yaml' } }, basePath, cache);
+
+    expect(readFileSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should preserve object values loaded from a matrix values file', () => {
     const { basePath } = createTempValuesFile(
       'users.yaml',
@@ -147,9 +158,11 @@ describe('generateVarCombinations', () => {
   });
 
   it('should reject malformed $values references', () => {
-    expect(() => generateVarCombinations({ language: [{ $values: 'languages.yaml' }] })).toThrow(
-      'Expected { $values: "file://path/to/values.yaml" }',
-    );
+    const loadMalformedReference = () =>
+      generateVarCombinations({ language: [{ $values: 'languages.yaml' }] });
+
+    expect(loadMalformedReference).toThrow(ConfigResolutionError);
+    expect(loadMalformedReference).toThrow('Expected { $values: "file://path/to/values.yaml" }');
   });
 
   it('should correctly handle nested array variables', () => {
