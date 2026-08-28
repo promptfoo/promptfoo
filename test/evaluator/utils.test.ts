@@ -114,6 +114,22 @@ describe('generateVarCombinations', () => {
     ).toThrow(`must contain a top-level array: ${filePath}`);
   });
 
+  it('should report errors when a values file cannot be loaded', () => {
+    const { basePath } = createTempValuesFile('existing.yaml', '- English\n');
+
+    expect(() =>
+      generateVarCombinations({ language: { $values: 'file://missing.yaml' } }, basePath),
+    ).toThrow('Failed to load $values for variable "language"');
+  });
+
+  it('should reject invalid entries in a values file', () => {
+    const { basePath, filePath } = createTempValuesFile('languages.yaml', '- English\n- null\n');
+
+    expect(() =>
+      generateVarCombinations({ language: { $values: 'file://languages.yaml' } }, basePath),
+    ).toThrow(`contains an invalid value at index 1: ${filePath}`);
+  });
+
   it('should reject malformed $values references', () => {
     expect(() => generateVarCombinations({ language: [{ $values: 'languages.yaml' }] })).toThrow(
       'Expected { $values: "file://path/to/values.yaml" }',
