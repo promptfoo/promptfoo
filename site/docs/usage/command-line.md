@@ -682,7 +682,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
-- API URL and effective auth header name (also shown if the account lookup fails)
+- API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
 Example:
