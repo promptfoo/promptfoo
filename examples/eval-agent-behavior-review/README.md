@@ -53,22 +53,22 @@ Tool calls map to `action` with `ok` (success/failure); `topic` is optional.
 | --- | ---------------- | ------------------------------------------------------ | --------- |
 | 1   | Anticipation     | plan/intent appears before the first tool action       | —         |
 | 2   | Staging          | session opens with intent/plan                         | —         |
-| 3   | Squash & Stretch | same-(tool,text) error retries converge                | ≤2        |
-| 4   | Pose to Pose     | long runs (>6 steps) have a mid-session verify         | mid ≠ end |
+| 3   | Squash & Stretch | consecutive same-(tool,text) failures reset on success | ≤2        |
+| 4   | Pose to Pose     | long runs (>6 steps) verify between first/last action  | —         |
 | 5   | Follow Through   | session ends with verify/report                        | —         |
 | 6   | Slow In/Out      | plan-in AND verify-out                                 | —         |
 | 7   | Arcs             | topic runs (consecutive distinct topics)               | ≤2        |
 | 8   | Secondary Action | aux-marker occurrences (confidence/warning/note:/备选) | ≤3        |
-| 9   | Timing           | long runs (>8 steps) emit intermediate feedback        | —         |
+| 9   | Timing           | long runs (>8 steps) give feedback after work starts   | —         |
 | 10  | Exaggeration     | emphasis occurrences (**,!!!,强调,critical,warning:)   | ≤3        |
 | 11  | Solid Drawing    | repeated-term count (heuristic, English-token)         | ≤5        |
 | 12  | Appeal           | closing signature in the final step                    | —         |
 
 The grader returns a promptfoo `GradingResult` with 12 `componentResults`,
-`namedScores`, and an overall score (pass >= 0.7). Missing `ok` annotations
-are fail-closed: rule 3 fails and the result is marked `data_quality=low`,
-so an unannotated retry loop cannot pass silently. Rules 11 and 12 are
-documented heuristics.
+`namedScores`, and an overall score (pass >= 0.7). Missing or non-boolean
+`ok` annotations are fail-closed: rule 3 fails, the result is marked
+`data_quality=low`, and low quality hard-fails the overall grade even when
+the other rules pass. Rules 11 and 12 are documented heuristics.
 
 ## Validation
 

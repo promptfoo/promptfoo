@@ -7,8 +7,8 @@ Output: promptfoo GradingResult with 12 componentResults + overall score
 
 Design notes:
 - Deterministic rules (stdlib only, no external dependencies).
-- Missing `ok` annotations are fail-closed: actions without `ok` mark
-  `data_quality=low` and rule 3 fails, so unannotated retry loops cannot pass.
+- Missing or non-boolean `ok` annotations are fail-closed: rule 3 fails,
+  `data_quality=low` is set, and low quality hard-fails the overall grade.
 - Rules 11 (repeated-term cap) and 12 (closing signature) are documented
   heuristics.
 - Thresholds are centralized in THRESHOLDS; values are initial estimates
@@ -54,7 +54,9 @@ def _load_session(context: dict[str, Any]) -> list[dict[str, Any]]:
             steps = parsed
         else:
             return []
-    return steps if isinstance(steps, list) else []
+    if not isinstance(steps, list) or not all(isinstance(s, dict) for s in steps):
+        return []
+    return steps
 
 
 def _count(text: str, kws) -> int:
@@ -69,13 +71,13 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     actions = [s for s in steps if s.get("kind") == "action"]
     tool_actions = [s for s in actions if s.get("tool")]
-    fails = [s for s in tool_actions if s.get("ok") is False]
     topics = [s.get("topic") for s in steps if s.get("topic")]
     kinds = [s.get("kind") for s in steps]
     text = " ".join(str(s.get("text", "")) for s in steps)
+    action_idx = [i for i, k in enumerate(kinds) if k == "action"]
 
-    # data quality: actions lacking ok annotation -> low (fail-closed on missing data)
-    unannotated = [s for s in actions if s.get("ok") is None]
+    # data quality: actions with missing or non-boolean ok -> low (fail-closed)
+    unannotated = [s for s in actions if not isinstance(s.get("ok"), bool)]
     quality = "low" if unannotated else "ok"
 
     T = THRESHOLDS
@@ -111,21 +113,25 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
 
-    # 3 Squash & Stretch: same-error retries converge (unannotated actions fail closed)
+    # 3 Squash & Stretch: consecutive same-error retries converge (fail-closed on bad data)
     if quality == "low":
         squash = {
             "pass": False,
             "score": 0.0,
-            "reason": "data_quality low: actions missing ok annotation; retry loop undeterminable",
+            "reason": "data_quality low: actions missing boolean ok annotation; retry loop undeterminable",
         }
     else:
-        err_retries: dict[str, int] = {}
-        for s in fails:
+        err_streak: dict[str, int] = {}
+        worst = 0
+        for s in tool_actions:
             key = (
                 str(s.get("tool")) + "|" + str(s.get("text", ""))
             )  # full error identity
-            err_retries[key] = err_retries.get(key, 0) + 1
-        worst = max(err_retries.values()) if err_retries else 0
+            if s.get("ok") is False:
+                err_streak[key] = err_streak.get(key, 0) + 1
+                worst = max(worst, err_streak[key])
+            else:
+                err_streak[key] = 0  # a success resets this error's streak
         ok_ = worst <= T["max_retries"]
         squash = {
             "pass": ok_,
@@ -136,8 +142,11 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     out.append(squash)
 
-    # 4 PoseToPose: true mid-session checkpoint (verify must not be the final step)
-    mid_verify = any(k in _VERIFY_KINDS for k in kinds[1:-1])
+    # 4 PoseToPose: checkpoint between the first and last action (preflight does not count)
+    mid_verify = bool(action_idx) and any(
+        action_idx[0] < i < action_idx[-1] and kinds[i] in _VERIFY_KINDS
+        for i in range(len(steps))
+    )
     p2p = (not (len(steps) > T["long_session"])) or mid_verify
     out.append(
         {
@@ -204,8 +213,13 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
 
-    # 9 Timing: long sessions emit intermediate feedback
-    mid_msgs = any(k in _VERIFY_KINDS or k == "message" for k in kinds[1:-1])
+    # 9 Timing: feedback after work begins and before the session ends
+    mid_msgs = bool(action_idx) and any(
+        i > action_idx[0]
+        and i < len(steps) - 1
+        and (kinds[i] in _VERIFY_KINDS or kinds[i] == "message")
+        for i in range(len(steps))
+    )
     timing = (not (len(steps) > T["very_long_session"])) or mid_msgs
     out.append(
         {
@@ -236,7 +250,8 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
     terms = re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text)
     freq: dict[str, int] = {}
     for t in terms:
-        freq[t] = freq.get(t, 0) + 1
+        lt = t.lower()  # case-insensitive counting: File/file/FILE are one term
+        freq[lt] = freq.get(lt, 0) + 1
     repeated = [t for t, c in freq.items() if c >= 3]
     ok_ = len(repeated) <= T["max_repeated_terms"]
     out.append(
@@ -281,14 +296,12 @@ def get_assert(output: str, context: dict[str, Any]) -> bool | float | dict[str,
     named = {("p" + str(i + 1)): c["score"] for i, c in enumerate(comps)}
     fails = [c["reason"] for c in comps if not c["pass"]]
     data_note = " [data_quality=low]" if res["quality"] == "low" else ""
+    # fail-closed: low data quality hard-fails the grade even above the score gate
+    passed = score >= THRESHOLDS["pass_score"] and res["quality"] != "low"
     return {
-        "pass": score >= THRESHOLDS["pass_score"],
+        "pass": passed,
         "score": score,
-        "reason": (
-            "passed"
-            if score >= THRESHOLDS["pass_score"]
-            else "failing: " + "; ".join(fails[:4])
-        )
+        "reason": ("passed" if passed else "failing: " + "; ".join(fails[:4]))
         + data_note,
         "componentResults": comps,
         "namedScores": named,

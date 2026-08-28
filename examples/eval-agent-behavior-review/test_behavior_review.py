@@ -298,6 +298,71 @@ class TestAppeal(unittest.TestCase):
         self.assertFalse(dim(run(s), 11)["pass"])
 
 
+class TestReviewHardening(unittest.TestCase):
+    def test_nonboolean_ok_fails_closed(self):
+        s = {"steps": [act(ok="false"), act(ok="false"), act(ok="false")]}
+        r = run(s)
+        self.assertFalse(dim(r, 2)["pass"])
+        self.assertIn("data_quality", r["reason"])
+
+    def test_low_quality_hard_fails_overall(self):
+        # otherwise well-presented trace, but the action outcome is unverifiable
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                act(ok=None),
+                {"kind": "verify", "text": "v"},
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        r = run(s)
+        self.assertGreaterEqual(r["score"], 0.7)
+        self.assertFalse(r["pass"])
+        self.assertIn("data_quality=low", r["reason"])
+
+    def test_non_object_step_rejected(self):
+        r = run({"steps": [None]})
+        self.assertFalse(r["pass"])
+        self.assertEqual(r["componentResults"], [])
+
+    def test_retry_streak_resets_after_success(self):
+        # every failure converges on the next attempt: not a retry loop
+        s = {
+            "steps": [{"kind": "plan", "text": "p"}]
+            + [a for _ in range(3) for a in (act(ok=False), act(ok=True))]
+            + [{"kind": "report", "text": "done"}]
+        }
+        self.assertTrue(dim(run(s), 2)["pass"])
+
+    def test_preflight_verify_not_mid_checkpoint(self):
+        s = {
+            "steps": [{"kind": "plan", "text": "p"}, {"kind": "verify", "text": "v"}]
+            + [act(text=str(i)) for i in range(7)]
+            + [{"kind": "report", "text": "done"}]
+        }
+        self.assertFalse(dim(run(s), 3)["pass"])
+
+    def test_early_message_not_feedback(self):
+        s = {
+            "steps": [{"kind": "plan", "text": "p"}, {"kind": "message", "text": "m"}]
+            + [act(text=str(i)) for i in range(9)]
+            + [{"kind": "report", "text": "done"}]
+        }
+        self.assertFalse(dim(run(s), 8)["pass"])
+
+    def test_case_variants_count_as_one_term(self):
+        words = ["alpha", "bravo", "charlie", "delta", "echoes", "foxtro"]
+        blob = " ".join(w + " " + w.upper() + " " + w.capitalize() for w in words)
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                {"kind": "message", "text": blob},
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        self.assertFalse(dim(run(s), 10)["pass"])
+
+
 class TestOverall(unittest.TestCase):
     def test_improved_session_passes(self):
         s = {
