@@ -575,6 +575,43 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should keep watching after a values file config error on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(new ConfigResolutionError('Failed to load $values'))
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to load $values');
+      expect(evaluate).toHaveBeenCalledTimes(3);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
   it('should keep watching after email validation fails on a file change', async () => {
     const config = {
       prompts: [],
@@ -1283,6 +1320,29 @@ describe('evalCommand', () => {
     const config = {
       prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
       providers: ['file://providers/provider.yaml'],
+      defaultTest: {
+        vars: {
+          defaultLanguage: { $values: 'file://vars/default-languages.yaml' },
+        },
+      },
+      scenarios: [
+        {
+          config: [
+            {
+              vars: {
+                scenarioConfig: { $values: 'file://vars/scenario-config.yaml' },
+              },
+            },
+          ],
+          tests: [
+            {
+              vars: {
+                scenarioTest: { $values: 'file://vars/scenario-test.yaml' },
+              },
+            },
+          ],
+        },
+      ],
       tests: [
         'file://vars/scenario.yaml',
         {
@@ -1324,6 +1384,9 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/body.txt'),
         path.resolve('/suite', 'vars/languages.yaml'),
         path.resolve('/suite', 'vars/regions.yaml'),
+        path.resolve('/suite', 'vars/default-languages.yaml'),
+        path.resolve('/suite', 'vars/scenario-config.yaml'),
+        path.resolve('/suite', 'vars/scenario-test.yaml'),
       ]),
       { ignored: /^\./, persistent: true },
     );

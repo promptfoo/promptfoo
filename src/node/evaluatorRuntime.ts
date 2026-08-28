@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { getEnvBool } from '../envars';
+import { ConfigResolutionError } from '../util/config/load';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -43,20 +44,20 @@ export function loadVarValuesFromFile(
   try {
     parsed = loadYaml(fs.readFileSync(resolvedPath, 'utf-8'));
   } catch (error) {
-    throw new Error(
+    throw new ConfigResolutionError(
       `Failed to load $values for variable "${varName}" from ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error(
+    throw new ConfigResolutionError(
       `$values file for variable "${varName}" must contain a top-level array: ${resolvedPath}`,
     );
   }
 
   const invalidIndex = parsed.findIndex((value) => !isValidExpandedVarValue(value));
   if (invalidIndex !== -1) {
-    throw new Error(
+    throw new ConfigResolutionError(
       `$values file for variable "${varName}" contains an invalid value at index ${invalidIndex}: ${resolvedPath}`,
     );
   }

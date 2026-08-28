@@ -207,6 +207,40 @@ function getVarWatchPaths(value: unknown, basePath: string): string[] {
   return [];
 }
 
+function getTestCaseWatchPaths(testCase: unknown, basePath: string): string[] {
+  if (typeof testCase === 'string') {
+    return getVarWatchPaths(testCase, basePath);
+  }
+
+  if (typeof testCase !== 'object' || testCase === null) {
+    return [];
+  }
+
+  const vars = (testCase as { vars?: unknown }).vars;
+  if (typeof vars !== 'object' || vars === null || Array.isArray(vars)) {
+    return getVarWatchPaths(vars, basePath);
+  }
+
+  return Object.values(vars).flatMap((value) => getVarWatchPaths(value, basePath));
+}
+
+function getScenarioWatchPaths(scenario: unknown, basePath: string): string[] {
+  if (typeof scenario === 'string') {
+    return getVarWatchPaths(scenario, basePath);
+  }
+
+  if (typeof scenario !== 'object' || scenario === null) {
+    return [];
+  }
+
+  const { config, tests } = scenario as { config?: unknown; tests?: unknown };
+  return [config, tests].flatMap((entries) =>
+    Array.isArray(entries)
+      ? entries.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
+      : [],
+  );
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -1180,20 +1214,16 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        const varPaths = Array.isArray(config.tests)
-          ? config.tests
-              .flatMap((t) => {
-                if (typeof t === 'string' && t.startsWith('file://')) {
-                  return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return Object.values(t.vars).flatMap((value) =>
-                    getVarWatchPaths(value, basePath),
-                  );
-                }
-                return [];
-              })
-              .filter(Boolean)
+        const testVarPaths = Array.isArray(config.tests)
+          ? config.tests.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
           : [];
+        const defaultTestVarPaths = config.defaultTest
+          ? getTestCaseWatchPaths(config.defaultTest, basePath)
+          : [];
+        const scenarioVarPaths = Array.isArray(config.scenarios)
+          ? config.scenarios.flatMap((scenario) => getScenarioWatchPaths(scenario, basePath))
+          : [];
+        const varPaths = [...testVarPaths, ...defaultTestVarPaths, ...scenarioVarPaths];
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );

@@ -12,6 +12,7 @@ import {
   isAllowedPrompt,
 } from '../../src/evaluator';
 import { type Prompt } from '../../src/types/index';
+import { ConfigResolutionError } from '../../src/util/config/load';
 
 const tempDirs: string[] = [];
 
@@ -130,9 +131,11 @@ describe('generateVarCombinations', () => {
   it('should report errors when a values file cannot be loaded', () => {
     const { basePath } = createTempValuesFile('existing.yaml', '- English\n');
 
-    expect(() =>
-      generateVarCombinations({ language: { $values: 'file://missing.yaml' } }, basePath),
-    ).toThrow('Failed to load $values for variable "language"');
+    const loadMissingFile = () =>
+      generateVarCombinations({ language: { $values: 'file://missing.yaml' } }, basePath);
+
+    expect(loadMissingFile).toThrow(ConfigResolutionError);
+    expect(loadMissingFile).toThrow('Failed to load $values for variable "language"');
   });
 
   it('should reject invalid entries in a values file', () => {
