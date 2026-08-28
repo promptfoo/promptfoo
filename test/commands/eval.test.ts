@@ -1695,7 +1695,7 @@ describe('evalCommand', () => {
           matrixValuesFingerprintError: expect.stringContaining(
             'The $values files used by evaluation',
           ),
-          varValuesBasePath: '/suite/configs',
+          varValuesBasePath: path.resolve('/suite/configs'),
         }),
       );
       return evalRecord as Eval;
