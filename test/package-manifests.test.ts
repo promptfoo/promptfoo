@@ -497,6 +497,30 @@ describe('package manifests', () => {
     }
   });
 
+  it('keeps the Langfuse client optional and its SDK packages on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = '@langfuse/client';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const clientVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(developmentRange).toBeDefined();
+    expect(optionalRange).toBe(developmentRange);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(minVersion(developmentRange!)?.compare('5.10.1')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(clientVersion).toBeDefined();
+    expect(satisfies(clientVersion!, developmentRange!)).toBe(true);
+
+    for (const packageName of ['@langfuse/core', '@langfuse/tracing']) {
+      expect(packageLock.packages[`node_modules/${packageName}`].version).toBe(clientVersion);
+    }
+  });
+
   it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
