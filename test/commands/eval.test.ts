@@ -653,6 +653,46 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should not reevaluate when an existing dependency is added to the watcher', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
+    } as UnifiedConfig;
+    const resolvedSuite = {
+      prompts: [],
+      providers: [],
+      tests: reloadedConfig.tests as TestSuite['tests'],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({ config, testSuite: config as TestSuite, basePath: '/suite' })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: resolvedSuite,
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+    chokidarMocks.handlers.get('ready')?.();
+
+    await expect(
+      chokidarMocks.handlers.get('change')?.(defaultConfigPath),
+    ).resolves.toBeUndefined();
+    await expect(
+      chokidarMocks.handlers.get('add')?.(path.resolve('/suite', 'vars/regions.yaml')),
+    ).resolves.toBeUndefined();
+
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
+  });
+
   it('should keep watching after email validation fails on a file change', async () => {
     const config = {
       prompts: [],

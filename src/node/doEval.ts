@@ -349,6 +349,7 @@ export async function doEval(
   let varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']> | undefined;
   let watcher: ReturnType<typeof chokidar.watch> | undefined;
   let watchedPaths = new Set<string>();
+  const ignoredWatchAddPaths = new Set<string>();
 
   const getCurrentWatchPaths = (): string[] => {
     const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
@@ -383,7 +384,7 @@ export async function doEval(
     return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
   };
 
-  const syncWatchPaths = async (): Promise<void> => {
+  const syncWatchPaths = async (ignoreAddedEvents = false): Promise<void> => {
     if (!watcher) {
       return;
     }
@@ -393,9 +394,13 @@ export async function doEval(
     const removedPaths = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
 
     if (addedPaths.length > 0) {
+      if (ignoreAddedEvents) {
+        addedPaths.forEach((addedPath) => ignoredWatchAddPaths.add(addedPath));
+      }
       watcher.add(addedPaths);
     }
     if (removedPaths.length > 0) {
+      removedPaths.forEach((removedPath) => ignoredWatchAddPaths.delete(removedPath));
       await watcher.unwatch(removedPaths);
     }
     watchedPaths = nextPaths;
@@ -1312,7 +1317,7 @@ export async function doEval(
           clearConfigCache();
           try {
             await runEvaluation();
-            await syncWatchPaths();
+            await syncWatchPaths(true);
           } catch (error) {
             if (handleRecoverableWatchError(error)) {
               await syncWatchPaths();
@@ -1325,7 +1330,7 @@ export async function doEval(
         watcher
           .on('change', handleWatchEvent)
           .on('add', async (addedPath) => {
-            if (watcherReady) {
+            if (watcherReady && !ignoredWatchAddPaths.delete(addedPath)) {
               await handleWatchEvent(addedPath);
             }
           })

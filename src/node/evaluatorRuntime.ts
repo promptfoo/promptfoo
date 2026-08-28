@@ -58,26 +58,65 @@ function getSuiteVarValuesPaths(
   suite: { tests?: unknown; defaultTest?: unknown; scenarios?: unknown },
   basePath: string,
 ): string[] {
-  const testPaths = Array.isArray(suite.tests)
-    ? suite.tests.flatMap((testCase) => getTestCaseVarValuesPaths(testCase, basePath))
-    : [];
-  const defaultPaths = suite.defaultTest
-    ? getTestCaseVarValuesPaths(suite.defaultTest, basePath)
-    : [];
+  const defaultVars =
+    typeof suite.defaultTest === 'object' && suite.defaultTest !== null
+      ? (suite.defaultTest as { vars?: unknown }).vars
+      : undefined;
+  const mergeVars = (...sources: unknown[]) => ({
+    vars: Object.assign(
+      {},
+      ...sources.filter(
+        (source): source is object =>
+          typeof source === 'object' && source !== null && !Array.isArray(source),
+      ),
+    ),
+  });
+  const directTests =
+    Array.isArray(suite.tests) && suite.tests.length > 0
+      ? suite.tests
+      : Array.isArray(suite.scenarios)
+        ? []
+        : [{}];
+  const testPaths = directTests.flatMap((testCase) =>
+    getTestCaseVarValuesPaths(
+      mergeVars(
+        defaultVars,
+        typeof testCase === 'object' && testCase !== null
+          ? (testCase as { vars?: unknown }).vars
+          : undefined,
+      ),
+      basePath,
+    ),
+  );
   const scenarioPaths = Array.isArray(suite.scenarios)
     ? suite.scenarios.flatMap((scenario) => {
         if (typeof scenario !== 'object' || scenario === null) {
           return [];
         }
         const { config, tests } = scenario as { config?: unknown; tests?: unknown };
-        return [config, tests].flatMap((entries) =>
-          Array.isArray(entries)
-            ? entries.flatMap((testCase) => getTestCaseVarValuesPaths(testCase, basePath))
-            : [],
+        if (!Array.isArray(config)) {
+          return [];
+        }
+        const scenarioTests = Array.isArray(tests) ? tests : [{}];
+        return config.flatMap((data) =>
+          scenarioTests.flatMap((testCase) =>
+            getTestCaseVarValuesPaths(
+              mergeVars(
+                defaultVars,
+                typeof data === 'object' && data !== null
+                  ? (data as { vars?: unknown }).vars
+                  : undefined,
+                typeof testCase === 'object' && testCase !== null
+                  ? (testCase as { vars?: unknown }).vars
+                  : undefined,
+              ),
+              basePath,
+            ),
+          ),
         );
       })
     : [];
-  return [...testPaths, ...defaultPaths, ...scenarioPaths];
+  return [...testPaths, ...scenarioPaths];
 }
 
 export function getVarValuesFingerprint(

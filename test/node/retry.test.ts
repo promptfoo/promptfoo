@@ -654,6 +654,31 @@ describe('retryCommand', () => {
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
+  it('validates file-backed matrix values when retrying with an explicit config', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        configBasePath: '/workspace/original',
+        matrixValuesFingerprint: 'original-fingerprint',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(getVarValuesFingerprint).mockReturnValue('changed-fingerprint');
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'The $values files used by evaluation eval-123 have changed',
+    );
+
+    expect(getVarValuesFingerprint).toHaveBeenCalledWith(
+      [testSuite],
+      '/workspace',
+      expect.any(Map),
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
   it('preserves error results when the stored filter cannot be applied to the config', async () => {
     const originalEval = createEval({
       runtimeOptions: { providerFilter: '[' },

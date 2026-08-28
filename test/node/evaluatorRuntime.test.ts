@@ -101,6 +101,27 @@ describe('nodeEvaluatorRuntime', () => {
     ]);
   });
 
+  it('ignores matrix references overridden by effective test variables', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
+    tempDirs.push(tempDir);
+    fs.writeFileSync(path.join(tempDir, 'used.yaml'), '- English\n');
+    const directSuite = {
+      defaultTest: { vars: { language: { $values: 'file://missing-default.yaml' } } },
+      tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
+    };
+    const scenarioSuite = {
+      defaultTest: { vars: { language: { $values: 'file://missing-default.yaml' } } },
+      scenarios: [
+        {
+          config: [{ vars: { language: { $values: 'file://missing-scenario.yaml' } } }],
+          tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
+        },
+      ],
+    };
+
+    expect(() => getVarValuesFingerprint([directSuite, scenarioSuite], tempDir)).not.toThrow();
+  });
+
   it.each([
     {
       name: 'ignores credentials from a previous evaluation',

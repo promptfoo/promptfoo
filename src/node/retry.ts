@@ -95,10 +95,10 @@ async function resolveRetryConfigs(
 
   const expectedFingerprint = originalEval.runtimeOptions?.matrixValuesFingerprint;
   const varValuesFileCache = new Map();
-  if (!cmdObj.config && expectedFingerprint !== undefined) {
+  if (expectedFingerprint !== undefined) {
     const currentFingerprint = getVarValuesFingerprint(
       [configs.testSuite],
-      configBasePath || configs.basePath || process.cwd(),
+      (cmdObj.config ? configs.basePath : configBasePath || configs.basePath) || process.cwd(),
       varValuesFileCache,
     );
     if (currentFingerprint !== expectedFingerprint) {
