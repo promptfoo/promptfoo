@@ -56,8 +56,8 @@ and accepts any non-null value (numeric ids like `0` included).
 | 2   | Staging          | session opens with intent/plan                         | —         |
 | 3   | Squash & Stretch | consecutive same-(tool,text) failures reset on success | ≤2        |
 | 4   | Pose to Pose     | long runs (>6 steps) verify between first/last action  | —         |
-| 5   | Follow Through   | session ends with verify/report                        | —         |
-| 6   | Slow In/Out      | plan-in AND verify-out                                 | —         |
+| 5   | Follow Through   | ends with a nonblank verify/report                     | —         |
+| 6   | Slow In/Out      | nonblank plan-in AND verify-out                        | —         |
 | 7   | Arcs             | topic runs (consecutive distinct topics)               | ≤2        |
 | 8   | Secondary Action | aux-marker occurrences (confidence/warning/note:/备选) | ≤3        |
 | 9   | Timing           | long runs (>8 steps) give feedback after work starts   | —         |
@@ -66,7 +66,8 @@ and accepts any non-null value (numeric ids like `0` included).
 | 12  | Appeal           | closing signature in the final step                    | —         |
 
 The grader returns a promptfoo `GradingResult` with 12 `componentResults`,
-`namedScores`, and an overall score (pass >= 0.7). Missing or non-boolean
+`namedScores`, and an overall score (pass >= 0.7). Traces with no action,
+verify, or report step are rejected before grading. Missing or non-boolean
 `ok` annotations are fail-closed: rule 3 fails, the result is marked
 `data_quality=low`, and low quality hard-fails the overall grade even when
 the other rules pass. Rules 11 and 12 are documented heuristics.

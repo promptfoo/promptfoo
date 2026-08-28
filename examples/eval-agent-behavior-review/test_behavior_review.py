@@ -29,7 +29,17 @@ def dim(result, index):
 class TestAnticipation(unittest.TestCase):
     def test_no_tool_actions_passes(self):
         self.assertTrue(
-            dim(run({"steps": [{"kind": "message", "text": "hi"}]}), 0)["pass"]
+            dim(
+                run(
+                    {
+                        "steps": [
+                            {"kind": "message", "text": "hi"},
+                            {"kind": "verify", "text": "checked"},
+                        ]
+                    }
+                ),
+                0,
+            )["pass"]
         )
 
     def test_first_action_without_intent_fails(self):
@@ -437,6 +447,47 @@ class TestReviewHardening(unittest.TestCase):
         r = run(s)
         self.assertIn("not required", dim(r, 3)["reason"])
         self.assertIn("not required", dim(r, 8)["reason"])
+
+    def test_plan_only_trace_rejected(self):
+        r = run({"steps": [{"kind": "plan", "text": "done"}]})
+        self.assertFalse(r["pass"])
+        self.assertEqual(r["componentResults"], [])
+        self.assertIn("no evidence of work", r["reason"])
+
+    def test_nonstring_text_plan_not_credited(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": None},
+                act(),
+                {"kind": "report", "text": "done"},
+            ]
+        }
+        r = run(s)
+        self.assertFalse(dim(r, 0)["pass"])
+        self.assertFalse(dim(r, 1)["pass"])
+        self.assertFalse(dim(r, 5)["pass"])
+
+    def test_blank_report_not_credited(self):
+        s = {
+            "steps": [
+                {"kind": "plan", "text": "p"},
+                act(),
+                {"kind": "report", "text": "   "},
+            ]
+        }
+        r = run(s)
+        self.assertFalse(dim(r, 4)["pass"])
+        self.assertFalse(dim(r, 5)["pass"])
+
+    def test_whitespace_verify_not_checkpoint(self):
+        s = {
+            "steps": [{"kind": "plan", "text": "p"}]
+            + [act(text=str(i)) for i in range(3)]
+            + [{"kind": "verify", "text": "   "}]
+            + [act(text=str(i)) for i in range(3, 6)]
+            + [{"kind": "report", "text": "done"}]
+        }
+        self.assertFalse(dim(run(s), 3)["pass"])
 
 
 class TestOverall(unittest.TestCase):

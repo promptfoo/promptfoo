@@ -9,6 +9,8 @@ Design notes:
 - Deterministic rules (stdlib only, no external dependencies).
 - Missing or non-boolean `ok` annotations are fail-closed: rule 3 fails,
   `data_quality=low` is set, and low quality hard-fails the overall grade.
+- Traces with no action, verify, or report step are rejected before grading:
+  a session that never did or presented any work is not gradeable.
 - Rules 11 (repeated-term cap) and 12 (closing signature) are documented
   heuristics.
 - Thresholds are centralized in THRESHOLDS; values are initial estimates
@@ -33,11 +35,14 @@ THRESHOLDS = {
 
 _PLAN_KINDS = {"plan", "intent"}
 _VERIFY_KINDS = {"verify", "report"}
+_WORK_KINDS = {"action"} | _VERIFY_KINDS
 _VALID_KINDS = _PLAN_KINDS | _VERIFY_KINDS | {"action", "message"}
 
 
 def _has_content(s: dict[str, Any]) -> bool:
-    return bool(str(s.get("text", "")).strip())
+    t = s.get("text")
+    # None/[] would stringify to "None"/"[]" and fake content; require a real string
+    return isinstance(t, str) and bool(t.strip())
 
 
 def _is_plan_step(s: dict[str, Any]) -> bool:
@@ -154,7 +159,9 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     # 4 PoseToPose: checkpoint between the first and last action (preflight does not count)
     mid_verify = bool(action_idx) and any(
-        action_idx[0] < i < action_idx[-1] and kinds[i] in _VERIFY_KINDS
+        action_idx[0] < i < action_idx[-1]
+        and kinds[i] in _VERIFY_KINDS
+        and _has_content(steps[i])
         for i in range(len(steps))
     )
     p2p = (not (len(steps) > T["long_session"])) or mid_verify
@@ -174,8 +181,8 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
 
-    # 5 FollowThrough: session ends with verify/report
-    ft = bool(kinds) and kinds[-1] in _VERIFY_KINDS
+    # 5 FollowThrough: session ends with a content-bearing verify/report
+    ft = bool(kinds) and kinds[-1] in _VERIFY_KINDS and _has_content(steps[-1])
     out.append(
         {
             "pass": ft,
@@ -186,8 +193,13 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
 
-    # 6 SlowInOut: plan-in AND verify-out
-    sio = bool(kinds) and _is_plan_step(steps[0]) and kinds[-1] in _VERIFY_KINDS
+    # 6 SlowInOut: nonblank plan-in AND verify-out
+    sio = (
+        bool(kinds)
+        and _is_plan_step(steps[0])
+        and kinds[-1] in _VERIFY_KINDS
+        and _has_content(steps[-1])
+    )
     out.append(
         {
             "pass": sio,
@@ -234,6 +246,7 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
         i > action_idx[0]
         and i < len(steps) - 1
         and (kinds[i] in _VERIFY_KINDS or kinds[i] == "message")
+        and _has_content(steps[i])
         for i in range(len(steps))
     )
     timing = (not (len(steps) > T["very_long_session"])) or mid_msgs
@@ -303,6 +316,14 @@ def _components(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
 def get_assert(output: str, context: dict[str, Any]) -> bool | float | dict[str, Any]:
     steps = _load_session(context)
+    if steps and not any(s.get("kind") in _WORK_KINDS for s in steps):
+        # a trace that never works or reports is not gradeable, however tidy it looks
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": "no evidence of work in session trace (no action, verify, or report steps)",
+            "componentResults": [],
+        }
     res = _components(steps)
     comps = res["comps"]
     if not comps:
