@@ -392,10 +392,17 @@ describe('package manifests', () => {
   });
 
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
-    const workflow = fs.readFileSync(
-      path.join(process.cwd(), '.github/workflows/main.yml'),
-      'utf8',
-    );
+    const workflowPath = '.github/workflows/main.yml';
+    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchCurrentValue?: string;
+        matchFileNames?: string[];
+        matchManagers?: string[];
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
 
     const unsupportedNodeVersion = workflow.match(
       /name:\s*Set up unsupported Node 20[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
@@ -406,6 +413,28 @@ describe('package manifests', () => {
 
     expect(unsupportedNodeVersion).toBe('20.20.0');
     expect(minimumSupportedNodeVersion).toBe('22.22.0');
+
+    const protectedRuntimeRule = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.enabled === false &&
+        rule.matchManagers?.includes('github-actions') &&
+        rule.matchPackageNames?.includes('node') &&
+        rule.matchFileNames?.includes(workflowPath) &&
+        rule.matchCurrentValue,
+    );
+
+    expect(
+      protectedRuntimeRule,
+      'Renovate must not replace intentionally unsupported or minimum-supported smoke-test runtimes',
+    ).toBeDefined();
+
+    const protectedRuntimePattern = new RegExp(
+      protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
+    );
+
+    expect(protectedRuntimePattern.test(unsupportedNodeVersion!)).toBe(true);
+    expect(protectedRuntimePattern.test(minimumSupportedNodeVersion!)).toBe(true);
+    expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
   });
 
   it('keeps the Docker runtime on the patched Node release', () => {
@@ -497,6 +526,30 @@ describe('package manifests', () => {
       const resolvedBinaryVersion = packageLock.packages[`node_modules/${binaryName}`]?.version;
       expect(resolvedBinaryVersion).toBeDefined();
       expect(satisfies(resolvedBinaryVersion!, agentVersion!)).toBe(true);
+    }
+  });
+
+  it('keeps the Langfuse client optional and its SDK packages on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = '@langfuse/client';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const clientVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(developmentRange).toBeDefined();
+    expect(optionalRange).toBe(developmentRange);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(minVersion(developmentRange!)?.compare('5.10.1')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(clientVersion).toBeDefined();
+    expect(satisfies(clientVersion!, developmentRange!)).toBe(true);
+
+    for (const packageName of ['@langfuse/core', '@langfuse/tracing']) {
+      expect(packageLock.packages[`node_modules/${packageName}`].version).toBe(clientVersion);
     }
   });
 
