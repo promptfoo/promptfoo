@@ -2560,7 +2560,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
-  const varValuesFileCache: VarValuesFileCache = new Map();
+  const varValuesFileCache: VarValuesFileCache = options.varValuesFileCache ?? new Map();
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {

@@ -61,7 +61,11 @@ function assertRetryProviderFilterMatched(
 async function resolveRetryConfigs(
   originalEval: Eval,
   cmdObj: RetryCommandOptions,
-): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+): Promise<
+  Awaited<ReturnType<typeof resolveConfigs>> & {
+    varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']>;
+  }
+> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     originalEval.runtimeOptions?.providerFilter,
   );
@@ -90,10 +94,12 @@ async function resolveRetryConfigs(
         });
 
   const expectedFingerprint = originalEval.runtimeOptions?.matrixValuesFingerprint;
+  const varValuesFileCache = new Map();
   if (!cmdObj.config && expectedFingerprint !== undefined) {
     const currentFingerprint = getVarValuesFingerprint(
-      [configs.config, configs.testSuite],
+      [configs.testSuite],
       configBasePath || configs.basePath || process.cwd(),
+      varValuesFileCache,
     );
     if (currentFingerprint !== expectedFingerprint) {
       throw new ConfigResolutionError(
@@ -113,7 +119,7 @@ async function resolveRetryConfigs(
     configs.testSuite.providers.length,
     cmdObj.config,
   );
-  return configs;
+  return { ...configs, varValuesFileCache };
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -373,7 +379,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
+  const { testSuite, commandLineOptions, config, varValuesFileCache } = await resolveRetryConfigs(
+    originalEval,
+    cmdObj,
+  );
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -420,6 +429,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     delay: effectiveDelay,
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
+    varValuesFileCache,
   };
 
   try {

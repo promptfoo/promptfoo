@@ -575,6 +575,7 @@ describe('evalCommand', () => {
 
       const onChange = chokidarMocks.handlers.get('change');
       expect(onChange).toBeDefined();
+      chokidarMocks.handlers.get('ready')?.();
 
       await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
 
@@ -632,6 +633,7 @@ describe('evalCommand', () => {
 
       const onChange = chokidarMocks.handlers.get('change');
       expect(onChange).toBeDefined();
+      chokidarMocks.handlers.get('ready')?.();
 
       await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
       expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([
@@ -640,7 +642,9 @@ describe('evalCommand', () => {
       expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([
         path.resolve('/suite', 'vars/languages.yaml'),
       ]);
-      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(
+        chokidarMocks.handlers.get('add')?.(path.resolve('/suite', 'vars/regions.yaml')),
+      ).resolves.toBeUndefined();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to load $values');
       expect(evaluate).toHaveBeenCalledTimes(3);
@@ -1516,6 +1520,14 @@ describe('evalCommand', () => {
 
     expect(capturedEval?.runtimeOptions?.configBasePath).toBe(path.resolve('configs'));
     expect(capturedEval?.runtimeOptions?.matrixValuesFingerprint).toBe('matrix-fingerprint');
+    expect((capturedEval?.runtimeOptions as Record<string, unknown>)?.varValuesFileCache).toBe(
+      undefined,
+    );
+    expect(getVarValuesFingerprint).toHaveBeenCalledWith(
+      [expect.objectContaining({ prompts: [], providers: [] })],
+      path.resolve('configs'),
+      expect.any(Map),
+    );
   });
 
   it('should resume an existing eval with persisted prompts', async () => {

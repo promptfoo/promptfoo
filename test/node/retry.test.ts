@@ -529,6 +529,7 @@ describe('retryCommand', () => {
         eventSource: 'cli',
         maxConcurrency: 4,
         showProgressBar: true,
+        varValuesFileCache: expect.any(Map),
       });
       return retriedEval;
     });
@@ -572,6 +573,7 @@ describe('retryCommand', () => {
         eventSource: 'cli',
         maxConcurrency: 1,
         showProgressBar: false,
+        varValuesFileCache: expect.any(Map),
       });
       return retriedEval;
     });

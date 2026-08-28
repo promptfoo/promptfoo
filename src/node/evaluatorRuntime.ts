@@ -83,6 +83,7 @@ function getSuiteVarValuesPaths(
 export function getVarValuesFingerprint(
   suites: Array<{ tests?: unknown; defaultTest?: unknown; scenarios?: unknown }>,
   basePath: string,
+  cache: VarValuesFileCache = new Map(),
 ): string | undefined {
   const paths = Array.from(
     new Set(suites.flatMap((suite) => getSuiteVarValuesPaths(suite, basePath))),
@@ -91,17 +92,11 @@ export function getVarValuesFingerprint(
     return undefined;
   }
 
-  try {
-    const entries = paths.map((filePath) => [
-      path.relative(basePath, filePath),
-      fs.readFileSync(filePath, 'utf-8'),
-    ]);
-    return sha256(JSON.stringify(entries));
-  } catch (error) {
-    throw new ConfigResolutionError(
-      `Failed to fingerprint $values files: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const entries = paths.map((filePath) => [
+    path.relative(basePath, filePath),
+    loadResolvedVarValues(filePath, '$values fingerprint', cache),
+  ]);
+  return sha256(JSON.stringify(entries));
 }
 
 function isValidExpandedVarValue(value: unknown): value is LoadedVarValue {
@@ -138,6 +133,14 @@ export function loadVarValuesFromFile(
     ? referencedPath
     : path.resolve(basePath || process.cwd(), referencedPath);
 
+  return loadResolvedVarValues(resolvedPath, varName, cache);
+}
+
+function loadResolvedVarValues(
+  resolvedPath: string,
+  varName: string,
+  cache?: VarValuesFileCache,
+): LoadedVarValue[] {
   const cached = cache?.get(resolvedPath);
   if (cached) {
     return cached;

@@ -5,7 +5,11 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import Eval from '../../src/models/eval';
-import { getVarValuesFingerprint, nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import {
+  getVarValuesFingerprint,
+  loadVarValuesFromFile,
+  nodeEvaluatorRuntime,
+} from '../../src/node/evaluatorRuntime';
 import { mockProcessEnv } from '../util/utils';
 
 import type { EvaluateResult, TestSuite } from '../../src/types/index';
@@ -77,7 +81,24 @@ describe('nodeEvaluatorRuntime', () => {
         [{ tests: [{ vars: { language: { $values: 'file://missing.yaml' } } }] }],
         tempDir,
       ),
-    ).toThrow('Failed to fingerprint $values files');
+    ).toThrow('Failed to load $values');
+  });
+
+  it('shares the fingerprinted matrix snapshot with later expansion', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
+    tempDirs.push(tempDir);
+    const valuesPath = path.join(tempDir, 'languages.yaml');
+    fs.writeFileSync(valuesPath, '- English\n- French\n');
+    const directive = { $values: 'file://languages.yaml' };
+    const cache = new Map();
+
+    getVarValuesFingerprint([{ tests: [{ vars: { language: directive } }] }], tempDir, cache);
+    fs.writeFileSync(valuesPath, '- German\n');
+
+    expect(loadVarValuesFromFile(directive, 'language', tempDir, cache)).toEqual([
+      'English',
+      'French',
+    ]);
   });
 
   it.each([

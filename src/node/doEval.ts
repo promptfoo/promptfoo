@@ -106,7 +106,11 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
-): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+): Promise<
+  Awaited<ReturnType<typeof resolveConfigs>> & {
+    varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']>;
+  }
+> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
   );
@@ -140,10 +144,12 @@ async function resolveReplayConfigs(
           basePath: configBasePath,
         });
   const expectedFingerprint = evalRecord.runtimeOptions?.matrixValuesFingerprint;
+  const varValuesFileCache = new Map();
   if (expectedFingerprint !== undefined) {
     const currentFingerprint = getVarValuesFingerprint(
-      [configs.config, configs.testSuite],
+      [configs.testSuite],
       path.resolve(configBasePath || configs.basePath || process.cwd()),
+      varValuesFileCache,
     );
     if (currentFingerprint !== expectedFingerprint) {
       throw new ConfigResolutionError(
@@ -156,7 +162,7 @@ async function resolveReplayConfigs(
   // provider set matches the original even when an instantiated id or label diverges
   // from its raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
-  return configs;
+  return { ...configs, varValuesFileCache };
 }
 
 export class EvalRunError extends Error {
@@ -340,6 +346,7 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']> | undefined;
   let watcher: ReturnType<typeof chokidar.watch> | undefined;
   let watchedPaths = new Set<string>();
 
@@ -540,6 +547,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        varValuesFileCache,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -597,6 +605,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        varValuesFileCache,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -611,6 +620,7 @@ export async function doEval(
         );
       }
     } else {
+      varValuesFileCache = undefined;
       ({
         config,
         testSuite,
@@ -932,11 +942,14 @@ export async function doEval(
 
     const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
     const normalizedConfigBasePath = path.resolve(configBasePath || process.cwd());
+    varValuesFileCache ??= new Map();
     const matrixValuesFingerprint =
       resumeEval?.runtimeOptions?.matrixValuesFingerprint ??
-      getVarValuesFingerprint([config, testSuite], normalizedConfigBasePath);
+      getVarValuesFingerprint([testSuite], normalizedConfigBasePath, varValuesFileCache);
+    options.varValuesFileCache = varValuesFileCache;
+    const { varValuesFileCache: _varValuesFileCache, ...persistableOptions } = options;
     const runtimeOptions: EvalRuntimeOptions = {
-      ...options,
+      ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
       ...(configBasePath === undefined ? {} : { configBasePath: path.resolve(configBasePath) }),
       ...(matrixValuesFingerprint === undefined ? {} : { matrixValuesFingerprint }),
@@ -1291,30 +1304,38 @@ export async function doEval(
         const watchPaths = getCurrentWatchPaths();
         watchedPaths = new Set(watchPaths);
         watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        let watcherReady = false;
+        const handleWatchEvent = async (changedPath: string) => {
+          printBorder();
+          logger.info(`File change detected: ${changedPath}`);
+          printBorder();
+          clearConfigCache();
+          try {
+            await runEvaluation();
+            await syncWatchPaths();
+          } catch (error) {
+            if (handleRecoverableWatchError(error)) {
+              await syncWatchPaths();
+              return;
+            }
+            throw error;
+          }
+        };
 
         watcher
-          .on('change', async (path) => {
-            printBorder();
-            logger.info(`File change detected: ${path}`);
-            printBorder();
-            clearConfigCache();
-            try {
-              await runEvaluation();
-              await syncWatchPaths();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                await syncWatchPaths();
-                return;
-              }
-              throw error;
+          .on('change', handleWatchEvent)
+          .on('add', async (addedPath) => {
+            if (watcherReady) {
+              await handleWatchEvent(addedPath);
             }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
-          .on('ready', () =>
+          .on('ready', () => {
+            watcherReady = true;
             watchPaths.forEach((watchPath) =>
               logger.info(`Watching for file changes on ${watchPath} ...`),
-            ),
-          );
+            );
+          });
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
