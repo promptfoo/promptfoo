@@ -70,6 +70,15 @@ describe('generateVarCombinations', () => {
     ).toEqual([{ language: 'English' }, { language: 'French' }, { language: 'Spanish' }]);
   });
 
+  it('should load matrix values from an absolute file path', () => {
+    const { filePath } = createTempValuesFile('languages.yaml', '- English\n- French\n');
+
+    expect(generateVarCombinations({ language: { $values: `file://${filePath}` } })).toEqual([
+      { language: 'English' },
+      { language: 'French' },
+    ]);
+  });
+
   it('should flatten multiple value files alongside direct matrix values', () => {
     const { basePath } = createTempValuesFile('primary.yaml', '- English\n- French\n');
     fs.writeFileSync(path.join(basePath, 'secondary.json'), JSON.stringify(['Spanish', 'German']));
