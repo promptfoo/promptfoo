@@ -1458,8 +1458,12 @@ describe('evalCommand', () => {
 
     await chokidarMocks.handlers.get('change')?.('/suite/promptfooconfig.yaml');
 
-    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith(['/suite/vars/regions.yaml']);
-    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith(['/suite/vars/languages.yaml']);
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([
+      path.resolve('/suite', 'vars/regions.yaml'),
+    ]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([
+      path.resolve('/suite', 'vars/languages.yaml'),
+    ]);
   });
 
   it('stores an absolute config base path for replay', async () => {
