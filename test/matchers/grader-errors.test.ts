@@ -44,9 +44,7 @@ describe('model grader failures', () => {
       response: { error: 'grader unavailable', tokenUsage },
     });
 
-    await expect(
-      matchesClosedQa('question', 'criterion', 'answer', { provider }),
-    ).resolves.toEqual(
+    await expect(matchesClosedQa('question', 'criterion', 'answer', { provider })).resolves.toEqual(
       expect.objectContaining({
         pass: false,
         score: 0,
