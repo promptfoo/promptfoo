@@ -3616,13 +3616,7 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it.each([
-          { behavior: 'permit' },
-          { behavior: true },
-          { behavior: 'unknown' },
-          true,
-          null,
-        ])(
+        it.each([{ behavior: 'permit' }, { behavior: true }, { behavior: 'unknown' }, true, null])(
           'rejects malformed ask_user_question config %#',
           async (askUserQuestion) => {
             const provider = new ClaudeCodeSDKProvider({
