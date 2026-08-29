@@ -233,6 +233,13 @@ describe('PortkeyChatCompletionProvider', () => {
       expect(provider.getApiKey()).toBe('sk-explicit');
     });
 
+    it('should not forward an explicit apiKey when Portkey holds the credential', () => {
+      const provider = new PortkeyChatCompletionProvider('@bedrock-eu/claude', {
+        config: { portkeyApiKey: 'pk-config-key', apiKey: 'sk-inherited' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
     it.each([
       ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
       ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
@@ -247,6 +254,36 @@ describe('PortkeyChatCompletionProvider', () => {
         expect(provider.getApiKey()).toBeUndefined();
       },
     );
+  });
+
+  describe('header collisions', () => {
+    it('should not emit a bearer when config.headers sets authorization', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: {
+          portkeyApiKey: 'pk-config-key',
+          portkeyProvider: 'openai',
+          headers: { authorization: 'Bearer explicit' },
+        },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
+        authorization: 'Bearer explicit',
+      });
+    });
+
+    it('should keep the portkey credential when a prompt overrides headers', () => {
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyApiKey: 'pk-config-key', portkeyProvider: '@bedrock-eu' },
+      });
+      // Mirrors the shallow prompt-config merge in OpenAiChatCompletionProvider.
+      const headers = provider.getOpenAiRequestHeaders({ 'x-tenant-id': 'acme' });
+      expect(headers).toMatchObject({
+        'x-portkey-api-key': 'pk-config-key',
+        'x-portkey-provider': '@bedrock-eu',
+        'x-tenant-id': 'acme',
+      });
+    });
   });
 
   it('should name the portkey credential when no key is configured', () => {

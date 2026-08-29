@@ -141,19 +141,39 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   }
 
   /**
+   * Re-derives the `x-portkey-*` headers for each request.
+   *
+   * The inherited chat provider merges `context.prompt.config` over the provider config
+   * shallowly, so a per-prompt `headers` block replaces this object wholesale. Rebuilding
+   * here keeps the Portkey credential attached when a prompt sets an unrelated header.
+   */
+  override getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
+    return super.getOpenAiRequestHeaders(
+      getPortkeyHeaders({ ...this.config, headers: customHeaders }),
+    );
+  }
+
+  /**
    * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
    * The inherited implementation returned the Portkey key here (leaving Portkey's own header
    * unset) and otherwise fell back to `OPENAI_API_KEY`, sending an OpenAI key to the gateway
    * even when Portkey already held the provider credential.
    */
   getApiKey(): string | undefined {
-    if (this.config.apiKey) {
-      return this.config.apiKey;
+    // A caller-supplied Authorization header wins outright. Returning a key as well would put
+    // two differently-cased entries on the request, which fetch joins into one value.
+    if (hasHeaderOverride(this.config.headers, 'Authorization')) {
+      return undefined;
     }
+    // Portkey owns the upstream credential for catalog slugs and virtual keys, so forward
+    // nothing — including an apiKey inherited from a shared provider config. Callers that
+    // still need a bearer can set one explicitly through `config.headers`.
     if (usesManagedCredentials(this.modelName, this.config)) {
       return undefined;
     }
-    return this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+    return this.config.apiKey || this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
   }
 
   protected override getMissingApiKeyErrorMessage(): string {
