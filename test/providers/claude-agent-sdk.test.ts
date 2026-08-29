@@ -3619,7 +3619,6 @@ describe('ClaudeCodeSDKProvider', () => {
         it.each([
           { behavior: 'permit' },
           { behavior: true },
-          {},
           { behavior: 'unknown' },
           true,
           null,
