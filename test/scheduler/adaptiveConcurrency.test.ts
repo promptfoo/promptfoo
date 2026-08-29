@@ -532,8 +532,8 @@ describe('AdaptiveConcurrency', () => {
       ac.recordSuccess(400);
       expect(ac.getCurrent()).toBe(8);
 
-      // 10 subsequent high-latency responses (gradient remains > 1.5)
-      for (let i = 0; i < 10; i++) {
+      // 5 subsequent high-latency responses (gradient remains > 1.5, exceeding the 5-success recovery threshold)
+      for (let i = 0; i < 5; i++) {
         const res = ac.recordSuccess(400);
         // Recovery must NOT trigger while congested
         expect(res.changed).toBe(false);

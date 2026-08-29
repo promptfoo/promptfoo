@@ -309,16 +309,17 @@ describe('DagOrchestrator', () => {
     orchestrator.addTask({
       id: 'slow-task',
       run: async ({ signal }) => {
-        signal.addEventListener('abort', () => {
-          abortedViaSignal = true;
+        return new Promise((resolve) => {
+          signal.addEventListener('abort', () => {
+            abortedViaSignal = true;
+            resolve('aborted');
+          });
         });
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        return 'slow';
       },
     });
 
     const execPromise = orchestrator.execute();
-    await vi.advanceTimersByTimeAsync(60);
+    vi.advanceTimersByTime(60);
 
     await expect(execPromise).rejects.toThrow('DAG execution timed out after 50ms');
     expect(abortedViaSignal).toBe(true);

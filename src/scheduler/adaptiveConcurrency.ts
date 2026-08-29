@@ -146,12 +146,18 @@ export class AdaptiveConcurrency {
       }
     }
 
-    // Suppress recovery increment while latency remains congested
+    // Suppress recovery while latency remains congested
     if (isCongested) {
       this.consecutiveSuccesses = 0;
-    } else {
-      this.consecutiveSuccesses++;
+      return {
+        changed: false,
+        previous: this.current,
+        current: this.current,
+        reason: 'proactive',
+      };
     }
+
+    this.consecutiveSuccesses++;
 
     // Check if we should recover
     if (this.consecutiveSuccesses >= RECOVERY_THRESHOLD && this.current < this.initial) {

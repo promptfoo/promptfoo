@@ -325,24 +325,33 @@ export class DagOrchestrator {
     const abortController = new AbortController();
 
     return new Promise<DagExecutionResult>((resolve, reject) => {
+      let settled = false;
       let timeoutTimer: NodeJS.Timeout | null = null;
 
-      if (this.options.timeoutMs > 0) {
-        timeoutTimer = setTimeout(() => {
-          isAborted = true;
-          const timeoutErr = new Error(`DAG execution timed out after ${this.options.timeoutMs}ms`);
-          abortController.abort(timeoutErr);
-          cleanup();
-          reject(timeoutErr);
-        }, this.options.timeoutMs);
-      }
-
       const cleanup = () => {
+        settled = true;
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);
           timeoutTimer = null;
         }
       };
+
+      if (this.options.timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          isAborted = true;
+          const timeoutErr = new Error(`DAG execution timed out after ${this.options.timeoutMs}ms`);
+          cleanup();
+          try {
+            abortController.abort(timeoutErr);
+          } catch {
+            // Ignore abort handler exceptions
+          }
+          reject(timeoutErr);
+        }, this.options.timeoutMs);
+      }
 
       const markDescendantsSkipped = (failedTaskId: string) => {
         const queue = [failedTaskId];
@@ -358,6 +367,10 @@ export class DagOrchestrator {
       };
 
       const checkCompletion = () => {
+        if (settled) {
+          return;
+        }
+
         const settledCount = completedCount + errors.size + skippedTasks.size;
         if (settledCount >= this.tasks.size && runningCount === 0) {
           cleanup();
@@ -384,14 +397,15 @@ export class DagOrchestrator {
       };
 
       const dispatch = () => {
-        if (isAborted) {
+        if (isAborted || settled) {
           return;
         }
 
         while (
           readyQueue.length > 0 &&
           runningCount < this.options.maxConcurrency &&
-          !isAborted
+          !isAborted &&
+          !settled
         ) {
           const item = readyQueue.shift()!;
           const taskId = item.id;
@@ -454,10 +468,16 @@ export class DagOrchestrator {
               errors.set(taskId, err);
 
               if (this.options.failFast) {
-                isAborted = true;
-                abortController.abort(err);
-                cleanup();
-                reject(err);
+                if (!settled) {
+                  isAborted = true;
+                  cleanup();
+                  try {
+                    abortController.abort(err);
+                  } catch {
+                    // Ignore
+                  }
+                  reject(err);
+                }
                 return;
               }
 
