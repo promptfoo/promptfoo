@@ -2,7 +2,6 @@ import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
 
-import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -78,7 +77,10 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
  * Portkey's own credential. It belongs in `x-portkey-api-key`; the `Authorization` bearer is
  * reserved for an upstream provider credential that Portkey forwards.
  */
-function resolvePortkeyApiKey(config: PortkeyConfig = {}, env?: EnvOverrides): string | undefined {
+function resolvePortkeyApiKey(
+  config: PortkeyConfig = {},
+  env?: ProviderOptions['env'],
+): string | undefined {
   return config.portkeyApiKey || getEnvString('PORTKEY_API_KEY') || env?.PORTKEY_API_KEY;
 }
 
