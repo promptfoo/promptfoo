@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -69,34 +70,63 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
   return { ...headers, ...config.headers };
 }
 
+/**
+ * Portkey's own credential. It belongs in `x-portkey-api-key`; the `Authorization` bearer
+ * is reserved for an upstream provider credential that Portkey forwards.
+ */
+function resolvePortkeyApiKey(config: PortkeyConfig = {}, env?: EnvOverrides): string | undefined {
+  return config.portkeyApiKey || getEnvString('PORTKEY_API_KEY') || env?.PORTKEY_API_KEY;
+}
+
+/**
+ * True when Portkey itself holds the upstream provider credential — a model catalog slug
+ * (`@provider/model`) or a legacy virtual key — so there is no provider key to forward.
+ */
+function usesManagedCredentials(modelName: string, config: PortkeyConfig = {}): boolean {
+  return (
+    Boolean(config.portkeyVirtualKey) ||
+    Boolean(config.portkeyProvider?.startsWith('@')) ||
+    modelName.startsWith('@')
+  );
+}
+
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
+    const portkeyApiKey = resolvePortkeyApiKey(providerOptions.config, providerOptions.env);
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'PORTKEY_API_KEY',
+        // Portkey authenticates with x-portkey-api-key, so a bearer token is only required
+        // when forwarding an upstream provider credential.
+        apiKeyRequired: providerOptions.config?.apiKeyRequired ?? !portkeyApiKey,
         apiBaseUrl:
           getEnvString('PORTKEY_API_BASE_URL') ||
           providerOptions.config?.portkeyApiBaseUrl ||
           'https://api.portkey.ai/v1',
-        headers: getPortkeyHeaders(providerOptions.config),
+        headers: {
+          ...(portkeyApiKey && { 'x-portkey-api-key': portkeyApiKey }),
+          ...getPortkeyHeaders(providerOptions.config),
+        },
       },
     });
   }
 
   /**
-   * Resolves the bearer token from Portkey credentials only. The inherited implementation
-   * falls back to `OPENAI_API_KEY`, which would send an OpenAI key to the Portkey gateway
-   * (or to whatever host `portkeyApiBaseUrl` points at).
+   * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
+   * The inherited implementation returned the Portkey key here (leaving Portkey's own
+   * header unset) and otherwise fell back to `OPENAI_API_KEY`, sending an OpenAI key to
+   * the gateway even when Portkey already held the provider credential.
    */
   getApiKey(): string | undefined {
     const config = this.config as PortkeyConfig;
-    return (
-      config.portkeyApiKey ||
-      config.apiKey ||
-      getEnvString('PORTKEY_API_KEY') ||
-      this.env?.PORTKEY_API_KEY
-    );
+    if (config.apiKey) {
+      return config.apiKey;
+    }
+    if (usesManagedCredentials(this.modelName, config)) {
+      return undefined;
+    }
+    return this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
   }
 }

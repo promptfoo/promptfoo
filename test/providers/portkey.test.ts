@@ -167,28 +167,78 @@ describe('PortkeyChatCompletionProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should use portkeyApiKey as the bearer token', () => {
-    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
-      config: { portkeyApiKey: 'pk-config-key' },
+  describe('portkey credential', () => {
+    it('should send portkeyApiKey in the x-portkey-api-key header', () => {
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyApiKey: 'pk-config-key' },
+      });
+      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-config-key' });
     });
-    expect(provider.getApiKey()).toBe('pk-config-key');
+
+    it('should send PORTKEY_API_KEY from the environment in the x-portkey-api-key header', () => {
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
+      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
+    });
+
+    it('should not require a bearer token when a portkey key is configured', () => {
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyApiKey: 'pk-config-key' },
+      });
+      expect(provider.requiresApiKey()).toBe(false);
+    });
+
+    it('should respect an explicit apiKeyRequired setting', () => {
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyApiKey: 'pk-config-key', apiKeyRequired: true },
+      });
+      expect(provider.requiresApiKey()).toBe(true);
+    });
   });
 
-  it('should fall back to the PORTKEY_API_KEY environment variable', () => {
-    vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
-    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
-      config: { portkeyProvider: '@openai-prod' },
+  describe('upstream provider credential', () => {
+    it('should forward OPENAI_API_KEY as the bearer when Portkey passes through to a provider', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
+      expect(provider.getApiKey()).toBe('sk-openai');
     });
-    expect(provider.getApiKey()).toBe('pk-env-key');
-  });
 
-  it('should not fall back to OPENAI_API_KEY', () => {
-    vi.stubEnv('OPENAI_API_KEY', 'sk-openai-secret');
-    vi.stubEnv('PORTKEY_API_KEY', '');
-    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
-      config: { portkeyProvider: '@openai-prod' },
+    it('should never send the portkey key as the bearer token', () => {
+      vi.stubEnv('OPENAI_API_KEY', undefined);
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
     });
-    expect(provider.getApiKey()).toBeUndefined();
+
+    it('should prefer an explicit apiKey over the environment', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { apiKey: 'sk-explicit', portkeyProvider: 'openai' },
+      });
+      expect(provider.getApiKey()).toBe('sk-explicit');
+    });
+
+    it.each([
+      ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
+      ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
+      ['legacy virtual key', 'claude', { portkeyVirtualKey: 'bedrock-prod' }],
+    ])(
+      'should not leak OPENAI_API_KEY when Portkey holds the credential (%s)',
+      (_, model, config) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const provider = new PortkeyChatCompletionProvider(model, {
+          config: { portkeyApiKey: 'pk-config-key', ...config },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+      },
+    );
   });
 
   it('should keep the model name intact, including colons', () => {
