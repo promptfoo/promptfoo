@@ -1,6 +1,6 @@
 import { getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
-import { getLiveModelCost, isLivePricingEnabled } from './livePricing';
+import { getLiveModelCost, isLivePricingEnabled, refreshLivePricing } from './livePricing';
 
 import type { ApiProvider } from '../types/index';
 
@@ -45,6 +45,16 @@ export interface ProviderConfig {
   imageInputCost?: number;
   service_tier?: string | null;
   passthrough?: object;
+}
+
+/**
+ * Warms the opt-in live pricing cache on behalf of callers outside the
+ * providers layer (the evaluator), so models missing from the static tables
+ * can resolve live prices during an evaluation. No-op unless
+ * PROMPTFOO_LIVE_PRICING is enabled and the cache is stale.
+ */
+export function warmLivePricing(): Promise<void> {
+  return refreshLivePricing();
 }
 
 /**

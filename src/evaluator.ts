@@ -26,9 +26,8 @@ import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
-import { refreshLivePricing } from './providers/livePricing';
 import { providerRegistry } from './providers/providerRegistry';
-import { isPromptfooSampleTarget } from './providers/shared';
+import { isPromptfooSampleTarget, warmLivePricing } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -5036,7 +5035,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // calculations during this evaluation can resolve prices for models
       // missing from the static tables. No-op unless PROMPTFOO_LIVE_PRICING
       // is enabled and the cache is stale.
-      await refreshLivePricing();
+      await warmLivePricing();
 
       return await this._runEvaluation();
     } catch (error) {
