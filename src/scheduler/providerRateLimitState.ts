@@ -212,7 +212,7 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Success
-        this.handleSuccess();
+        this.handleSuccess(latencyMs);
         this.completedRequests++;
         return result;
       } catch (error) {
@@ -336,8 +336,8 @@ export class ProviderRateLimitState extends EventEmitter {
   /**
    * Handle successful request.
    */
-  private handleSuccess(): void {
-    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+  private handleSuccess(latencyMs?: number): void {
+    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess(latencyMs));
   }
 
   /**

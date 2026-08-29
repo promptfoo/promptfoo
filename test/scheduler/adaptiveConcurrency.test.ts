@@ -392,4 +392,81 @@ describe('AdaptiveConcurrency', () => {
       expect(results[5].current).toBe(1); // 3 → 1
     });
   });
+
+  describe('Latency-Gradient AIMD Congestion Control', () => {
+    it('should track minLatency and calculate EMA latency correctly', () => {
+      const ac = new AdaptiveConcurrency(10, 1, { alpha: 0.2 });
+
+      expect(ac.getEmaLatency()).toBeNull();
+      expect(ac.getMinLatency()).toBe(0);
+      expect(ac.getLatencyGradient()).toBeNull();
+
+      // First request: 100ms
+      ac.recordSuccess(100);
+      expect(ac.getMinLatency()).toBe(100);
+      expect(ac.getEmaLatency()).toBe(100);
+      expect(ac.getLatencyGradient()).toBe(1);
+
+      // Second request: 200ms -> EMA = 0.2 * 200 + 0.8 * 100 = 120ms
+      ac.recordSuccess(200);
+      expect(ac.getMinLatency()).toBe(100);
+      expect(ac.getEmaLatency()).toBeCloseTo(120, 2);
+      expect(ac.getLatencyGradient()).toBeCloseTo(1.2, 2);
+    });
+
+    it('should proactively throttle when latency gradient exceeds threshold', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      // Establish baseline at 100ms
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+      expect(ac.getMinLatency()).toBe(100);
+
+      // Stable request at 110ms (EMA = 0.5*110 + 0.5*100 = 105, G = 1.05 <= 1.5)
+      const res1 = ac.recordSuccess(110);
+      expect(res1.changed).toBe(false);
+      expect(ac.getCurrent()).toBe(10);
+
+      // Severe latency spike to 400ms (EMA = 0.5*400 + 0.5*105 = 252.5, G = 2.525 > 1.5)
+      const res2 = ac.recordSuccess(400);
+      expect(res2.changed).toBe(true);
+      expect(res2.reason).toBe('proactive');
+      expect(res2.previous).toBe(10);
+      expect(res2.current).toBe(8); // floor(10 * 0.8) = 8
+      expect(ac.getCurrent()).toBe(8);
+    });
+
+    it('should not throttle below minConcurrency on latency gradient spike', () => {
+      const ac = new AdaptiveConcurrency(2, 2, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+      });
+
+      ac.recordSuccess(100);
+      // High latency spike
+      const res = ac.recordSuccess(500);
+      expect(res.changed).toBe(false);
+      expect(ac.getCurrent()).toBe(2); // Clamped at min
+    });
+
+    it('should recover normally when latency gradient is within threshold', () => {
+      const ac = new AdaptiveConcurrency(10, 1);
+      ac.recordRateLimit(); // 10 -> 5
+      expect(ac.getCurrent()).toBe(5);
+
+      // 5 successes with stable 100ms latency
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(100);
+        expect(res.changed).toBe(false);
+      }
+      const res5 = ac.recordSuccess(100);
+      expect(res5.changed).toBe(true);
+      expect(res5.reason).toBe('recovery');
+      expect(res5.current).toBe(8); // ceil(5 * 1.5) = 8
+    });
+  });
 });

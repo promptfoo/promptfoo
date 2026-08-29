@@ -3,9 +3,17 @@ const BACKOFF_FACTOR = 0.5; // Halve on rate limit
 const RECOVERY_FACTOR = 1.5; // +50% on recovery
 const RECOVERY_THRESHOLD = 5; // Successes before recovery
 const WARNING_THRESHOLD = 0.1; // 10% remaining triggers proactive reduction
+const DEFAULT_LATENCY_ALPHA = 0.2; // Smoothing factor for EMA
+const DEFAULT_GRADIENT_THRESHOLD = 1.5; // 50% above baseline latency triggers proactive reduction
+const DEFAULT_LATENCY_BACKOFF_FACTOR = 0.8; // Reduce by 20% on latency inflation
 
 // Export for use in other modules
-export { WARNING_THRESHOLD };
+export {
+  DEFAULT_GRADIENT_THRESHOLD,
+  DEFAULT_LATENCY_ALPHA,
+  DEFAULT_LATENCY_BACKOFF_FACTOR,
+  WARNING_THRESHOLD,
+};
 
 export interface ConcurrencyChangeResult {
   changed: boolean;
@@ -14,8 +22,25 @@ export interface ConcurrencyChangeResult {
   reason: 'recovery' | 'ratelimit' | 'proactive';
 }
 
+export interface AdaptiveConcurrencyOptions {
+  /** Smoothing factor for Exponential Moving Average (0 < alpha <= 1). Default: 0.2 */
+  alpha?: number;
+  /** Latency gradient threshold (ratio of EMA to min baseline) before throttling. Default: 1.5 */
+  gradientThreshold?: number;
+  /** Concurrency multiplier on latency gradient breach. Default: 0.8 */
+  latencyBackoffFactor?: number;
+}
+
 /**
- * Manages adaptive concurrency based on rate limit feedback.
+ * Manages adaptive concurrency based on rate limit feedback and latency gradient tracking.
+ *
+ * Combines:
+ * 1. Additive Recovery: +50% concurrency after 5 consecutive successes up to initial.
+ * 2. Multiplicative Rate-Limit Backoff: Halves concurrency on HTTP 429.
+ * 3. Proactive Quota Reduction: Reduces concurrency when quota remaining < 10%.
+ * 4. Latency-Gradient Congestion Control (TCP Vegas / BBR inspired): Tracks EMA latency and
+ *    compares with baseline unloaded latency. If latency inflates past the gradient threshold,
+ *    proactively steps down concurrency before HTTP 429 errors occur.
  *
  * Recovery path with constants (initial=10, min=1):
  * 1 → ceil(1.5) = 2   (5 successes)
@@ -32,18 +57,57 @@ export class AdaptiveConcurrency {
   private readonly min: number;
   private consecutiveSuccesses = 0;
 
-  constructor(initial: number, min: number = DEFAULT_MIN_CONCURRENCY) {
+  // Latency-gradient state
+  private emaLatency: number | null = null;
+  private minLatency = Infinity;
+  private readonly alpha: number;
+  private readonly gradientThreshold: number;
+  private readonly latencyBackoffFactor: number;
+
+  constructor(
+    initial: number,
+    min: number = DEFAULT_MIN_CONCURRENCY,
+    options?: AdaptiveConcurrencyOptions,
+  ) {
     this.initial = initial;
     this.current = initial;
     // Clamp min to be at least 1 and at most initial
     this.min = Math.min(initial, Math.max(1, min));
+    this.alpha = options?.alpha ?? DEFAULT_LATENCY_ALPHA;
+    this.gradientThreshold = options?.gradientThreshold ?? DEFAULT_GRADIENT_THRESHOLD;
+    this.latencyBackoffFactor = options?.latencyBackoffFactor ?? DEFAULT_LATENCY_BACKOFF_FACTOR;
   }
 
   /**
-   * Called on successful request.
-   * May increase concurrency after sustained success.
+   * Called on successful request with optional round-trip latency.
+   * May increase concurrency after sustained success, or proactively throttle if latency degrades.
    */
-  recordSuccess(): ConcurrencyChangeResult {
+  recordSuccess(latencyMs?: number): ConcurrencyChangeResult {
+    // Process latency tracking if provided and valid
+    if (latencyMs !== undefined && latencyMs > 0) {
+      this.minLatency = Math.min(this.minLatency, latencyMs);
+      this.emaLatency =
+        this.emaLatency === null
+          ? latencyMs
+          : this.alpha * latencyMs + (1 - this.alpha) * this.emaLatency;
+
+      const gradient = this.minLatency > 0 ? this.emaLatency / this.minLatency : 1;
+
+      // If latency has inflated significantly beyond baseline and we have room to throttle
+      if (gradient > this.gradientThreshold && this.current > this.min) {
+        const previous = this.current;
+        this.current = Math.max(this.min, Math.floor(this.current * this.latencyBackoffFactor));
+        this.consecutiveSuccesses = 0;
+
+        return {
+          changed: previous !== this.current,
+          previous,
+          current: this.current,
+          reason: 'proactive',
+        };
+      }
+    }
+
     this.consecutiveSuccesses++;
 
     // Check if we should recover
@@ -70,7 +134,7 @@ export class AdaptiveConcurrency {
 
   /**
    * Called on rate limit (429).
-   * Reduces concurrency immediately.
+   * Reduces concurrency immediately and resets consecutive successes.
    */
   recordRateLimit(): ConcurrencyChangeResult {
     this.consecutiveSuccesses = 0;
@@ -138,5 +202,20 @@ export class AdaptiveConcurrency {
 
   getInitial(): number {
     return this.initial;
+  }
+
+  getEmaLatency(): number | null {
+    return this.emaLatency;
+  }
+
+  getMinLatency(): number {
+    return Number.isFinite(this.minLatency) ? this.minLatency : 0;
+  }
+
+  getLatencyGradient(): number | null {
+    if (this.emaLatency === null || !Number.isFinite(this.minLatency) || this.minLatency === 0) {
+      return null;
+    }
+    return this.emaLatency / this.minLatency;
   }
 }
