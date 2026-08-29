@@ -1,7 +1,7 @@
-// Package main implements a promptfoo provider that uses OpenAI's API.
+// Package provider implements a promptfoo provider that uses OpenAI's API.
 // It demonstrates a simple implementation of the provider interface using
 // shared code from the core and pkg1 packages.
-package main
+package provider
 
 import (
 	"fmt"
