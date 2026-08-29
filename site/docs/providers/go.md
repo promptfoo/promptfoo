@@ -115,7 +115,9 @@ sibling files in the same directory.
 `package main` providers remain supported for backward compatibility, with two caveats:
 
 - Only the provider file itself is compiled, so helpers in sibling files are not visible and fail
-  with `undefined: <helper>`. Move them into the same file, or switch to a named package.
+  with `undefined: <helper>`. Move them into the same file, or switch to a named package. This is
+  deliberate: it lets several `package main` providers share a directory, each exporting its own
+  `CallApi`, which a directory-wide build would reject as `CallApi redeclared in this block`.
 - The provider cannot declare its own `func main()`; it would collide with the generated entry
   point. This is why a `package main` provider breaks `go build ./...` — the package has no `main`
   function of its own.

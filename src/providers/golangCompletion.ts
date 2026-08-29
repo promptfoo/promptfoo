@@ -34,14 +34,19 @@ const WRAPPER_FILE = 'wrapper.go';
 const ADAPTER_FILE = 'promptfoo_adapter.go';
 
 /**
- * Directory holding the generated entry point for named-package providers. The
- * leading dot keeps it out of `./...` so it cannot affect the user's own builds.
+ * Directory holding the generated entry point for named-package providers. It
+ * lives inside the throwaway module copy, so it never reaches the user's own
+ * tree; the leading dot additionally keeps it out of any `./...` run against
+ * that copy.
  */
 const WRAPPER_DIR = '.promptfoo-wrapper';
 
 /**
- * The only provider symbol `wrapper.go` knows how to dispatch to. Function names
- * may be supplied as `file://provider.go:CallApi`, but no other name resolves.
+ * Function names accepted in a provider id. Both resolve to the single `CallApi`
+ * symbol -- `call_api` is an alias, not a second Go function.
+ *
+ * Keep in sync with the dispatch switch in `src/golang/wrapper.go`;
+ * `test/providers/golangCompletion.test.ts` asserts the two agree.
  */
 const SUPPORTED_FUNCTION_NAMES = new Set(['CallApi', 'call_api']);
 
@@ -95,13 +100,23 @@ export class GolangProvider implements ApiProvider {
    * in its own directory and have it import the provider through the module path
    * reported by `go list`, which keeps the provider importable and leaves
    * repository-wide commands such as `go build ./...` working.
+   *
+   * The `package main` branch deliberately builds an explicit file list rather
+   * than the whole directory: two `package main` providers can sit side by side,
+   * each exporting `CallApi`, and a directory-wide build would fail with
+   * `CallApi redeclared in this block`. The file list isolates them.
    */
-  private async prepareBuild(
-    goExecutable: string,
-    tempDir: string,
-    scriptDir: string,
-    scriptFile: string,
-  ): Promise<{ buildDir: string; buildFiles: string[] }> {
+  private async prepareBuild({
+    goExecutable,
+    tempDir,
+    scriptDir,
+    scriptFile,
+  }: {
+    goExecutable: string;
+    tempDir: string;
+    scriptDir: string;
+    scriptFile: string;
+  }): Promise<{ buildDir: string; buildFiles: string[] }> {
     const { stdout } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
       cwd: scriptDir,
     });
@@ -125,7 +140,7 @@ export class GolangProvider implements ApiProvider {
     await fs.mkdir(buildDir, { recursive: true });
     await fs.writeFile(
       path.join(buildDir, ADAPTER_FILE),
-      `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
+      `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi ApiFunc = provider.CallApi\n`,
     );
     return { buildDir, buildFiles: [WRAPPER_FILE, ADAPTER_FILE] };
   }
@@ -211,15 +226,15 @@ export class GolangProvider implements ApiProvider {
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
 
-        const { buildDir, buildFiles } = await this.prepareBuild(
+        const { buildDir, buildFiles } = await this.prepareBuild({
           goExecutable,
           tempDir,
           scriptDir,
-          path.basename(relativeScriptPath),
-        );
+          scriptFile: path.basename(relativeScriptPath),
+        });
 
         await fs.copyFile(
-          path.join(getWrapperDir('golang'), 'wrapper.go'),
+          path.join(getWrapperDir('golang'), WRAPPER_FILE),
           path.join(buildDir, WRAPPER_FILE),
         );
 
