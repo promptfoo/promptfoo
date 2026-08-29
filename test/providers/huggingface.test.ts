@@ -198,6 +198,16 @@ describe('HuggingfaceChatCompletionProvider', () => {
       expect(url).not.toContain('/chat/completions/chat/completions');
     });
 
+    it('preserves root-based custom endpoints without adding /v1', async () => {
+      mockFetch.mockResolvedValue(mockChatResponse('response'));
+      const provider = new HuggingfaceChatCompletionProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.endpoint.co/chat/completions' },
+      });
+      await provider.callApi('test');
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe('https://custom.endpoint.co/chat/completions');
+    });
+
     it('strips /chat/completions from apiEndpoint', async () => {
       mockFetch.mockResolvedValue(mockChatResponse('response'));
       const provider = new HuggingfaceChatCompletionProvider('test-model', {
