@@ -103,6 +103,8 @@ export class AdaptiveConcurrency {
   recordSuccess(latencyMs?: number): ConcurrencyChangeResult {
     this.totalSuccessCount++;
 
+    let isCongested = false;
+
     // Process latency tracking if provided and valid
     if (latencyMs !== undefined && latencyMs > 0) {
       this.recentLatencies.push(latencyMs);
@@ -117,11 +119,12 @@ export class AdaptiveConcurrency {
 
       const minBaseline = Math.min(...this.recentLatencies);
       const gradient = minBaseline > 0 ? this.emaLatency / minBaseline : 1;
+      isCongested = gradient > this.gradientThreshold;
 
       // If latency has inflated significantly beyond recent baseline, room to throttle,
       // and congestion wave cooldown epoch has elapsed (preventing in-flight cascade)
       if (
-        gradient > this.gradientThreshold &&
+        isCongested &&
         this.current > this.min &&
         this.totalSuccessCount >= this.cooldownUntilSuccessCount
       ) {
@@ -143,7 +146,12 @@ export class AdaptiveConcurrency {
       }
     }
 
-    this.consecutiveSuccesses++;
+    // Suppress recovery increment while latency remains congested
+    if (isCongested) {
+      this.consecutiveSuccesses = 0;
+    } else {
+      this.consecutiveSuccesses++;
+    }
 
     // Check if we should recover
     if (this.consecutiveSuccesses >= RECOVERY_THRESHOLD && this.current < this.initial) {

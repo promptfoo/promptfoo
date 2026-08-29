@@ -33,8 +33,13 @@ export class MissingDependencyError extends Error {
  */
 export interface DagExecutionContext {
   /**
+   * Cooperative cancellation signal that triggers if the DAG times out or aborts.
+   */
+  signal: AbortSignal;
+
+  /**
    * Retrieves the resolved output of an upstream dependency task.
-   * Throws if the dependency did not resolve successfully.
+   * Throws if the dependency was not declared in the task's dependencies or did not resolve successfully.
    */
   getDependencyOutput: <T = unknown>(dependencyId: string) => T;
 
@@ -94,10 +99,11 @@ export interface DagExecutionResult {
  *
  * Implements:
  * - Topological sorting with Kahn's Algorithm in O(V + E) time
- * - Static cycle detection with cycle path tracing
+ * - Iterative cycle detection with cycle path tracing
  * - Dynamic parallel asynchronous task execution
- * - Upstream-to-downstream dependency data passing
+ * - Upstream-to-downstream dependency data passing with undeclared ID validation
  * - Configurable concurrency bounds & fail-fast policies
+ * - Cooperative AbortSignal propagation for timeouts & cancellations
  */
 export class DagOrchestrator {
   private tasks = new Map<string, DagTask<unknown>>();
@@ -106,10 +112,19 @@ export class DagOrchestrator {
   private options: Required<DagOrchestratorOptions>;
 
   constructor(options?: DagOrchestratorOptions) {
+    let maxConcurrency = options?.maxConcurrency ?? Infinity;
+    if (typeof maxConcurrency === 'number') {
+      if (Number.isNaN(maxConcurrency) || maxConcurrency <= 0) {
+        maxConcurrency = 1;
+      } else if (Number.isFinite(maxConcurrency)) {
+        maxConcurrency = Math.floor(maxConcurrency);
+      }
+    }
+
     this.options = {
-      maxConcurrency: options?.maxConcurrency ?? Infinity,
+      maxConcurrency,
       failFast: options?.failFast ?? true,
-      timeoutMs: options?.timeoutMs ?? 0,
+      timeoutMs: options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 0,
     };
   }
 
@@ -121,7 +136,13 @@ export class DagOrchestrator {
       throw new Error(`Task with ID '${task.id}' is already registered in the DAG`);
     }
 
-    this.tasks.set(task.id, task as DagTask<unknown>);
+    const dependenciesCopy = Array.isArray(task.dependencies) ? [...task.dependencies] : [];
+    const clonedTask: DagTask<unknown> = {
+      ...task,
+      dependencies: dependenciesCopy,
+    };
+
+    this.tasks.set(task.id, clonedTask);
     if (!this.adjacencyList.has(task.id)) {
       this.adjacencyList.set(task.id, new Set());
     }
@@ -129,7 +150,7 @@ export class DagOrchestrator {
       this.reverseAdjacency.set(task.id, new Set());
     }
 
-    for (const depId of task.dependencies ?? []) {
+    for (const depId of dependenciesCopy) {
       if (!this.adjacencyList.has(depId)) {
         this.adjacencyList.set(depId, new Set());
       }
@@ -301,6 +322,7 @@ export class DagOrchestrator {
     let runningCount = 0;
     let isAborted = false;
     let completedCount = 0;
+    const abortController = new AbortController();
 
     return new Promise<DagExecutionResult>((resolve, reject) => {
       let timeoutTimer: NodeJS.Timeout | null = null;
@@ -308,7 +330,10 @@ export class DagOrchestrator {
       if (this.options.timeoutMs > 0) {
         timeoutTimer = setTimeout(() => {
           isAborted = true;
-          reject(new Error(`DAG execution timed out after ${this.options.timeoutMs}ms`));
+          const timeoutErr = new Error(`DAG execution timed out after ${this.options.timeoutMs}ms`);
+          abortController.abort(timeoutErr);
+          cleanup();
+          reject(timeoutErr);
         }, this.options.timeoutMs);
       }
 
@@ -380,7 +405,14 @@ export class DagOrchestrator {
           const task = this.tasks.get(taskId)!;
 
           const context: DagExecutionContext = {
+            signal: abortController.signal,
             getDependencyOutput: <T = unknown>(depId: string): T => {
+              const declared = this.reverseAdjacency.get(taskId);
+              if (!declared || !declared.has(depId)) {
+                throw new Error(
+                  `Task '${taskId}' cannot access output of undeclared dependency '${depId}'`,
+                );
+              }
               if (!outputs.has(depId)) {
                 throw new Error(
                   `Output for dependency '${depId}' is unavailable for task '${taskId}'`,
@@ -391,9 +423,9 @@ export class DagOrchestrator {
             allOutputs: outputs,
           };
 
-          // Execute task
-          task
-            .run(context)
+          // Execute task safely wrapping synchronous throws into promise rejection
+          Promise.resolve()
+            .then(() => task.run(context))
             .then((output) => {
               runningCount--;
               completedCount++;
@@ -423,6 +455,7 @@ export class DagOrchestrator {
 
               if (this.options.failFast) {
                 isAborted = true;
+                abortController.abort(err);
                 cleanup();
                 reject(err);
                 return;
@@ -445,46 +478,59 @@ export class DagOrchestrator {
   }
 
   /**
-   * Helper DFS method to pinpoint and trace a circular dependency path for error reporting.
+   * Helper iterative DFS method to pinpoint and trace a circular dependency path for error reporting.
+   * Uses an explicit stack to prevent recursion stack overflow on large/deep graphs.
    */
   private findCyclePath(): string[] {
     const visited = new Set<string>();
-    const recStack = new Set<string>();
+    const onStack = new Set<string>();
     const parentMap = new Map<string, string>();
 
-    const dfs = (node: string): string[] | null => {
-      visited.add(node);
-      recStack.add(node);
-
-      for (const neighbor of this.adjacencyList.get(node) ?? []) {
-        if (!visited.has(neighbor)) {
-          parentMap.set(neighbor, node);
-          const cycle = dfs(neighbor);
-          if (cycle) {
-            return cycle;
-          }
-        } else if (recStack.has(neighbor)) {
-          // Cycle found! Reconstruct cycle path
-          const path = [neighbor];
-          let curr = node;
-          while (curr !== neighbor) {
-            path.push(curr);
-            curr = parentMap.get(curr)!;
-          }
-          path.push(neighbor);
-          return path.reverse();
-        }
+    for (const startNode of this.tasks.keys()) {
+      if (visited.has(startNode)) {
+        continue;
       }
 
-      recStack.delete(node);
-      return null;
-    };
+      const stack: Array<{ node: string; neighbors: string[]; nextIdx: number }> = [
+        {
+          node: startNode,
+          neighbors: Array.from(this.adjacencyList.get(startNode) ?? []),
+          nextIdx: 0,
+        },
+      ];
 
-    for (const node of this.tasks.keys()) {
-      if (!visited.has(node)) {
-        const cycle = dfs(node);
-        if (cycle) {
-          return cycle;
+      visited.add(startNode);
+      onStack.add(startNode);
+
+      while (stack.length > 0) {
+        const top = stack[stack.length - 1];
+
+        if (top.nextIdx < top.neighbors.length) {
+          const neighbor = top.neighbors[top.nextIdx++];
+
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            onStack.add(neighbor);
+            parentMap.set(neighbor, top.node);
+            stack.push({
+              node: neighbor,
+              neighbors: Array.from(this.adjacencyList.get(neighbor) ?? []),
+              nextIdx: 0,
+            });
+          } else if (onStack.has(neighbor)) {
+            // Cycle found! Reconstruct cycle path from top.node to neighbor
+            const path: string[] = [neighbor];
+            let curr = top.node;
+            while (curr !== neighbor) {
+              path.push(curr);
+              curr = parentMap.get(curr)!;
+            }
+            path.push(neighbor);
+            return path.reverse();
+          }
+        } else {
+          onStack.delete(top.node);
+          stack.pop();
         }
       }
     }

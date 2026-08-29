@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CyclicDependencyError,
   DagOrchestrator,
@@ -6,6 +6,10 @@ import {
 } from '../../src/scheduler/dagOrchestrator';
 
 describe('DagOrchestrator', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should execute an empty DAG returning zero stats', async () => {
     const orchestrator = new DagOrchestrator();
     const result = await orchestrator.execute();
@@ -60,6 +64,48 @@ describe('DagOrchestrator', () => {
     const result = await orchestrator.execute();
     expect(result.stats.completedTasks).toBe(3);
     expect(result.outputs.get('load')).toBe('Loaded: PROMPTFOO EVALUATION');
+  });
+
+  it('should reject undeclared dependencies in getDependencyOutput', async () => {
+    const orchestrator = new DagOrchestrator({ failFast: true });
+    orchestrator.addTask({
+      id: 'unrelated',
+      run: async () => 'secret',
+    });
+    orchestrator.addTask({
+      id: 'rogue-task',
+      // Note: 'unrelated' is NOT in dependencies!
+      dependencies: [],
+      run: async ({ getDependencyOutput }) => {
+        return getDependencyOutput('unrelated');
+      },
+    });
+
+    await expect(orchestrator.execute()).rejects.toThrow(
+      "Task 'rogue-task' cannot access output of undeclared dependency 'unrelated'",
+    );
+  });
+
+  it('should snapshot dependencies upon registration preventing external mutation', async () => {
+    const orchestrator = new DagOrchestrator();
+    const externalDeps = ['root'];
+    orchestrator.addTask({
+      id: 'root',
+      run: async () => 'root-val',
+    });
+    orchestrator.addTask({
+      id: 'child',
+      dependencies: externalDeps,
+      run: async ({ getDependencyOutput }) => getDependencyOutput('root'),
+    });
+
+    // Mutate the external array after registration
+    externalDeps.push('non-existent-task');
+
+    // Validation and execution should use the snapshotted graph and succeed
+    const result = await orchestrator.execute();
+    expect(result.stats.completedTasks).toBe(2);
+    expect(result.outputs.get('child')).toBe('root-val');
   });
 
   it('should execute diamond dependency DAGs correctly', async () => {
@@ -132,6 +178,20 @@ describe('DagOrchestrator', () => {
     }
   });
 
+  it('should detect cycles in deep graphs using iterative DFS without stack overflow', () => {
+    const orchestrator = new DagOrchestrator();
+    const depth = 200;
+    for (let i = 0; i < depth; i++) {
+      orchestrator.addTask({
+        id: `node-${i}`,
+        dependencies: i === 0 ? [`node-${depth - 1}`] : [`node-${i - 1}`],
+        run: async () => i,
+      });
+    }
+
+    expect(() => orchestrator.validate()).toThrow(CyclicDependencyError);
+  });
+
   it('should detect missing dependencies and throw MissingDependencyError', () => {
     const orchestrator = new DagOrchestrator();
     orchestrator.addTask({ id: 'task-1', dependencies: ['ghost-task'], run: async () => 1 });
@@ -145,6 +205,14 @@ describe('DagOrchestrator', () => {
     expect(() => orchestrator.addTask({ id: 'dup-id', run: async () => 2 })).toThrow(
       "Task with ID 'dup-id' is already registered in the DAG",
     );
+  });
+
+  it('should normalize invalid maxConcurrency options to 1', async () => {
+    const orchestrator = new DagOrchestrator({ maxConcurrency: 0 });
+    orchestrator.addTask({ id: 'task-1', run: async () => 'done' });
+    const result = await orchestrator.execute();
+    expect(result.stats.completedTasks).toBe(1);
+    expect(result.outputs.get('task-1')).toBe('done');
   });
 
   it('should enforce maxConcurrency limits during execution', async () => {
@@ -187,6 +255,26 @@ describe('DagOrchestrator', () => {
     await expect(orchestrator.execute()).rejects.toThrow('Explosion');
   });
 
+  it('should convert synchronous exceptions into task failures when failFast is false', async () => {
+    const orchestrator = new DagOrchestrator({ failFast: false });
+    orchestrator.addTask({
+      id: 'sync-throwing-task',
+      run: () => {
+        throw new Error('Sync boom');
+      },
+    });
+    orchestrator.addTask({
+      id: 'healthy-task',
+      run: async () => 'healthy',
+    });
+
+    const result = await orchestrator.execute();
+    expect(result.stats.completedTasks).toBe(1);
+    expect(result.stats.failedTasks).toBe(1);
+    expect(result.outputs.get('healthy-task')).toBe('healthy');
+    expect(result.errors.get('sync-throwing-task')?.message).toBe('Sync boom');
+  });
+
   it('should skip downstream tasks while completing independent tasks when failFast is false', async () => {
     const orchestrator = new DagOrchestrator({ failFast: false });
     orchestrator.addTask({
@@ -213,16 +301,26 @@ describe('DagOrchestrator', () => {
     expect(result.errors.get('failing-branch-root')?.message).toBe('Branch error');
   });
 
-  it('should respect overall timeoutMs and reject if execution exceeds timeout', async () => {
-    const orchestrator = new DagOrchestrator({ timeoutMs: 30 });
+  it('should respect overall timeoutMs and trigger cooperative AbortSignal using fake timers', async () => {
+    vi.useFakeTimers();
+    let abortedViaSignal = false;
+
+    const orchestrator = new DagOrchestrator({ timeoutMs: 50 });
     orchestrator.addTask({
       id: 'slow-task',
-      run: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      run: async ({ signal }) => {
+        signal.addEventListener('abort', () => {
+          abortedViaSignal = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 200));
         return 'slow';
       },
     });
 
-    await expect(orchestrator.execute()).rejects.toThrow('DAG execution timed out after 30ms');
+    const execPromise = orchestrator.execute();
+    await vi.advanceTimersByTimeAsync(60);
+
+    await expect(execPromise).rejects.toThrow('DAG execution timed out after 50ms');
+    expect(abortedViaSignal).toBe(true);
   });
 });

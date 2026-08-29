@@ -518,6 +518,39 @@ describe('AdaptiveConcurrency', () => {
       }
     });
 
+    it('should suppress recovery increment while latency gradient remains congested', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+
+      // Trigger reduction: 10 -> 8
+      ac.recordSuccess(400);
+      expect(ac.getCurrent()).toBe(8);
+
+      // 10 subsequent high-latency responses (gradient remains > 1.5)
+      for (let i = 0; i < 10; i++) {
+        const res = ac.recordSuccess(400);
+        // Recovery must NOT trigger while congested
+        expect(res.changed).toBe(false);
+        expect(ac.getCurrent()).toBe(8);
+      }
+
+      // Once latency drops back to baseline (healthy), recovery takes 5 consecutive healthy responses
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(100);
+        expect(res.changed).toBe(false);
+      }
+      const resRecover = ac.recordSuccess(100);
+      expect(resRecover.changed).toBe(true);
+      expect(resRecover.reason).toBe('recovery');
+      expect(resRecover.current).toBe(10);
+    });
+
     it('should clamp latency options and never grow concurrency beyond initial ceiling', () => {
       // Caller passes invalid/excessive backoff factor > 1
       const ac = new AdaptiveConcurrency(10, 1, {

@@ -226,17 +226,22 @@ export class ProviderRateLimitState extends EventEmitter {
 
         lastError = error as Error;
 
-        // Check if rate limited (from error, not result)
-        const isRateLimited =
-          options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
-        const retryAfterMs = options.getRetryAfter?.(undefined, lastError);
+        let isRateLimited = false;
+        let retryAfterMs: number | undefined;
 
-        if (isRateLimited) {
-          this.handleRateLimit(retryAfterMs);
+        try {
+          // Check if rate limited (from error, not result)
+          isRateLimited =
+            options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
+          retryAfterMs = options.getRetryAfter?.(undefined, lastError);
+
+          if (isRateLimited) {
+            this.handleRateLimit(retryAfterMs);
+          }
+        } finally {
+          // Release slot after applying rate limit updates (guaranteed release)
+          this.slotQueue.release();
         }
-
-        // Release slot after applying rate limit updates
-        this.slotQueue.release();
 
         // Check if we should retry
         if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
