@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { getPortkeyHeaders, toKebabCase } from '../../src/providers/portkey';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  getPortkeyHeaders,
+  PortkeyChatCompletionProvider,
+  toKebabCase,
+} from '../../src/providers/portkey';
 
 describe('toKebabCase', () => {
   it('should convert simple camelCase to kebab-case', () => {
@@ -59,15 +63,63 @@ describe('getPortkeyHeaders', () => {
     expect(headers).toEqual({});
   });
 
-  it('should handle non-portkey config keys without modification', () => {
+  it('should not turn non-portkey config keys into headers', () => {
     const config = {
       apiKey: 'test-api-key',
       customHost: 'custom.host.com',
+      max_tokens: 512,
+    };
+    expect(getPortkeyHeaders(config)).toEqual({});
+  });
+
+  it('should not leak promptfoo bookkeeping keys into headers', () => {
+    const config = {
+      portkeyProvider: '@bedrock-eu',
+      basePath: '/home/user/my-project',
+    };
+    expect(getPortkeyHeaders(config)).toEqual({
+      'x-portkey-provider': '@bedrock-eu',
+    });
+  });
+
+  it('should not emit a header for the promptfoo-only portkeyApiBaseUrl key', () => {
+    const config = {
+      portkeyApiKey: 'test-api-key',
+      portkeyApiBaseUrl: 'https://gateway.internal/v1',
+    };
+    expect(getPortkeyHeaders(config)).toEqual({
+      'x-portkey-api-key': 'test-api-key',
+    });
+  });
+
+  it('should not produce invalid header values from multiline config strings', () => {
+    const config = {
+      portkeyProvider: '@bedrock-eu',
+      instructions: 'line one\nline two',
     };
     const headers = getPortkeyHeaders(config);
-    expect(headers).toEqual({
-      apiKey: 'test-api-key',
-      customHost: 'custom.host.com',
+    expect(headers).toEqual({ 'x-portkey-provider': '@bedrock-eu' });
+    expect(() => new Headers(headers)).not.toThrow();
+  });
+
+  it('should merge custom headers from config.headers', () => {
+    const config = {
+      portkeyProvider: '@bedrock-eu',
+      headers: { 'x-my-custom': 'my-value' },
+    };
+    expect(getPortkeyHeaders(config)).toEqual({
+      'x-portkey-provider': '@bedrock-eu',
+      'x-my-custom': 'my-value',
+    });
+  });
+
+  it('should let config.headers override a generated portkey header', () => {
+    const config = {
+      portkeyTraceId: 'generated',
+      headers: { 'x-portkey-trace-id': 'explicit' },
+    };
+    expect(getPortkeyHeaders(config)).toEqual({
+      'x-portkey-trace-id': 'explicit',
     });
   });
 
@@ -81,9 +133,7 @@ describe('getPortkeyHeaders', () => {
     const headers = getPortkeyHeaders(config);
     expect(headers).toEqual({
       'x-portkey-api-key': 'test-portkey',
-      apiKey: 'test-regular',
       'x-portkey-custom-host': 'custom.host.com',
-      regularSetting: 'value',
     });
   });
 
@@ -109,5 +159,43 @@ describe('getPortkeyHeaders', () => {
       'x-portkey-timeout': '1000',
       'x-portkey-retries': '3',
     });
+  });
+});
+
+describe('PortkeyChatCompletionProvider', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('should use portkeyApiKey as the bearer token', () => {
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyApiKey: 'pk-config-key' },
+    });
+    expect(provider.getApiKey()).toBe('pk-config-key');
+  });
+
+  it('should fall back to the PORTKEY_API_KEY environment variable', () => {
+    vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyProvider: '@openai-prod' },
+    });
+    expect(provider.getApiKey()).toBe('pk-env-key');
+  });
+
+  it('should not fall back to OPENAI_API_KEY', () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-openai-secret');
+    vi.stubEnv('PORTKEY_API_KEY', '');
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyProvider: '@openai-prod' },
+    });
+    expect(provider.getApiKey()).toBeUndefined();
+  });
+
+  it('should keep the model name intact, including colons', () => {
+    const provider = new PortkeyChatCompletionProvider(
+      '@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      { config: { portkeyApiKey: 'pk-config-key' } },
+    );
+    expect(provider.modelName).toBe('@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0');
   });
 });
