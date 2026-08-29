@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   getPortkeyHeaders,
   PortkeyChatCompletionProvider,
@@ -58,28 +59,28 @@ describe('getPortkeyHeaders', () => {
   });
 
   it('should handle empty config object', () => {
-    const config = {};
-    const headers = getPortkeyHeaders(config);
-    expect(headers).toEqual({});
+    expect(getPortkeyHeaders({})).toEqual({});
   });
 
-  it('should not turn non-portkey config keys into headers', () => {
-    const config = {
-      apiKey: 'test-api-key',
-      customHost: 'custom.host.com',
-      max_tokens: 512,
-    };
-    expect(getPortkeyHeaders(config)).toEqual({});
+  // Non-portkey keys are request body params (max_tokens) or promptfoo bookkeeping
+  // (basePath). Forwarding them leaked local state and produced invalid header values.
+  it.each([
+    ['a request body parameter', { max_tokens: 512 }],
+    ['promptfoo bookkeeping', { basePath: '/home/user/my-project' }],
+    ['a provider credential', { apiKey: 'test-api-key' }],
+    ['an arbitrary setting', { regularSetting: 'value', customHost: 'custom.host.com' }],
+  ])('should not turn %s into a header', (_, foreign) => {
+    const config = { portkeyProvider: '@bedrock-eu', ...foreign };
+    expect(getPortkeyHeaders(config)).toEqual({ 'x-portkey-provider': '@bedrock-eu' });
   });
 
-  it('should not leak promptfoo bookkeeping keys into headers', () => {
-    const config = {
+  it('should not produce invalid header values from multiline config strings', () => {
+    const headers = getPortkeyHeaders({
       portkeyProvider: '@bedrock-eu',
-      basePath: '/home/user/my-project',
-    };
-    expect(getPortkeyHeaders(config)).toEqual({
-      'x-portkey-provider': '@bedrock-eu',
+      instructions: 'line one\nline two',
     });
+    expect(headers).toEqual({ 'x-portkey-provider': '@bedrock-eu' });
+    expect(() => new Headers(headers)).not.toThrow();
   });
 
   it('should not emit a header for the promptfoo-only portkeyApiBaseUrl key', () => {
@@ -90,16 +91,6 @@ describe('getPortkeyHeaders', () => {
     expect(getPortkeyHeaders(config)).toEqual({
       'x-portkey-api-key': 'test-api-key',
     });
-  });
-
-  it('should not produce invalid header values from multiline config strings', () => {
-    const config = {
-      portkeyProvider: '@bedrock-eu',
-      instructions: 'line one\nline two',
-    };
-    const headers = getPortkeyHeaders(config);
-    expect(headers).toEqual({ 'x-portkey-provider': '@bedrock-eu' });
-    expect(() => new Headers(headers)).not.toThrow();
   });
 
   it('should merge custom headers from config.headers', () => {
@@ -118,23 +109,15 @@ describe('getPortkeyHeaders', () => {
       portkeyTraceId: 'generated',
       headers: { 'x-portkey-trace-id': 'explicit' },
     };
-    expect(getPortkeyHeaders(config)).toEqual({
-      'x-portkey-trace-id': 'explicit',
-    });
+    expect(getPortkeyHeaders(config)).toEqual({ 'x-portkey-trace-id': 'explicit' });
   });
 
-  it('should handle mixed portkey and non-portkey config keys', () => {
+  it('should override case-insensitively so the header is not sent twice', () => {
     const config = {
-      portkeyApiKey: 'test-portkey',
-      apiKey: 'test-regular',
-      portkeyCustomHost: 'custom.host.com',
-      regularSetting: 'value',
+      portkeyTraceId: 'generated',
+      headers: { 'X-Portkey-Trace-Id': 'explicit' },
     };
-    const headers = getPortkeyHeaders(config);
-    expect(headers).toEqual({
-      'x-portkey-api-key': 'test-portkey',
-      'x-portkey-custom-host': 'custom.host.com',
-    });
+    expect(getPortkeyHeaders(config)).toEqual({ 'X-Portkey-Trace-Id': 'explicit' });
   });
 
   it('should handle boolean values', () => {
@@ -241,11 +224,23 @@ describe('PortkeyChatCompletionProvider', () => {
     );
   });
 
-  it('should keep the model name intact, including colons', () => {
-    const provider = new PortkeyChatCompletionProvider(
-      '@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0',
-      { config: { portkeyApiKey: 'pk-config-key' } },
+  it('should name the portkey credential when no key is configured', () => {
+    vi.stubEnv('OPENAI_API_KEY', undefined);
+    vi.stubEnv('PORTKEY_API_KEY', undefined);
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyProvider: 'openai' },
+    });
+    expect(provider.requiresApiKey()).toBe(true);
+    expect(provider.getApiKey()).toBeUndefined();
+  });
+
+  it('should preserve colons in a model catalog reference loaded from a provider id', async () => {
+    const provider = await loadApiProvider(
+      'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      { options: { config: { portkeyApiKey: 'pk-config-key' } } },
     );
-    expect(provider.modelName).toBe('@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0');
+    expect((provider as PortkeyChatCompletionProvider).modelName).toBe(
+      '@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    );
   });
 });
