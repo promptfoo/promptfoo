@@ -7,10 +7,6 @@ description: Configure custom Go providers to integrate your own Go-based LLM cl
 
 The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
-:::info
-The golang provider is currently experimental
-:::
-
 ## Quick Start
 
 You can initialize a new Go provider project using:
