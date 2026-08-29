@@ -1756,20 +1756,28 @@ describe('OpenAiResponsesProvider request building', () => {
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         return await new Promise<any>((resolve, reject) => {
-          setTimeout(
-            () =>
-              resolve({
-                data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
-                cached: false,
-                status: 200,
-                statusText: 'OK',
-                deleteFromCache,
-              }),
-            20,
-          );
           options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
             once: true,
           });
+          // Abort only once creation is in flight, then let creation resolve on a later
+          // macrotask. Driving both from here keeps the ordering deterministic: a wall-clock
+          // abort timer started alongside callApi() can fire after creation has already
+          // resolved on a loaded machine, and the request then proceeds to polling instead
+          // of aborting.
+          setTimeout(() => {
+            controller.abort(new Error('caller cancelled creation'));
+            setTimeout(
+              () =>
+                resolve({
+                  data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
+                  cached: false,
+                  status: 200,
+                  statusText: 'OK',
+                  deleteFromCache,
+                }),
+              0,
+            );
+          }, 0);
         });
       }
       if (String(url).endsWith('/responses/resp_accepted/cancel')) {
@@ -1784,7 +1792,6 @@ describe('OpenAiResponsesProvider request building', () => {
     const pending = provider.callApi('Accept and then cancel', { bustCache: true } as any, {
       abortSignal: controller.signal,
     });
-    setTimeout(() => controller.abort(new Error('caller cancelled creation')), 5);
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
 
