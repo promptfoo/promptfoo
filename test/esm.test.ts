@@ -1,4 +1,3 @@
-import fsPromises from 'node:fs/promises';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -288,18 +287,6 @@ describe('ESM utilities', () => {
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
-    });
-
-    it('does not treat a failed access check as proof that the module is absent', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/nonExistent.mjs');
-      vi.spyOn(fsPromises, 'access').mockRejectedValue(
-        Object.assign(new Error('Permission denied'), { code: 'EACCES' }),
-      );
-
-      const thrown = await importModule(modulePath).catch((err) => err);
-      expect(thrown).toMatchObject({ code: 'ERR_MODULE_NOT_FOUND' });
-      expect(logger.debug).toHaveBeenCalledWith(thrown.stack);
-      expect(logger.error).toHaveBeenCalledWith(`ESM import failed: ${thrown}`);
     });
 
     it('logs debug information during import process', async () => {

@@ -273,6 +273,8 @@ export async function importModule(modulePath: string, functionName?: string) {
     // Note: createRequire() doesn't work for .js files in "type": "module" packages
     // because Node.js still treats them as ESM based on package.json.
     // We use Node's vm module to execute the code with proper CJS globals.
+    // Intentionally limited to ".js": ".cjs" is already handled by Node as CJS and ".mjs"
+    // is always ESM, so this fallback only applies to ambiguous ".js" in ESM packages.
     if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
         `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
@@ -305,33 +307,31 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
+          { cause: { esmError: err, cjsError: cjsErr } },
         );
-
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
-        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
     }
 
-    // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
-    // (vs a dependency inside the file being missing).
-    // This provides clearer error messages for users when their files don't exist.
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT only when the missing target is the
+    // entry module itself (vs a dependency inside that module).
+    // This provides clearer error messages for users without masking nested import failures.
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
-      try {
-        await fsPromises.access(resolvedModulePath);
-      } catch (accessError) {
-        if ((accessError as NodeJS.ErrnoException).code === 'ENOENT') {
-          // Expected during config discovery: normalize before logging any error or stack.
-          const enoentError = new Error(
-            `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
-          ) as NodeJS.ErrnoException;
-          enoentError.code = 'ENOENT';
-          enoentError.path = resolvedModulePath;
-          throw enoentError;
-        }
-        // Other access failures do not establish absence; preserve the import error below.
+      const resolvedModuleFileUrl = pathToFileURL(resolvedModulePath).href;
+      const missingTarget = nodeError.message.match(/Cannot find module ['"]([^'"]+)['"]/)?.[1];
+      const missingEntryModule =
+        missingTarget === resolvedModulePath || missingTarget === resolvedModuleFileUrl;
+
+      if (missingEntryModule) {
+        // Expected during config discovery: normalize before logging any error or stack.
+        const enoentError = new Error(
+          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+        ) as NodeJS.ErrnoException;
+        enoentError.code = 'ENOENT';
+        enoentError.path = resolvedModulePath;
+        throw enoentError;
       }
     }
 

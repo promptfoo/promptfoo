@@ -321,6 +321,12 @@ describe('GolangProvider', () => {
       expect(provider.config).toEqual({});
     });
 
+    it('should handle options without config', () => {
+      const provider = new GolangProvider('script.go', { id: 'testId' } as never);
+      expect(provider.id()).toBe('testId');
+      expect(provider.config).toEqual({});
+    });
+
     it('should use class id() method when no id is provided in options', () => {
       const provider = new GolangProvider('script.go:custom_function');
       expect(provider.id()).toBe('golang:script.go:custom_function');
