@@ -1635,6 +1635,8 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const { loadApiProvider } = await import('../../src/providers/index');
 
+        // Expected env precedence: suite-level env < options.env < options.config.env.
+        // The conflicting suite-level base URL below proves the provider-level pin wins.
         const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
           options: {
             config: {
@@ -3614,7 +3616,14 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it.each([{ behavior: 'permit' }, { behavior: true }, true, null])(
+        it.each([
+          { behavior: 'permit' },
+          { behavior: true },
+          {},
+          { behavior: 'unknown' },
+          true,
+          null,
+        ])(
           'rejects malformed ask_user_question config %#',
           async (askUserQuestion) => {
             const provider = new ClaudeCodeSDKProvider({
