@@ -322,8 +322,9 @@ export async function importModule(modulePath: string, functionName?: string) {
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
       const resolvedModuleFileUrl = pathToFileURL(resolvedModulePath).href;
+      const missingModuleTarget = errorMessage.match(/Cannot find module ['"]([^'"]+)['"]/)?.[1];
       const missingEntryModule =
-        errorMessage.includes(resolvedModulePath) || errorMessage.includes(resolvedModuleFileUrl);
+        missingModuleTarget === resolvedModulePath || missingModuleTarget === resolvedModuleFileUrl;
 
       if (missingEntryModule) {
         // Expected during config discovery: normalize before logging any error or stack.
