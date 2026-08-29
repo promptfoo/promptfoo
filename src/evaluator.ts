@@ -26,6 +26,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { refreshLivePricing } from './providers/livePricing';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
@@ -5030,6 +5031,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         initializeOtel(otelConfig);
         otelInitialized = true;
       }
+
+      // Warm the opt-in live pricing cache before providers run so cost
+      // calculations during this evaluation can resolve prices for models
+      // missing from the static tables. No-op unless PROMPTFOO_LIVE_PRICING
+      // is enabled and the cache is stale.
+      await refreshLivePricing();
 
       return await this._runEvaluation();
     } catch (error) {
