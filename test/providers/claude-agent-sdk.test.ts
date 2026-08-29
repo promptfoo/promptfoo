@@ -1517,11 +1517,12 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata).not.toHaveProperty('assistantErrors');
       });
 
-      it.each(['model_not_found', 'overloaded'] as const)(
+      it.each(['model_not_found', 'overloaded', 'account_on_hold'] as const)(
         'annotates error result messages with the %s assistant error code',
         async (assistantError) => {
-          // The SDK formalized model_not_found in 0.3.144 and overloaded in
-          // 0.3.161. Both should be promoted from a dropped detail to the error
+          // The SDK formalized model_not_found in 0.3.144, overloaded in
+          // 0.3.161, and account_on_hold in 0.3.235. All should be promoted
+          // from a dropped detail to the error
           // string and metadata so consumers can distinguish the upstream cause
           // from the generic terminal subtype.
           mockQuery.mockReturnValue(
