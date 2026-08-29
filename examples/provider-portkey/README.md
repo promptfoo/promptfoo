@@ -7,10 +7,11 @@ npx promptfoo@latest init --example provider-portkey
 cd provider-portkey
 ```
 
-There are two examples:
+There are three examples:
 
 - prompt_example.yaml shows how to pull from portkey's prompt management platform. It requires you to set PORTKEY_API_KEY and OPENAI_API_KEY environment variables. Replace the portkey prompt with your own portkey prompt id.
 - provider_example.yaml shows how to use portkey's gateway. It requires the PORTKEY_API_KEY environment variable.
+- model_catalog_example.yaml shows how to address a model from Portkey's model catalog with an `@<ai-provider-slug>/<model-name>` reference. Replace the slug and model with your own. It requires the PORTKEY_API_KEY environment variable.
 
 Then run:
 

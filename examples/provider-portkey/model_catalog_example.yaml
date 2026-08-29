@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Portkey.ai model catalog integration'
+
+prompts:
+  - 'Write a short tweet about {{topic}}'
+
+providers:
+  # Model catalog reference: @<ai-provider-slug>/<model-name>
+  - id: 'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
+
+  # Equivalent, with the AI provider slug sent as a header
+  - id: 'portkey:eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
+    config:
+      portkeyProvider: '@bedrock-eu'
+
+tests:
+  - vars:
+      topic: bananas

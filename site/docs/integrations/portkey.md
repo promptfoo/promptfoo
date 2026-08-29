@@ -46,6 +46,32 @@ providers:
     portkeyProvider: openai
 ```
 
+### Model catalog
+
+Portkey's [model catalog](https://portkey.ai/docs/product/model-catalog) replaced virtual keys. Models are addressed as `@<ai-provider-slug>/<model-name>`, where the slug is the AI provider from your workspace's catalog and the model name is the one listed against it. Put the whole reference after `portkey:`:
+
+```yaml
+providers:
+  - id: 'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
+```
+
+Colons in the model name are preserved, so Bedrock and Vertex identifiers work as-is.
+
+The slug can also be sent separately, which is useful when the same model name is served by more than one provider:
+
+```yaml
+providers:
+  - id: 'portkey:eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
+    config:
+      portkeyProvider: '@bedrock-eu'
+```
+
+Both forms authenticate with `PORTKEY_API_KEY`, which must be a key from the workspace that owns the AI provider. The workspace slug itself is not part of the promptfoo config.
+
+`portkeyVirtualKey` continues to work for gateways that have not migrated to the model catalog.
+
+### Other options
+
 More complex portkey configurations are also supported.
 
 ```yaml
