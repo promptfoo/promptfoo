@@ -38,11 +38,24 @@ export {
 } from './retryPolicy';
 // Slot queue
 export { IndexedDeque, SlotQueue } from './slotQueue';
+// DAG Orchestrator
+export {
+  CyclicDependencyError,
+  DagOrchestrator,
+  MissingDependencyError,
+} from './dagOrchestrator';
 
 export type {
   AdaptiveConcurrencyOptions,
   ConcurrencyChangeResult,
 } from './adaptiveConcurrency';
+export type {
+  DagExecutionContext,
+  DagExecutionResult,
+  DagOrchestratorOptions,
+  DagStats,
+  DagTask,
+} from './dagOrchestrator';
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';
