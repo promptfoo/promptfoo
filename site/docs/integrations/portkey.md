@@ -1,6 +1,6 @@
 ---
 sidebar_label: Portkey AI
-description: Integrate Portkey AI gateway with promptfoo for LLM testing, including prompt management, observability, and custom configurations with OpenAI models and APIs.
+description: Integrate the Portkey AI gateway with promptfoo, including model catalog provider slugs, prompt management, observability, and gateway configuration.
 ---
 
 # Portkey AI integration
@@ -41,9 +41,9 @@ Example:
 
 ```yaml
 providers:
-  id: portkey:gpt-5.6
-  config:
-    portkeyProvider: openai
+  - id: portkey:gpt-5.6
+    config:
+      portkeyProvider: openai
 ```
 
 ### Model catalog
@@ -70,24 +70,33 @@ Both forms authenticate with `PORTKEY_API_KEY`, which must be a key from the wor
 
 `portkeyVirtualKey` continues to work for gateways that have not migrated to the model catalog.
 
-### Other options
+### Gateway options
 
-More complex portkey configurations are also supported.
+Any `portkey`-prefixed config key is sent as the matching [Portkey header](https://portkey.ai/docs/api-reference/inference-api/headers), so `portkeyCacheNamespace` becomes `x-portkey-cache-namespace`. The commonly used ones:
+
+| Config key                 | Header                          | Purpose                                                                |
+| -------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| `portkeyApiKey`            | `x-portkey-api-key`             | Portkey credential. Prefer the `PORTKEY_API_KEY` environment variable. |
+| `portkeyProvider`          | `x-portkey-provider`            | AI provider slug (`@my-provider`) or provider name.                    |
+| `portkeyVirtualKey`        | `x-portkey-virtual-key`         | Legacy credential reference, superseded by the provider slug.          |
+| `portkeyConfig`            | `x-portkey-config`              | Config ID or JSON object for routing, caching, and fallbacks.          |
+| `portkeyCustomHost`        | `x-portkey-custom-host`         | Base URL for privately hosted models.                                  |
+| `portkeyMetadata`          | `x-portkey-metadata`            | Metadata for filtering in Portkey analytics.                           |
+| `portkeyTraceId`           | `x-portkey-trace-id`            | Correlates related requests.                                           |
+| `portkeyCacheForceRefresh` | `x-portkey-cache-force-refresh` | Bypasses the Portkey cache for the request.                            |
+| `portkeyCacheNamespace`    | `x-portkey-cache-namespace`     | Partitions the cache store.                                            |
+| `portkeyRequestTimeout`    | `x-portkey-request-timeout`     | Timeout in milliseconds.                                               |
+
+`portkeyApiBaseUrl` is the exception: it sets the gateway URL promptfoo calls rather than a header, and defaults to `https://api.portkey.ai/v1`. The `PORTKEY_API_BASE_URL` environment variable takes precedence over it.
 
 ```yaml
 providers:
-  id: portkey:gpt-5.6
-  config:
-    # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
-    portkeyApiKey: xxx
-
-    # Other configuration options
-    portkeyVirtualKey: xxx
-    portkeyMetadata:
-      team: xxx
-    portkeyConfig: xxx
-    portkeyProvider: xxx
-    portkeyApiBaseUrl: xxx
+  - id: portkey:gpt-5.6
+    config:
+      portkeyProvider: openai
+      portkeyMetadata:
+        team: platform
+      portkeyTraceId: nightly-eval
 ```
 
 ## Portkey MCP Gateway
