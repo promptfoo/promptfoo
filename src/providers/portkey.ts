@@ -86,6 +86,23 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
 }
 
 /**
+ * Rewrites any `Authorization` entry to its canonical casing.
+ *
+ * The inherited request builder adds `Authorization` before spreading these headers, and it
+ * only guards the originator and organization headers case-insensitively. A caller-supplied
+ * `authorization` would therefore survive as a second entry that fetch joins into one value;
+ * emitting the canonical name lets it replace the generated bearer instead.
+ */
+function canonicalizeAuthorization(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [
+      key.toLowerCase() === 'authorization' ? 'Authorization' : key,
+      value,
+    ]),
+  );
+}
+
+/**
  * Portkey's own credential. It belongs in `x-portkey-api-key`; the `Authorization` bearer is
  * reserved for an upstream provider credential that Portkey forwards.
  */
@@ -150,8 +167,8 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   override getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
-    return super.getOpenAiRequestHeaders(
-      getPortkeyHeaders({ ...this.config, headers: customHeaders }),
+    return canonicalizeAuthorization(
+      super.getOpenAiRequestHeaders(getPortkeyHeaders({ ...this.config, headers: customHeaders })),
     );
   }
 
@@ -162,11 +179,6 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
    * even when Portkey already held the provider credential.
    */
   getApiKey(): string | undefined {
-    // A caller-supplied Authorization header wins outright. Returning a key as well would put
-    // two differently-cased entries on the request, which fetch joins into one value.
-    if (hasHeaderOverride(this.config.headers, 'Authorization')) {
-      return undefined;
-    }
     // Portkey owns the upstream credential for catalog slugs and virtual keys, so forward
     // nothing — including an apiKey inherited from a shared provider config. Callers that
     // still need a bearer can set one explicitly through `config.headers`.

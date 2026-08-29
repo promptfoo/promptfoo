@@ -257,19 +257,26 @@ describe('PortkeyChatCompletionProvider', () => {
   });
 
   describe('header collisions', () => {
-    it('should not emit a bearer when config.headers sets authorization', () => {
+    // The inherited builder adds `Authorization` and then spreads these, so emitting the
+    // canonical casing is what lets a caller override replace the generated bearer rather
+    // than being joined with it.
+    it.each([
+      ['provider-level', (h: Record<string, string>) => ({ headers: h }), undefined],
+      ['prompt-level', () => ({}), { authorization: 'Bearer explicit' }],
+    ])('should canonicalize an %s authorization override', (_, providerCfg, promptHeaders) => {
       vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
       const provider = new PortkeyChatCompletionProvider('gpt-4o', {
         config: {
           portkeyApiKey: 'pk-config-key',
           portkeyProvider: 'openai',
-          headers: { authorization: 'Bearer explicit' },
+          ...providerCfg({ authorization: 'Bearer explicit' }),
         },
       });
-      expect(provider.getApiKey()).toBeUndefined();
-      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
-        authorization: 'Bearer explicit',
-      });
+      const headers = provider.getOpenAiRequestHeaders(promptHeaders);
+      expect(headers).toMatchObject({ Authorization: 'Bearer explicit' });
+      expect(Object.keys(headers).filter((k) => k.toLowerCase() === 'authorization')).toHaveLength(
+        1,
+      );
     });
 
     it('should keep the portkey credential when a prompt overrides headers', () => {
