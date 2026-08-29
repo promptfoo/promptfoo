@@ -309,9 +309,15 @@ describe('DagOrchestrator', () => {
     orchestrator.addTask({
       id: 'slow-task',
       run: async ({ signal }) => {
-        return new Promise((resolve) => {
+        if (signal.aborted) {
+          abortedViaSignal = true;
+        } else {
           signal.addEventListener('abort', () => {
             abortedViaSignal = true;
+          });
+        }
+        return new Promise((resolve) => {
+          signal.addEventListener('abort', () => {
             resolve('aborted');
           });
         });

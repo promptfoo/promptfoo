@@ -540,7 +540,12 @@ describe('AdaptiveConcurrency', () => {
         expect(ac.getCurrent()).toBe(8);
       }
 
-      // Once latency drops back to baseline (healthy), recovery takes 5 consecutive healthy responses
+      // Wait for EMA to decay back to healthy gradient (<= 1.5):
+      // With alpha=0.5, EMA: 395 -> 247 -> 173.8 -> 136.9 (healthy!)
+      ac.recordSuccess(100);
+      ac.recordSuccess(100);
+
+      // Once gradient is healthy (<= 1.5), 5 consecutive healthy responses trigger recovery (8 -> 10)
       for (let i = 0; i < 4; i++) {
         const res = ac.recordSuccess(100);
         expect(res.changed).toBe(false);

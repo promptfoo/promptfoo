@@ -8,7 +8,12 @@
  */
 
 // Adaptive concurrency
-export { AdaptiveConcurrency, WARNING_THRESHOLD } from './adaptiveConcurrency';
+export {
+  AdaptiveConcurrency,
+  type AdaptiveConcurrencyOptions,
+  type ConcurrencyChangeResult,
+  WARNING_THRESHOLD,
+} from './adaptiveConcurrency';
 // Header parsing
 export {
   type ParsedRateLimitHeaders,
@@ -17,18 +22,25 @@ export {
 } from './headerParser';
 export { getProviderCallTracingContext } from './providerCallExecutionContext';
 // Provider state
-export { ProviderRateLimitState } from './providerRateLimitState';
+export {
+  type ProviderMetrics,
+  ProviderRateLimitState,
+} from './providerRateLimitState';
 // Provider wrapper
 export {
   createProviderRateLimitOptions,
   isRateLimitWrapped,
-  wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
+  wrapProvidersWithRateLimiting,
 } from './providerWrapper';
 // Rate limit key generation
 export { getRateLimitKey } from './rateLimitKey';
 // Core exports
-export { createRateLimitRegistry, RateLimitRegistry } from './rateLimitRegistry';
+export {
+  createRateLimitRegistry,
+  RateLimitRegistry,
+  type RateLimitRegistryOptions,
+} from './rateLimitRegistry';
 // Retry policy
 export {
   DEFAULT_RETRY_POLICY,
@@ -37,27 +49,22 @@ export {
   shouldRetry,
 } from './retryPolicy';
 // Slot queue
-export { IndexedDeque, SlotQueue } from './slotQueue';
+export {
+  IndexedDeque,
+  SlotQueue,
+  type SlotQueueOptions,
+} from './slotQueue';
 // DAG Orchestrator
 export {
   CyclicDependencyError,
+  type DagExecutionContext,
+  type DagExecutionResult,
   DagOrchestrator,
+  type DagOrchestratorOptions,
+  type DagStats,
+  type DagTask,
   MissingDependencyError,
 } from './dagOrchestrator';
-
-export type {
-  AdaptiveConcurrencyOptions,
-  ConcurrencyChangeResult,
-} from './adaptiveConcurrency';
-export type {
-  DagExecutionContext,
-  DagExecutionResult,
-  DagOrchestratorOptions,
-  DagStats,
-  DagTask,
-} from './dagOrchestrator';
-export type { ProviderMetrics } from './providerRateLimitState';
-export type { RateLimitRegistryOptions } from './rateLimitRegistry';
-export type { SlotQueueOptions } from './slotQueue';
 // Shared types
 export type { RateLimitExecuteOptions } from './types';
+

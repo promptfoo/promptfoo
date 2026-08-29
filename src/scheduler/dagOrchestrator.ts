@@ -437,9 +437,15 @@ export class DagOrchestrator {
             allOutputs: outputs,
           };
 
-          // Execute task safely wrapping synchronous throws into promise rejection
-          Promise.resolve()
-            .then(() => task.run(context))
+          // Execute task: invoke synchronously to register listeners/signals immediately, catching any sync throws
+          let taskPromise: Promise<unknown>;
+          try {
+            taskPromise = Promise.resolve(task.run(context));
+          } catch (syncError) {
+            taskPromise = Promise.reject(syncError);
+          }
+
+          taskPromise
             .then((output) => {
               runningCount--;
               completedCount++;
