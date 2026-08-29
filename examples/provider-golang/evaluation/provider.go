@@ -24,8 +24,12 @@ var client = core.NewClient()
 func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	// Get reasoning_effort from config, default to pkg1's default if not specified
 	reasoningEffort := pkg1.GetDefaultReasoningEffort()
-	if mode, ok := options["config"].(map[string]interface{})["reasoning_effort"].(string); ok {
-		reasoningEffort = mode
+	// Check "config" separately: a single-value type assertion panics if the key
+	// is absent or not a map.
+	if config, ok := options["config"].(map[string]interface{}); ok {
+		if mode, ok := config["reasoning_effort"].(string); ok {
+			reasoningEffort = mode
+		}
 	}
 
 	output, err := client.CreateCompletion(prompt, reasoningEffort)
