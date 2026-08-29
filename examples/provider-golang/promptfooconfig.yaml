@@ -5,10 +5,10 @@ prompts:
   - 'Given the sequence {{sequence}}, what are the next two numbers and explain your reasoning?'
 
 providers:
-  - id: 'file://evaluation/main.go:CallApi'
+  - id: 'file://evaluation/provider.go:CallApi'
     label: 'Provider in evaluation/'
 
-  - id: 'file://main.go:CallApi'
+  - id: 'file://provider.go:CallApi'
     label: 'Provider in root'
     config:
       reasoning_effort: 'high'

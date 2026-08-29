@@ -113,6 +113,7 @@ describe('GolangProvider', () => {
   const mockDirname = vi.mocked(path.dirname);
   const mockJoin = vi.mocked(path.join);
   const mockRelative = vi.mocked(path.relative);
+  const mockBasename = vi.mocked(path.basename);
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -184,6 +185,10 @@ describe('GolangProvider', () => {
       return to;
     });
 
+    mockBasename.mockImplementation(function (p: string) {
+      return p.split('/').pop() || '';
+    });
+
     mockDirname.mockImplementation(function (p: string) {
       const paths: Record<string, string> = {
         '/absolute/path/to/script.go': '/absolute/path/to',
@@ -205,10 +210,6 @@ describe('GolangProvider', () => {
         const basePath = validPaths.find((p) => p !== 'go.mod') || '/absolute/path/to';
         return `${basePath}/go.mod`;
       }
-      if (validPaths.includes('wrapper.go')) {
-        return '/tmp/golang-provider-xyz/wrapper.go';
-      }
-
       return validPaths.join('/').replace(/\/+/g, '/');
     });
 
@@ -712,10 +713,8 @@ describe('GolangProvider', () => {
   });
 
   describe('script execution', () => {
-    it('should import named provider packages from a separate wrapper directory', async () => {
-      mockMkdtempSync
-        .mockReturnValueOnce('/tmp/golang-provider-xyz')
-        .mockReturnValueOnce('/tmp/golang-provider-xyz/.promptfoo-wrapper-abc');
+    // Mocks `go list` so the provider is reported as a named (non-main) package.
+    const mockGoList = (stdout: string) => {
       mockExecFile.mockImplementation(((
         file: string,
         args: any[],
@@ -729,14 +728,7 @@ describe('GolangProvider', () => {
         }
         setImmediate(() => {
           if (file === 'go' && args[0] === 'list') {
-            callback(
-              null,
-              {
-                stdout: '{"Name":"provider","ImportPath":"example.com/project/provider"}',
-                stderr: '',
-              },
-              '',
-            );
+            callback(null, { stdout, stderr: '' }, '');
           } else if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
           } else {
@@ -745,23 +737,86 @@ describe('GolangProvider', () => {
         });
         return {} as any;
       }) as any);
+    };
+
+    const WRAPPER_DIR = '/tmp/golang-provider-xyz/.promptfoo-wrapper';
+
+    it('should import named provider packages from a separate wrapper directory', async () => {
+      mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
+      mockGoList('{"Name":"provider","ImportPath":"example.com/project/provider"}');
 
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
 
       await expect(provider.callApi('test prompt')).resolves.toEqual({ output: 'test' });
+
+      // The generated adapter aliases the package's CallApi into a `main` package.
       expect(mockWriteFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('provider.go'),
+        `${WRAPPER_DIR}/promptfoo_adapter.go`,
         expect.stringContaining('import provider "example.com/project/provider"'),
+      );
+      // wrapper.go must land in the generated directory, not next to the user's source,
+      // otherwise Go refuses to compile two packages in one directory.
+      expect(mockCopyFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('wrapper.go'),
+        `${WRAPPER_DIR}/wrapper.go`,
       );
       expect(mockExecFile).toHaveBeenCalledWith(
         'go',
-        expect.arrayContaining(['build', 'wrapper.go', 'provider.go']),
-        expect.objectContaining({
-          cwd: '/tmp/golang-provider-xyz/.promptfoo-wrapper-abc',
-        }),
+        [
+          'build',
+          '-o',
+          '/tmp/golang-provider-xyz/golang_wrapper',
+          'wrapper.go',
+          'promptfoo_adapter.go',
+        ],
+        expect.objectContaining({ cwd: WRAPPER_DIR }),
         expect.any(Function),
+      );
+    });
+
+    it('should build package main providers in place without an adapter', async () => {
+      mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
+      mockGoList('{"Name":"main","ImportPath":"example.com/project"}');
+
+      const provider = new GolangProvider('script.go', {
+        config: { basePath: '/absolute/path/to' },
+      });
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({ output: 'test' });
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'go',
+        expect.arrayContaining(['build', 'wrapper.go', 'script.go']),
+        expect.objectContaining({ cwd: '/tmp/golang-provider-xyz' }),
+        expect.any(Function),
+      );
+    });
+
+    it('should throw when a named package has no import path', async () => {
+      mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
+      mockGoList('{"Name":"provider"}');
+
+      const provider = new GolangProvider('script.go', {
+        config: { basePath: '/absolute/path/to' },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Could not determine Go provider import path',
+      );
+    });
+
+    it('should throw a clear error when go list output is not JSON', async () => {
+      mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
+      mockGoList('not json at all');
+
+      const provider = new GolangProvider('script.go', {
+        config: { basePath: '/absolute/path/to' },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        /Could not parse 'go list' output/,
       );
     });
 
@@ -796,7 +851,54 @@ describe('GolangProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow('Error running Golang script');
     });
 
-    it('should use custom function name when specified', async () => {
+    it.each(['CallApi', 'call_api'])(
+      'should accept the supported function name %s',
+      async (functionName) => {
+        const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
+        mockParsePathOrGlob.mockReturnValueOnce({
+          filePath: '/absolute/path/to/script.go',
+          functionName,
+          isPathPattern: false,
+          extension: 'go',
+        });
+
+        const provider = new GolangProvider(`script.go:${functionName}`, {
+          config: { basePath: '/absolute/path/to' },
+        });
+
+        let executedFunctionName = '';
+        mockExecFile.mockImplementation(((
+          file: string,
+          args: any[],
+          optionsOrCallback: any,
+          maybeCallback?: any,
+        ) => {
+          const callback =
+            typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+          if (!callback) {
+            return {} as any;
+          }
+          if (file.includes('golang_wrapper')) {
+            executedFunctionName = args[1]; // args[1] is the function name
+          }
+          setImmediate(() => {
+            if (args[0] === 'list') {
+              callback(null, { stdout: '{"Name":"main"}', stderr: '' }, '');
+            } else {
+              callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
+            }
+          });
+          return {} as any;
+        }) as any);
+
+        await provider.callApi('test prompt');
+        expect(executedFunctionName).toBe(functionName);
+      },
+    );
+
+    // wrapper.go only dispatches to CallApi, so any other name is rejected up front
+    // rather than failing later as an opaque Go compile or "Unknown function" error.
+    it('should reject a function name the Go wrapper cannot dispatch to', async () => {
       const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
@@ -809,27 +911,10 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      let executedFunctionName = '';
-      mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        if (file.includes('golang_wrapper')) {
-          executedFunctionName = args[1]; // args[1] is the function name
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
-
-      await provider.callApi('test prompt');
-      expect(executedFunctionName).toBe('custom_function');
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        /must export a function named 'CallApi'.*requested 'custom_function'/s,
+      );
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
 
     it('should use custom go executable when specified', async () => {
