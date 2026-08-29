@@ -39,7 +39,10 @@ export {
 // Slot queue
 export { IndexedDeque, SlotQueue } from './slotQueue';
 
-export type { ConcurrencyChangeResult } from './adaptiveConcurrency';
+export type {
+  AdaptiveConcurrencyOptions,
+  ConcurrencyChangeResult,
+} from './adaptiveConcurrency';
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';

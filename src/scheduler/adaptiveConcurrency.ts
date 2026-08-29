@@ -6,14 +6,10 @@ const WARNING_THRESHOLD = 0.1; // 10% remaining triggers proactive reduction
 const DEFAULT_LATENCY_ALPHA = 0.2; // Smoothing factor for EMA
 const DEFAULT_GRADIENT_THRESHOLD = 1.5; // 50% above baseline latency triggers proactive reduction
 const DEFAULT_LATENCY_BACKOFF_FACTOR = 0.8; // Reduce by 20% on latency inflation
+const DEFAULT_BASELINE_WINDOW_SIZE = 20; // Sliding window size to expire baseline min latency
 
 // Export for use in other modules
-export {
-  DEFAULT_GRADIENT_THRESHOLD,
-  DEFAULT_LATENCY_ALPHA,
-  DEFAULT_LATENCY_BACKOFF_FACTOR,
-  WARNING_THRESHOLD,
-};
+export { WARNING_THRESHOLD };
 
 export interface ConcurrencyChangeResult {
   changed: boolean;
@@ -29,6 +25,8 @@ export interface AdaptiveConcurrencyOptions {
   gradientThreshold?: number;
   /** Concurrency multiplier on latency gradient breach. Default: 0.8 */
   latencyBackoffFactor?: number;
+  /** Number of recent samples used to calculate baseline minimum latency. Default: 20 */
+  baselineWindowSize?: number;
 }
 
 /**
@@ -39,7 +37,7 @@ export interface AdaptiveConcurrencyOptions {
  * 2. Multiplicative Rate-Limit Backoff: Halves concurrency on HTTP 429.
  * 3. Proactive Quota Reduction: Reduces concurrency when quota remaining < 10%.
  * 4. Latency-Gradient Congestion Control (TCP Vegas / BBR inspired): Tracks EMA latency and
- *    compares with baseline unloaded latency. If latency inflates past the gradient threshold,
+ *    compares with a sliding-window baseline latency. If latency inflates past the gradient threshold,
  *    proactively steps down concurrency before HTTP 429 errors occur.
  *
  * Recovery path with constants (initial=10, min=1):
@@ -59,7 +57,8 @@ export class AdaptiveConcurrency {
 
   // Latency-gradient state
   private emaLatency: number | null = null;
-  private minLatency = Infinity;
+  private recentLatencies: number[] = [];
+  private readonly baselineWindowSize: number;
   private readonly alpha: number;
   private readonly gradientThreshold: number;
   private readonly latencyBackoffFactor: number;
@@ -76,6 +75,7 @@ export class AdaptiveConcurrency {
     this.alpha = options?.alpha ?? DEFAULT_LATENCY_ALPHA;
     this.gradientThreshold = options?.gradientThreshold ?? DEFAULT_GRADIENT_THRESHOLD;
     this.latencyBackoffFactor = options?.latencyBackoffFactor ?? DEFAULT_LATENCY_BACKOFF_FACTOR;
+    this.baselineWindowSize = options?.baselineWindowSize ?? DEFAULT_BASELINE_WINDOW_SIZE;
   }
 
   /**
@@ -85,15 +85,20 @@ export class AdaptiveConcurrency {
   recordSuccess(latencyMs?: number): ConcurrencyChangeResult {
     // Process latency tracking if provided and valid
     if (latencyMs !== undefined && latencyMs > 0) {
-      this.minLatency = Math.min(this.minLatency, latencyMs);
+      this.recentLatencies.push(latencyMs);
+      if (this.recentLatencies.length > this.baselineWindowSize) {
+        this.recentLatencies.shift();
+      }
+
       this.emaLatency =
         this.emaLatency === null
           ? latencyMs
           : this.alpha * latencyMs + (1 - this.alpha) * this.emaLatency;
 
-      const gradient = this.minLatency > 0 ? this.emaLatency / this.minLatency : 1;
+      const minBaseline = Math.min(...this.recentLatencies);
+      const gradient = minBaseline > 0 ? this.emaLatency / minBaseline : 1;
 
-      // If latency has inflated significantly beyond baseline and we have room to throttle
+      // If latency has inflated significantly beyond recent baseline and we have room to throttle
       if (gradient > this.gradientThreshold && this.current > this.min) {
         const previous = this.current;
         this.current = Math.max(this.min, Math.floor(this.current * this.latencyBackoffFactor));
@@ -138,6 +143,8 @@ export class AdaptiveConcurrency {
    */
   recordRateLimit(): ConcurrencyChangeResult {
     this.consecutiveSuccesses = 0;
+    this.recentLatencies = [];
+    this.emaLatency = null;
 
     const previous = this.current;
     this.current = Math.max(this.min, Math.floor(this.current * BACKOFF_FACTOR));
@@ -209,13 +216,14 @@ export class AdaptiveConcurrency {
   }
 
   getMinLatency(): number {
-    return Number.isFinite(this.minLatency) ? this.minLatency : 0;
+    return this.recentLatencies.length > 0 ? Math.min(...this.recentLatencies) : 0;
   }
 
   getLatencyGradient(): number | null {
-    if (this.emaLatency === null || !Number.isFinite(this.minLatency) || this.minLatency === 0) {
+    const minBaseline = this.getMinLatency();
+    if (this.emaLatency === null || minBaseline === 0) {
       return null;
     }
-    return this.emaLatency / this.minLatency;
+    return this.emaLatency / minBaseline;
   }
 }

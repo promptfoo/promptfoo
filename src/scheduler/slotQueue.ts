@@ -26,7 +26,7 @@ export interface DequeNode<T> {
 export class IndexedDeque<T extends { id: string }> {
   private head: DequeNode<T> | null = null;
   private tail: DequeNode<T> | null = null;
-  private nodeMap = new Map<string, DequeNode<T>>();
+  private nodeMap = new Map<string, Set<DequeNode<T>>>();
   private _size = 0;
 
   get length(): number {
@@ -44,7 +44,13 @@ export class IndexedDeque<T extends { id: string }> {
     } else {
       this.head = this.tail = node;
     }
-    this.nodeMap.set(value.id, node);
+
+    let nodeSet = this.nodeMap.get(value.id);
+    if (!nodeSet) {
+      nodeSet = new Set();
+      this.nodeMap.set(value.id, nodeSet);
+    }
+    nodeSet.add(node);
     this._size++;
   }
 
@@ -62,18 +68,34 @@ export class IndexedDeque<T extends { id: string }> {
     } else {
       this.tail = null;
     }
-    this.nodeMap.delete(node.value.id);
+
+    const nodeSet = this.nodeMap.get(node.value.id);
+    if (nodeSet) {
+      nodeSet.delete(node);
+      if (nodeSet.size === 0) {
+        this.nodeMap.delete(node.value.id);
+      }
+    }
+
     this._size--;
     return node.value;
   }
 
   /**
    * Remove an item by ID from anywhere in the queue (O(1)).
+   * If multiple queued items share the same ID, removes the earliest queued item (FIFO).
    */
   remove(id: string): T | undefined {
-    const node = this.nodeMap.get(id);
-    if (!node) {
+    const nodeSet = this.nodeMap.get(id);
+    if (!nodeSet || nodeSet.size === 0) {
       return undefined;
+    }
+
+    // Get the earliest queued node with this ID
+    const node = nodeSet.values().next().value!;
+    nodeSet.delete(node);
+    if (nodeSet.size === 0) {
+      this.nodeMap.delete(id);
     }
 
     if (node.prev) {
@@ -88,7 +110,6 @@ export class IndexedDeque<T extends { id: string }> {
       this.tail = node.prev;
     }
 
-    this.nodeMap.delete(id);
     this._size--;
     return node.value;
   }

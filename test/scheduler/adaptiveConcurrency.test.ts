@@ -468,5 +468,30 @@ describe('AdaptiveConcurrency', () => {
       expect(res5.reason).toBe('recovery');
       expect(res5.current).toBe(8); // ceil(5 * 1.5) = 8
     });
+
+    it('should expire older baseline minimums as new latencies arrive in sliding window', () => {
+      // Window size of 3
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        baselineWindowSize: 3,
+      });
+
+      // Old baseline: 100ms
+      ac.recordSuccess(100);
+      expect(ac.getMinLatency()).toBe(100);
+
+      // Workload shifts to 200ms
+      ac.recordSuccess(200);
+      ac.recordSuccess(200);
+      // 100ms sample is still in the 3-sample window ([100, 200, 200])
+      expect(ac.getMinLatency()).toBe(100);
+
+      // 4th request: 100ms sample is pushed out of the 3-sample window ([200, 200, 200])
+      ac.recordSuccess(200);
+      expect(ac.getMinLatency()).toBe(200);
+      expect(ac.getEmaLatency()).toBeCloseTo(200, 1);
+      expect(ac.getLatencyGradient()).toBeCloseTo(1.0, 1);
+    });
   });
 });
