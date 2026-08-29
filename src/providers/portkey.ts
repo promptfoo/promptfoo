@@ -42,15 +42,20 @@ export function toKebabCase(str: string): string {
   return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+function toHeaderValue(value: unknown): string {
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
 /**
- * Builds the request headers from `portkey*` config keys, merging `config.headers` last.
+ * Builds the request headers from `portkey*` config keys, applying `config.headers` last.
  *
  * Only `portkey`-prefixed keys are mapped. Everything else in the provider config is either a
  * request body parameter (`max_tokens`) or promptfoo bookkeeping (`basePath`); forwarding
  * those leaked local state to the gateway and could produce invalid header values.
  */
 export function getPortkeyHeaders(config: Record<string, any> = {}): Record<string, string> {
-  const customHeaders: Record<string, string> = config.headers ?? {};
+  const customHeaders: Record<string, unknown> =
+    typeof config.headers === 'object' && config.headers !== null ? config.headers : {};
   const headers: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(config)) {
@@ -62,15 +67,22 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
       continue;
     }
     const headerKey = `x-portkey-${toKebabCase(key.slice(PORTKEY_CONFIG_PREFIX.length))}`;
-    // Skip anything the user set explicitly, so a differently-cased duplicate does not
-    // survive the merge below and get sent as two header values.
-    if (hasHeaderOverride(customHeaders, headerKey)) {
+    // Header names are case-insensitive, so skip anything the user set explicitly. A
+    // differently-cased duplicate would otherwise reach the wire as two combined values.
+    if (hasHeaderOverride(customHeaders as Record<string, string>, headerKey)) {
       continue;
     }
-    headers[headerKey] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    headers[headerKey] = toHeaderValue(value);
   }
 
-  return { ...headers, ...customHeaders };
+  // Values come from user YAML, so coerce them rather than trusting the declared type.
+  for (const [key, value] of Object.entries(customHeaders)) {
+    if (value != null) {
+      headers[key] = toHeaderValue(value);
+    }
+  }
+
+  return headers;
 }
 
 /**
@@ -81,7 +93,9 @@ function resolvePortkeyApiKey(
   config: PortkeyConfig = {},
   env?: ProviderOptions['env'],
 ): string | undefined {
-  return config.portkeyApiKey || getEnvString('PORTKEY_API_KEY') || env?.PORTKEY_API_KEY;
+  // The per-provider `env:` override wins over ambient process env, matching how the
+  // upstream credential is resolved in getApiKey below.
+  return config.portkeyApiKey || env?.PORTKEY_API_KEY || getEnvString('PORTKEY_API_KEY');
 }
 
 /**

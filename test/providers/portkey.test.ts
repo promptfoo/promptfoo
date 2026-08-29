@@ -120,6 +120,22 @@ describe('getPortkeyHeaders', () => {
     expect(getPortkeyHeaders(config)).toEqual({ 'X-Portkey-Trace-Id': 'explicit' });
   });
 
+  it('should coerce non-string custom header values', () => {
+    const config = {
+      headers: { 'x-count': 5, 'x-enabled': true, 'x-obj': { a: 1 }, 'x-skip': null },
+    };
+    expect(getPortkeyHeaders(config)).toEqual({
+      'x-count': '5',
+      'x-enabled': 'true',
+      'x-obj': JSON.stringify({ a: 1 }),
+    });
+  });
+
+  it('should ignore a non-object config.headers', () => {
+    const config = { portkeyProvider: '@bedrock-eu', headers: 'not-an-object' };
+    expect(getPortkeyHeaders(config)).toEqual({ 'x-portkey-provider': '@bedrock-eu' });
+  });
+
   it('should handle boolean values', () => {
     const config = {
       portkeyFeatureFlag: true,
@@ -164,6 +180,15 @@ describe('PortkeyChatCompletionProvider', () => {
         config: { portkeyProvider: 'openai' },
       });
       expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
+    });
+
+    it('should prefer the per-provider env override over ambient process env', () => {
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-process-env');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+        env: { PORTKEY_API_KEY: 'pk-override' },
+      });
+      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-override' });
     });
 
     it('should not require a bearer token when a portkey key is configured', () => {
