@@ -1,6 +1,5 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { fetchWithTimeout } from '../util/fetch';
 
 export const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 
@@ -95,6 +94,10 @@ export async function refreshLivePricing(): Promise<void> {
     return;
   }
   try {
+    // Lazy import: a static import here closes a dependency cycle
+    // shared.ts > livePricing.ts > util/fetch > shared.ts that the
+    // Style Check madge gate rejects (same pattern as globalConfig/cloud.ts).
+    const { fetchWithTimeout } = await import('../util/fetch');
     const response = await fetchWithTimeout(
       OPENROUTER_MODELS_URL,
       { headers: { Accept: 'application/json' } },
