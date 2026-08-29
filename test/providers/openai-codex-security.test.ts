@@ -313,6 +313,17 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
       expect(mockRun).not.toHaveBeenCalled();
     });
+
+    it('reports malformed security SDK versions as incompatible', async () => {
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: 'unknown' });
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('package is incompatible (unknown)');
+      expect(response.error).not.toContain('Failed to load @openai/codex-security');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
   });
 
   describe('repository scanning', () => {

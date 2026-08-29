@@ -39,10 +39,10 @@ export class GolangProvider implements ApiProvider {
     private options?: ProviderOptions,
   ) {
     const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
+      options?.config?.basePath || '',
       runPath,
     );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
+    this.scriptPath = path.relative(options?.config?.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
@@ -69,7 +69,7 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
