@@ -1753,32 +1753,24 @@ describe('OpenAiResponsesProvider request building', () => {
   it('should cancel an accepted background job when creation is aborted before the response arrives', async () => {
     const controller = new AbortController();
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    // Creation resolves only when the test releases it, so the ordering this test depends on
+    // (abort lands while creation is in flight, creation resolves afterwards so the cleanup
+    // path can learn the response id) never rides on wall-clock timers.
+    let releaseCreation!: () => void;
+    const creationReleased = new Promise<void>((resolve) => {
+      releaseCreation = resolve;
+    });
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        return await new Promise<any>((resolve, reject) => {
-          options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-            once: true,
-          });
-          // Abort only once creation is in flight, then let creation resolve on a later
-          // macrotask. Driving both from here keeps the ordering deterministic: a wall-clock
-          // abort timer started alongside callApi() can fire after creation has already
-          // resolved on a loaded machine, and the request then proceeds to polling instead
-          // of aborting.
-          setTimeout(() => {
-            controller.abort(new Error('caller cancelled creation'));
-            setTimeout(
-              () =>
-                resolve({
-                  data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
-                  cached: false,
-                  status: 200,
-                  statusText: 'OK',
-                  deleteFromCache,
-                }),
-              0,
-            );
-          }, 0);
-        });
+        controller.abort(new Error('caller cancelled creation'));
+        await creationReleased;
+        return {
+          data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
       }
       if (String(url).endsWith('/responses/resp_accepted/cancel')) {
         return { data: {}, cached: false, status: 200, statusText: 'OK' };
@@ -1793,6 +1785,8 @@ describe('OpenAiResponsesProvider request building', () => {
       abortSignal: controller.signal,
     });
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+
+    releaseCreation();
     await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
