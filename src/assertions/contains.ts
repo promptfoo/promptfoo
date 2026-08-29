@@ -1,6 +1,7 @@
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+import { normalizeForComparison } from './normalize';
 
 interface ParsedField {
   field: string;
@@ -123,7 +124,11 @@ export const handleContains = ({
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
   invariant(isContainsValue(value), '"contains" assertion type must have a string or number value');
-  const pass = outputString.includes(String(value)) !== inverse;
+  const n = assertion.normalizeUnicode;
+  const pass =
+    normalizeForComparison(outputString, n).includes(
+      normalizeForComparison(String(value), n),
+    ) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,

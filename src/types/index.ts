@@ -747,6 +747,12 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Apply Unicode NFKC normalization before string comparison. Off by default.
+  // Folds forms that are visually identical but differ in codepoints — NFC vs
+  // NFD accents, ligatures such as U+FB01, non-breaking spaces — which cause
+  // false negatives on correct output. Normalizes form only, never wording.
+  normalizeUnicode: z.boolean().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
