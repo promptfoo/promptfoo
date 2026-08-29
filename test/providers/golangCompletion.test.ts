@@ -917,6 +917,31 @@ describe('GolangProvider', () => {
       expect(mockExecFile).not.toHaveBeenCalled();
     });
 
+    // The check is a static config error, so a warm cache entry must not be able to
+    // satisfy the call before it runs.
+    it('should reject an unsupported function name even when a cache entry exists', async () => {
+      const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
+      mockParsePathOrGlob.mockReturnValueOnce({
+        filePath: '/absolute/path/to/script.go',
+        functionName: 'custom_function',
+        isPathPattern: false,
+        extension: 'go',
+      });
+
+      const get = vi.fn().mockResolvedValue(JSON.stringify({ output: 'stale cached output' }));
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue({ get, set: vi.fn() } as never);
+
+      const provider = new GolangProvider('script.go:custom_function', {
+        config: { basePath: '/absolute/path/to' },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        /must export a function named 'CallApi'/,
+      );
+      expect(get).not.toHaveBeenCalled();
+    });
+
     it('should use custom go executable when specified', async () => {
       const provider = new GolangProvider('script.go', {
         config: {

@@ -135,6 +135,16 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
+    // `wrapper.go` only dispatches to `CallApi`, so a custom name in the provider id
+    // can never resolve. This is a static config error, so it is checked before any
+    // cache lookup: a cache hit must never be able to mask it.
+    if (this.functionName && !SUPPORTED_FUNCTION_NAMES.has(this.functionName)) {
+      throw new Error(
+        `Go providers must export a function named 'CallApi', but '${this.scriptPath}' requested '${this.functionName}'. ` +
+          `Rename the function to 'CallApi' or drop the ':${this.functionName}' suffix from the provider id.`,
+      );
+    }
+
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
@@ -168,15 +178,6 @@ export class GolangProvider implements ApiProvider {
       logger.debug(
         `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
-      // `wrapper.go` only dispatches to `CallApi`, so a custom name in the provider
-      // id can never resolve. Fail with an explanation rather than letting it
-      // surface as an `undefined: provider.CallApi` compile error.
-      if (this.functionName && !SUPPORTED_FUNCTION_NAMES.has(this.functionName)) {
-        throw new Error(
-          `Go providers must export a function named 'CallApi', but '${this.scriptPath}' requested '${this.functionName}'. ` +
-            `Rename the function to 'CallApi' or drop the ':${this.functionName}' suffix from the provider id.`,
-        );
-      }
       const functionName = this.functionName || apiType;
 
       let tempDir: string | undefined;
