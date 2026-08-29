@@ -490,8 +490,43 @@ describe('AdaptiveConcurrency', () => {
       // 4th request: 100ms sample is pushed out of the 3-sample window ([200, 200, 200])
       ac.recordSuccess(200);
       expect(ac.getMinLatency()).toBe(200);
-      expect(ac.getEmaLatency()).toBeCloseTo(200, 1);
-      expect(ac.getLatencyGradient()).toBeCloseTo(1.0, 1);
+      // EMA with alpha=0.5: 100 -> 150 -> 175 -> 187.5
+      expect(ac.getEmaLatency()).toBeCloseTo(187.5, 1);
+      expect(ac.getLatencyGradient()).toBeCloseTo(187.5 / 200, 2);
+    });
+
+    it('should limit proactive backoff to one reduction per congestion wave via cooldown epoch', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+
+      // 1st completion in spike: triggers 10 -> 8
+      const res1 = ac.recordSuccess(400);
+      expect(res1.changed).toBe(true);
+      expect(res1.current).toBe(8);
+
+      // Subsequent in-flight completions from the same wave should be in cooldown
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(400);
+        expect(res.changed).toBe(false);
+        expect(ac.getCurrent()).toBe(8);
+      }
+    });
+
+    it('should clamp latency options and never grow concurrency beyond initial ceiling', () => {
+      // Caller passes invalid/excessive backoff factor > 1
+      const ac = new AdaptiveConcurrency(10, 1, {
+        latencyBackoffFactor: 1.5,
+      });
+
+      ac.recordSuccess(100);
+      const res = ac.recordSuccess(500);
+      expect(res.current).toBeLessThanOrEqual(10);
     });
   });
 });

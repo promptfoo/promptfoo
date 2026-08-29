@@ -54,6 +54,8 @@ export class AdaptiveConcurrency {
   private readonly initial: number;
   private readonly min: number;
   private consecutiveSuccesses = 0;
+  private totalSuccessCount = 0;
+  private cooldownUntilSuccessCount = 0;
 
   // Latency-gradient state
   private emaLatency: number | null = null;
@@ -72,10 +74,26 @@ export class AdaptiveConcurrency {
     this.current = initial;
     // Clamp min to be at least 1 and at most initial
     this.min = Math.min(initial, Math.max(1, min));
-    this.alpha = options?.alpha ?? DEFAULT_LATENCY_ALPHA;
-    this.gradientThreshold = options?.gradientThreshold ?? DEFAULT_GRADIENT_THRESHOLD;
-    this.latencyBackoffFactor = options?.latencyBackoffFactor ?? DEFAULT_LATENCY_BACKOFF_FACTOR;
-    this.baselineWindowSize = options?.baselineWindowSize ?? DEFAULT_BASELINE_WINDOW_SIZE;
+
+    const rawAlpha = options?.alpha ?? DEFAULT_LATENCY_ALPHA;
+    this.alpha = Number.isFinite(rawAlpha)
+      ? Math.max(0.01, Math.min(1.0, rawAlpha))
+      : DEFAULT_LATENCY_ALPHA;
+
+    const rawGradient = options?.gradientThreshold ?? DEFAULT_GRADIENT_THRESHOLD;
+    this.gradientThreshold = Number.isFinite(rawGradient)
+      ? Math.max(1.01, rawGradient)
+      : DEFAULT_GRADIENT_THRESHOLD;
+
+    const rawBackoff = options?.latencyBackoffFactor ?? DEFAULT_LATENCY_BACKOFF_FACTOR;
+    this.latencyBackoffFactor = Number.isFinite(rawBackoff)
+      ? Math.max(0.1, Math.min(0.95, rawBackoff))
+      : DEFAULT_LATENCY_BACKOFF_FACTOR;
+
+    const rawWindow = options?.baselineWindowSize ?? DEFAULT_BASELINE_WINDOW_SIZE;
+    this.baselineWindowSize = Number.isFinite(rawWindow)
+      ? Math.max(1, Math.floor(rawWindow))
+      : DEFAULT_BASELINE_WINDOW_SIZE;
   }
 
   /**
@@ -83,6 +101,8 @@ export class AdaptiveConcurrency {
    * May increase concurrency after sustained success, or proactively throttle if latency degrades.
    */
   recordSuccess(latencyMs?: number): ConcurrencyChangeResult {
+    this.totalSuccessCount++;
+
     // Process latency tracking if provided and valid
     if (latencyMs !== undefined && latencyMs > 0) {
       this.recentLatencies.push(latencyMs);
@@ -98,11 +118,21 @@ export class AdaptiveConcurrency {
       const minBaseline = Math.min(...this.recentLatencies);
       const gradient = minBaseline > 0 ? this.emaLatency / minBaseline : 1;
 
-      // If latency has inflated significantly beyond recent baseline and we have room to throttle
-      if (gradient > this.gradientThreshold && this.current > this.min) {
+      // If latency has inflated significantly beyond recent baseline, room to throttle,
+      // and congestion wave cooldown epoch has elapsed (preventing in-flight cascade)
+      if (
+        gradient > this.gradientThreshold &&
+        this.current > this.min &&
+        this.totalSuccessCount >= this.cooldownUntilSuccessCount
+      ) {
         const previous = this.current;
-        this.current = Math.max(this.min, Math.floor(this.current * this.latencyBackoffFactor));
+        this.current = Math.min(
+          this.initial,
+          Math.max(this.min, Math.floor(this.current * this.latencyBackoffFactor)),
+        );
         this.consecutiveSuccesses = 0;
+        // Require at least `this.current` subsequent completions before another throttle
+        this.cooldownUntilSuccessCount = this.totalSuccessCount + this.current;
 
         return {
           changed: previous !== this.current,
