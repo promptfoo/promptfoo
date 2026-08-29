@@ -60,11 +60,16 @@ export class TokenUsageTracker {
    */
   public trackResponseUsage(
     providerId: string,
-    response: { tokenUsage?: TokenUsage } | undefined,
+    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
   ): void {
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };
-    accumulateResponseTokenUsage(updated, response);
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, response);
+    accumulateTokenUsage(updated, {
+      ...(accounting.incurredTokenUsage ?? accounting),
+      cached: accounting.cached,
+    });
     this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,

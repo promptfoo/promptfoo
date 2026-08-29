@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.0",
+  "version": "0.122.2",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -116,7 +116,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.11"
+      "@asamuzakjp/css-color": "6.0.7"
     },
     "storybook": {
       "esbuild": "0.28.2"
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.233",
+    "@anthropic-ai/claude-agent-sdk": "0.3.235",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -234,7 +234,7 @@
     "@biomejs/biome": "2.5.8",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.4.0",
+    "@langfuse/client": "^5.10.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -260,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.144.0",
+    "oxc-parser": "^0.145.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.233",
+    "@anthropic-ai/claude-agent-sdk": "0.3.235",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -293,10 +293,11 @@
     "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.4.0",
+    "@langfuse/client": "^5.10.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
+    "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.18",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",

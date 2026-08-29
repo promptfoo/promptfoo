@@ -216,6 +216,42 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('routes Codex Security provider IDs without treating them as OpenAI API models', async () => {
+      const provider = await registry.create('openai:codex-security', {
+        ...mockContext,
+        options: {
+          config: { operation: 'security-scan', model: 'gpt-5.6-terra' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security');
+      expect(provider.config).toMatchObject({
+        operation: 'security-scan',
+        model: 'gpt-5.6-terra',
+      });
+    });
+
+    it('supports inline Codex Security model selection and preserves provider environment metadata', async () => {
+      const provider = await registry.create('openai:codex-security:gpt-5.6-sol', {
+        ...mockContext,
+        env: { OPENAI_API_KEY: 'context-key' },
+        options: {
+          config: { operation: 'deep-security-scan' },
+          env: { CODEX_API_KEY: 'provider-key' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security:gpt-5.6-sol');
+      expect(provider.config).toMatchObject({
+        operation: 'deep-security-scan',
+        model: 'gpt-5.6-sol',
+      });
+      expect((provider as any).env).toEqual({
+        OPENAI_API_KEY: 'context-key',
+        CODEX_API_KEY: 'provider-key',
+      });
+    });
+
     it('fails fast for xAI embedding aliases since xAI has no public embeddings API', async () => {
       const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
       expect(factory).toBeDefined();

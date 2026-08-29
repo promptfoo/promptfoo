@@ -45,6 +45,18 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
+vi.mock('../../src/esm', () => ({
+  getWrapperDir: vi.fn(() => '/absolute/path/to'),
+}));
+
+vi.mock('../../src/util/file', () => ({
+  pathExists: vi.fn(async (filePath: string) => fsMocks.existsSync(filePath)),
+}));
+
+vi.mock('../../src/util/json', () => ({
+  safeJsonStringify: vi.fn((value: unknown) => JSON.stringify(value)),
+}));
+
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -72,24 +84,21 @@ vi.mock('fs/promises', () => {
   const mkdtemp = vi.fn(async (...args: any[]) => fsMocks.mkdtempSync(...args));
   const mkdir = vi.fn(async (...args: any[]) => fsMocks.mkdirSync(...args));
   const copyFile = vi.fn(async (...args: any[]) => fsMocks.copyFileSync(...args));
+  const writeFile = vi.fn(async (...args: any[]) => fsMocks.writeFileSync(...args));
   const rm = vi.fn(async (...args: any[]) => fsMocks.rmSync(...args));
-  const promiseApi = { readFile, readdir, mkdtemp, mkdir, copyFile, rm, access };
+  const promiseApi = { readFile, readdir, mkdtemp, mkdir, copyFile, writeFile, rm, access };
   return { default: promiseApi, ...promiseApi };
 });
 vi.mock('path');
 
-vi.mock('../../src/util', async () => {
-  const actual = await vi.importActual('../../src/util');
-  return {
-    ...actual,
-    parsePathOrGlob: vi.fn(() => ({
-      extension: 'go',
-      functionName: undefined,
-      isPathPattern: false,
-      filePath: '/absolute/path/to/script.go',
-    })),
-  };
-});
+vi.mock('../../src/util', () => ({
+  parsePathOrGlob: vi.fn(() => ({
+    extension: 'go',
+    functionName: undefined,
+    isPathPattern: false,
+    filePath: '/absolute/path/to/script.go',
+  })),
+}));
 
 describe('GolangProvider', () => {
   const mockReadFileSync = vi.mocked(fs.readFileSync);
@@ -100,6 +109,7 @@ describe('GolangProvider', () => {
   const mockReaddirSync = vi.mocked(fs.readdirSync);
   const mockCopyFileSync = vi.mocked(fs.copyFileSync);
   const mockMkdirSync = vi.mocked(fs.mkdirSync);
+  const mockWriteFileSync = vi.mocked(fs.writeFileSync);
   const mockDirname = vi.mocked(path.dirname);
   const mockJoin = vi.mocked(path.join);
   const mockRelative = vi.mocked(path.relative);
@@ -251,7 +261,13 @@ describe('GolangProvider', () => {
       // Use setImmediate to ensure proper async behavior
       setImmediate(() => {
         try {
-          if (file === 'go' && args[0] === 'build') {
+          if (file === 'go' && args[0] === 'list') {
+            callback(
+              null,
+              { stdout: '{"Name":"main","ImportPath":"example.com/provider"}', stderr: '' },
+              '',
+            );
+          } else if (file === 'go' && args[0] === 'build') {
             callback(null, { stdout: '', stderr: '' }, '');
           } else if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"output":"test output"}', stderr: '' }, '');
@@ -388,7 +404,7 @@ describe('GolangProvider', () => {
 
       mockExecFile.mockImplementation(((
         file: string,
-        _args: any[],
+        args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -398,7 +414,9 @@ describe('GolangProvider', () => {
           return {} as any;
         }
         setImmediate(() => {
-          if (file.includes('golang_wrapper')) {
+          if (args[0] === 'list') {
+            callback(null, { stdout: '{"Name":"main"}', stderr: '' }, '');
+          } else if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"error":"test error in result"}', stderr: '' }, '');
           } else {
             callback(null, { stdout: '', stderr: '' }, '');
@@ -522,7 +540,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        _args: any[],
+        args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -535,7 +553,12 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: file.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
+              stdout:
+                args[0] === 'list'
+                  ? '{"Name":"main"}'
+                  : file.includes('golang_wrapper')
+                    ? '{"embedding":[0.1,0.2,0.3]}'
+                    : '',
               stderr: '',
             },
             '',
@@ -554,7 +577,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        _args: any[],
+        args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -567,7 +590,12 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: file.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
+              stdout:
+                args[0] === 'list'
+                  ? '{"Name":"main"}'
+                  : file.includes('golang_wrapper')
+                    ? '{"classification":"test_class"}'
+                    : '',
               stderr: '',
             },
             '',
@@ -586,7 +614,7 @@ describe('GolangProvider', () => {
       });
       mockExecFile.mockImplementation(((
         file: string,
-        _args: any[],
+        args: any[],
         optionsOrCallback: any,
         maybeCallback?: any,
       ) => {
@@ -599,7 +627,12 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: file.includes('golang_wrapper') ? '{"output":"test"}' : '',
+              stdout:
+                args[0] === 'list'
+                  ? '{"Name":"main"}'
+                  : file.includes('golang_wrapper')
+                    ? '{"output":"test"}'
+                    : '',
               stderr: 'warning: some go warning',
             },
             '',
@@ -679,6 +712,59 @@ describe('GolangProvider', () => {
   });
 
   describe('script execution', () => {
+    it('should import named provider packages from a separate wrapper directory', async () => {
+      mockMkdtempSync
+        .mockReturnValueOnce('/tmp/golang-provider-xyz')
+        .mockReturnValueOnce('/tmp/golang-provider-xyz/.promptfoo-wrapper-abc');
+      mockExecFile.mockImplementation(((
+        file: string,
+        args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+        if (!callback) {
+          return {} as any;
+        }
+        setImmediate(() => {
+          if (file === 'go' && args[0] === 'list') {
+            callback(
+              null,
+              {
+                stdout: '{"Name":"provider","ImportPath":"example.com/project/provider"}',
+                stderr: '',
+              },
+              '',
+            );
+          } else if (file.includes('golang_wrapper')) {
+            callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
+          } else {
+            callback(null, { stdout: '', stderr: '' }, '');
+          }
+        });
+        return {} as any;
+      }) as any);
+
+      const provider = new GolangProvider('script.go', {
+        config: { basePath: '/absolute/path/to' },
+      });
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({ output: 'test' });
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('provider.go'),
+        expect.stringContaining('import provider "example.com/project/provider"'),
+      );
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'go',
+        expect.arrayContaining(['build', 'wrapper.go', 'provider.go']),
+        expect.objectContaining({
+          cwd: '/tmp/golang-provider-xyz/.promptfoo-wrapper-abc',
+        }),
+        expect.any(Function),
+      );
+    });
+
     it('should handle JSON parsing errors', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
