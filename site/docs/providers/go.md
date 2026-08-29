@@ -7,10 +7,6 @@ description: Configure custom Go providers to integrate your own Go-based LLM cl
 
 The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
-:::info
-The golang provider currently experimental
-:::
-
 ## Quick Start
 
 You can initialize a new Go provider project using:
@@ -33,6 +29,12 @@ The function should:
 - Return a map containing an "output" key with the response
 - Return an error if the operation fails
 
+The exported function must be named `CallApi`. Promptfoo's generated entry point resolves that
+symbol and no other, so a provider id such as `file://provider.go:MyProvider` will not work.
+
+Your provider must live inside a Go module: promptfoo walks up from the script looking for a
+`go.mod` and fails if it does not find one.
+
 ## Configuration
 
 To configure the Go provider, you need to specify the path to your Go script and any additional options you want to pass to the script. Here's an example configuration in YAML format:
@@ -54,8 +56,10 @@ Here's a complete example using the OpenAI API:
 package provider
 
 import (
+    "context"
     "fmt"
     "os"
+
     "github.com/sashabaranov/go-openai"
 )
 
@@ -64,10 +68,13 @@ var client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 // CallApi processes prompts with configurable options.
 func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-    // Extract configuration
+    // Extract configuration. Check the "config" key separately: a single-value type
+    // assertion panics when the provider is used without a config block.
     temp := 0.7
-    if val, ok := options["config"].(map[string]interface{})["temperature"].(float64); ok {
-        temp = val
+    if config, ok := options["config"].(map[string]interface{}); ok {
+        if val, ok := config["temperature"].(float64); ok {
+            temp = val
+        }
     }
 
     // Call the API
@@ -95,11 +102,25 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
 }
 ```
 
-Use a named, importable package as shown above when the provider lives in a regular Go module.
-Promptfoo builds its generated entry point separately and imports the package through the module
-path from `go.mod`, so repository-wide commands such as `go build ./...` continue to work. The
-`CallApi` symbol must be exported. Existing `package main` providers remain supported, but a provider
-without its own `main` function cannot also be built as a standalone command.
+## Package layout
+
+Prefer a named, importable package as shown above. Promptfoo detects the package with `go list`,
+generates its entry point in a separate directory, and imports your provider through the module
+path from `go.mod`. Because your source is never compiled next to a generated `main` package,
+repository-wide commands such as `go build ./...` keep working.
+
+Named packages are also compiled as a whole package, so the provider can call helpers defined in
+sibling files in the same directory.
+
+`package main` providers remain supported for backward compatibility, with two caveats:
+
+- Only the provider file itself is compiled, so helpers in sibling files are not visible and fail
+  with `undefined: <helper>`. Move them into the same file, or switch to a named package. This is
+  deliberate: it lets several `package main` providers share a directory, each exporting its own
+  `CallApi`, which a directory-wide build would reject as `CallApi redeclared in this block`.
+- The provider cannot declare its own `func main()`; it would collide with the generated entry
+  point. This is why a `package main` provider breaks `go build ./...` — the package has no `main`
+  function of its own.
 
 ## Using the Provider
 

@@ -29,8 +29,12 @@ var CallApi func(string, map[string]interface{}, map[string]interface{}) (map[st
 // and calls the OpenAI API through the core client.
 func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	reasoningEffort := pkg1.GetDefaultReasoningEffort()
-	if val, ok := options["config"].(map[string]interface{})["reasoning_effort"].(string); ok {
-		reasoningEffort = val
+	// Check "config" separately: a single-value type assertion panics if the key
+	// is absent or not a map.
+	if config, ok := options["config"].(map[string]interface{}); ok {
+		if val, ok := config["reasoning_effort"].(string); ok {
+			reasoningEffort = val
+		}
 	}
 
 	output, err := client.CreateCompletion(prompt, reasoningEffort)

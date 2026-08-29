@@ -872,3 +872,11 @@ jobs:
         working-directory: src/golang
         run: |
           go test -v wrapper.go wrapper_test.go
+
+      # The Go provider example must stay buildable as an ordinary Go module.
+      # See https://github.com/promptfoo/promptfoo/issues/10538.
+      - name: Build Go provider example
+        working-directory: examples/provider-golang
+        run: |
+          go build ./...
+          go vet ./...
