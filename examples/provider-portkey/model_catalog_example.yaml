@@ -5,13 +5,9 @@ prompts:
   - 'Write a short tweet about {{topic}}'
 
 providers:
-  # Model catalog reference: @<ai-provider-slug>/<model-name>
+  # Catalog reference: @<ai-provider-slug>/<model-name>.
+  # The slug can go in config.portkeyProvider instead of the id.
   - id: 'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
-
-  # Equivalent, with the AI provider slug sent as a header
-  - id: 'portkey:eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
-    config:
-      portkeyProvider: '@bedrock-eu'
 
 tests:
   - vars:
