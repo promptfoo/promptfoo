@@ -152,6 +152,8 @@ export const SECRET_FIELD_NAMES = new Set([
   'xcsrftoken', // x-csrf-token
   // Portkey gateway credential headers. The provider derives these from `portkey*` config
   // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
+  'portkeyapikey', // portkeyApiKey config field
+  'portkeyvirtualkey', // portkeyVirtualKey config field
   'xportkeyapikey', // x-portkey-api-key
   'xportkeyvirtualkey', // x-portkey-virtual-key
   'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id

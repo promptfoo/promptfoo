@@ -191,6 +191,28 @@ describe('PortkeyChatCompletionProvider', () => {
       expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-override' });
     });
 
+    it('should not copy an environment credential into the persisted config', () => {
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+      });
+      // eval results persist provider config, so the credential must only reach the header.
+      expect(provider.config.portkeyApiKey).toBeUndefined();
+      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
+    });
+
+    it('should accept a credential supplied directly as a header', () => {
+      const provider = new PortkeyChatCompletionProvider('@bedrock-eu/claude', {
+        config: { headers: { 'X-Portkey-Api-Key': 'pk-header' } },
+      });
+      expect(provider.requiresApiKey()).toBe(false);
+      const headers = provider.getOpenAiRequestHeaders();
+      expect(headers).toMatchObject({ 'X-Portkey-Api-Key': 'pk-header' });
+      expect(
+        Object.keys(headers).filter((k) => k.toLowerCase() === 'x-portkey-api-key'),
+      ).toHaveLength(1);
+    });
+
     it('should not require a bearer token when a portkey key is configured', () => {
       const provider = new PortkeyChatCompletionProvider('gpt-4o', {
         config: { portkeyApiKey: 'pk-config-key' },

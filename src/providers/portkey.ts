@@ -52,27 +52,31 @@ function toHeaderValue(value: unknown): string {
  * Only `portkey`-prefixed keys are mapped. Everything else in the provider config is either a
  * request body parameter (`max_tokens`) or promptfoo bookkeeping (`basePath`); forwarding
  * those leaked local state to the gateway and could produce invalid header values.
+ *
+ * `portkeyApiKey` is passed in rather than read from config so an environment-supplied
+ * credential never has to be written into the config that eval results persist.
  */
-export function getPortkeyHeaders(config: Record<string, any> = {}): Record<string, string> {
+export function getPortkeyHeaders(
+  config: Record<string, any> = {},
+  portkeyApiKey?: string,
+): Record<string, string> {
   const customHeaders: Record<string, unknown> =
     typeof config.headers === 'object' && config.headers !== null ? config.headers : {};
   const headers: Record<string, string> = {};
 
+  // Header names are case-insensitive, so never emit a name the caller already set. A
+  // differently-cased duplicate would otherwise reach the wire as two combined values.
+  const setGenerated = (name: string, value: unknown) => {
+    if (value != null && !hasHeaderOverride(customHeaders as Record<string, string>, name)) {
+      headers[name] = toHeaderValue(value);
+    }
+  };
+
+  setGenerated('x-portkey-api-key', portkeyApiKey);
   for (const [key, value] of Object.entries(config)) {
-    if (
-      value == null ||
-      !key.startsWith(PORTKEY_CONFIG_PREFIX) ||
-      key === PORTKEY_API_BASE_URL_KEY
-    ) {
-      continue;
+    if (key.startsWith(PORTKEY_CONFIG_PREFIX) && key !== PORTKEY_API_BASE_URL_KEY) {
+      setGenerated(`x-portkey-${toKebabCase(key.slice(PORTKEY_CONFIG_PREFIX.length))}`, value);
     }
-    const headerKey = `x-portkey-${toKebabCase(key.slice(PORTKEY_CONFIG_PREFIX.length))}`;
-    // Header names are case-insensitive, so skip anything the user set explicitly. A
-    // differently-cased duplicate would otherwise reach the wire as two combined values.
-    if (hasHeaderOverride(customHeaders as Record<string, string>, headerKey)) {
-      continue;
-    }
-    headers[headerKey] = toHeaderValue(value);
   }
 
   // Values come from user YAML, so coerce them rather than trusting the declared type.
@@ -131,13 +135,8 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   declare config: PortkeyConfig;
 
   constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
-    const portkeyApiKey = resolvePortkeyApiKey(providerOptions.config, providerOptions.env);
-    // Fold the resolved credential back into the config so `x-portkey-api-key` has a single
-    // producer regardless of whether it came from config or the environment.
-    const config: PortkeyConfig = {
-      ...providerOptions.config,
-      ...(portkeyApiKey && { portkeyApiKey }),
-    };
+    const config = providerOptions.config ?? {};
+    const portkeyApiKey = resolvePortkeyApiKey(config, providerOptions.env);
     super(modelName, {
       ...providerOptions,
       config: {
@@ -146,13 +145,16 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
         // the missing-key diagnostics in src/util/provider.ts.
         apiKeyEnvar: 'PORTKEY_API_KEY',
         // Portkey authenticates with x-portkey-api-key, so a bearer is only required when
-        // forwarding an upstream provider credential.
-        apiKeyRequired: config.apiKeyRequired ?? !portkeyApiKey,
+        // forwarding an upstream provider credential. The credential can also arrive as an
+        // explicit header rather than through config or the environment.
+        apiKeyRequired:
+          config.apiKeyRequired ??
+          !(portkeyApiKey || hasHeaderOverride(config.headers, 'x-portkey-api-key')),
         apiBaseUrl:
           getEnvString('PORTKEY_API_BASE_URL') ||
           config.portkeyApiBaseUrl ||
           'https://api.portkey.ai/v1',
-        headers: getPortkeyHeaders(config),
+        headers: getPortkeyHeaders(config, portkeyApiKey),
       },
     });
   }
@@ -168,7 +170,12 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
     return canonicalizeAuthorization(
-      super.getOpenAiRequestHeaders(getPortkeyHeaders({ ...this.config, headers: customHeaders })),
+      super.getOpenAiRequestHeaders(
+        getPortkeyHeaders(
+          { ...this.config, headers: customHeaders },
+          resolvePortkeyApiKey(this.config, this.env),
+        ),
+      ),
     );
   }
 
