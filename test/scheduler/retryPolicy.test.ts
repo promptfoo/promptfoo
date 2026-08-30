@@ -67,6 +67,86 @@ describe('shouldRetry', () => {
     expect(result).toBe(true);
   });
 
+  it.each([
+    ['HTTP 502: Authentication Failed', false],
+    ['HTTP 502: Bad Gateway', true],
+    ['HTTP 503: Authentication Failed', false],
+    ['HTTP 503: Service Unavailable', true],
+    ['HTTP 504: Authentication Failed', false],
+    ['HTTP 504: Gateway Timeout', true],
+    ['HTTP 524: Authentication Failed', false],
+    ['HTTP 524: A Timeout Occurred', true],
+    ['API error: server_error 503 Service Unavailable', true],
+    ['API call error: Status UNAVAILABLE, Code 503, Message:\n\nService Unavailable', true],
+    ['API call error: Status UNAVAILABLE, Code 503, Message:\n\nAuthentication Failed', false],
+    ['API error: maximum 503 tokens', false],
+  ])('should preserve transient status-text gating for %s', (message, expected) => {
+    expect(shouldRetry(0, new Error(message), false, DEFAULT_RETRY_POLICY)).toBe(expected);
+  });
+
+  it('should retry on bare 524 response errors', () => {
+    expect(
+      shouldRetry(0, new Error('QuiverAI API error: HTTP 524'), false, DEFAULT_RETRY_POLICY),
+    ).toBe(true);
+  });
+
+  it('should retry other server errors when explicitly enabled', () => {
+    const error = new Error('HTTP 500: Internal Server Error');
+
+    expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+    expect(
+      shouldRetry(0, error, false, { ...DEFAULT_RETRY_POLICY, retryAllServerErrors: true }),
+    ).toBe(true);
+  });
+
+  it.each([
+    'HTTP 500: Internal Server Error',
+    'status code: 501',
+    'API error: 505',
+    'API call error: 503',
+    'Internal Server Error: 511',
+  ])('should only retry explicit server status %s when all-5xx retry is enabled', (message) => {
+    expect(
+      shouldRetry(0, new Error(message), false, {
+        ...DEFAULT_RETRY_POLICY,
+        retryAllServerErrors: true,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    '500',
+    '502',
+    '503',
+    '504',
+    '524',
+    'network timeout',
+  ])('should not retry a client error mentioning %s', (text) => {
+    expect(
+      shouldRetry(0, new Error(`HTTP 400: maximum ${text} tokens`), false, {
+        ...DEFAULT_RETRY_POLICY,
+        retryAllServerErrors: true,
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPIPE',
+  ])('should retry flattened transient network error %s', (code) => {
+    expect(
+      shouldRetry(
+        0,
+        new Error(
+          `Request failed after 0 retries: TypeError: fetch failed (Cause: Error: ${code})`,
+        ),
+        false,
+        DEFAULT_RETRY_POLICY,
+      ),
+    ).toBe(true);
+  });
+
   it('should not retry on generic error', () => {
     const error = new Error('Some random error');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
@@ -85,6 +165,17 @@ describe('shouldRetry', () => {
     const error = new Error('Request timeout after 30000ms');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
+  });
+
+  it('should retry the timeout wording emitted by fetchWithTimeout', () => {
+    expect(
+      shouldRetry(
+        0,
+        new Error('Request failed after 0 retries: Error: Request timed out after 1000 ms'),
+        false,
+        DEFAULT_RETRY_POLICY,
+      ),
+    ).toBe(true);
   });
 
   it('should retry on network error', () => {
