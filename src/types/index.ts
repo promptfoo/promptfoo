@@ -619,6 +619,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'context-relevance',
   'conversation-relevance',
   'cost',
+  'ends-with',
   'equals',
   'factuality',
   'finish-reason',
