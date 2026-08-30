@@ -263,6 +263,13 @@ describe('ESM utilities', () => {
         error: { code: 'ERR_MODULE_NOT_FOUND' },
       },
       {
+        // A missing bare specifier names the package, never the entry module's path,
+        // so the ENOENT normalization must not claim the config file itself is absent.
+        name: 'missing bare package dependency',
+        source: "import 'promptfoo-not-a-real-package';",
+        error: { code: 'ERR_MODULE_NOT_FOUND' },
+      },
+      {
         name: 'invalid syntax',
         source: 'export default {;',
         // Vite reports parse failures as Error rather than Node's SyntaxError.

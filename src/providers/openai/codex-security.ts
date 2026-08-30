@@ -3,7 +3,6 @@ import path from 'path';
 
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
-import semverValid from 'semver/functions/valid.js';
 import { z } from 'zod';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -164,11 +163,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     try {
       const module = (await importModule(entryPoint)) as CodexSecurityModule;
       const version = typeof module.VERSION === 'string' ? module.VERSION : 'unknown';
-      const validVersion = semverValid(version);
-      if (
-        !validVersion ||
-        !semverSatisfies(validVersion, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)
-      ) {
+      if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
           `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for complete security operations and deep-scan usage accounting.`,

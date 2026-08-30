@@ -322,7 +322,7 @@ describe('GolangProvider', () => {
     });
 
     it('should handle options without config', () => {
-      const provider = new GolangProvider('script.go', { id: 'testId' } as never);
+      const provider = new GolangProvider('script.go', { id: 'testId' });
       expect(provider.id()).toBe('testId');
       expect(provider.config).toEqual({});
     });

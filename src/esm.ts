@@ -315,18 +315,24 @@ export async function importModule(modulePath: string, functionName?: string) {
       }
     }
 
-    // Normalize ERR_MODULE_NOT_FOUND to ENOENT only when the missing target is the
-    // entry module itself (vs a dependency inside that module).
-    // This provides clearer error messages for users without masking nested import failures.
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT only when the entry module itself is the
+    // unresolved target (vs a dependency imported by it), so nested import failures keep
+    // their original diagnostics. Comparing against the reported target rather than
+    // re-stat'ing the path also avoids mistaking EACCES for absence.
+    //
+    // Both spellings are required: Node names the missing entry by filesystem path
+    // ("Cannot find module '/abs/config.ts'"), while Vite's module runner names it by
+    // file URL ("Cannot find module 'file:///abs/config.ts'"). Nested failures report the
+    // dependency instead (its resolved path under Node, its raw specifier under Vite), so
+    // they match neither spelling and fall through.
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
-      const resolvedModuleFileUrl = pathToFileURL(resolvedModulePath).href;
       const missingTarget = nodeError.message.match(/Cannot find module ['"]([^'"]+)['"]/)?.[1];
-      const missingEntryModule =
-        missingTarget === resolvedModulePath || missingTarget === resolvedModuleFileUrl;
-
-      if (missingEntryModule) {
+      if (
+        missingTarget === resolvedModulePath ||
+        missingTarget === pathToFileURL(resolvedModulePath).href
+      ) {
         // Expected during config discovery: normalize before logging any error or stack.
         const enoentError = new Error(
           `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
