@@ -21,8 +21,14 @@ export const googleProviderFactories: ProviderFactory[] = [
         });
       }
       if (firstPart === 'interactions') {
+        const interactionsModel = splits.slice(2).join(':');
+        if (!interactionsModel) {
+          throw new Error(
+            `Missing model name for ${providerPath}. Use e.g. vertex:interactions:gemini-3-flash-preview.`,
+          );
+        }
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
-        return new GoogleInteractionsChatProvider(splits.slice(2).join(':'), {
+        return new GoogleInteractionsChatProvider(interactionsModel, {
           ...providerOptions,
           id: providerPath,
           config: { ...providerOptions.config, vertexai: true },
@@ -37,6 +43,12 @@ export const googleProviderFactories: ProviderFactory[] = [
           config: { ...providerOptions.config, vertexai: true },
         });
       }
+      const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
+      // Embeddings have no Interactions equivalent, so they are dispatched before
+      // the chat opt-in flag is considered.
+      if (firstPart === 'embedding' || firstPart === 'embeddings') {
+        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+      }
       if (providerOptions.config?.interactions) {
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
@@ -45,12 +57,8 @@ export const googleProviderFactories: ProviderFactory[] = [
           config: { ...providerOptions.config, vertexai: true },
         });
       }
-      const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
-      }
-      if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
       }
       // Default to chat provider
       return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);

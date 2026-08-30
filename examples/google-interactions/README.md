@@ -12,6 +12,7 @@ cd google-interactions
 ## Prerequisites
 
 - Google AI Studio API key set as `GOOGLE_API_KEY` or `GEMINI_API_KEY` in your environment
+- For `promptfooconfig.vertex.yaml` only: `gcloud auth application-default login` and a Google Cloud project (Vertex refuses API-key auth)
 
 ## Overview
 
@@ -33,5 +34,6 @@ Google stores interactions by default (55 days on the paid tier). Promptfoo send
 promptfoo eval -c promptfooconfig.yaml
 promptfoo eval -c promptfooconfig.tools.yaml
 promptfoo eval -c promptfooconfig.stateful.yaml
+promptfoo eval -c promptfooconfig.vertex.yaml
 promptfoo view
 ```

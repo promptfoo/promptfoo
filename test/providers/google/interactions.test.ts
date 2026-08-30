@@ -124,10 +124,6 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
-          safety_settings: [
-            { type: 'hate_speech', threshold: 'block_low_and_above' },
-            { type: 'harassment', threshold: 'block_medium_and_above' },
-          ],
           generation_config: {
             max_output_tokens: 2_048,
             thinking_level: 'low',
@@ -164,6 +160,34 @@ describe('GoogleInteractionsProvider', () => {
       completionDetails: { reasoning: 20 },
     });
     expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
+  });
+
+  it('drops safetySettings, which the Gemini Interactions API rejects outright', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'AAA' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }],
+      },
+    });
+    await provider.callApi('A city at dusk');
+
+    // Sending safety_settings makes the API reject the whole request, so a
+    // configured value must be dropped rather than forwarded.
+    const body = JSON.parse((mockFetchWithCache.mock.calls[0][1] as any).body);
+    expect(body.safety_settings).toBeUndefined();
   });
 
   it('returns a useful error when the Interactions API does not return video', async () => {
@@ -719,7 +743,7 @@ describe('GoogleInteractionsProvider', () => {
     });
 
     await expect(provider.callApi('A city at dusk')).resolves.toMatchObject({
-      error: expect.stringContaining('Gemini Interactions API requires an API key'),
+      error: expect.stringContaining('Gemini Omni requires an API key'),
     });
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });

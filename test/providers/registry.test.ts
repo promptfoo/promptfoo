@@ -1556,6 +1556,32 @@ describe('Provider Registry', () => {
       },
     );
 
+    it('rejects vertex:interactions without a model name', async () => {
+      const providerPath = 'vertex:interactions:';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
+    it.each(['vertex:embedding:gemini-embedding-001', 'vertex:embeddings:gemini-embedding-001'])(
+      'keeps %s on the embedding provider even with interactions enabled',
+      async (providerPath) => {
+        const options: ProviderOptions = { config: { interactions: true } };
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const provider = await factory!.create(providerPath, options, {
+          basePath: '/test',
+          options,
+        });
+        const { VertexEmbeddingProvider } = await import('../../src/providers/google/vertex');
+        // Embeddings have no Interactions equivalent; routing them to the chat
+        // provider would send "embedding:<model>" to the wrong endpoint.
+        expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+      },
+    );
+
     it('applies provider id but omits vertexai config for google:video routes', async () => {
       const providerPath = 'google:video:veo-3.1-generate-preview';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

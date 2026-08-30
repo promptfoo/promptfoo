@@ -140,15 +140,6 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
   }
 }
 
-function normalizeInteractionSafetySettings(
-  safetySettings: NonNullable<CompletionOptions['safetySettings']>,
-) {
-  return safetySettings.map(({ category, threshold, probability }) => ({
-    type: category.replace(/^HARM_CATEGORY_/i, '').toLowerCase(),
-    ...(threshold || probability ? { threshold: (threshold || probability)?.toLowerCase() } : {}),
-  }));
-}
-
 export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
   config: GoogleProviderConfig;
@@ -202,6 +193,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
           'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
       };
     }
+    if (config.safetySettings) {
+      // The Gemini API rejects `safety_settings` on the Interactions endpoint
+      // ("not available on the Gemini API"), so sending it fails the whole
+      // request. Verified against the live API for both Omni and chat models.
+      logger.warn(
+        '[Google Interactions] safetySettings is not supported by the Gemini Interactions API and was dropped from the request.',
+      );
+    }
+
     const transport = await resolveInteractionsTransport(config, this.env, {
       vertex: config.vertexai,
       label: 'Gemini Omni',
@@ -268,9 +268,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.safetySettings
-        ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
-        : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...passthrough,
       background: false,

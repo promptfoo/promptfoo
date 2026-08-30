@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini Interactions API on Vertex AI
+
+# Vertex is narrower than AI Studio for Interactions:
+#   - fewer models (gemini-3-flash-preview works; gemini-3.6-flash does not)
+#   - locations are limited to global, us, and eu
+#   - store must be true, so interactions ARE retained on this route
+#   - previousInteractionId is unsupported (Vertex silently ignores it), so
+#     multi-turn history is sent inline as a chat-formatted prompt
+#
+# Auth is OAuth only: run `gcloud auth application-default login` first.
+providers:
+  - id: vertex:interactions:gemini-3-flash-preview
+    config:
+      region: global
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: file://callbacks.js:get_weather
+
+prompts:
+  - 'What is the weather in {{city}}? Use the tool. Answer in one sentence.'
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: contains
+        value: '52'

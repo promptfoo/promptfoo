@@ -101,6 +101,13 @@ export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOver
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
+/**
+ * Vertex serves Interactions only from these locations, and all three live on
+ * the global `aiplatform.googleapis.com` host - there is no `us-aiplatform`
+ * or `eu-aiplatform` regional host (both 404). Verified against the live API.
+ */
+const VERTEX_INTERACTIONS_GLOBAL_HOST_LOCATIONS = new Set(['global', 'us', 'eu']);
+
 /** Resolve the Vertex AI Interactions endpoint for a project/region. */
 export function getVertexInteractionsEndpoint(
   config: GoogleProviderConfig,
@@ -118,7 +125,9 @@ export function getVertexInteractionsEndpoint(
     config.apiHost ||
     env?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
+    (VERTEX_INTERACTIONS_GLOBAL_HOST_LOCATIONS.has(region)
+      ? 'aiplatform.googleapis.com'
+      : `${region}-aiplatform.googleapis.com`);
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
 }
@@ -197,8 +206,7 @@ export async function resolveInteractionsTransport(
   const apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
   if (!apiKey) {
     return {
-      error:
-        'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.',
+      error: `${label} requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.`,
     };
   }
   return {

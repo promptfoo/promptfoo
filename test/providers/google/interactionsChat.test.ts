@@ -62,6 +62,19 @@ describe('GoogleInteractionsChatProvider', () => {
     vi.unstubAllEnvs();
   });
 
+  /** Stub Vertex OAuth so endpoint/body assertions do not need real credentials. */
+  const mockVertexAuth = () => {
+    const oauthHeaders = new Headers();
+    oauthHeaders.set('Authorization', 'Bearer vertex-token');
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      client: {
+        getAccessToken: async () => ({ token: 'vertex-token' }),
+        getRequestHeaders: async () => oauthHeaders,
+      },
+      projectId: 'auth-project',
+    } as any);
+  };
+
   const make = (config: Record<string, any> = {}) =>
     new GoogleInteractionsChatProvider('gemini-3.6-flash', {
       config: { apiKey: 'test-key', vertexai: false, ...config } as any,
@@ -113,12 +126,28 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
-    it('does not persist credentials in the response cache', async () => {
+    it('keys the cache on a credential hash rather than the raw API key', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make().callApi('Hello');
-      // 5th argument is `bustCache`: always true so the API key never becomes
-      // part of a durable cache fingerprint.
+
+      const init = mockFetchWithCache.mock.calls[0][1] as any;
+      // Responses are cacheable like every other Google provider, but the key is
+      // discriminated by a hash so the credential is never a durable fingerprint.
+      expect(init._authHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(JSON.stringify(init._authHash)).not.toContain('test-key');
+      expect(mockFetchWithCache.mock.calls[0][4]).toBe(false);
+    });
+
+    it('busts the cache when the caller asks for fresh results', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make().callApi('Hello', { bustCache: true } as any);
       expect(mockFetchWithCache.mock.calls[0][4]).toBe(true);
+    });
+
+    it('applies a configured timeoutMs to the initial request, not just polling', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({ timeoutMs: 1234 }).callApi('Hello');
+      expect(mockFetchWithCache.mock.calls[0][2]).toBe(1234);
     });
 
     it('maps a chat prompt into a user/model interaction timeline', async () => {
@@ -197,6 +226,60 @@ describe('GoogleInteractionsChatProvider', () => {
       ]);
     });
 
+    it('withholds function declarations when the tool policy disables tools', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+      await make({
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }, { googleSearch: {} }],
+        tool_choice: 'none',
+      }).callApi('Hello');
+
+      // Interactions has no tool_choice field, so a disabled policy can only be
+      // honored by not sending the functions at all. Server-side tools remain.
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual([{ type: 'google_search' }]);
+    });
+
+    it('does not run callbacks for a tool the policy disabled', async () => {
+      const spy = vi.fn().mockReturnValue('52F');
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          status: 'requires_action',
+          steps: [{ type: 'function_call', id: 'call_1', name: 'get_weather', arguments: {} }],
+        }) as any,
+      );
+
+      await make({
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        functionToolCallbacks: { get_weather: spy },
+      }).callApi('Hello');
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends the configured service tier', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({ service_tier: 'priority' }).callApi('Hello');
+      // Cost is computed against the tier, so the request has to actually use it.
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).service_tier).toBe('priority');
+    });
+
+    it('maps a nested generationConfig response schema onto response_format', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        generationConfig: {
+          response_schema: { type: 'OBJECT', properties: { color: { type: 'STRING' } } },
+        },
+      }).callApi('Hello');
+
+      // Otherwise opting into Interactions would silently drop structured output.
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+        type: 'object',
+        properties: { color: { type: 'string' } },
+      });
+    });
+
     it('sends responseSchema as a parsed response_format object', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
 
@@ -247,6 +330,34 @@ describe('GoogleInteractionsChatProvider', () => {
       const result = await make({ store: false, previousInteractionId: 'v1_prev' }).callApi('Hi');
       expect(result.error).toContain('previousInteractionId requires store: true');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('does not let passthrough.store bypass the retention default', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const result = await make({ passthrough: { store: true } }).callApi('Hello');
+      const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+      // Whatever is sent must match what metadata reports; passthrough is merged
+      // last, so an unguarded `store` there would silently enable retention.
+      expect(body.store).toBe(true);
+      expect(result.metadata?.interactionStored).toBe(true);
+    });
+
+    it('validates a previous_interaction_id supplied through passthrough', async () => {
+      const result = await make({
+        store: false,
+        passthrough: { previous_interaction_id: 'v1_prev' },
+      }).callApi('Hello');
+      expect(result.error).toContain('previousInteractionId requires store: true');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('sends a passthrough previous_interaction_id as a real stored reference', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({ passthrough: { previous_interaction_id: 'v1_prev' } }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0])).toMatchObject({
+        store: true,
+        previous_interaction_id: 'v1_prev',
+      });
     });
 
     it('drops safetySettings, which the Gemini Interactions API rejects', async () => {
@@ -581,8 +692,16 @@ describe('GoogleInteractionsChatProvider', () => {
       mockFetchWithCache.mockResolvedValue(
         interaction({ id: 'v1_pending', status: 'in_progress' }) as any,
       );
-      const result = await make({ timeoutMs: 1 }).callApi('Hello');
-      expect(result.error).toContain('timed out');
+      // Drive elapsed time explicitly rather than depending on host clock
+      // resolution to advance past the deadline mid-loop.
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => {
+        now += 400;
+        return now;
+      });
+
+      const result = await make({ timeoutMs: 1000 }).callApi('Hello');
+      expect(result.error).toContain('timed out after 1000ms');
     });
 
     it('requires an API key on the AI Studio route', async () => {
@@ -625,6 +744,99 @@ describe('GoogleInteractionsChatProvider', () => {
         Authorization: 'Bearer vertex-token',
         'Api-Revision': '2026-05-20',
       });
+    });
+
+    it('defaults to store:true on Vertex, which rejects store:false', async () => {
+      mockVertexAuth();
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+      const provider = new GoogleInteractionsChatProvider('gemini-3-flash-preview', {
+        config: { vertexai: true, projectId: 'p' } as any,
+      });
+      const result = await provider.callApi('Hello');
+
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).store).toBe(true);
+      expect(result.metadata?.interactionStored).toBe(true);
+    });
+
+    it.each(['global', 'us', 'eu'])(
+      'serves the %s location from the global aiplatform host',
+      async (region) => {
+        mockVertexAuth();
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+        const provider = new GoogleInteractionsChatProvider('gemini-3-flash-preview', {
+          config: { vertexai: true, projectId: 'p', region } as any,
+        });
+        await provider.callApi('Hello');
+
+        // There is no us-/eu-aiplatform regional host for Interactions; both 404.
+        expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+          `https://aiplatform.googleapis.com/v1beta1/projects/p/locations/${region}/interactions`,
+        );
+      },
+    );
+
+    it('exposes the endpoint from a configured project without a prior call', () => {
+      const provider = new GoogleInteractionsChatProvider('gemini-3-flash-preview', {
+        config: { vertexai: true, projectId: 'configured', region: 'global' } as any,
+      });
+      expect(provider.getApiEndpoint()).toBe(
+        'https://aiplatform.googleapis.com/v1beta1/projects/configured/locations/global/interactions',
+      );
+    });
+
+    it('rejects previousInteractionId on Vertex, which silently drops the history', async () => {
+      mockVertexAuth();
+      const provider = new GoogleInteractionsChatProvider('gemini-3-flash-preview', {
+        config: { vertexai: true, projectId: 'p', previousInteractionId: 'v1_prev' } as any,
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('does not support previousInteractionId');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('continues the Vertex tool loop with inline history, not a stored reference', async () => {
+      mockVertexAuth();
+      mockFetchWithCache
+        .mockResolvedValueOnce(
+          interaction({
+            id: 'v1_first',
+            status: 'requires_action',
+            steps: [{ type: 'function_call', id: 'call_1', name: 'get_weather', arguments: {} }],
+          }) as any,
+        )
+        .mockResolvedValueOnce(
+          interaction({
+            id: 'v1_second',
+            steps: [{ type: 'model_output', content: [{ type: 'text', text: '52F' }] }],
+          }) as any,
+        );
+
+      const provider = new GoogleInteractionsChatProvider('gemini-3-flash-preview', {
+        config: {
+          vertexai: true,
+          projectId: 'p',
+          tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+          functionToolCallbacks: { get_weather: () => '52F' },
+        } as any,
+      });
+      const result = await provider.callApi('Weather?');
+
+      const second = bodyOf(mockFetchWithCache.mock.calls[1]);
+      // Vertex stores the interaction (it requires store:true) but ignores the
+      // reference, so the timeline must be resent for the answer to be correct.
+      expect(second.previous_interaction_id).toBeUndefined();
+      expect(second.input).toEqual([
+        { type: 'user_input', content: [{ type: 'text', text: 'Weather?' }] },
+        {
+          type: 'function_result',
+          call_id: 'call_1',
+          name: 'get_weather',
+          result: [{ type: 'text', text: '52F' }],
+        },
+      ]);
+      expect(result.output).toBe('52F');
     });
 
     it('reports a Vertex authentication failure', async () => {

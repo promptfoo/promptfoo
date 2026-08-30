@@ -288,11 +288,13 @@ providers:
       interactions: true
 ```
 
-Prompts, tools, `responseSchema`, `systemInstruction`, and generation options are written exactly as they are for `generateContent` — Promptfoo translates them to the Interactions wire format.
+Prompts, tools, `responseSchema`, `systemInstruction`, `service_tier`, and generation options are written exactly as they are for `generateContent` — Promptfoo translates them to the Interactions wire format. Responses are cached like any other provider (the cache key is keyed on a hash of your credentials, never the key itself); use `--no-cache` for fresh results.
+
+Only models served on Interactions work. Retired ids such as `gemini-2.0-flash` return a not-found error, and the supported set differs between AI Studio and Vertex — see [Vertex AI differences](#vertex-ai-differences) below.
 
 ### Server-side history and retention
 
-Google stores interactions by default (55 days on the paid tier, 1 day on the free tier). **Promptfoo sends `store: false`**, so eval and red-team payloads are not retained. Function calling still works: Promptfoo resolves the tool loop by resending the timeline inline rather than relying on stored state.
+Google stores interactions by default (55 days on the paid tier, 1 day on the free tier). **On Google AI Studio, Promptfoo sends `store: false`**, so eval and red-team payloads are not retained. Function calling still works: Promptfoo resolves the tool loop by resending the timeline inline rather than relying on stored state.
 
 Set `store: true` to opt into server-side history, then pass the returned id — available as `metadata.interactionId` — to continue that thread:
 
@@ -304,7 +306,7 @@ providers:
       previousInteractionId: v1_ChcxcEtUYXJpRExMZThqTWNQc0tQdW1RSRIX...
 ```
 
-`previousInteractionId` requires storage; combining it with `store: false` is rejected before any request is made.
+`previousInteractionId` requires storage; combining it with `store: false` is rejected before any request is made. The same applies to `store` and `previous_interaction_id` set through `passthrough`, so they cannot bypass the retention check.
 
 ### Tools
 
@@ -321,6 +323,30 @@ providers:
 
 Without a matching callback the pending call is returned in the same array shape the other Google providers use, so `is-valid-function-call` and similar assertions keep working.
 
+The Interactions API has no `tool_choice` field, so a disabled tool policy (`tool_choice: none`, or `functionCallingConfig.mode: NONE`) is honored by withholding the function declarations entirely. Server-side tools such as `googleSearch` are unaffected.
+
+### Vertex AI differences
+
+`vertex:interactions:` works, but the Vertex surface is narrower than AI Studio in ways worth knowing before you switch:
+
+| Behavior     | Vertex AI                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Models       | A smaller set than AI Studio. `gemini-3-flash-preview` works; `gemini-3.6-flash` and `gemini-2.5-flash` return `Unsupported model interaction`.   |
+| Locations    | Only `global`, `us`, and `eu`, all served from `aiplatform.googleapis.com`. A regional value like `us-central1` is rejected.                      |
+| `store`      | Must be `true` — Vertex rejects `store: false`. Promptfoo defaults it to `true` here, so **interactions are retained on the Vertex route**.       |
+| Server state | `previousInteractionId` is rejected up front. Vertex answers with HTTP 200 but silently ignores the stored history, so Promptfoo does not use it. |
+| Auth         | OAuth only; API keys are refused. Use `gcloud auth application-default login` or a service account.                                               |
+
+Because Vertex ignores stored history, Promptfoo always resolves the Vertex tool loop by resending the timeline inline. Multi-turn conversations should be passed as chat-formatted prompts rather than through `previousInteractionId`.
+
+```yaml
+providers:
+  - id: vertex:interactions:gemini-3-flash-preview
+    config:
+      projectId: your-project
+      region: global
+```
+
 ### Differences from `generateContent`
 
 | Behavior          | Notes                                                                                                        |
@@ -328,7 +354,7 @@ Without a matching callback the pending call is returned in the same array shape
 | `safetySettings`  | Not supported by the Gemini API on this endpoint. Promptfoo drops it and logs a warning rather than failing. |
 | Structured output | `responseSchema` maps to `response_format`, which takes a JSON Schema directly.                              |
 | Streaming         | Not yet wired up; requests are sent with `stream: false`.                                                    |
-| Models            | Only models served on Interactions. Retired ids (e.g. `gemini-2.0-flash`) return a not-found error.          |
+| MCP               | MCP tools are advertised to the model but not auto-executed, matching the other Google providers.            |
 
 See the [Google Interactions example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-interactions) for a runnable configuration.
 
@@ -508,7 +534,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Video Generation Models (Gemini Omni Flash)
 
-Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools, and `safetySettings` is dropped because the Interactions endpoint rejects it (see [Interactions API](#interactions-api)).
 
 ```yaml
 providers:
