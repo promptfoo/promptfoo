@@ -1635,6 +1635,8 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const { loadApiProvider } = await import('../../src/providers/index');
 
+        // Expected env precedence for this regression: suite-level env < options.env < options.config.env.
+        // We intentionally set a conflicting suite-level base URL and assert the provider-level pin wins.
         const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
           options: {
             config: {
@@ -3614,7 +3616,7 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it.each([{ behavior: 'permit' }, { behavior: true }, true, null])(
+        it.each([{ behavior: 'permit' }, { behavior: true }, { behavior: 'unknown' }, true, null])(
           'rejects malformed ask_user_question config %#',
           async (askUserQuestion) => {
             const provider = new ClaudeCodeSDKProvider({
@@ -3626,6 +3628,19 @@ describe('ClaudeCodeSDKProvider', () => {
             expect(mockQuery).not.toHaveBeenCalled();
           },
         );
+
+        it('defaults empty ask_user_question config to first_option', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const provider = new ClaudeCodeSDKProvider({
+            config: { ask_user_question: {} },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          await expect(provider.callApi('Test prompt')).resolves.toMatchObject({
+            output: 'Response',
+          });
+          expect(mockQuery.mock.calls[0][0].options.canUseTool).toEqual(expect.any(Function));
+        });
 
         it('denies malformed AskUserQuestion tool input', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
