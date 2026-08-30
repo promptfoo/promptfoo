@@ -1,7 +1,8 @@
 import util from 'util';
 
-import type { AssertionParams, GradingResult } from '../types/index';
 import { normalizeForComparison } from './normalize';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleEquals = async ({
   assertion,
@@ -30,7 +31,8 @@ export const handleEquals = async ({
     const normalize = assertion.normalizeUnicode;
     pass =
       (normalizeForComparison(String(renderedValue), normalize) ===
-        normalizeForComparison(outputString, normalize)) !== inverse;
+        normalizeForComparison(outputString, normalize)) !==
+      inverse;
   }
 
   return {

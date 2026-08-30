@@ -68,9 +68,7 @@
           "$ref": "#/definitions/__schema48"
         }
       },
-      "required": [
-        "prompts"
-      ],
+      "required": ["prompts"],
       "additionalProperties": false
     },
     "__schema0": {
@@ -620,9 +618,7 @@
                 "$ref": "#/definitions/__schema12"
               }
             },
-            "required": [
-              "description"
-            ],
+            "required": ["description"],
             "additionalProperties": false
           }
         ]
@@ -658,12 +654,7 @@
     },
     "__schema12": {
       "type": "string",
-      "enum": [
-        "text",
-        "pdf",
-        "docx",
-        "image"
-      ]
+      "enum": ["text", "pdf", "docx", "image"]
     },
     "__schema13": {
       "anyOf": [
@@ -690,9 +681,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "id"
-                ],
+                "required": ["id"],
                 "additionalProperties": false
               },
               {
@@ -716,10 +705,7 @@
                   "function": {},
                   "config": {}
                 },
-                "required": [
-                  "raw",
-                  "label"
-                ],
+                "required": ["raw", "label"],
                 "additionalProperties": false
               }
             ]
@@ -836,10 +822,7 @@
               ]
             }
           },
-          "required": [
-            "id",
-            "callApi"
-          ],
+          "required": ["id", "callApi"],
           "additionalProperties": false
         }
       ]
@@ -908,10 +891,7 @@
                 "additionalProperties": {}
               }
             },
-            "required": [
-              "type",
-              "assert"
-            ],
+            "required": ["type", "assert"],
             "additionalProperties": false
           },
           {
@@ -1069,11 +1049,7 @@
             },
             {
               "type": "string",
-              "enum": [
-                "select-best",
-                "human",
-                "max-score"
-              ]
+              "enum": ["select-best", "human", "max-score"]
             },
             {}
           ]
@@ -1107,9 +1083,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "additionalProperties": false
     },
     "__schema24": {
@@ -1165,10 +1139,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "role",
-                  "content"
-                ],
+                "required": ["role", "content"],
                 "additionalProperties": false
               }
             }
@@ -1298,9 +1269,7 @@
           }
         }
       },
-      "required": [
-        "path"
-      ],
+      "required": ["path"],
       "additionalProperties": false
     },
     "__schema29": {
@@ -1409,10 +1378,7 @@
                 }
               }
             },
-            "required": [
-              "config",
-              "tests"
-            ],
+            "required": ["config", "tests"],
             "additionalProperties": false
           }
         ]
@@ -1545,10 +1511,7 @@
             ]
           }
         },
-        "required": [
-          "name",
-          "value"
-        ],
+        "required": ["name", "value"],
         "additionalProperties": false
       }
     },
@@ -1650,27 +1613,17 @@
                           },
                           "type": {
                             "type": "string",
-                            "enum": [
-                              "text",
-                              "pdf",
-                              "docx",
-                              "image"
-                            ]
+                            "enum": ["text", "pdf", "docx", "image"]
                           }
                         },
-                        "required": [
-                          "description"
-                        ],
+                        "required": ["description"],
                         "additionalProperties": false
                       }
                     ]
                   }
                 }
               },
-              "required": [
-                "id",
-                "callApi"
-              ],
+              "required": ["id", "callApi"],
               "additionalProperties": false
             },
             {
@@ -2162,17 +2115,10 @@
                           },
                           "type": {
                             "type": "string",
-                            "enum": [
-                              "text",
-                              "pdf",
-                              "docx",
-                              "image"
-                            ]
+                            "enum": ["text", "pdf", "docx", "image"]
                           }
                         },
-                        "required": [
-                          "description"
-                        ],
+                        "required": ["description"],
                         "additionalProperties": false
                       }
                     ]
@@ -2254,9 +2200,7 @@
                 }
               }
             },
-            "required": [
-              "id"
-            ],
+            "required": ["id"],
             "additionalProperties": false
           }
         },
@@ -2892,18 +2836,10 @@
                   "severity": {
                     "description": "Severity level for this plugin",
                     "type": "string",
-                    "enum": [
-                      "critical",
-                      "high",
-                      "medium",
-                      "low",
-                      "informational"
-                    ]
+                    "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
-                "required": [
-                  "id"
-                ],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
@@ -2911,9 +2847,7 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
-          "default": [
-            "default"
-          ],
+          "default": ["default"],
           "type": "array",
           "items": {
             "anyOf": [
@@ -3033,9 +2967,7 @@
                     "additionalProperties": {}
                   }
                 },
-                "required": [
-                  "id"
-                ],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
@@ -3091,20 +3023,12 @@
                 "type": "string"
               }
             },
-            "required": [
-              "output",
-              "pass",
-              "score",
-              "reason"
-            ],
+            "required": ["output", "pass", "score", "reason"],
             "additionalProperties": false
           }
         }
       },
-      "required": [
-        "plugins",
-        "strategies"
-      ],
+      "required": ["plugins", "strategies"],
       "additionalProperties": false,
       "definitions": {
         "__schema0": {
@@ -3206,10 +3130,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": [
-                      "protobuf",
-                      "json"
-                    ]
+                    "enum": ["protobuf", "json"]
                   }
                 },
                 "redactAttributes": {
@@ -3219,12 +3140,7 @@
                   }
                 }
               },
-              "required": [
-                "enabled",
-                "port",
-                "host",
-                "acceptFormats"
-              ],
+              "required": ["enabled", "port", "host", "acceptFormats"],
               "additionalProperties": false
             },
             "grpc": {
@@ -3237,10 +3153,7 @@
                   "type": "number"
                 }
               },
-              "required": [
-                "enabled",
-                "port"
-              ],
+              "required": ["enabled", "port"],
               "additionalProperties": false
             }
           },
@@ -3251,18 +3164,13 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "sqlite"
-              ]
+              "enum": ["sqlite"]
             },
             "retentionDays": {
               "type": "number"
             }
           },
-          "required": [
-            "type",
-            "retentionDays"
-          ],
+          "required": ["type", "retentionDays"],
           "additionalProperties": false
         },
         "forwarding": {
@@ -3284,10 +3192,7 @@
               }
             }
           },
-          "required": [
-            "enabled",
-            "endpoint"
-          ],
+          "required": ["enabled", "endpoint"],
           "additionalProperties": false
         },
         "provider": {
@@ -3332,10 +3237,7 @@
                   "maximum": 300000
                 }
               },
-              "required": [
-                "id",
-                "endpoint"
-              ],
+              "required": ["id", "endpoint"],
               "additionalProperties": false
             },
             {
@@ -3361,9 +3263,7 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "token"
-                  ],
+                  "required": ["token"],
                   "additionalProperties": false
                 },
                 "headers": {
@@ -3381,12 +3281,7 @@
                   "maximum": 300000
                 }
               },
-              "required": [
-                "id",
-                "endpoint",
-                "projectId",
-                "auth"
-              ],
+              "required": ["id", "endpoint", "projectId", "auth"],
               "additionalProperties": false
             },
             {
@@ -3414,10 +3309,7 @@
                       "not": {}
                     }
                   },
-                  "required": [
-                    "username",
-                    "password"
-                  ],
+                  "required": ["username", "password"],
                   "additionalProperties": false
                 },
                 "headers": {
@@ -3435,11 +3327,7 @@
                   "maximum": 300000
                 }
               },
-              "required": [
-                "id",
-                "endpoint",
-                "auth"
-              ],
+              "required": ["id", "endpoint", "auth"],
               "additionalProperties": false
             }
           ]
@@ -3450,9 +3338,7 @@
           "maximum": 300000
         }
       },
-      "required": [
-        "enabled"
-      ],
+      "required": ["enabled"],
       "additionalProperties": false
     },
     "__schema41": {

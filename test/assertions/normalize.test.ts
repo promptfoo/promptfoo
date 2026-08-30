@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { normalizeForComparison } from '../../src/assertions/normalize';
 
 describe('normalizeForComparison', () => {
@@ -27,11 +28,7 @@ describe('normalizeForComparison', () => {
   it('never relaxes wording', () => {
     // The point of an exact assertion survives: normalization changes form, not
     // meaning. A changed digit is still a different string.
-    expect(normalizeForComparison('$8.540', true)).not.toBe(
-      normalizeForComparison('$9.540', true),
-    );
-    expect(normalizeForComparison('Paris', true)).not.toBe(
-      normalizeForComparison('paris', true),
-    );
+    expect(normalizeForComparison('$8.540', true)).not.toBe(normalizeForComparison('$9.540', true));
+    expect(normalizeForComparison('Paris', true)).not.toBe(normalizeForComparison('paris', true));
   });
 });
