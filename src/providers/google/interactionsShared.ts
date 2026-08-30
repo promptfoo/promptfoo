@@ -283,6 +283,18 @@ function getInteractionsCapabilityGap(
     // The Gemini API rejects `safety_settings` on this endpoint outright.
     return 'safetySettings is not supported by the Interactions API';
   }
+  const toolMode =
+    config.toolConfig?.functionCallingConfig?.mode ??
+    config.tool_config?.function_calling_config?.mode ??
+    (typeof config.tool_choice === 'string' ? config.tool_choice : undefined);
+  if (
+    typeof toolMode === 'string' &&
+    ['ANY', 'VALIDATED', 'REQUIRED'].includes(toolMode.toUpperCase())
+  ) {
+    // Interactions has no tool_choice field, so a mode that *requires* a call
+    // cannot be enforced; generateContent can.
+    return `functionCallingConfig.mode ${toolMode.toUpperCase()} cannot be enforced on the Interactions API`;
+  }
   const modalities = (config.generationConfig?.responseModalities ??
     config.generationConfig?.response_modalities) as string[] | undefined;
   if (modalities?.some((modality) => /audio|image/i.test(modality))) {

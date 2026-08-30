@@ -22,6 +22,14 @@ export const googleProviderFactories: ProviderFactory[] = [
       }
       if (firstPart === 'interactions') {
         const interactionsModel = splits.slice(2).join(':');
+        if (interactionsModel === 'gemini-omni-flash-preview') {
+          const { GoogleInteractionsProvider } = await import('../google/interactions');
+          return new GoogleInteractionsProvider(interactionsModel, {
+            ...providerOptions,
+            id: providerPath,
+            config: { ...providerOptions.config, vertexai: true },
+          });
+        }
         if (!interactionsModel) {
           throw new Error(
             `Missing model name for ${providerPath}. Use e.g. vertex:interactions:gemini-3-flash-preview.`,
@@ -76,6 +84,15 @@ export const googleProviderFactories: ProviderFactory[] = [
         const modelName = splits.slice(2).join(':');
 
         if (serviceType === 'interactions') {
+          if (modelName === 'gemini-omni-flash-preview') {
+            // Omni returns video; the chat provider would collect only text and
+            // drop the result. Keep the explicit prefix on the video provider.
+            const { GoogleInteractionsProvider } = await import('../google/interactions');
+            return new GoogleInteractionsProvider(modelName, {
+              ...providerOptions,
+              id: providerPath,
+            });
+          }
           if (!modelName) {
             throw new Error(
               `Missing model name for ${providerPath}. Use e.g. google:interactions:gemini-3.6-flash.`,

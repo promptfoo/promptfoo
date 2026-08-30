@@ -1594,6 +1594,20 @@ describe('Provider Registry', () => {
       expect(provider).toBeInstanceOf(VertexChatProvider);
     });
 
+    it.each([
+      'google:interactions:gemini-omni-flash-preview',
+      'vertex:interactions:gemini-omni-flash-preview',
+    ])('keeps %s on the video-capable Omni provider', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const { GoogleInteractionsProvider } = await import(
+        '../../src/providers/google/interactions'
+      );
+      // The chat provider collects only text, so an Omni video response would
+      // come back empty.
+      expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
+    });
+
     it('rejects vertex:interactions without a model name', async () => {
       const providerPath = 'vertex:interactions:';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

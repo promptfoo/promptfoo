@@ -18,7 +18,7 @@ cd google-interactions
 
 ## Overview
 
-Promptfoo keeps `generateContent` as the default. Opt into Interactions either with the `google:interactions:` prefix or with `interactions: true` (which leaves the provider id, and your eval history, unchanged).
+Bare `google:` chat providers use Interactions unless you opt out with `interactions: false` or hit a capability fallback. The `google:interactions:` prefix forces it explicitly, at the cost of changing the provider id.
 
 | Config                          | Shows                                                         |
 | ------------------------------- | ------------------------------------------------------------- |

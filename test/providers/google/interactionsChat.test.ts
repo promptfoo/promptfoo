@@ -240,6 +240,53 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual([{ type: 'google_search' }]);
     });
 
+    it('withholds passthrough tools too when the policy disables tools', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+      await make({
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+        tool_choice: 'none',
+        passthrough: { tools: [{ functionDeclarations: [{ name: 'sneaky' }] }] },
+      }).callApi('Hello');
+
+      // passthrough is merged last, so an unfiltered `tools` there would
+      // reinstate the declarations the policy just removed.
+      const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+      expect(body.tools ?? []).toEqual([]);
+    });
+
+    it('merges passthrough tools when the policy allows them', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+        passthrough: { tools: [{ googleSearch: {} }] },
+      }).callApi('Hello');
+
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual([
+        { type: 'function', name: 'get_weather' },
+        { type: 'google_search' },
+      ]);
+    });
+
+    it('advertises only the allowed function names', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+      await make({
+        tools: [
+          { functionDeclarations: [{ name: 'get_weather' }, { name: 'send_email' }] },
+          { googleSearch: {} },
+        ],
+        toolConfig: { functionCallingConfig: { allowedFunctionNames: ['get_weather'] } },
+      }).callApi('Hello');
+
+      // An allow-list can only be honored by not offering the others; server
+      // tools are unaffected.
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual([
+        { type: 'function', name: 'get_weather' },
+        { type: 'google_search' },
+      ]);
+    });
+
     it('does not run callbacks for a tool the policy disabled', async () => {
       const spy = vi.fn().mockReturnValue('52F');
       mockFetchWithCache.mockResolvedValue(
@@ -614,6 +661,66 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(result.output).toBe('52F and rain');
     });
 
+    it('returns every pending call when only some have callbacks', async () => {
+      const spy = vi.fn().mockReturnValue('52F');
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          status: 'requires_action',
+          steps: [
+            { type: 'function_call', id: 'call_1', name: 'get_weather', arguments: {} },
+            { type: 'function_call', id: 'call_2', name: 'send_email', arguments: {} },
+          ],
+        }) as any,
+      );
+
+      const result = await make({
+        ...toolConfig,
+        functionToolCallbacks: { get_weather: spy },
+      }).callApi('Do both');
+
+      // Running only the matched call would replace this response and silently
+      // drop the unmatched one.
+      expect(spy).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(result.output as string).map((p: any) => p.functionCall.name)).toEqual([
+        'get_weather',
+        'send_email',
+      ]);
+    });
+
+    it('serializes a callback that returns nothing', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce(pendingCall() as any)
+        .mockResolvedValueOnce(finalAnswer() as any);
+
+      await make({
+        ...toolConfig,
+        functionToolCallbacks: { get_weather: () => undefined },
+      }).callApi('Weather?');
+
+      // JSON.stringify(undefined) is undefined, which would drop `text` and
+      // make the follow-up request malformed.
+      const [{ result }] = bodyOf(mockFetchWithCache.mock.calls[1]).input.filter(
+        (item: any) => item.type === 'function_result',
+      );
+      expect(typeof result[0].text).toBe('string');
+    });
+
+    it('still bills the uncached rounds of a partially cached tool loop', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce({ ...pendingCall(), cached: true } as any)
+        .mockResolvedValueOnce(finalAnswer() as any);
+
+      const result = await make({
+        ...toolConfig,
+        functionToolCallbacks: { get_weather: () => 'ok' },
+      }).callApi('Weather?');
+
+      // The second round reached Google, so its cost must not be suppressed.
+      expect(result.cached).toBe(false);
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
     it('does not loop when no callback is registered for the requested tool', async () => {
       mockFetchWithCache.mockResolvedValue(pendingCall() as any);
 
@@ -713,6 +820,18 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(result.output).toBe('Hello');
       expect(mockFetchWithCache.mock.calls[1][0]).toBe(`${AI_STUDIO_ENDPOINT}/v1_pending`);
       expect((mockFetchWithCache.mock.calls[1][1] as any).method).toBe('GET');
+    });
+
+    it('never serves a poll from cache', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce(interaction({ id: 'v1_pending', status: 'in_progress' }) as any)
+        .mockResolvedValueOnce(interaction({ id: 'v1_pending' }) as any);
+
+      await make().callApi('Hello');
+
+      // Caching a poll would freeze the interaction on its first in_progress
+      // snapshot and guarantee a timeout.
+      expect(mockFetchWithCache.mock.calls[1][4]).toBe(true);
     });
 
     it('times out an interaction that never leaves in_progress', async () => {
@@ -972,6 +1091,12 @@ describe('shouldUseInteractions', () => {
       'a snake_case image modality',
       'gemini-3.6-flash',
       { generationConfig: { response_modalities: ['IMAGE'] } },
+    ],
+    ['a tool mode Interactions cannot enforce', 'gemini-3.6-flash', { tool_choice: 'required' }],
+    [
+      'functionCallingConfig.mode ANY',
+      'gemini-3.6-flash',
+      { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
     ],
     ['a legacy PaLM model', 'chat-bison-001', {}],
     ['a script-like id', 'custom-model.ts', {}],

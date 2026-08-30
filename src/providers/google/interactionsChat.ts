@@ -230,6 +230,41 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
   return out;
 }
 
+/**
+ * Restrict advertised functions to `allowedFunctionNames`.
+ *
+ * Interactions has no `tool_choice`, so an allow-list can only be honored by not
+ * offering the other functions in the first place. Server-side tools are kept.
+ */
+function filterAllowedFunctions(
+  tools: Record<string, unknown>[],
+  allowedFunctionNames: string[] | undefined,
+): Record<string, unknown>[] {
+  if (!allowedFunctionNames?.length) {
+    return tools;
+  }
+  return tools.filter(
+    (tool) => tool.type !== 'function' || allowedFunctionNames.includes(tool.name as string),
+  );
+}
+
+/**
+ * A function-calling mode that Interactions cannot express.
+ *
+ * `NONE` is honored by withholding declarations, and `AUTO` is the default, but
+ * modes that *require* a call have no equivalent on this endpoint.
+ */
+export function getUnexpressibleToolMode(config: GoogleProviderConfig): string | undefined {
+  const mode =
+    config.toolConfig?.functionCallingConfig?.mode ??
+    config.tool_config?.function_calling_config?.mode ??
+    (typeof config.tool_choice === 'string' ? config.tool_choice : undefined);
+  const normalized = typeof mode === 'string' ? mode.toUpperCase() : undefined;
+  return normalized && ['ANY', 'VALIDATED', 'REQUIRED'].includes(normalized)
+    ? normalized
+    : undefined;
+}
+
 /** Flatten a Gemini system instruction into the plain string Interactions takes. */
 function flattenSystemInstruction(systemInstruction: unknown): string | undefined {
   if (!systemInstruction) {
@@ -534,10 +569,23 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     // Interactions has no `tool_choice` equivalent (the API rejects the field),
     // so a disabled tool policy has to be honored by withholding the function
     // declarations entirely rather than by asking the model not to call them.
-    const { toolsDisabled } = resolveGoogleToolConfig(config);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
+    const allowedFunctionNames = toolConfig?.functionCallingConfig?.allowedFunctionNames;
     const allTools = await this.getAllTools(context, { skipExecutableToolFiles: toolsDisabled });
-    const tools = toInteractionsTools(
-      toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools,
+    // `passthrough.tools` would otherwise be spread into the body verbatim and
+    // reinstate the very declarations the policy just removed.
+    const { tools: passthroughTools, ...passthroughRest } = passthrough;
+    const combinedTools = [
+      ...allTools,
+      ...(passthroughTools === undefined
+        ? []
+        : ((Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]) as Tool[])),
+    ];
+    const tools = filterAllowedFunctions(
+      toInteractionsTools(
+        toolsDisabled ? removeGoogleFunctionDeclarations(combinedTools) : combinedTools,
+      ),
+      allowedFunctionNames,
     );
 
     const generationConfig = buildGenerationConfig(config);
@@ -565,6 +613,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
     }
 
+    const unexpressibleMode = getUnexpressibleToolMode(config);
+    if (unexpressibleMode) {
+      logger.warn(
+        `[Google Interactions] The Interactions API has no tool_choice field, so functionCallingConfig.mode ${unexpressibleMode} cannot be enforced; the model may skip the required call.`,
+      );
+    }
+
     const systemText = flattenSystemInstruction(systemInstruction);
     const mergedGenerationConfig = {
       ...generationConfig,
@@ -582,13 +637,27 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       // Verified accepted by the live API and echoed back on the response.
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       store,
-      ...passthrough,
+      ...passthroughRest,
       background: false,
       stream: false,
     };
 
     // Accumulated across tool rounds so token usage reflects the whole exchange.
     const totals = {
+      prompt: 0,
+      completion: 0,
+      thoughts: 0,
+      cached: 0,
+      audioIn: 0,
+      audioOut: 0,
+      imageIn: 0,
+      cachedAudio: 0,
+      cachedImage: 0,
+      total: 0,
+      requests: 0,
+    };
+    // Mirrors `totals` but counts only rounds that were not served from cache.
+    const billable = {
       prompt: 0,
       completion: 0,
       thoughts: 0,
@@ -616,7 +685,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     let currentInput: InteractionInputItem[] = input;
     let currentPreviousInteractionId = previousInteractionId;
     let lastData: InteractionResponse | undefined;
-    let anyCached = false;
+    let allCached = true;
     let rounds = 0;
     const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
 
@@ -636,9 +705,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
       const { data, cached } = result;
       lastData = data;
-      anyCached = anyCached || cached;
+      allCached = allCached && cached;
 
       accumulateUsage(totals, data.usage);
+      if (!cached) {
+        // Only uncached rounds are billable; a partially cached tool loop must
+        // still report the cost of the rounds that reached Google.
+        accumulateUsage(billable, data.usage);
+      }
       for (const grounding of data.usage?.grounding_tool_count || []) {
         groundingCalls.push({ ...grounding });
       }
@@ -648,6 +722,20 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
       const runnable = functionCalls.filter((call) => callbacks?.[call.name]);
 
+      // Continue only when every pending call can be answered. Executing a
+      // subset would replace this response with the next round and silently
+      // drop the calls that had no callback.
+      if (runnable.length !== functionCalls.length) {
+        if (runnable.length > 0) {
+          logger.warn(
+            `[Google Interactions] Returning ${functionCalls.length} pending function call(s) without running the tool loop: no callback is registered for ${functionCalls
+              .filter((call) => !callbacks?.[call.name])
+              .map((call) => call.name)
+              .join(', ')}.`,
+          );
+        }
+        break;
+      }
       if (runnable.length === 0 || rounds > maxRounds) {
         if (runnable.length > 0) {
           logger.warn(
@@ -670,7 +758,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
             config,
             call.id,
           );
-          resultText = typeof output === 'string' ? output : JSON.stringify(output);
+          // JSON.stringify(undefined) is undefined, which would drop `text`
+          // from the payload and make the next request malformed.
+          resultText =
+            typeof output === 'string' ? output : (JSON.stringify(output) ?? String(output));
           executedToolCalls.push({ name: call.name, args: call.args, result: output });
         } catch (err) {
           // Surface the failure to the model rather than aborting the eval, so a
@@ -728,26 +819,27 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       output = text;
     }
 
-    const cost = anyCached
-      ? undefined
-      : calculateGoogleCost(
-          this.modelName,
-          this.isVertexMode ? { ...config, region: this.getRegion() } : config,
-          totals.prompt,
-          totals.completion + totals.thoughts,
-          this.isVertexMode,
-          totals.audioIn,
-          totals.audioOut,
-          0,
-          totals.imageIn,
-          totals.cached,
-          totals.cachedAudio,
-          totals.cachedImage,
-        );
+    const cost =
+      billable.requests === 0
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
+            billable.prompt,
+            billable.completion + billable.thoughts,
+            this.isVertexMode,
+            billable.audioIn,
+            billable.audioOut,
+            0,
+            billable.imageIn,
+            billable.cached,
+            billable.cachedAudio,
+            billable.cachedImage,
+          );
 
     return {
       output,
-      cached: anyCached,
+      cached: allCached,
       raw: lastData,
       tokenUsage: {
         prompt: totals.prompt,
@@ -870,7 +962,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           } as RequestInit,
           Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
           'json',
-          bustCache,
+          // Always bust: caching a poll would freeze the interaction on its
+          // first `in_progress` snapshot and guarantee a timeout.
+          true,
         )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
         // A cached poll still means this result was not freshly billed.
         cached = cached || polledCached;
