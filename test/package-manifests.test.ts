@@ -12,6 +12,10 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
+type PackageLockManifest<T = PackageManifest & { version?: string }> = {
+  packages: Record<string, T>;
+};
+
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
@@ -240,9 +244,8 @@ describe('package manifests', () => {
   });
 
   it('keeps private npm registry endpoints out of the published lockfile', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, { resolved?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ resolved?: string }>>('package-lock.json');
     const privateRegistryPackages = Object.entries(packageLock.packages)
       .filter(([, packageInfo]) => {
         if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
@@ -261,9 +264,8 @@ describe('package manifests', () => {
 
   it('holds Knip below the incompatible public re-export audit', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -286,9 +288,8 @@ describe('package manifests', () => {
 
   it('holds TanStack Table below v9 until the shared table migration is complete', () => {
     const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -325,9 +326,10 @@ describe('package manifests', () => {
         overrides?: Record<string, Record<string, string> | string>;
       }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { engines?: Record<string, string>; version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ engines?: Record<string, string>; version?: string }>>(
+        'package-lock.json',
+      );
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -492,14 +494,7 @@ describe('package manifests', () => {
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const sdkName = '@anthropic-ai/sdk';
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
@@ -528,9 +523,7 @@ describe('package manifests', () => {
 
   it('keeps the Langfuse client optional and its SDK packages on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = '@langfuse/client';
     const developmentRange = packageJson.devDependencies?.[dependencyName];
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
@@ -552,14 +545,7 @@ describe('package manifests', () => {
 
   it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'ibm-cloud-sdk-core';
     const developmentRange = packageJson.devDependencies?.[dependencyName];
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
@@ -577,9 +563,7 @@ describe('package manifests', () => {
 
   it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const protobufRange = packageJson.dependencies?.protobufjs;
 
     expect(protobufRange).toBeDefined();
@@ -595,9 +579,7 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'gcp-metadata';
     const dependencyRange = packageJson.dependencies?.[dependencyName];
 
@@ -933,9 +915,7 @@ describe('package manifests', () => {
 
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const browserName = '@playwright/browser-chromium';
     const optionalRange = packageJson.optionalDependencies?.[browserName];
 
@@ -973,9 +953,8 @@ describe('package manifests', () => {
     const exampleManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
       'examples/config-websockets/streaming/server/package.json',
     );
-    const lockfile = readPackageJson<{
-      packages: Record<string, { engines?: { node?: string } }>;
-    }>('package-lock.json');
+    const lockfile =
+      readPackageJson<PackageLockManifest<{ engines?: { node?: string } }>>('package-lock.json');
     const readme = fs.readFileSync(
       path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
       'utf8',
@@ -1017,9 +996,7 @@ describe('package manifests', () => {
   });
 
   it('keeps every direct and transitive js-yaml installation patched', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const workspaceManifests = [
       { path: 'package.json', lockPath: '', field: 'dependencies' },
       { path: 'site/package.json', lockPath: 'site', field: 'dependencies' },
@@ -1069,9 +1046,10 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
       'package.json',
     );
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { engines?: { node?: string }; version?: string }>
+      >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
     const parserTransportRange = parser?.dependencies?.undici;
@@ -1117,7 +1095,7 @@ describe('package manifests', () => {
     // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
-    const PATCHED_UNDICI = '7.29.0';
+    const PATCHED_UNDICI_FLOOR = '7.29.0';
     const rootPackageJson = readPackageJson<{
       overrides?: Record<string, string | Record<string, string>>;
     }>('package.json');
@@ -1149,14 +1127,12 @@ describe('package manifests', () => {
 
       const minimum = minVersion(pinnedRange as string);
       expect(
-        minimum?.compare(PATCHED_UNDICI),
-        `${manifest} must not allow undici below ${PATCHED_UNDICI}`,
+        minimum?.compare(PATCHED_UNDICI_FLOOR),
+        `${manifest} must not allow undici below ${PATCHED_UNDICI_FLOOR}`,
       ).toBeGreaterThanOrEqual(0);
       minimumVersions.push(minimum?.version ?? '');
 
-      const packageLock = readPackageJson<{
-        packages: Record<string, { version?: string }>;
-      }>(lockfile);
+      const packageLock = readPackageJson<PackageLockManifest<{ version?: string }>>(lockfile);
       const installations = Object.entries(packageLock.packages).filter(
         ([packagePath]) =>
           packagePath === 'node_modules/undici' || packagePath.endsWith('/node_modules/undici'),
@@ -1201,9 +1177,8 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
 
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
