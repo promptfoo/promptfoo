@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/util/eval/summary';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { stripAnsi } from '../../util/utils';
 
 import type { EvalSummaryParams } from '../../../src/util/eval/summary';
@@ -200,7 +201,8 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion)');
+      expect(output).not.toContain('Target:');
     });
 
     it('should display grading tokens only when no eval tokens (critical bug fix)', () => {
@@ -234,7 +236,65 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Tokens:');
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
-      expect(output).not.toContain('Eval:');
+      expect(output).not.toContain('Provider:');
+    });
+
+    it('displays cached-only grading usage without charging historical tokens', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-cached-grading-only',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 0,
+          assertions: { total: 0, cached: 97, numRequests: 0 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 0');
+      expect(output).toContain('Grading: 0 (97 cached)');
+      expect(output).not.toContain('Provider:');
+    });
+
+    it('keeps cached-only grading separate from actual target token totals', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-target-with-cached-grading',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          assertions: { total: 0, cached: 97, numRequests: 0 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 100');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Grading: 0 (97 cached)');
+      expect(output).not.toContain('Total Tokens: 197');
     });
 
     it('should display both eval and grading tokens', () => {
@@ -268,8 +328,204 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion)');
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
+    });
+
+    it('separates target, generation, attacker, and grading token totals', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-three-token-buckets',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 2,
+          attacker: { total: 50, prompt: 30, completion: 20, numRequests: 3 },
+          assertions: { total: 25, prompt: 15, completion: 10 },
+          generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+      expect(output).toContain('Total Tokens: 215');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
+      expect(output).not.toContain('Provider:');
+      expect(output).toContain('Generation: 40 (25 prompt, 15 completion)');
+      expect(output).toContain('Attacker: 50 (30 prompt, 20 completion)');
+      expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
+      expect(output).toContain('Probes: 2');
+    });
+
+    it('reports cached scan footprint separately from tokens actually incurred', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-logical-and-incurred-usage',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 295,
+          prompt: 201,
+          completion: 94,
+          cached: 295,
+          numRequests: 1,
+          assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 0,
+            numRequests: 0,
+            assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 332');
+      expect(output).toContain('Target: 295');
+      expect(output).toContain('Grading: 37');
+      expect(output).toContain('Incurred Tokens: 37');
+      expect(output).toContain('Cached Savings: 295');
+      expect(output).toContain('Actual Target Requests: 0');
+      expect(output).toContain('Probes: 1');
+    });
+
+    it('omits redundant incurred accounting when all provider responses were fresh', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-fresh-usage-only',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          numRequests: 1,
+          incurredTokenUsage: { total: 100, numRequests: 1 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 100');
+      expect(output).not.toContain('Incurred Tokens:');
+    });
+
+    it('derives category totals from prompt and completion usage when total is absent', () => {
+      const aggregatedUsage = createEmptyTokenUsage();
+      accumulateTokenUsage(aggregatedUsage, {
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+        attacker: { prompt: 30, completion: 20, numRequests: 3 },
+        assertions: { prompt: 15, completion: 10 },
+        generation: { prompt: 25, completion: 15, numRequests: 4 },
+      });
+
+      const lines = generateEvalSummary({
+        evalId: 'eval-derived-token-totals',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: aggregatedUsage,
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 215');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Generation: 40 (25 prompt, 15 completion)');
+      expect(output).toContain('Attacker: 50 (30 prompt, 20 completion)');
+      expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
+    });
+
+    it('reports unmetered generation requests without treating them as target probes', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-unmetered-generation',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          generation: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
+        },
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 0');
+      expect(output).toContain('Generation: token usage unavailable (1 request)');
+      expect(output).not.toContain('Probes:');
+    });
+
+    it('displays attacker-only usage without treating internal requests as target probes', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-attacker-only',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 73, prompt: 45, completion: 28, numRequests: 3 },
+        },
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 73');
+      expect(output).toContain('Attacker: 73 (45 prompt, 28 completion)');
+      expect(output).not.toContain('Target:');
+      expect(output).not.toContain('Grading:');
+      expect(output).not.toContain('Probes:');
     });
 
     it('should show 100% cached correctly', () => {
@@ -297,7 +553,7 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (cached)');
+      expect(output).toContain('Provider: 1,000 (cached)');
     });
 
     it('should show partial cached tokens', () => {
@@ -326,7 +582,7 @@ describe('generateEvalSummary', () => {
       const lines = generateEvalSummary(params);
       const output = stripAnsi(lines.join('\n'));
 
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion, 200 cached)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion, 200 cached)');
     });
 
     it('should not show token section when no tokens', () => {

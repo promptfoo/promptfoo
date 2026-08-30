@@ -80,7 +80,12 @@ export default function ProviderEditor({
 
   // Sync providerType with provider changes
   useEffect(() => {
-    setProviderType(getProviderType(provider?.id) ?? availableProviderIds?.[0]);
+    const inferredType = getProviderType(provider?.id) ?? availableProviderIds?.[0];
+    setProviderType((currentType) =>
+      currentType === 'openinterpreter' && inferredType !== 'openinterpreter'
+        ? currentType
+        : inferredType,
+    );
   }, [provider?.id, availableProviderIds]);
 
   // Handle errors from child components
