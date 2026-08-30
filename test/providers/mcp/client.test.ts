@@ -213,6 +213,36 @@ describe('MCPClient', () => {
       expect(mcpClient.hasInitialized).toBe(false);
     });
 
+    it('should initialize with per-server env merged into process.env', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'server-with-env',
+          command: 'npm',
+          args: ['start'],
+          env: { CUSTOM_MCP_VAR: 'custom_value' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'npm',
+        args: ['start'],
+        env: {
+          ...(process.env as Record<string, string>),
+          CUSTOM_MCP_VAR: 'custom_value',
+        },
+      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      await mcpClient.cleanup();
+    });
+
     it('should initialize with multiple servers', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValue(undefined);

@@ -166,7 +166,12 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
           Array.isArray(candidate.headers) ||
           Object.values(candidate.headers).some((value) => typeof value !== 'string'))) ||
       (candidate.auth !== undefined &&
-        (!candidate.auth || typeof candidate.auth !== 'object' || Array.isArray(candidate.auth)))
+        (!candidate.auth || typeof candidate.auth !== 'object' || Array.isArray(candidate.auth))) ||
+      (candidate.env !== undefined &&
+        (!candidate.env ||
+          typeof candidate.env !== 'object' ||
+          Array.isArray(candidate.env) ||
+          Object.values(candidate.env).some((value) => typeof value !== 'string')))
     ) {
       return true;
     }
@@ -218,11 +223,21 @@ async function transformMCPServerConfigToClaudeCode(
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
   } else if (config.command) {
-    out = { type: 'stdio', command: config.command, args: config.args ?? [] };
+    out = {
+      type: 'stdio',
+      command: config.command,
+      args: config.args ?? [],
+      ...(config.env !== undefined ? { env: config.env } : {}),
+    };
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
-    out = { type: 'stdio', command, args: [config.path] };
+    out = {
+      type: 'stdio',
+      command,
+      args: [config.path],
+      ...(config.env !== undefined ? { env: config.env } : {}),
+    };
   } else {
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }

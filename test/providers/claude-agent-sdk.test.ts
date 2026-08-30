@@ -1392,7 +1392,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
     describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
-        error: SDKAssistantMessageError | undefined,
+        error: SDKAssistantMessageError | (string & {}) | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
       ): Partial<SDKMessage> => ({
         type: 'assistant',
@@ -1401,7 +1401,7 @@ describe('ClaudeCodeSDKProvider', () => {
         uuid: (opts.uuid ??
           '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
         session_id: 'test-session-123',
-        ...(error ? { error } : {}),
+        ...(error ? { error: error as any } : {}),
         ...(opts.request_id ? { request_id: opts.request_id } : {}),
         ...(opts.subagent_type ? { subagent_type: opts.subagent_type } : {}),
       });
@@ -2727,6 +2727,59 @@ describe('ClaudeCodeSDKProvider', () => {
               'test-server': {
                 command: 'test-command',
                 args: ['arg1'],
+              },
+            },
+            strictMcpConfig: true,
+          }),
+        });
+      });
+
+      it('should transform MCP config with env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+        mockTransformMCPConfigToClaudeCode.mockResolvedValue({
+          'test-server': {
+            type: 'stdio',
+            command: 'test-command',
+            args: ['arg1'],
+            env: { CUSTOM_VAR: 'custom_value' },
+          },
+        });
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            mcp: {
+              enabled: true,
+              server: {
+                name: 'test-server',
+                command: 'test-command',
+                args: ['arg1'],
+                env: { CUSTOM_VAR: 'custom_value' },
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(mockTransformMCPConfigToClaudeCode).toHaveBeenCalledWith({
+          enabled: true,
+          server: {
+            name: 'test-server',
+            command: 'test-command',
+            args: ['arg1'],
+            env: { CUSTOM_VAR: 'custom_value' },
+          },
+        });
+
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            mcpServers: {
+              'test-server': {
+                type: 'stdio',
+                command: 'test-command',
+                args: ['arg1'],
+                env: { CUSTOM_VAR: 'custom_value' },
               },
             },
             strictMcpConfig: true,
@@ -5028,6 +5081,7 @@ describe('ClaudeCodeSDKProvider', () => {
         },
         { url: 'https://mcp.example.test/tools?signature=secret-value' },
         { command: 'mcp-server', args: ['postgres://user:password@db.example.test/app'] },
+        { command: 'mcp-server', env: { API_KEY: 'secret-token' } },
       ])('should not cache credential-bearing MCP configurations %#', async (server) => {
         mockQuery.mockReturnValue(createMockResponse('Sensitive MCP response'));
         const provider = new ClaudeCodeSDKProvider({

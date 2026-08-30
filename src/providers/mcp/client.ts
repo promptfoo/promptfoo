@@ -162,7 +162,9 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
-          env: process.env as Record<string, string>,
+          env: server.env
+            ? { ...(process.env as Record<string, string>), ...server.env }
+            : (process.env as Record<string, string>),
         });
         await client.connect(transport, requestOptions);
       } else if (server.path) {
@@ -186,7 +188,9 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
-          env: process.env as Record<string, string>,
+          env: server.env
+            ? { ...(process.env as Record<string, string>), ...server.env }
+            : (process.env as Record<string, string>),
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
