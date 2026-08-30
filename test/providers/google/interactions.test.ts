@@ -24,6 +24,13 @@ describe('GoogleInteractionsProvider', () => {
     vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
     vi.stubEnv('VERTEX_API_HOST', '');
     vi.stubEnv('GOOGLE_API_HOST', '');
+    // Ambient credentials (a developer's .env, an exported key) otherwise win over
+    // the per-test `env` overrides and silently change which key is sent.
+    vi.stubEnv('GOOGLE_API_KEY', '');
+    vi.stubEnv('GEMINI_API_KEY', '');
+    vi.stubEnv('PALM_API_KEY', '');
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+    vi.stubEnv('VERTEX_API_KEY', '');
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,

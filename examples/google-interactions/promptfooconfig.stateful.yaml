@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Server-side interaction history (opt-in retention)
+
+# Promptfoo defaults to store:false so eval payloads are not retained by Google.
+# Setting store:true opts into server-side history (55-day paid retention) and
+# makes metadata.interactionId available to continue the thread later.
+providers:
+  - id: google:interactions:gemini-3.6-flash
+    config:
+      store: true
+
+prompts:
+  - '{{message}}'
+
+tests:
+  - vars:
+      message: 'Remember the secret word: FLAMINGO. Reply OK.'
+    assert:
+      - type: contains
+        value: OK
+      - type: javascript
+        value: context.metadata.interactionStored === true

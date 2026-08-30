@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Function calling over the Gemini Interactions API
+
+providers:
+  # No callback: the pending tool call is returned for assertions to inspect.
+  - id: google:interactions:gemini-3.6-flash
+    label: tool-call-only
+    config:
+      tools: file://tools.yaml
+
+  # With a callback promptfoo runs the tool and loops until the model answers.
+  - id: google:interactions:gemini-3.6-flash
+    label: tool-executed
+    config:
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: file://callbacks.js:get_weather
+
+prompts:
+  - 'What is the weather in {{city}}? Use the tool. Answer in one sentence.'
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: javascript
+        # The tool-call-only provider returns a function call; the other answers in prose.
+        value: output.includes('get_weather') || /52/.test(output)

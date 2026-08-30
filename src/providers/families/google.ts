@@ -20,10 +20,26 @@ export const googleProviderFactories: ProviderFactory[] = [
           config: { ...providerOptions.config, vertexai: true },
         });
       }
+      if (firstPart === 'interactions') {
+        const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
+        return new GoogleInteractionsChatProvider(splits.slice(2).join(':'), {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: true },
+        });
+      }
       if (firstPart === 'video') {
         const { GoogleVideoProvider } = await import('../google/video');
         const modelName = splits.slice(2).join(':');
         return new GoogleVideoProvider(modelName, {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: true },
+        });
+      }
+      if (providerOptions.config?.interactions) {
+        const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
+        return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,
           id: providerPath,
           config: { ...providerOptions.config, vertexai: true },
@@ -50,6 +66,19 @@ export const googleProviderFactories: ProviderFactory[] = [
         const serviceType = splits[1];
         const modelName = splits.slice(2).join(':');
 
+        if (serviceType === 'interactions') {
+          if (!modelName) {
+            throw new Error(
+              `Missing model name for ${providerPath}. Use e.g. google:interactions:gemini-3.6-flash.`,
+            );
+          }
+          const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
+          return new GoogleInteractionsChatProvider(modelName, {
+            ...providerOptions,
+            id: providerPath,
+            config: { ...providerOptions.config, vertexai: false },
+          });
+        }
         if (serviceType === 'live') {
           // This is a Live API request
           const { GoogleLiveProvider } = await import('../google/live');
@@ -90,6 +119,15 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (modelName.includes('-image')) {
         const { GeminiImageProvider } = await import('../google/gemini-image');
         return new GeminiImageProvider(modelName, providerOptions);
+      }
+
+      if (providerOptions.config?.interactions) {
+        const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
+        return new GoogleInteractionsChatProvider(modelName, {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: false },
+        });
       }
 
       const { AIStudioChatProvider } = await import('../google/ai.studio');

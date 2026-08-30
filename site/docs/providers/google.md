@@ -271,6 +271,67 @@ providers:
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
+## Interactions API
+
+The [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview) went GA in June 2026 and is Google's primary interface for Gemini models and agents; `generateContent` is now the legacy path. An `Interaction` holds the whole turn as a chronological list of `steps` — thoughts, tool calls, tool results, and the final output — and can optionally be stored server-side so follow-up turns reference it by id instead of resending history.
+
+Promptfoo keeps `generateContent` as the default. Opt a model into Interactions either with the `google:interactions:` / `vertex:interactions:` prefix, or with `interactions: true` if you want to keep the provider id (and your eval history) unchanged:
+
+```yaml
+providers:
+  # Explicit route
+  - id: google:interactions:gemini-3.6-flash
+
+  # Same transport, provider id unchanged
+  - id: google:gemini-3.6-flash
+    config:
+      interactions: true
+```
+
+Prompts, tools, `responseSchema`, `systemInstruction`, and generation options are written exactly as they are for `generateContent` — Promptfoo translates them to the Interactions wire format.
+
+### Server-side history and retention
+
+Google stores interactions by default (55 days on the paid tier, 1 day on the free tier). **Promptfoo sends `store: false`**, so eval and red-team payloads are not retained. Function calling still works: Promptfoo resolves the tool loop by resending the timeline inline rather than relying on stored state.
+
+Set `store: true` to opt into server-side history, then pass the returned id — available as `metadata.interactionId` — to continue that thread:
+
+```yaml
+providers:
+  - id: google:interactions:gemini-3.6-flash
+    config:
+      store: true
+      previousInteractionId: v1_ChcxcEtUYXJpRExMZThqTWNQc0tQdW1RSRIX...
+```
+
+`previousInteractionId` requires storage; combining it with `store: false` is rejected before any request is made.
+
+### Tools
+
+Gemini-format tools are converted to the Interactions typed form, so `functionDeclarations`, `googleSearch`, `codeExecution`, and `urlContext` all carry over. With `functionToolCallbacks` configured, Promptfoo executes the tool and feeds the result back, looping until the model produces an answer (up to 8 rounds):
+
+```yaml
+providers:
+  - id: google:interactions:gemini-3.6-flash
+    config:
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: file://callbacks.js:get_weather
+```
+
+Without a matching callback the pending call is returned in the same array shape the other Google providers use, so `is-valid-function-call` and similar assertions keep working.
+
+### Differences from `generateContent`
+
+| Behavior          | Notes                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `safetySettings`  | Not supported by the Gemini API on this endpoint. Promptfoo drops it and logs a warning rather than failing. |
+| Structured output | `responseSchema` maps to `response_format`, which takes a JSON Schema directly.                              |
+| Streaming         | Not yet wired up; requests are sent with `stream: false`.                                                    |
+| Models            | Only models served on Interactions. Retired ids (e.g. `gemini-2.0-flash`) return a not-found error.          |
+
+See the [Google Interactions example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-interactions) for a runnable configuration.
+
 ## Available Models
 
 ### Chat and Multimodal Models

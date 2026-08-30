@@ -1,45 +1,20 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
-import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
-import { GoogleAuthManager } from './auth';
+import {
+  getInteractionModalityTokenCount,
+  getModelOutputContent,
+  resolveInteractionsTransport,
+} from './interactionsShared';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { InteractionResponse } from './interactionsShared';
 import type { CompletionOptions, GoogleProviderConfig } from './types';
-
-type InteractionContent = {
-  type?: string;
-  text?: string;
-  data?: string;
-  uri?: string;
-  mime_type?: string;
-};
-
-type InteractionResponse = {
-  id?: string;
-  status?: string;
-  error?: { message?: string };
-  steps?: Array<{ type?: string; content?: InteractionContent[]; error?: { message?: string } }>;
-  usage?: {
-    total_input_tokens?: number;
-    total_output_tokens?: number;
-    total_reasoning_tokens?: number;
-    total_thought_tokens?: number;
-    total_tool_use_tokens?: number;
-    total_cached_tokens?: number;
-    total_tokens?: number;
-    input_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
-    tool_use_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
-    cached_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
-    output_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
-  };
-};
 
 function normalizeAudioMimeType(format?: string): string {
   if (format?.startsWith('audio/')) {
@@ -174,69 +149,6 @@ function normalizeInteractionSafetySettings(
   }));
 }
 
-function getInteractionModalityTokenCount(
-  details: Array<{ modality?: string; tokens?: number }> | undefined,
-  modalities: string[],
-): number {
-  return (details || [])
-    .filter((detail) => modalities.includes(detail.modality?.toLowerCase() || ''))
-    .reduce((total, detail) => total + Math.max(detail.tokens ?? 0, 0), 0);
-}
-
-function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
-  const steps = data.steps || [];
-  const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
-  return steps
-    .slice(latestUserInput + 1)
-    .filter((step) => step.type === 'model_output')
-    .flatMap((step) => step.content || []);
-}
-
-function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
-  const endpointFromHost = (apiHost: string) => {
-    const normalizedHost = /^https?:\/\//i.test(apiHost) ? apiHost : `https://${apiHost}`;
-    return `${normalizedHost.replace(/\/$/, '')}/v1beta/interactions`;
-  };
-
-  if (config.apiHost) {
-    return endpointFromHost(config.apiHost);
-  }
-  if (config.apiBaseUrl) {
-    return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
-  }
-
-  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
-  if (apiHost) {
-    return endpointFromHost(apiHost);
-  }
-  const apiBaseUrl = env?.GOOGLE_API_BASE_URL || getEnvString('GOOGLE_API_BASE_URL');
-  if (apiBaseUrl) {
-    return `${apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
-  }
-  return 'https://generativelanguage.googleapis.com/v1beta/interactions';
-}
-
-function getVertexInteractionsEndpoint(
-  config: GoogleProviderConfig,
-  projectId: string,
-  env?: EnvOverrides,
-): string {
-  const region =
-    config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
-    'global';
-  const configuredHost =
-    config.apiBaseUrl ||
-    config.apiHost ||
-    env?.VERTEX_API_HOST ||
-    getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
-  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
-  return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
-}
-
 export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
   config: GoogleProviderConfig;
@@ -290,72 +202,14 @@ export class GoogleInteractionsProvider implements ApiProvider {
           'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
       };
     }
-    let apiKey: string | undefined;
-    let endpoint: string;
-    let headers: Record<string, string>;
-    if (config.vertexai) {
-      try {
-        const { client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
-          credentials: config.credentials,
-          googleAuthOptions: config.googleAuthOptions,
-          keyFilename: config.keyFilename,
-          scopes: config.scopes,
-        });
-        const projectId =
-          config.projectId ||
-          this.env?.VERTEX_PROJECT_ID ||
-          this.env?.GOOGLE_PROJECT_ID ||
-          this.env?.GOOGLE_CLOUD_PROJECT ||
-          getEnvString('VERTEX_PROJECT_ID') ||
-          getEnvString('GOOGLE_PROJECT_ID') ||
-          getEnvString('GOOGLE_CLOUD_PROJECT') ||
-          authProjectId;
-        if (!projectId) {
-          return {
-            error:
-              'Gemini Omni on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
-          };
-        }
-        const accessToken = await client.getAccessToken();
-        const token = typeof accessToken === 'string' ? accessToken : accessToken?.token;
-        if (!token) {
-          return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
-        }
-        endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
-        const { authorization, ...authHeaders } =
-          typeof client.getRequestHeaders === 'function'
-            ? Object.fromEntries((await client.getRequestHeaders(endpoint)).entries())
-            : {};
-        headers = {
-          'Content-Type': 'application/json',
-          'Api-Revision': '2026-05-20',
-          Authorization: authorization || `Bearer ${token}`,
-          ...authHeaders,
-          ...config.headers,
-        };
-      } catch (err) {
-        return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
-      }
-    } else {
-      const rawApiKey =
-        GoogleAuthManager.getApiKey(config, this.env).apiKey ||
-        this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-        getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
-      apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
-      if (!apiKey) {
-        return {
-          error:
-            'Gemini Interactions API requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.',
-        };
-      }
-      endpoint = getInteractionsEndpoint(config, this.env);
-      headers = {
-        'Content-Type': 'application/json',
-        'Api-Revision': '2026-05-20',
-        'x-goog-api-key': apiKey,
-        ...config.headers,
-      };
+    const transport = await resolveInteractionsTransport(config, this.env, {
+      vertex: config.vertexai,
+      label: 'Gemini Omni',
+    });
+    if ('error' in transport) {
+      return { error: transport.error };
     }
+    const { endpoint, headers, apiKey } = transport;
     const unsupportedGenerationFields = new Set([
       ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
       'stop_sequences',

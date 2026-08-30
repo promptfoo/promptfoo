@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini Interactions API vs legacy generateContent
+
+providers:
+  # Interactions API via the explicit service-type prefix.
+  - id: google:interactions:gemini-3.6-flash
+    label: interactions
+
+  # Same transport, but the provider id (and eval history) stays unchanged.
+  - id: google:gemini-3.6-flash
+    label: interactions-flag
+    config:
+      interactions: true
+
+  # Legacy generateContent, for comparison.
+  - id: google:gemini-3.6-flash
+    label: generateContent
+
+prompts:
+  - 'Answer in one word: what is the capital of {{country}}?'
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      country: Japan
+    assert:
+      - type: contains
+        value: Tokyo
