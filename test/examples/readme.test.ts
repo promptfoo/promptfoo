@@ -95,16 +95,33 @@ function getH1Lines(content: string): Array<{ line: number; text: string }> {
  * Extract backtick-quoted filenames that look like local file references.
  * Only captures references OUTSIDE of code blocks to avoid false positives
  * from illustrative YAML/code examples.
+ *
+ * Keep this list in sync with file types used by examples/READMEs.
  */
+const RECOGNIZED_FILE_EXTENSIONS = [
+  'yaml',
+  'yml',
+  'json',
+  'js',
+  'ts',
+  'py',
+  'txt',
+  'csv',
+  'xlsx',
+] as const;
+const FILE_REFERENCE_PATTERN = new RegExp(
+  String.raw`\`([\w][\w.-]*\.(${RECOGNIZED_FILE_EXTENSIONS.join('|')}))\``,
+  'g',
+);
+
 function getFileReferences(content: string): string[] {
-  const pattern = /`([\w][\w.-]*\.(yaml|yml|json|js|ts|py|txt|csv|xlsx))`/g;
   const refs = new Set<string>();
 
   // Strip code blocks first to avoid false positives from illustrative examples
   const strippedContent = content.replace(/```[\s\S]*?```/g, '');
 
   let match;
-  while ((match = pattern.exec(strippedContent)) !== null) {
+  while ((match = FILE_REFERENCE_PATTERN.exec(strippedContent)) !== null) {
     const filename = match[1];
     // Skip things that look like package names, URLs, or glob patterns
     if (filename.includes('*') || filename.includes('/')) {
@@ -193,6 +210,7 @@ describe('Example README standards', () => {
 
     it('should not reference files that do not exist in the directory', () => {
       const refs = getFileReferences(content);
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       const missing = refs.filter((ref) => {
         if (FILE_REFERENCE_ALLOWLIST.has(ref)) {
           return false;
@@ -202,7 +220,6 @@ describe('Example README standards', () => {
           return false;
         }
         // Also check in immediate subdirectories (files may live in sub-folders)
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory() && fs.existsSync(path.join(dirPath, entry.name, ref))) {
             return false;

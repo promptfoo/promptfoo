@@ -218,7 +218,7 @@ function resolveConfigPath(value: string | undefined, configBasePath?: string): 
 }
 
 function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
-  const usage = result?.turnResult.usage;
+  const usage = result?.turnResult?.usage;
   const values = usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : {};
   const cost = result?.cost ?? observedCost;
   const inputTokens =
@@ -588,6 +588,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         !Array.isArray(findingVariable))
         ? findingVariable
         : undefined;
+    // Finding precedence: config.finding -> context.vars.finding -> prompt.
+    // If finding_file is set, its parsed or raw contents override all of the above.
     let finding: string | object = config.finding ?? contextualFinding ?? prompt;
     if (config.finding_file) {
       const findingContents = await fs.readFile(
