@@ -674,11 +674,10 @@ export async function readTests(
  * `loadTestsFromGlob`, including their Windows drive-letter guard.
  */
 function stripFunctionSuffix(resolvedPath: string): string {
+  // `> 1` is itself the Windows drive-letter guard, since a drive colon is always at
+  // index 1 -- which is how both of those functions express the same rule.
   const lastColonIndex = resolvedPath.lastIndexOf(':');
-  const isWindowsDriveColon = lastColonIndex === 1 && /^[A-Za-z]:/.test(resolvedPath);
-  return lastColonIndex > 1 && !isWindowsDriveColon
-    ? resolvedPath.slice(0, lastColonIndex)
-    : resolvedPath;
+  return lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
 }
 
 /**
