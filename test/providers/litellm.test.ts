@@ -24,23 +24,23 @@ const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
-const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
-
 describe('LiteLLM Provider', () => {
+  let restoreEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    restoreEnv = mockProcessEnv({
+      LITELLM_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      OPENAI_TEMPERATURE: undefined,
+    });
   });
 
   afterEach(() => {
     vi.resetAllMocks();
     mockFetch.mockReset();
     vi.unstubAllEnvs();
-    if (originalOpenAiTemperature === undefined) {
-      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
-    } else {
-      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
-    }
+    restoreEnv();
   });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
@@ -128,6 +128,53 @@ describe('LiteLLM Provider', () => {
           mockProcessEnv({ LITELLM_API_KEY: originalEnv });
         }
       }
+    });
+
+    it.each([
+      'litellm:chat:gpt-4',
+      'litellm:completion:gpt-3.5-turbo-instruct',
+      'litellm:embedding:text-embedding-3-small',
+    ])('should preserve the documented OPENAI_API_KEY fallback for %s', (providerPath) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+      const provider = createLiteLLMProvider(providerPath, {});
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe('OPENAI_API_KEY');
+      expect(wrappedProvider.getApiKey()).toBe('test-openai-key');
+    });
+
+    it('should prefer a provider-level LiteLLM key over the OpenAI fallback', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          env: { LITELLM_API_KEY: 'test-litellm-key' },
+        },
+      });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+      expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
+    });
+
+    it.each([
+      [{ OPENAI_API_KEY: 'context-openai-key' }, 'OPENAI_API_KEY', 'context-openai-key'],
+      [{ LITELLM_API_KEY: 'context-litellm-key' }, 'LITELLM_API_KEY', 'context-litellm-key'],
+    ])('should use %s from the factory context env', (env, apiKeyEnvar, expectedKey) => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', { env });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe(apiKeyEnvar);
+      expect(wrappedProvider.getApiKey()).toBe(expectedKey);
+    });
+
+    it('should prefer provider env over factory context env', () => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        env: { LITELLM_API_KEY: 'context-litellm-key' },
+        config: { env: { LITELLM_API_KEY: 'provider-litellm-key' } },
+      });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(wrappedProvider.getApiKey()).toBe('provider-litellm-key');
     });
 
     it('should handle model names with colons', () => {
