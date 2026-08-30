@@ -98,6 +98,7 @@ const chokidarMocks = vi.hoisted(() => {
       handlers.set(event, handler);
       return watcher;
     }),
+    close: vi.fn(async () => {}),
   };
 
   return {
@@ -536,6 +537,86 @@ describe('evalCommand', () => {
       '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
     );
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  describe('watch mode process lifecycle', () => {
+    // main() resolves as soon as the eval action handler returns, and its `finally`
+    // then runs shutdownGracefully(), which closes the database and HTTP dispatcher
+    // and calls process.exit() 100ms later. If doEval returns while the watcher is
+    // still running, that tears down everything a re-run needs and kills the process
+    // before chokidar can report a single change -- which is what made `--watch` a
+    // no-op in the shipped CLI.
+    const startWatch = (evaluateOptions: Record<string, unknown>) => {
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: path.dirname(defaultConfigPath),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      return doEval(
+        { watch: true, write: false },
+        config,
+        defaultConfigPath,
+        evaluateOptions as never,
+      );
+    };
+
+    // doEval reaches the watcher several awaits in, so let the queue drain before
+    // asserting on anything it registers.
+    const flush = async () => {
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    };
+
+    const settled = async (promise: Promise<unknown>) => {
+      let done = false;
+      void promise.then(() => {
+        done = true;
+      });
+      await flush();
+      return done;
+    };
+
+    afterEach(() => {
+      process.removeAllListeners('SIGINT');
+      process.removeAllListeners('SIGTERM');
+    });
+
+    it('does not resolve while the CLI is watching, and resolves on SIGINT', async () => {
+      const pending = startWatch({ eventSource: 'cli' });
+
+      expect(await settled(pending)).toBe(false);
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+
+      process.emit('SIGINT');
+      await pending;
+
+      expect(chokidarMocks.watcher.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes its signal handlers so a second Ctrl-C terminates', async () => {
+      const before = process.listenerCount('SIGINT');
+      const pending = startWatch({ eventSource: 'cli' });
+      await flush();
+      expect(process.listenerCount('SIGINT')).toBe(before + 1);
+
+      process.emit('SIGINT');
+      await pending;
+
+      expect(process.listenerCount('SIGINT')).toBe(before);
+    });
+
+    it('still resolves immediately for library callers, which own their own lifetime', async () => {
+      // isCliEventSource() gates process-lifecycle behavior; a library embedder
+      // decides when to stop watching, so doEval must not block on a signal.
+      await expect(startWatch({})).resolves.toBeDefined();
+      expect(chokidarMocks.watch).toHaveBeenCalled();
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+    });
   });
 
   it('should keep watching after config resolution fails on a file change', async () => {
