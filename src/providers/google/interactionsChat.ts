@@ -265,6 +265,20 @@ export function getUnexpressibleToolMode(config: GoogleProviderConfig): string |
     : undefined;
 }
 
+/**
+ * Whether a model-named function has a callback the caller actually registered.
+ *
+ * A plain object inherits `constructor`, `toString`, `valueOf` and friends, so a
+ * bare index lookup would treat a model-chosen name like `constructor` as a
+ * registered callback and invoke it. Only own properties count.
+ */
+function getRegisteredCallback(
+  callbacks: CompletionOptions['functionToolCallbacks'],
+  name: string,
+): unknown {
+  return callbacks && Object.hasOwn(callbacks, name) ? callbacks[name] : undefined;
+}
+
 /** Flatten a Gemini system instruction into the plain string Interactions takes. */
 function flattenSystemInstruction(systemInstruction: unknown): string | undefined {
   if (!systemInstruction) {
@@ -720,7 +734,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       const turnSteps = getLatestTurnSteps(data);
       const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
       const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
-      const runnable = functionCalls.filter((call) => callbacks?.[call.name]);
+      const runnable = functionCalls.filter((call) => getRegisteredCallback(callbacks, call.name));
 
       // Continue only when every pending call can be answered. Executing a
       // subset would replace this response with the next round and silently
@@ -729,7 +743,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         if (runnable.length > 0) {
           logger.warn(
             `[Google Interactions] Returning ${functionCalls.length} pending function call(s) without running the tool loop: no callback is registered for ${functionCalls
-              .filter((call) => !callbacks?.[call.name])
+              .filter((call) => !getRegisteredCallback(callbacks, call.name))
               .map((call) => call.name)
               .join(', ')}.`,
           );

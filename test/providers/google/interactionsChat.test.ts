@@ -721,6 +721,28 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it.each(['constructor', 'toString', '__proto__', 'valueOf'])(
+      'does not execute inherited object member %s as a callback',
+      async (name) => {
+        mockFetchWithCache.mockResolvedValue(
+          interaction({
+            status: 'requires_action',
+            steps: [{ type: 'function_call', id: 'call_1', name, arguments: {} }],
+          }) as any,
+        );
+
+        const result = await make({
+          tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+          functionToolCallbacks: { get_weather: () => 'ok' },
+        }).callApi('Go');
+
+        // A bare index lookup resolves these to Object.prototype members, which
+        // would then be invoked as though the caller had registered them.
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(result.output as string)[0].functionCall.name).toBe(name);
+      },
+    );
+
     it('does not loop when no callback is registered for the requested tool', async () => {
       mockFetchWithCache.mockResolvedValue(pendingCall() as any);
 

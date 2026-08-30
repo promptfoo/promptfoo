@@ -289,7 +289,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
+        // Only own properties: a model-chosen name such as `constructor` or
+        // `toString` would otherwise resolve to an inherited Object.prototype
+        // member and be executed as if the caller had registered it.
+        const callbackRef =
+          config.functionToolCallbacks && Object.hasOwn(config.functionToolCallbacks, functionName)
+            ? config.functionToolCallbacks[functionName]
+            : undefined;
 
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
