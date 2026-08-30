@@ -1171,19 +1171,24 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
+        // `--tests`, and its `--vars` alias, replace the config's own tests entirely
+        // (see resolveConfigs), so `config.tests` already holds the command-line value.
+        const cliTests = cmdObj.tests || cmdObj.vars;
         const varPaths: string[] = [];
-        // The array form survives combineConfigs() untouched, so inline test cases and
-        // their `vars` file references are still readable from the resolved config.
-        varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-        // A scalar reference (`tests: file://cases.yaml`) and a generator object are
-        // expanded into concrete test cases by combineConfigs(), so by this point the
-        // reference they came from is gone. Recover it by reading the config again.
-        //
-        // Skipped entirely when tests come from the command line: resolveConfigs() uses
-        // cmdObj.tests in place of the config's own tests, so watching the config's test
-        // sources would rerun the whole evaluation, and any paid provider calls with it,
-        // on an edit to a file that has no bearing on the run.
-        if (!cmdObj.tests) {
+        if (cliTests) {
+          // resolveConfigs loads `--tests` with no base path, so it resolves against the
+          // working directory rather than the directory holding the config file.
+          // `--vars` keeps the config's base path.
+          varPaths.push(
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+          );
+        } else {
+          // The array form survives combineConfigs() untouched, so inline test cases and
+          // their `vars` file references are still readable from the resolved config.
+          varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
+          // A scalar reference (`tests: file://cases.yaml`) and a generator object are
+          // expanded into concrete test cases by combineConfigs(), so by this point the
+          // reference they came from is gone. Recover it by reading the config again.
           for (const configPathPattern of configPaths) {
             // --config accepts globs, which combineConfigs() expands, so expand here too
             // rather than handing a literal wildcard to the reader.
@@ -1202,12 +1207,6 @@ export async function doEval(
               }
             }
           }
-        }
-        // Tests supplied on the command line are loaded with no base path (see
-        // resolveConfigs), so they resolve against the working directory rather than the
-        // directory holding the config file.
-        if (cmdObj.tests) {
-          varPaths.push(...resolveTestsWatchPaths(cmdObj.tests, process.cwd()));
         }
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
