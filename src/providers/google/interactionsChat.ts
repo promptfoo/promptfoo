@@ -276,7 +276,9 @@ function getRegisteredCallback(
   callbacks: CompletionOptions['functionToolCallbacks'],
   name: string,
 ): unknown {
-  return callbacks && Object.hasOwn(callbacks, name) ? callbacks[name] : undefined;
+  return callbacks && Object.prototype.hasOwnProperty.call(callbacks, name)
+    ? callbacks[name]
+    : undefined;
 }
 
 /** Flatten a Gemini system instruction into the plain string Interactions takes. */
