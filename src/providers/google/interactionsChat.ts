@@ -281,6 +281,16 @@ function getRegisteredCallback(
     : undefined;
 }
 
+/**
+ * Make a model-supplied name safe to embed in a log line.
+ *
+ * Tool names come straight from the model, so they are untrusted text: control
+ * characters could forge log entries and an unbounded name could flood the log.
+ */
+function sanitizeToolNameForLog(name: string): string {
+  return name.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 64);
+}
+
 /** Flatten a Gemini system instruction into the plain string Interactions takes. */
 function flattenSystemInstruction(systemInstruction: unknown): string | undefined {
   if (!systemInstruction) {
@@ -743,11 +753,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       // drop the calls that had no callback.
       if (runnable.length !== functionCalls.length) {
         if (runnable.length > 0) {
+          const unhandled = functionCalls
+            .filter((call) => !getRegisteredCallback(callbacks, call.name))
+            .map((call) => sanitizeToolNameForLog(call.name));
           logger.warn(
-            `[Google Interactions] Returning ${functionCalls.length} pending function call(s) without running the tool loop: no callback is registered for ${functionCalls
-              .filter((call) => !getRegisteredCallback(callbacks, call.name))
-              .map((call) => call.name)
-              .join(', ')}.`,
+            '[Google Interactions] Returning pending function calls without running the tool loop; no callback is registered for some of them.',
+            { pending: functionCalls.length, unhandled },
           );
         }
         break;

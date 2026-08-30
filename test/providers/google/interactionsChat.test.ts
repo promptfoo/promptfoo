@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import {
   GoogleInteractionsChatProvider,
@@ -742,6 +743,35 @@ describe('GoogleInteractionsChatProvider', () => {
         expect(JSON.parse(result.output as string)[0].functionCall.name).toBe(name);
       },
     );
+
+    it('sanitizes a model-supplied tool name before logging it', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          status: 'requires_action',
+          steps: [
+            { type: 'function_call', id: 'call_1', name: 'get_weather', arguments: {} },
+            {
+              type: 'function_call',
+              id: 'call_2',
+              // Control characters could otherwise forge log entries.
+              name: 'evil\n[fake] INFO forged entry',
+              arguments: {},
+            },
+          ],
+        }) as any,
+      );
+
+      await make({
+        tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+        functionToolCallbacks: { get_weather: () => 'ok' },
+      }).callApi('Go');
+
+      const logged = JSON.stringify(warn.mock.calls);
+      expect(logged).not.toContain('\n');
+      expect(logged).toContain('evil');
+      warn.mockRestore();
+    });
 
     it('does not loop when no callback is registered for the requested tool', async () => {
       mockFetchWithCache.mockResolvedValue(pendingCall() as any);
