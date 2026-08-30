@@ -256,6 +256,30 @@ export function getLatestTurnSteps(data: InteractionResponse): InteractionStep[]
 }
 
 /**
+ * Generation options the Interactions API accepts, verified against the live
+ * endpoint. Anything else - `response_mime_type`, `candidate_count`,
+ * `presence_penalty`, `frequency_penalty`, `logprobs`, `media_resolution`,
+ * `audio_timestamp`, response modalities - is rejected with
+ * `Unknown parameter`, so an allow-list keeps the default from turning a
+ * working generateContent config into a 400.
+ */
+const INTERACTIONS_GENERATION_KEYS = new Set([
+  'temperature',
+  'topP',
+  'top_p',
+  'topK',
+  'top_k',
+  'maxOutputTokens',
+  'max_output_tokens',
+  'stopSequences',
+  'stop_sequences',
+  'seed',
+  'thinkingConfig',
+  'responseSchema',
+  'response_schema',
+]);
+
+/**
  * A function-calling mode the Interactions API cannot express.
  *
  * `NONE` is honored by withholding declarations and `AUTO` is the default, but
@@ -305,10 +329,25 @@ function getInteractionsCapabilityGap(
   if (toolMode) {
     return `functionCallingConfig.mode ${toolMode} cannot be enforced on the Interactions API`;
   }
-  const modalities = (config.generationConfig?.responseModalities ??
-    config.generationConfig?.response_modalities) as string[] | undefined;
-  if (modalities?.some((modality) => /audio|image/i.test(modality))) {
-    return 'audio and image response modalities are not supported by the Interactions API';
+  if (config.generationConfig?.thinkingConfig?.thinkingBudget !== undefined) {
+    // Interactions takes `thinking_level`, not a token budget.
+    return 'generationConfig.thinkingConfig.thinkingBudget is not supported by the Interactions API';
+  }
+  const hasSchema = Boolean(
+    config.responseSchema ??
+      config.generationConfig?.response_schema ??
+      (config.generationConfig as { responseSchema?: unknown } | undefined)?.responseSchema,
+  );
+  for (const key of Object.keys(config.generationConfig ?? {})) {
+    if (INTERACTIONS_GENERATION_KEYS.has(key)) {
+      continue;
+    }
+    // A schema already constrains the output, so an accompanying mime type is
+    // redundant rather than unsupported.
+    if (hasSchema && (key === 'responseMimeType' || key === 'response_mime_type')) {
+      continue;
+    }
+    return `generationConfig.${key} is not supported by the Interactions API`;
   }
   return undefined;
 }

@@ -1177,10 +1177,44 @@ describe('shouldUseInteractions', () => {
       'gemini-3.6-flash',
       { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
     ],
+    [
+      'a thinking token budget',
+      'gemini-3.6-flash',
+      { generationConfig: { thinkingConfig: { thinkingBudget: 512 } } },
+    ],
+    [
+      'JSON mode without a schema',
+      'gemini-3.6-flash',
+      { generationConfig: { response_mime_type: 'application/json' } },
+    ],
+    [
+      'a sampling option the endpoint rejects',
+      'gemini-3.6-flash',
+      { generationConfig: { presencePenalty: 0.5 } },
+    ],
     ['a legacy PaLM model', 'chat-bison-001', {}],
     ['a script-like id', 'custom-model.ts', {}],
   ])('falls back to generateContent for %s', (_label, model, config) => {
     expect(shouldUseInteractions(model, config as any)).toBe(false);
+  });
+
+  it.each([
+    ['temperature', { temperature: 0.5 }],
+    ['seed', { seed: 42 }],
+    ['thinkingLevel', { thinkingConfig: { thinkingLevel: 'LOW' } }],
+    ['stopSequences', { stop_sequences: ['X'] }],
+  ])('still uses Interactions for the supported option %s', (_label, generationConfig) => {
+    expect(shouldUseInteractions('gemini-3.6-flash', { generationConfig } as any)).toBe(true);
+  });
+
+  it('keeps a response mime type when a schema already constrains the output', () => {
+    // The schema wins, so an accompanying mime type is redundant, not unsupported.
+    expect(
+      shouldUseInteractions('gemini-3.6-flash', {
+        responseSchema: '{"type":"object"}',
+        generationConfig: { response_mime_type: 'application/json' },
+      } as any),
+    ).toBe(true);
   });
 
   it('keeps Vertex on generateContent unless explicitly opted in', () => {
