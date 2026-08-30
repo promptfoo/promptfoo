@@ -3013,7 +3013,7 @@ async function evidenceFromWorkspaceSecretScan(
       }
       evidence.push({
         evidenceSource: 'artifact-file',
-        location: `workspace file ${path.relative(root, filePath) || path.basename(filePath)}`,
+        location: `workspace file ${path.relative(root, filePath).replace(/\\/g, '/') || path.basename(filePath)}`,
         text,
       });
     }
