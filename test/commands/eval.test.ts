@@ -581,9 +581,23 @@ describe('evalCommand', () => {
       return done;
     };
 
+    // Remove only what a test leaked (it fails before emitting a signal). Vitest
+    // installs its own SIGINT handler, so removeAllListeners() is not safe here.
+    const SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+    let preexisting: Map<string, unknown[]>;
+
+    beforeEach(() => {
+      preexisting = new Map(SIGNALS.map((signal) => [signal, process.listeners(signal)]));
+    });
+
     afterEach(() => {
-      process.removeAllListeners('SIGINT');
-      process.removeAllListeners('SIGTERM');
+      for (const signal of SIGNALS) {
+        for (const listener of process.listeners(signal)) {
+          if (!preexisting.get(signal)?.includes(listener)) {
+            process.removeListener(signal, listener as never);
+          }
+        }
+      }
     });
 
     it('does not resolve while the CLI is watching, and resolves on SIGINT', async () => {
