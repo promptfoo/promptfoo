@@ -31,6 +31,7 @@ import {
   getInteractionModalityTokenCount,
   getInteractionsEndpoint,
   getLatestTurnSteps,
+  getUnexpressibleToolMode,
   getVertexInteractionsEndpoint,
   resolveInteractionsTransport,
 } from './interactionsShared';
@@ -135,6 +136,21 @@ function geminiPartToInteractionContent(part: unknown): Record<string, unknown> 
   return { type: interactionContentTypeForMime(mimeType), mime_type: mimeType, ...payload };
 }
 
+/** Build the `function_result` entry the API threads a tool result back through. */
+function toFunctionResult(source: {
+  id?: string;
+  name?: string;
+  response?: unknown;
+}): InteractionInputItem {
+  const value = source.response ?? source;
+  return {
+    type: 'function_result',
+    ...(source.id ? { call_id: source.id } : {}),
+    ...(source.name ? { name: source.name } : {}),
+    result: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+  };
+}
+
 /**
  * Convert Gemini `contents` into the Interactions `input` timeline.
  *
@@ -156,19 +172,7 @@ export function geminiContentsToInteractionsInput(contents: unknown): Interactio
     for (const part of partList) {
       const functionResponse = (part as { functionResponse?: any })?.functionResponse;
       if (functionResponse) {
-        const responseValue = functionResponse.response ?? functionResponse;
-        input.push({
-          type: 'function_result',
-          ...(functionResponse.id ? { call_id: functionResponse.id } : {}),
-          ...(functionResponse.name ? { name: functionResponse.name } : {}),
-          result: [
-            {
-              type: 'text',
-              text:
-                typeof responseValue === 'string' ? responseValue : JSON.stringify(responseValue),
-            },
-          ],
-        });
+        input.push(toFunctionResult(functionResponse));
         continue;
       }
       const mapped = geminiPartToInteractionContent(part);
@@ -187,6 +191,16 @@ export function geminiContentsToInteractionsInput(contents: unknown): Interactio
 
   return input;
 }
+
+/** Gemini's spellings for each server-side tool, mapped to its Interactions type. */
+const SERVER_TOOL_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  [
+    'google_search',
+    ['googleSearch', 'google_search', 'googleSearchRetrieval', 'google_search_retrieval'],
+  ],
+  ['code_execution', ['codeExecution', 'code_execution']],
+  ['url_context', ['urlContext', 'url_context']],
+];
 
 /** Convert Gemini-format tools into Interactions typed tool entries. */
 export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
@@ -212,19 +226,10 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
         });
       }
     }
-    if (
-      raw.googleSearch ||
-      raw.google_search ||
-      raw.googleSearchRetrieval ||
-      raw.google_search_retrieval
-    ) {
-      out.push({ type: 'google_search' });
-    }
-    if (raw.codeExecution || raw.code_execution) {
-      out.push({ type: 'code_execution' });
-    }
-    if (raw.urlContext || raw.url_context) {
-      out.push({ type: 'url_context' });
+    for (const [type, aliases] of SERVER_TOOL_ALIASES) {
+      if (aliases.some((alias) => raw[alias])) {
+        out.push({ type });
+      }
     }
   }
   return out;
@@ -249,23 +254,6 @@ function filterAllowedFunctions(
 }
 
 /**
- * A function-calling mode that Interactions cannot express.
- *
- * `NONE` is honored by withholding declarations, and `AUTO` is the default, but
- * modes that *require* a call have no equivalent on this endpoint.
- */
-export function getUnexpressibleToolMode(config: GoogleProviderConfig): string | undefined {
-  const mode =
-    config.toolConfig?.functionCallingConfig?.mode ??
-    config.tool_config?.function_calling_config?.mode ??
-    (typeof config.tool_choice === 'string' ? config.tool_choice : undefined);
-  const normalized = typeof mode === 'string' ? mode.toUpperCase() : undefined;
-  return normalized && ['ANY', 'VALIDATED', 'REQUIRED'].includes(normalized)
-    ? normalized
-    : undefined;
-}
-
-/**
  * Whether a model-named function has a callback the caller actually registered.
  *
  * A plain object inherits `constructor`, `toString`, `valueOf` and friends, so a
@@ -279,16 +267,6 @@ function getRegisteredCallback(
   return callbacks && Object.prototype.hasOwnProperty.call(callbacks, name)
     ? callbacks[name]
     : undefined;
-}
-
-/**
- * Make a model-supplied name safe to embed in a log line.
- *
- * Tool names come straight from the model, so they are untrusted text: control
- * characters could forge log entries and an unbounded name could flood the log.
- */
-function sanitizeToolNameForLog(name: string): string {
-  return name.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 64);
 }
 
 /** Flatten a Gemini system instruction into the plain string Interactions takes. */
@@ -405,6 +383,34 @@ type UsageTotals = {
 
 /** Video input is billed at the image rate, matching the generateContent path. */
 const IMAGE_RATE_MODALITIES = ['image', 'document', 'video'];
+
+/** A fresh zeroed accumulator. */
+function newUsageTotals(): UsageTotals {
+  return {
+    prompt: 0,
+    completion: 0,
+    thoughts: 0,
+    cached: 0,
+    audioIn: 0,
+    audioOut: 0,
+    imageIn: 0,
+    cachedAudio: 0,
+    cachedImage: 0,
+    total: 0,
+    requests: 0,
+  };
+}
+
+type ToolLoopResult = {
+  lastData: InteractionResponse;
+  totals: UsageTotals;
+  billable: UsageTotals;
+  executedToolCalls: Array<{ name: string; args: unknown; result?: unknown; error?: string }>;
+  groundingCalls: Array<Record<string, unknown>>;
+  allCached: boolean;
+  /** Calls already answered, so the final output does not repeat them. */
+  executedCallIds: ReadonlySet<string>;
+};
 
 /** Fold one response's usage into the running totals for this call. */
 function accumulateUsage(totals: UsageTotals, usage: InteractionResponse['usage']): void {
@@ -543,6 +549,201 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     return transport.headers;
   }
 
+  /**
+   * Build the tool list for the request.
+   *
+   * Interactions has no `tool_choice` field, so a disabled policy or an
+   * allow-list can only be honored by withholding declarations. `passthrough`
+   * is folded in *before* the policy runs, since it is merged into the body last
+   * and would otherwise reinstate whatever the policy removed.
+   */
+  private async resolveTools(
+    config: GoogleProviderConfig,
+    context: CallApiContextParams | undefined,
+    passthrough: Record<string, unknown>,
+  ): Promise<{ tools: Record<string, unknown>[]; toolsDisabled: boolean }> {
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
+    const configured = await this.getAllTools(context, { skipExecutableToolFiles: toolsDisabled });
+    const fromPassthrough =
+      passthrough.tools === undefined
+        ? []
+        : ((Array.isArray(passthrough.tools) ? passthrough.tools : [passthrough.tools]) as Tool[]);
+    const combined = [...configured, ...fromPassthrough];
+    return {
+      tools: filterAllowedFunctions(
+        toInteractionsTools(toolsDisabled ? removeGoogleFunctionDeclarations(combined) : combined),
+        toolConfig?.functionCallingConfig?.allowedFunctionNames,
+      ),
+      toolsDisabled,
+    };
+  }
+
+  /**
+   * Run one registered callback and render its outcome as text for the model.
+   *
+   * A thrown callback is reported back to the model rather than aborting the
+   * eval, so a broken tool shows up as a bad answer, not a provider crash.
+   */
+  private async runOneCallback(
+    call: { id?: string; name: string; args: unknown },
+    config: GoogleProviderConfig,
+  ): Promise<{ text: string; record: { result?: unknown; error?: string } }> {
+    try {
+      const output = await this.executeFunctionCallback(
+        call.name,
+        typeof call.args === 'string' ? call.args : JSON.stringify(call.args ?? {}),
+        config,
+        call.id,
+      );
+      // JSON.stringify(undefined) is undefined, which would drop `text` from the
+      // payload and make the next request malformed.
+      const text = typeof output === 'string' ? output : (JSON.stringify(output) ?? String(output));
+      return { text, record: { result: output } };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { text: `Error: ${message}`, record: { error: message } };
+    }
+  }
+
+  /**
+   * Drive one exchange to completion, resolving tool calls along the way.
+   *
+   * Returns the final interaction plus the usage accumulated across every round,
+   * so the caller can report tokens for the whole exchange while billing only
+   * the rounds that actually reached Google.
+   */
+  private async runToolLoop(args: {
+    endpoint: string;
+    headers: Record<string, string>;
+    baseBody: Record<string, unknown>;
+    config: GoogleProviderConfig;
+    context?: CallApiContextParams;
+    input: InteractionInputItem[];
+    previousInteractionId?: string;
+    store: boolean;
+    toolsDisabled: boolean;
+  }): Promise<ToolLoopResult | { error: ProviderResponse }> {
+    const { endpoint, headers, baseBody, config, context, store, toolsDisabled } = args;
+    // Accumulated across tool rounds so token usage reflects the whole exchange.
+    const totals = newUsageTotals();
+    // Mirrors `totals` but counts only rounds that were not served from cache.
+    const billable = newUsageTotals();
+    const executedToolCalls: Array<{
+      name: string;
+      args: unknown;
+      result?: unknown;
+      error?: string;
+    }> = [];
+    // A stored interaction fetched with GET replays its whole timeline, so the
+    // same function_call can reappear on a later round. Track what we already
+    // ran so a tool never fires twice and the loop cannot spin on stale calls.
+    const executedCallIds = new Set<string>();
+    const groundingCalls: Array<Record<string, unknown>> = [];
+
+    let currentInput: InteractionInputItem[] = args.input;
+    let currentPreviousInteractionId = args.previousInteractionId;
+    let lastData: InteractionResponse | undefined;
+    let allCached = true;
+    let rounds = 0;
+    const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
+
+    while (rounds <= maxRounds) {
+      rounds++;
+      const body = {
+        ...baseBody,
+        input: currentInput,
+        ...(currentPreviousInteractionId
+          ? { previous_interaction_id: currentPreviousInteractionId }
+          : {}),
+      };
+
+      const result = await this.postInteraction(endpoint, headers, body, config, context);
+      if ('error' in result) {
+        return { error: result.error };
+      }
+      const { data, cached } = result;
+      lastData = data;
+      allCached = allCached && cached;
+
+      accumulateUsage(totals, data.usage);
+      if (!cached) {
+        // Only uncached rounds are billable; a partially cached tool loop must
+        // still report the cost of the rounds that reached Google.
+        accumulateUsage(billable, data.usage);
+      }
+      for (const grounding of data.usage?.grounding_tool_count || []) {
+        groundingCalls.push({ ...grounding });
+      }
+
+      const turnSteps = getLatestTurnSteps(data);
+      const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
+      const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
+      const runnable = functionCalls.filter((call) => getRegisteredCallback(callbacks, call.name));
+
+      // Continue only when every pending call can be answered. Executing a
+      // subset would replace this response with the next round and silently
+      // drop the calls that had no callback.
+      if (runnable.length !== functionCalls.length) {
+        if (runnable.length > 0) {
+          const unhandled = functionCalls
+            .filter((call) => !getRegisteredCallback(callbacks, call.name))
+            .map((call) => call.name);
+          logger.warn(
+            '[Google Interactions] Returning pending function calls without running the tool loop; no callback is registered for some of them.',
+            { pending: functionCalls.length, unhandled },
+          );
+        }
+        break;
+      }
+      if (runnable.length === 0 || rounds > maxRounds) {
+        if (runnable.length > 0) {
+          logger.warn(
+            `[Google Interactions] Stopped after ${maxRounds} tool rounds with function calls still pending.`,
+          );
+        }
+        break;
+      }
+
+      const results: InteractionInputItem[] = [];
+      for (const call of runnable) {
+        if (call.id) {
+          executedCallIds.add(call.id);
+        }
+        const outcome = await this.runOneCallback(call, config);
+        executedToolCalls.push({ name: call.name, args: call.args, ...outcome.record });
+        results.push({
+          type: 'function_result',
+          ...(call.id ? { call_id: call.id } : {}),
+          name: call.name,
+          result: [{ type: 'text', text: outcome.text }],
+        });
+      }
+
+      if (store && data.id && !this.isVertexMode) {
+        currentPreviousInteractionId = data.id;
+        currentInput = results;
+      } else {
+        // Stateless continuation: resend the timeline with the tool results
+        // appended. Verified against the live API - the model's own
+        // `function_call` step must not be replayed.
+        currentInput = [...currentInput, ...results];
+      }
+    }
+
+    if (!lastData) {
+      return { error: { error: 'Gemini Interactions API returned no data' } };
+    }
+    return {
+      lastData,
+      totals,
+      billable,
+      executedToolCalls,
+      groundingCalls,
+      allCached,
+      executedCallIds,
+    };
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.initializationPromise) {
       await this.initializationPromise;
@@ -592,32 +793,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       return { error: 'Prompt is required for the Gemini Interactions API' };
     }
 
-    // Interactions has no `tool_choice` equivalent (the API rejects the field),
-    // so a disabled tool policy has to be honored by withholding the function
-    // declarations entirely rather than by asking the model not to call them.
-    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
-    const allowedFunctionNames = toolConfig?.functionCallingConfig?.allowedFunctionNames;
-    const allTools = await this.getAllTools(context, { skipExecutableToolFiles: toolsDisabled });
-    // `passthrough.tools` would otherwise be spread into the body verbatim and
-    // reinstate the very declarations the policy just removed.
-    const { tools: passthroughTools, ...passthroughRest } = passthrough;
-    const combinedTools = [
-      ...allTools,
-      ...(passthroughTools === undefined
-        ? []
-        : ((Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]) as Tool[])),
-    ];
-    const tools = filterAllowedFunctions(
-      toInteractionsTools(
-        toolsDisabled ? removeGoogleFunctionDeclarations(combinedTools) : combinedTools,
-      ),
-      allowedFunctionNames,
-    );
+    const { tools, toolsDisabled } = await this.resolveTools(config, context, passthrough);
 
     const generationConfig = buildGenerationConfig(config);
 
     // generateContent accepts the schema at the top level or nested under
-    // generationConfig; both must reach response_format or opting into
+    // generationConfig; both must reach response_format, or opting into
     // Interactions would silently downgrade structured output to free text.
     const rawResponseSchema =
       config.responseSchema ??
@@ -629,12 +810,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         renderVarsInObject(rawResponseSchema, context?.vars),
       );
       try {
-        // `responseSchema` is typed as a string, so a literal YAML/JSON schema
-        // arrives unparsed; Interactions needs the object itself.
+        // `responseSchema` is typed as a string, so a literal schema arrives
+        // unparsed; Interactions needs the object itself.
         responseFormat = lowercaseSchemaTypes(parseStringObject(schema));
-      } catch {
+      } catch (err) {
         return {
-          error: `Gemini Interactions API error: responseSchema is not valid JSON: ${String(schema).slice(0, 200)}`,
+          error: `Gemini Interactions API error: responseSchema is not valid JSON: ${String(err)}`,
         };
       }
     }
@@ -646,6 +827,8 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       );
     }
 
+    // `tools` is already resolved above; re-spreading it here would undo the policy.
+    const { tools: _passthroughTools, ...passthroughWithoutTools } = passthrough;
     const systemText = flattenSystemInstruction(systemInstruction);
     const mergedGenerationConfig = {
       ...generationConfig,
@@ -663,159 +846,27 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       // Verified accepted by the live API and echoed back on the response.
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       store,
-      ...passthroughRest,
+      ...passthroughWithoutTools,
       background: false,
       stream: false,
     };
 
-    // Accumulated across tool rounds so token usage reflects the whole exchange.
-    const totals = {
-      prompt: 0,
-      completion: 0,
-      thoughts: 0,
-      cached: 0,
-      audioIn: 0,
-      audioOut: 0,
-      imageIn: 0,
-      cachedAudio: 0,
-      cachedImage: 0,
-      total: 0,
-      requests: 0,
-    };
-    // Mirrors `totals` but counts only rounds that were not served from cache.
-    const billable = {
-      prompt: 0,
-      completion: 0,
-      thoughts: 0,
-      cached: 0,
-      audioIn: 0,
-      audioOut: 0,
-      imageIn: 0,
-      cachedAudio: 0,
-      cachedImage: 0,
-      total: 0,
-      requests: 0,
-    };
-    const executedToolCalls: Array<{
-      name: string;
-      args: unknown;
-      result?: unknown;
-      error?: string;
-    }> = [];
-    // A stored interaction fetched with GET replays its whole timeline, so the
-    // same function_call can reappear on a later round. Track what we already
-    // ran so a tool never fires twice and the loop cannot spin on stale calls.
-    const executedCallIds = new Set<string>();
-    const groundingCalls: Array<Record<string, unknown>> = [];
-
-    let currentInput: InteractionInputItem[] = input;
-    let currentPreviousInteractionId = previousInteractionId;
-    let lastData: InteractionResponse | undefined;
-    let allCached = true;
-    let rounds = 0;
-    const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
-
-    while (rounds <= maxRounds) {
-      rounds++;
-      const body = {
-        ...baseBody,
-        input: currentInput,
-        ...(currentPreviousInteractionId
-          ? { previous_interaction_id: currentPreviousInteractionId }
-          : {}),
-      };
-
-      const result = await this.postInteraction(endpoint, headers, body, config, context);
-      if ('error' in result) {
-        return result.error;
-      }
-      const { data, cached } = result;
-      lastData = data;
-      allCached = allCached && cached;
-
-      accumulateUsage(totals, data.usage);
-      if (!cached) {
-        // Only uncached rounds are billable; a partially cached tool loop must
-        // still report the cost of the rounds that reached Google.
-        accumulateUsage(billable, data.usage);
-      }
-      for (const grounding of data.usage?.grounding_tool_count || []) {
-        groundingCalls.push({ ...grounding });
-      }
-
-      const turnSteps = getLatestTurnSteps(data);
-      const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
-      const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
-      const runnable = functionCalls.filter((call) => getRegisteredCallback(callbacks, call.name));
-
-      // Continue only when every pending call can be answered. Executing a
-      // subset would replace this response with the next round and silently
-      // drop the calls that had no callback.
-      if (runnable.length !== functionCalls.length) {
-        if (runnable.length > 0) {
-          const unhandled = functionCalls
-            .filter((call) => !getRegisteredCallback(callbacks, call.name))
-            .map((call) => sanitizeToolNameForLog(call.name));
-          logger.warn(
-            '[Google Interactions] Returning pending function calls without running the tool loop; no callback is registered for some of them.',
-            { pending: functionCalls.length, unhandled },
-          );
-        }
-        break;
-      }
-      if (runnable.length === 0 || rounds > maxRounds) {
-        if (runnable.length > 0) {
-          logger.warn(
-            `[Google Interactions] Stopped after ${maxRounds} tool rounds with function calls still pending.`,
-          );
-        }
-        break;
-      }
-
-      const results: InteractionInputItem[] = [];
-      for (const call of runnable) {
-        if (call.id) {
-          executedCallIds.add(call.id);
-        }
-        let resultText: string;
-        try {
-          const output = await this.executeFunctionCallback(
-            call.name,
-            typeof call.args === 'string' ? call.args : JSON.stringify(call.args ?? {}),
-            config,
-            call.id,
-          );
-          // JSON.stringify(undefined) is undefined, which would drop `text`
-          // from the payload and make the next request malformed.
-          resultText =
-            typeof output === 'string' ? output : (JSON.stringify(output) ?? String(output));
-          executedToolCalls.push({ name: call.name, args: call.args, result: output });
-        } catch (err) {
-          // Surface the failure to the model rather than aborting the eval, so a
-          // broken tool shows up as a bad answer instead of a provider crash.
-          const message = err instanceof Error ? err.message : String(err);
-          resultText = `Error: ${message}`;
-          executedToolCalls.push({ name: call.name, args: call.args, error: message });
-        }
-        results.push({
-          type: 'function_result',
-          ...(call.id ? { call_id: call.id } : {}),
-          name: call.name,
-          result: [{ type: 'text', text: resultText }],
-        });
-      }
-
-      if (store && data.id && !this.isVertexMode) {
-        currentPreviousInteractionId = data.id;
-        currentInput = results;
-      } else {
-        // Stateless continuation: resend the timeline with the tool results
-        // appended. Verified against the live API - the model's own
-        // `function_call` step must not be replayed.
-        currentInput = [...currentInput, ...results];
-      }
+    const exchange = await this.runToolLoop({
+      endpoint,
+      headers,
+      baseBody,
+      config,
+      context,
+      input,
+      previousInteractionId,
+      store,
+      toolsDisabled,
+    });
+    if ('error' in exchange) {
+      return exchange.error;
     }
-
+    const { lastData, totals, billable, executedToolCalls, groundingCalls, allCached } = exchange;
+    const { executedCallIds } = exchange;
     if (!lastData) {
       return { error: 'Gemini Interactions API returned no data' };
     }

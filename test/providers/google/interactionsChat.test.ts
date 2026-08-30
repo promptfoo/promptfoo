@@ -744,20 +744,14 @@ describe('GoogleInteractionsChatProvider', () => {
       },
     );
 
-    it('sanitizes a model-supplied tool name before logging it', async () => {
+    it('logs unhandled tool names as structured context, not interpolated text', async () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
       mockFetchWithCache.mockResolvedValue(
         interaction({
           status: 'requires_action',
           steps: [
             { type: 'function_call', id: 'call_1', name: 'get_weather', arguments: {} },
-            {
-              type: 'function_call',
-              id: 'call_2',
-              // Control characters could otherwise forge log entries.
-              name: 'evil\n[fake] INFO forged entry',
-              arguments: {},
-            },
+            { type: 'function_call', id: 'call_2', name: 'send_email', arguments: {} },
           ],
         }) as any,
       );
@@ -767,9 +761,11 @@ describe('GoogleInteractionsChatProvider', () => {
         functionToolCallbacks: { get_weather: () => 'ok' },
       }).callApi('Go');
 
-      const logged = JSON.stringify(warn.mock.calls);
-      expect(logged).not.toContain('\n');
-      expect(logged).toContain('evil');
+      // The logger sanitizes context objects, so the real name is reported
+      // as-is rather than being mangled into the message.
+      const [message, context] = warn.mock.calls[0];
+      expect(message).not.toContain('send_email');
+      expect(context).toMatchObject({ pending: 2, unhandled: ['send_email'] });
       warn.mockRestore();
     });
 
