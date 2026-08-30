@@ -46,10 +46,26 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it('expands a glob, because chokidar v5 does not', () => {
+    // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'tests/a.yaml'));
-    expect(watched).toContain(path.join(base, 'tests/b.yaml'));
-    expect(watched).not.toContain(path.join(base, 'tests/*.yaml'));
+    expect([...watched].sort()).toEqual([
+      path.join(base, 'tests/a.yaml'),
+      path.join(base, 'tests/b.yaml'),
+    ]);
+  });
+
+  it("never watches a glob's parent directory", () => {
+    // chokidar watches a directory recursively, and doEval reruns the whole evaluation
+    // on any `change` beneath it. Watching the parent would therefore rerun on every
+    // unrelated edit in the tree -- including the run writing its own output file,
+    // which reruns forever. It also buys nothing: a newly added file emits `add`, and
+    // the watcher only handles `change`.
+    expect(resolve('file://tests/*.yaml' as TestSuiteConfig['tests'])).not.toContain(
+      path.join(base, 'tests'),
+    );
+    // The worst shape: a pattern anchored at the config directory itself.
+    expect(resolve('file://*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
+    expect(resolve('file://**/*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
   });
 
   it('strips a generator function suffix from a script reference', () => {
@@ -111,16 +127,13 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('watches the stable parent of a glob so later additions are seen', () => {
-    // Resolving a glob only to its current matches means a file added afterwards is
-    // never watched, even though the loader would include it on the next run.
-    const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'tests'));
-  });
-
-  it('watches the stable parent when a glob matches nothing yet', () => {
-    const watched = resolve('file://tests/new-*.yaml' as TestSuiteConfig['tests']);
-    expect(watched).toEqual([path.join(base, 'tests')]);
+  it('falls back to the literal path when a glob matches nothing', () => {
+    // A reference may be a literal filename that happens to contain a glob
+    // metacharacter, so an unmatched pattern is still watched as written.
+    fs.writeFileSync(path.join(base, 'report[1].csv'), '');
+    expect(resolve('file://report[1].csv' as TestSuiteConfig['tests'])).toEqual([
+      path.join(base, 'report[1].csv'),
+    ]);
   });
 
   it('watches file references nested inside a tests file', () => {
@@ -130,6 +143,18 @@ describe('resolveTestsWatchPaths', () => {
     const watched = resolve('file://nested.yaml' as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'nested.yaml'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
+  });
+
+  it('tolerates a self-referential generator config', () => {
+    // A YAML anchor produces a cyclic object, which naive recursion would follow until
+    // the stack overflows -- crashing a run that had already evaluated successfully.
+    const cyclic: Record<string, unknown> = { data: 'file://dataset.yaml' };
+    cyclic.self = cyclic;
+    const watched = resolveTestsWatchPaths(
+      { path: 'file://gen.py:make', config: cyclic } as unknown as TestSuiteConfig['tests'],
+      base,
+    );
+    expect(watched).toContain(path.join(base, 'dataset.yaml'));
   });
 
   it('tolerates an unreadable or malformed tests file', () => {

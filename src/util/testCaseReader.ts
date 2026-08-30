@@ -713,30 +713,18 @@ function isRemoteTestsReference(reference: string): boolean {
   );
 }
 
-/**
- * Resolve a single `tests` string reference to the file paths the loader will read.
- *
- * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
- * chokidar v5 does not expand glob patterns itself. When a pattern matches nothing the
- * literal path is returned so that creating the file later still triggers a rerun.
- */
 function hasGlobMagic(reference: string): boolean {
   return /[*?[\]{}]/.test(reference);
 }
 
 /**
- * The deepest directory of a glob that contains no wildcards.
+ * Resolve a single `tests` string reference to the file paths the loader will read.
  *
- * Watching it means a file added later that matches the pattern still triggers a rerun,
- * which resolving the pattern to its current matches alone would miss.
+ * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
+ * chokidar v5 does not expand glob patterns itself. Only concrete files are returned:
+ * watching a pattern's parent directory instead would rerun the evaluation on every
+ * unrelated edit beneath it, including the run's own output file.
  */
-function globParentDirectory(resolvedPattern: string): string {
-  const segments = resolvedPattern.split(path.sep);
-  const firstMagic = segments.findIndex((segment) => hasGlobMagic(segment));
-  const stable = firstMagic === -1 ? segments : segments.slice(0, firstMagic);
-  return stable.join(path.sep) || path.sep;
-}
-
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -744,38 +732,23 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  const matches = globSync(resolved, { windowsPathsNoEscape: true });
-  if (matches.length > 0) {
-    const paths = matches.map((match) => stripSheetSelector(match));
-    // Watch the glob's stable parent too, so a file added later that matches the
-    // pattern triggers a rerun rather than being silently excluded until restart.
-    if (hasGlobMagic(withoutScheme)) {
-      paths.push(globParentDirectory(resolved));
-    }
-    return paths;
-  }
   if (hasGlobMagic(withoutScheme)) {
-    // A pattern matching nothing yet: watch the stable parent so the first matching
-    // file to appear is picked up.
-    return [globParentDirectory(resolved)];
+    const matches = globSync(resolved, { windowsPathsNoEscape: true });
+    if (matches.length > 0) {
+      return matches.map((match) => stripSheetSelector(match));
+    }
+    // No matches: fall through, since the reference may be a literal filename that
+    // happens to contain a glob metacharacter.
   }
 
-  // No glob matches: fall back to the concrete path the loader would open. Only strip a
-  // `:functionName` suffix for script references, so that a vars file whose name legally
-  // contains a colon is still watched in full.
+  // A concrete path. Only strip a `:functionName` suffix for script references, so that
+  // a vars file whose name legally contains a colon is still watched in full.
   const withoutSheet = stripSheetSelector(resolved);
   const withoutFunction = stripFunctionSuffix(withoutSheet);
   const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
   return [isScript ? withoutFunction : withoutSheet];
 }
 
-/**
- * Collect `file://` references nested inside a test generator's `config` object.
- *
- * `readStandaloneTestsFile` passes `config` through `maybeLoadConfigFromExternalFile`
- * before invoking the generator, so those files change the generated cases and need to
- * be watched alongside the generator script itself.
- */
 /**
  * Collect `file://` references contained inside a resolved tests file.
  *
@@ -797,17 +770,32 @@ function collectNestedFileReferences(testsFile: string): string[] {
   }
 }
 
-function collectConfigFileReferences(value: unknown, basePath: string): string[] {
+/**
+ * Collect `file://` references nested anywhere inside a parsed value.
+ *
+ * Used for a test generator's `config` object, which `readStandaloneTestsFile` passes
+ * through `maybeLoadConfigFromExternalFile` before invoking the generator, and for the
+ * contents of a declarative tests file.
+ */
+function collectConfigFileReferences(
+  value: unknown,
+  basePath: string,
+  seen: WeakSet<object> = new WeakSet(),
+): string[] {
   if (typeof value === 'string') {
     return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
   }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectConfigFileReferences(item, basePath));
+  if (typeof value !== 'object' || value === null) {
+    return [];
   }
-  if (value && typeof value === 'object') {
-    return Object.values(value).flatMap((item) => collectConfigFileReferences(item, basePath));
+  // A YAML anchor can make a config self-referential, which would recurse forever.
+  // Visiting each node once also keeps a widely shared anchor from being re-expanded.
+  if (seen.has(value)) {
+    return [];
   }
-  return [];
+  seen.add(value);
+  const children = Array.isArray(value) ? value : Object.values(value);
+  return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
 }
 
 /**
@@ -832,11 +820,13 @@ export function resolveTestsWatchPaths(
   const entries = Array.isArray(tests) ? tests : [tests];
   const paths = entries.flatMap((entry): string[] => {
     if (typeof entry === 'string') {
-      const resolved = resolveTestsFileReference(entry, basePath);
       // A tests file may itself point at more files, e.g. a case with
       // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
       // config is built, so collect them here as well.
-      return [...resolved, ...resolved.flatMap((file) => collectNestedFileReferences(file))];
+      return resolveTestsFileReference(entry, basePath).flatMap((file) => [
+        file,
+        ...collectNestedFileReferences(file),
+      ]);
     }
     if (!entry || typeof entry !== 'object') {
       return [];
@@ -848,30 +838,24 @@ export function resolveTestsWatchPaths(
       ];
     }
     if ('vars' in entry && entry.vars) {
-      // `vars` may itself be a file reference rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`, which loadTestWithVars() passes to readTestFiles().
-      // That form carries no file:// scheme, so it is resolved as written.
-      if (typeof entry.vars === 'string') {
-        return resolveTestsFileReference(entry.vars, basePath);
-      }
-      if (Array.isArray(entry.vars)) {
-        // `vars: ['common.yaml', 'case.yaml']` passes every bare path to
-        // readTestFiles(), so array elements are resolved as written, like the
-        // scalar form, rather than requiring a file:// scheme.
-        return entry.vars.flatMap((value) =>
+      // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
+      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
+      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
+        const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
+        return references.flatMap((value) =>
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      if (typeof entry.vars === 'object') {
-        return Object.values(entry.vars).flatMap((value) =>
-          typeof value === 'string' && value.startsWith('file://')
-            ? resolveTestsFileReference(value, basePath)
-            : [],
-        );
-      }
+      // A mapping: only file:// values are file references, the rest are literal vars.
+      return Object.values(entry.vars).flatMap((value) =>
+        typeof value === 'string' && value.startsWith('file://')
+          ? resolveTestsFileReference(value, basePath)
+          : [],
+      );
     }
     return [];
   });
 
-  return Array.from(new Set(paths.filter(Boolean)));
+  return Array.from(new Set(paths));
 }
