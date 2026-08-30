@@ -114,6 +114,7 @@ export async function initializeSourceMapSupport(): Promise<void> {
   sourceMapSupportInitialized = true;
 }
 export function initializeRunLogging(): void {}
+export function setCustomLogFile(_filePath: string): void {}
 export function setLogger(_customLogger: unknown): void {}
 export async function logRequestResponse(opts: {
   url: string;

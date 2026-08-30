@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Hoisted mocks for shutdown tests
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
+const mockSetCustomLogFile = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -30,6 +31,7 @@ vi.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   setLogLevel: mockSetLogLevel,
+  setCustomLogFile: mockSetCustomLogFile,
   closeLogger: mockCloseLogger,
 }));
 
@@ -172,7 +174,7 @@ describe('addCommonOptionsRecursively', () => {
     process.exit = originalExit;
   });
 
-  it('should add both verbose and env-file options to a command', () => {
+  it('should add verbose, env-file, and log-file options to a command', () => {
     addCommonOptionsRecursively(program);
 
     const hasVerboseOption = program.options.some(
@@ -181,14 +183,17 @@ describe('addCommonOptionsRecursively', () => {
     const hasEnvFileOption = program.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
+    const hasLogFileOption = program.options.some((option) => option.long === '--log-file');
 
     expect(hasVerboseOption).toBe(true);
     expect(hasEnvFileOption).toBe(true);
+    expect(hasLogFileOption).toBe(true);
   });
 
   it('should not add duplicate options if they already exist', () => {
     program.option('--env-file, --env-path <path>', 'Path to .env file');
     program.option('-v, --verbose', 'Show debug logs', false);
+    program.option('--log-file <path>', 'Write logs to specified file');
 
     // Count options before
     const envFileOptionsBefore = program.options.filter(
@@ -197,6 +202,10 @@ describe('addCommonOptionsRecursively', () => {
 
     const verboseOptionsBefore = program.options.filter(
       (option) => option.short === '-v' || option.long === '--verbose',
+    ).length;
+
+    const logFileOptionsBefore = program.options.filter(
+      (option) => option.long === '--log-file',
     ).length;
 
     addCommonOptionsRecursively(program);
@@ -210,9 +219,14 @@ describe('addCommonOptionsRecursively', () => {
       (option) => option.short === '-v' || option.long === '--verbose',
     ).length;
 
+    const logFileOptionsAfter = program.options.filter(
+      (option) => option.long === '--log-file',
+    ).length;
+
     // Should still have the same number of options
     expect(envFileOptionsAfter).toBe(envFileOptionsBefore);
     expect(verboseOptionsAfter).toBe(verboseOptionsBefore);
+    expect(logFileOptionsAfter).toBe(logFileOptionsBefore);
   });
 
   it('should add options to subcommands', () => {
@@ -224,9 +238,13 @@ describe('addCommonOptionsRecursively', () => {
     const hasSubcommandEnvFileOption = subCommand.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
+    const hasSubcommandLogFileOption = subCommand.options.some(
+      (option) => option.long === '--log-file',
+    );
 
     expect(hasSubcommandVerboseOption).toBe(true);
     expect(hasSubcommandEnvFileOption).toBe(true);
+    expect(hasSubcommandLogFileOption).toBe(true);
   });
 
   it('should add options to nested subcommands', () => {
@@ -245,12 +263,16 @@ describe('addCommonOptionsRecursively', () => {
     const hasMainEnvFileOption = program.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
+    const hasMainLogFileOption = program.options.some((option) => option.long === '--log-file');
 
     const hasSubCommandVerboseOption = subCommand.options.some(
       (option) => option.short === '-v' || option.long === '--verbose',
     );
     const hasSubCommandEnvFileOption = subCommand.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
+    );
+    const hasSubCommandLogFileOption = subCommand.options.some(
+      (option) => option.long === '--log-file',
     );
 
     const hasSubSubCommandVerboseOption = subSubCommand.options.some(
@@ -259,6 +281,9 @@ describe('addCommonOptionsRecursively', () => {
     const hasSubSubCommandEnvFileOption = subSubCommand.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
+    const hasSubSubCommandLogFileOption = subSubCommand.options.some(
+      (option) => option.long === '--log-file',
+    );
 
     const hasSubSubSubCommandVerboseOption = level3Command.options.some(
       (option) => option.short === '-v' || option.long === '--verbose',
@@ -266,18 +291,25 @@ describe('addCommonOptionsRecursively', () => {
     const hasSubSubSubCommandEnvFileOption = level3Command.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
+    const hasSubSubSubCommandLogFileOption = subSubSubCommand.options.some(
+      (option) => option.long === '--log-file',
+    );
 
     expect(hasMainVerboseOption).toBe(true);
     expect(hasMainEnvFileOption).toBe(true);
+    expect(hasMainLogFileOption).toBe(true);
     expect(hasSubCommandVerboseOption).toBe(true);
     expect(hasSubCommandEnvFileOption).toBe(true);
+    expect(hasSubCommandLogFileOption).toBe(true);
     expect(hasSubSubCommandVerboseOption).toBe(true);
     expect(hasSubSubCommandEnvFileOption).toBe(true);
+    expect(hasSubSubCommandLogFileOption).toBe(true);
     expect(hasSubSubSubCommandVerboseOption).toBe(true);
     expect(hasSubSubSubCommandEnvFileOption).toBe(true);
+    expect(hasSubSubSubCommandLogFileOption).toBe(true);
   });
 
-  it('should register a single hook that handles both options', () => {
+  it('should register a single hook that handles common options', () => {
     // Create a fake action that manually mocks the Commander hook system
     const mockHookRegister = vi.fn();
     (program as any).hook = mockHookRegister;
@@ -308,9 +340,16 @@ describe('addCommonOptionsRecursively', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.test');
 
     // Test both options together
-    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
+    preActionFn(
+      createMockCommand({
+        verbose: true,
+        envFile: '.env.combined',
+        logFile: '/tmp/promptfoo-custom.log',
+      }),
+    );
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
+    expect(mockSetCustomLogFile).toHaveBeenCalledWith('/tmp/promptfoo-custom.log');
   });
 
   it('keeps structured code-scan output muted even when --verbose is present', () => {
