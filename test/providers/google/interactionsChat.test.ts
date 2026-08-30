@@ -486,6 +486,20 @@ describe('GoogleInteractionsChatProvider', () => {
       ]);
     });
 
+    it('attributes a fully cached exchange to cached tokens, not fresh usage', async () => {
+      mockFetchWithCache.mockResolvedValue({ ...interaction(), cached: true } as any);
+
+      const result = await make().callApi('Hello');
+
+      // Matches the other Google providers: nothing was billed, so the tokens
+      // must not be counted again as fresh prompt/completion usage.
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toMatchObject({ cached: 30, total: 30 });
+      expect(result.tokenUsage?.prompt).toBeUndefined();
+      expect(result.tokenUsage?.completion).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+    });
+
     it('reports token usage, reasoning tokens, and cost', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       const result = await make().callApi('Hello');
@@ -850,6 +864,23 @@ describe('GoogleInteractionsChatProvider', () => {
       );
       const result = await make().callApi('Hello');
       expect(result.error).toBe('Gemini Interactions API error: generation failed');
+    });
+
+    it('returns the partial output of a truncated interaction instead of failing', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          status: 'incomplete',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: '**Title:** The' }] }],
+        }) as any,
+      );
+
+      const result = await make({ maxOutputTokens: 120 }).callApi('Write an essay');
+
+      // generateContent returns truncated text with finishReason MAX_TOKENS, so
+      // erroring here would drop real output and diverge from the legacy path.
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('**Title:** The');
+      expect(result.metadata?.interactionStatus).toBe('incomplete');
     });
 
     it('surfaces a terminal non-completed status', async () => {

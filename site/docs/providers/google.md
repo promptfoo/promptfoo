@@ -291,12 +291,14 @@ Responses are cached like any other provider — the cache key is keyed on a has
 
 Interactions is not a strict superset of `generateContent`, so the default falls back automatically rather than silently changing behavior. You get the legacy transport when:
 
-| Condition                                                    | Why                                                                    |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `safetySettings` is configured                               | The Gemini API rejects `safety_settings` on the Interactions endpoint. |
-| A `-tts` model, or an `AUDIO`/`IMAGE` response modality      | Interactions returns text for these instead of audio or image output.  |
-| The legacy `palm:` prefix, or a PaLM model like `chat-bison` | Predates Interactions entirely.                                        |
-| A `vertex:` provider without an explicit opt-in              | See [Vertex AI differences](#vertex-ai-differences).                   |
+| Condition                                                         | Why                                                                                             |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `safetySettings` is configured                                    | The Gemini API rejects `safety_settings` on the Interactions endpoint.                          |
+| A `-tts` model, or an `AUDIO`/`IMAGE` response modality           | Interactions returns text for these instead of audio or image output.                           |
+| A tool mode that requires a call (`ANY`, `VALIDATED`, `required`) | Interactions has no `tool_choice` field, so the mode cannot be enforced. `NONE` **is** honored. |
+| The legacy `palm:` prefix, or a PaLM model like `chat-bison`      | Predates Interactions entirely.                                                                 |
+| A script-like provider id such as `google:custom-model.ts`        | A pseudo model name rather than a model Interactions serves.                                    |
+| A `vertex:` provider without an explicit opt-in                   | See [Vertex AI differences](#vertex-ai-differences).                                            |
 
 Set `interactions` explicitly to override the decision in either direction:
 
@@ -313,7 +315,9 @@ providers:
       interactions: true
 ```
 
-`google:interactions:<model>` and `vertex:interactions:<model>` are equivalent to `interactions: true`, but change the provider id. Prefer the config flag if you want to keep eval history comparable.
+`google:interactions:<model>` and `vertex:interactions:<model>` also force Interactions, and additionally pin the service — `google:interactions:` always uses AI Studio even when `VERTEX_*` variables are set in your environment. They change the provider id, so prefer the config flag if you want eval history to stay comparable.
+
+Like `interactions: true`, both prefixes bypass the fallback table above: if you name a model or option Interactions cannot serve, the request fails rather than quietly switching transports.
 
 ### Server-side history and retention
 
@@ -333,7 +337,7 @@ providers:
 
 ### Tools
 
-Gemini-format tools are converted to the Interactions typed form, so `functionDeclarations`, `googleSearch`, `codeExecution`, and `urlContext` all carry over. With `functionToolCallbacks` configured, promptfoo executes the tool and feeds the result back, looping until the model produces an answer (up to 8 rounds):
+Gemini-format tools are converted to the Interactions typed form, so `functionDeclarations`, `googleSearch`, `codeExecution`, and `urlContext` all carry over (the endpoint's own tool vocabulary is `function`, `google_search`, `code_execution`, `url_context`, `google_maps`, `file_search`, `filesystem`, `bash`, `computer_use`, `mcp_server`, and `tool_search`). With `functionToolCallbacks` configured, promptfoo executes the tool and feeds the result back, looping until the model produces an answer (up to 8 rounds):
 
 ```yaml
 providers:

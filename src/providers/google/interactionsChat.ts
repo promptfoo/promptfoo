@@ -401,6 +401,37 @@ function newUsageTotals(): UsageTotals {
   };
 }
 
+/**
+ * Report usage the way the other Google providers do.
+ *
+ * A fully cached exchange was not billed, so its tokens are attributed to
+ * `cached` rather than counted again as fresh prompt/completion usage.
+ */
+function buildTokenUsage(totals: UsageTotals, allCached: boolean) {
+  const total = totals.total || totals.prompt + totals.completion + totals.thoughts;
+  const reasoning =
+    totals.thoughts > 0
+      ? {
+          completionDetails: {
+            reasoning: totals.thoughts,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        }
+      : {};
+  if (allCached) {
+    return { cached: total, total, numRequests: totals.requests, ...reasoning };
+  }
+  return {
+    prompt: totals.prompt,
+    completion: totals.completion,
+    total,
+    cached: totals.cached,
+    numRequests: totals.requests,
+    ...reasoning,
+  };
+}
+
 type ToolLoopResult = {
   lastData: InteractionResponse;
   totals: UsageTotals;
@@ -640,7 +671,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     const executedCallIds = new Set<string>();
     const groundingCalls: Array<Record<string, unknown>> = [];
 
-    let currentInput: InteractionInputItem[] = args.input;
+    // The full conversation, always. `currentInput` is what this round sends,
+    // which is just the new results when the server is holding the thread.
+    const timeline: InteractionInputItem[] = [...args.input];
+    let currentInput: InteractionInputItem[] = timeline;
     let currentPreviousInteractionId = args.previousInteractionId;
     let lastData: InteractionResponse | undefined;
     let allCached = true;
@@ -719,15 +753,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         });
       }
 
-      if (store && data.id && !this.isVertexMode) {
-        currentPreviousInteractionId = data.id;
-        currentInput = results;
-      } else {
-        // Stateless continuation: resend the timeline with the tool results
-        // appended. Verified against the live API - the model's own
-        // `function_call` step must not be replayed.
-        currentInput = [...currentInput, ...results];
-      }
+      // Vertex ignores stored history, so it always resends the timeline.
+      // Verified against the live API: the model's own `function_call` step must
+      // not be replayed, only the results.
+      timeline.push(...results);
+      const useServerState = store && !this.isVertexMode && Boolean(data.id);
+      currentPreviousInteractionId = useServerState ? data.id : currentPreviousInteractionId;
+      currentInput = useServerState ? results : timeline;
     }
 
     if (!lastData) {
@@ -919,22 +951,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       output,
       cached: allCached,
       raw: lastData,
-      tokenUsage: {
-        prompt: totals.prompt,
-        completion: totals.completion,
-        total: totals.total || totals.prompt + totals.completion + totals.thoughts,
-        cached: totals.cached,
-        numRequests: totals.requests,
-        ...(totals.thoughts > 0
-          ? {
-              completionDetails: {
-                reasoning: totals.thoughts,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }
-          : {}),
-      },
+      tokenUsage: buildTokenUsage(totals, allCached),
       cost,
       metadata: {
         ...(lastData.id ? { interactionId: lastData.id } : {}),
@@ -1066,7 +1083,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
     }
 
-    if (data?.status && !['completed', 'requires_action'].includes(data.status)) {
+    // `incomplete` means the model ran out of budget mid-answer, but the partial
+    // output is still there. generateContent returns it with finishReason
+    // MAX_TOKENS rather than failing, so erroring here would lose real output.
+    if (data?.status === 'incomplete') {
+      logger.warn('[Google Interactions] Interaction ended early; returning partial output.', {
+        status: data.status,
+      });
+    } else if (data?.status && !['completed', 'requires_action'].includes(data.status)) {
       return {
         error: {
           error: `Gemini interaction did not complete (status: ${data.status})`,
