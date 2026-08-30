@@ -129,22 +129,39 @@ export class GolangProvider implements ApiProvider {
 
         const relativeScriptPath = path.relative(moduleRoot, absPath);
         const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
-
-        // Copy wrapper.go to the same directory as the script
-        const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         await fs.mkdir(scriptDir, { recursive: true });
-        await fs.copyFile(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
-
-        // Build from the script directory using execFile (no shell injection)
         const goExecutable = this.config.goExecutable || 'go';
-        await execFileAsync(
-          goExecutable,
-          ['build', '-o', executablePath, 'wrapper.go', path.basename(relativeScriptPath)],
-          { cwd: scriptDir },
+        const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
+          cwd: scriptDir,
+        });
+        const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
+        let buildDir = scriptDir;
+        let buildFiles = ['wrapper.go', path.basename(relativeScriptPath)];
+
+        if (packageInfo.Name && packageInfo.Name !== 'main') {
+          if (!packageInfo.ImportPath) {
+            throw new Error('Could not determine Go provider import path');
+          }
+
+          buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
+          await fs.writeFile(
+            path.join(buildDir, 'provider.go'),
+            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
+          );
+          buildFiles = ['wrapper.go', 'provider.go'];
+        }
+
+        await fs.copyFile(
+          path.join(getWrapperDir('golang'), 'wrapper.go'),
+          path.join(buildDir, 'wrapper.go'),
         );
+
+        await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
+          cwd: buildDir,
+        });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);

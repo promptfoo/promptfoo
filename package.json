@@ -214,10 +214,10 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.109.2",
-    "dompurify": "3.4.13",
+    "dompurify": "3.4.14",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.13"
+      "dompurify": "3.4.14"
     }
   },
   "devDependencies": {
@@ -260,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.145.0",
+    "oxc-parser": "^0.146.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -303,12 +303,12 @@
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.16.0",
-    "@swc/core-darwin-arm64": "^1.16.0",
-    "@swc/core-darwin-x64": "^1.16.0",
-    "@swc/core-linux-x64-gnu": "^1.16.0",
-    "@swc/core-linux-x64-musl": "^1.16.0",
-    "@swc/core-win32-x64-msvc": "^1.16.0",
+    "@swc/core": "^1.16.1",
+    "@swc/core-darwin-arm64": "^1.16.1",
+    "@swc/core-darwin-x64": "^1.16.1",
+    "@swc/core-linux-x64-gnu": "^1.16.1",
+    "@swc/core-linux-x64-musl": "^1.16.1",
+    "@swc/core-win32-x64-msvc": "^1.16.1",
     "google-auth-library": "^11.0.2",
     "hono": "^4.13.2",
     "ibm-cloud-sdk-core": "^5.6.0",
