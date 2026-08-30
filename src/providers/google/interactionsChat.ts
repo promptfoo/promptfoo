@@ -268,6 +268,26 @@ function collectPendingFunctionCalls(
     .filter((call) => !call.id || !executed.has(call.id));
 }
 
+/**
+ * Search queries the model actually issued.
+ *
+ * `generateContent` reports these as `webSearchQueries` in grounding metadata;
+ * Interactions puts them on the `google_search_call` step, so surface them under
+ * the same key to keep grounding assertions and reports working across both
+ * transports.
+ */
+function collectSearchQueries(steps: InteractionStep[]): string[] {
+  return steps
+    .filter((step) => step.type === 'google_search_call')
+    .flatMap((step) => {
+      const args = step.arguments;
+      const queries = (args as { queries?: unknown } | undefined)?.queries;
+      return Array.isArray(queries)
+        ? queries.filter((q): q is string => typeof q === 'string')
+        : [];
+    });
+}
+
 function collectText(steps: InteractionStep[]): string {
   return steps
     .filter((step) => step.type === 'model_output')
@@ -685,6 +705,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     const turnSteps = getLatestTurnSteps(lastData);
     const text = collectText(turnSteps);
     const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
+    const webSearchQueries = collectSearchQueries(turnSteps);
+    const serverToolSteps = turnSteps
+      .map((step) => step.type)
+      .filter(
+        (type): type is string =>
+          typeof type === 'string' &&
+          (type.startsWith('google_search') || type.startsWith('code_execution')),
+      );
 
     let output: string;
     if (functionCalls.length > 0) {
@@ -744,6 +772,8 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         interactionStored: store,
         ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
         ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
+        ...(webSearchQueries.length > 0 ? { webSearchQueries } : {}),
+        ...(serverToolSteps.length > 0 ? { serverToolSteps } : {}),
       },
     };
   }

@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Automatic fallback to generateContent for unsupported capabilities
+
+# Interactions is not a strict superset of generateContent, so promptfoo falls
+# back automatically rather than silently changing behavior. Each provider below
+# resolves to the legacy transport without anyone asking for it.
+providers:
+  # The Gemini API rejects safety_settings on the Interactions endpoint.
+  - id: google:gemini-3.6-flash
+    label: safety-settings-fallback
+    config:
+      safetySettings:
+        - category: HARM_CATEGORY_HARASSMENT
+          threshold: BLOCK_ONLY_HIGH
+
+  # Explicit opt-out.
+  - id: google:gemini-3.6-flash
+    label: explicit-opt-out
+    config:
+      interactions: false
+
+prompts:
+  - 'Answer in one word: what is the capital of {{country}}?'
+
+tests:
+  - vars:
+      country: Italy
+    assert:
+      - type: contains
+        value: Rome

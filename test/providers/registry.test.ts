@@ -1399,19 +1399,27 @@ describe('Provider Registry', () => {
       ],
       [
         'google:gemini-3.7-flash',
-        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
       ],
       [
         'google:gemini-3.6-flash',
-        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
       ],
       [
         'google:gemini-3.5-flash-lite',
-        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
       ],
       [
         'google:gemini-2.5-flash',
-        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
       ],
       [
         'palm:chat-bison',
@@ -1555,6 +1563,36 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(providerPath);
       },
     );
+
+    it.each([
+      // Capabilities Interactions does not serve must stay on generateContent so
+      // making it the default cannot silently change behavior.
+      ['google:gemini-2.5-flash-preview-tts', {}],
+      ['google:gemini-3.6-flash', { safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT' }] }],
+      ['google:gemini-3.6-flash', { generationConfig: { responseModalities: ['AUDIO'] } }],
+      ['google:gemini-3.6-flash', { interactions: false }],
+      ['palm:chat-bison', {}],
+      ['google:custom-model.ts', {}],
+    ])('keeps %s on generateContent', async (providerPath, config) => {
+      const options: ProviderOptions = { config: config as any };
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, options, {
+        basePath: '/test',
+        options,
+      });
+      const { AIStudioChatProvider } = await import('../../src/providers/google/ai.studio');
+      expect(provider).toBeInstanceOf(AIStudioChatProvider);
+    });
+
+    it('keeps bare vertex:<model> on generateContent unless explicitly opted in', async () => {
+      const providerPath = 'vertex:gemini-3-flash-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const { VertexChatProvider } = await import('../../src/providers/google/vertex');
+      // Vertex Interactions serves fewer models, forces retention, and ignores
+      // stored history, so it stays opt-in.
+      expect(provider).toBeInstanceOf(VertexChatProvider);
+    });
 
     it('rejects vertex:interactions without a model name', async () => {
       const providerPath = 'vertex:interactions:';

@@ -6,6 +6,7 @@ import {
   geminiContentsToInteractionsInput,
   toInteractionsTools,
 } from '../../../src/providers/google/interactionsChat';
+import { shouldUseInteractions } from '../../../src/providers/google/interactionsShared';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 
@@ -408,6 +409,32 @@ describe('GoogleInteractionsChatProvider', () => {
       // Matches Vertex/AI Studio so `is-valid-function-call` keeps working.
       expect(JSON.parse(result.output as string)).toEqual([
         { functionCall: { name: 'get_weather', args: { location: 'Boston' }, id: 'call_1' } },
+      ]);
+    });
+
+    it('surfaces search queries and server-side tool steps as metadata', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          steps: [
+            {
+              type: 'google_search_call',
+              id: 'call_1',
+              arguments: { queries: ['who won', 'world cup winner'] },
+            },
+            { type: 'google_search_result', id: 'call_1' },
+            { type: 'model_output', content: [{ type: 'text', text: 'Spain' }] },
+          ],
+        }) as any,
+      );
+
+      const result = await make({ tools: [{ googleSearch: {} }] }).callApi('Who won?');
+
+      // generateContent reports these as webSearchQueries; keep the same key so
+      // grounding assertions work across both transports.
+      expect(result.metadata?.webSearchQueries).toEqual(['who won', 'world cup winner']);
+      expect(result.metadata?.serverToolSteps).toEqual([
+        'google_search_call',
+        'google_search_result',
       ]);
     });
 
@@ -925,5 +952,48 @@ describe('toInteractionsTools', () => {
     expect(toInteractionsTools([{ functionDeclarations: [{ description: 'x' }] }] as any)).toEqual(
       [],
     );
+  });
+});
+
+describe('shouldUseInteractions', () => {
+  it('defaults to the Interactions API for AI Studio chat models', () => {
+    expect(shouldUseInteractions('gemini-3.6-flash', {})).toBe(true);
+  });
+
+  it.each([
+    ['a TTS model', 'gemini-2.5-flash-preview-tts', {}],
+    ['configured safetySettings', 'gemini-3.6-flash', { safetySettings: [{ category: 'X' }] }],
+    [
+      'an audio response modality',
+      'gemini-3.6-flash',
+      { generationConfig: { responseModalities: ['AUDIO'] } },
+    ],
+    [
+      'a snake_case image modality',
+      'gemini-3.6-flash',
+      { generationConfig: { response_modalities: ['IMAGE'] } },
+    ],
+    ['a legacy PaLM model', 'chat-bison-001', {}],
+    ['a script-like id', 'custom-model.ts', {}],
+  ])('falls back to generateContent for %s', (_label, model, config) => {
+    expect(shouldUseInteractions(model, config as any)).toBe(false);
+  });
+
+  it('keeps Vertex on generateContent unless explicitly opted in', () => {
+    expect(shouldUseInteractions('gemini-3-flash-preview', {}, { vertex: true })).toBe(false);
+    expect(
+      shouldUseInteractions('gemini-3-flash-preview', { interactions: true } as any, {
+        vertex: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('lets an explicit flag override every fallback in both directions', () => {
+    // Opting in past a known gap is allowed; the request may fail, but the
+    // caller asked for it.
+    expect(
+      shouldUseInteractions('gemini-2.5-flash-preview-tts', { interactions: true } as any),
+    ).toBe(true);
+    expect(shouldUseInteractions('gemini-3.6-flash', { interactions: false } as any)).toBe(false);
   });
 });

@@ -15,6 +15,7 @@
  */
 
 import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
 import { GoogleAuthManager } from './auth';
 
@@ -252,4 +253,74 @@ export function getLatestTurnSteps(data: InteractionResponse): InteractionStep[]
   const steps = data.steps || [];
   const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
   return steps.slice(latestUserInput + 1);
+}
+
+/**
+ * Config that would break if a request were routed through Interactions.
+ *
+ * Each entry is a capability `generateContent` has and Interactions does not,
+ * verified against the live API. They gate the default only: an explicit
+ * `interactions: true` still forces the Interactions transport.
+ */
+function getInteractionsCapabilityGap(
+  modelName: string,
+  config: GoogleProviderConfig,
+): string | undefined {
+  if (/\.(ts|js|mjs|cjs|py)$/i.test(modelName)) {
+    // A script-like id is a pseudo model name, not something Interactions serves.
+    return 'script-like provider ids are not Interactions models';
+  }
+  if (/^(chat|text|code)-bison|^embedding-gecko/.test(modelName)) {
+    // Legacy PaLM models predate Interactions entirely.
+    return 'legacy PaLM models are not served on the Interactions API';
+  }
+  if (/-tts$/.test(modelName)) {
+    // TTS models reject a text response_format, and an audio response_format
+    // silently returns text instead of audio.
+    return 'text-to-speech models are not served on the Interactions API';
+  }
+  if (config.safetySettings) {
+    // The Gemini API rejects `safety_settings` on this endpoint outright.
+    return 'safetySettings is not supported by the Interactions API';
+  }
+  const modalities = (config.generationConfig?.responseModalities ??
+    config.generationConfig?.response_modalities) as string[] | undefined;
+  if (modalities?.some((modality) => /audio|image/i.test(modality))) {
+    return 'audio and image response modalities are not supported by the Interactions API';
+  }
+  return undefined;
+}
+
+/**
+ * Decide whether a Gemini chat request should use the Interactions API.
+ *
+ * Interactions is Google's primary interface and the default here, but it is
+ * not a superset of `generateContent`: Vertex serves a much narrower model set
+ * with forced retention and no working server-side history, and a few AI Studio
+ * capabilities have no Interactions equivalent. Those cases fall back so that
+ * making Interactions the default cannot silently change behavior.
+ *
+ * `config.interactions` always wins, in both directions.
+ */
+export function shouldUseInteractions(
+  modelName: string,
+  config: GoogleProviderConfig,
+  options: { vertex?: boolean } = {},
+): boolean {
+  if (typeof config.interactions === 'boolean') {
+    return config.interactions;
+  }
+  if (options.vertex) {
+    // Verified live: fewer models, `store: false` rejected, and
+    // previous_interaction_id returns 200 while ignoring the stored history.
+    return false;
+  }
+  const gap = getInteractionsCapabilityGap(modelName, config);
+  if (gap) {
+    logger.debug(
+      `[Google] Using generateContent for ${modelName} instead of the Interactions API: ${gap}.`,
+    );
+    return false;
+  }
+  return true;
 }

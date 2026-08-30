@@ -2,6 +2,8 @@
 
 This example demonstrates the [Gemini Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview), which went GA in June 2026 and is Google's primary interface for Gemini models and agents. `generateContent` is now the legacy path.
 
+Promptfoo uses Interactions by default for `google:` chat models, so these configs mostly show what that default does and how to opt out of it.
+
 You can run this example with:
 
 ```bash
@@ -34,6 +36,7 @@ Google stores interactions by default (55 days on the paid tier). Promptfoo send
 promptfoo eval -c promptfooconfig.yaml
 promptfoo eval -c promptfooconfig.tools.yaml
 promptfoo eval -c promptfooconfig.stateful.yaml
+promptfoo eval -c promptfooconfig.fallback.yaml
 promptfoo eval -c promptfooconfig.vertex.yaml
 promptfoo view
 ```

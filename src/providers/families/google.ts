@@ -49,7 +49,8 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (firstPart === 'embedding' || firstPart === 'embeddings') {
         return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
       }
-      if (providerOptions.config?.interactions) {
+      const { shouldUseInteractions } = await import('../google/interactionsShared');
+      if (shouldUseInteractions(modelName, providerOptions.config ?? {}, { vertex: true })) {
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,
@@ -129,7 +130,17 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GeminiImageProvider(modelName, providerOptions);
       }
 
-      if (providerOptions.config?.interactions) {
+      // The Interactions API is Google's primary interface and the default here.
+      // `shouldUseInteractions` falls back to legacy generateContent for the
+      // capabilities Interactions does not serve, and honors an explicit
+      // `interactions: false` opt-out.
+      // The legacy `palm:` prefix keeps the legacy transport; only `google:` opts
+      // into the new default.
+      const { shouldUseInteractions } = await import('../google/interactionsShared');
+      if (
+        !providerPath.startsWith('palm:') &&
+        shouldUseInteractions(modelName, providerOptions.config ?? {})
+      ) {
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,

@@ -5,7 +5,7 @@ description: Server-side interaction history (opt-in retention)
 # Setting store:true opts into server-side history (55-day paid retention) and
 # makes metadata.interactionId available to continue the thread later.
 providers:
-  - id: google:interactions:gemini-3.6-flash
+  - id: google:gemini-3.6-flash
     config:
       store: true
 
