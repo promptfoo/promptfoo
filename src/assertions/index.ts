@@ -47,6 +47,7 @@ import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleCharacterCount } from './characterCount';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -233,6 +234,7 @@ const ASSERTION_HANDLERS: Record<
   'agent-rubric': handleAgentRubric,
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
+  'character-count': handleCharacterCount,
   classifier: handleClassifier,
   contains: handleContains,
   'contains-all': handleContainsAll,
