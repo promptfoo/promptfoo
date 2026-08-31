@@ -5,8 +5,10 @@ import { AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
 
+import { pathToFileURL } from 'url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
+import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
 
 interface MockFileSummary {
   filename: string;
@@ -185,7 +187,7 @@ describe('HttpProvider structured multipart requests', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
     const reportPath = path.join(tempDir, 'report-a.txt');
-    const standardFileUrl = new URL(`file://${reportPath}`).toString();
+    const standardFileUrl = pathToFileURL(reportPath).toString();
     fs.writeFileSync(reportPath, 'report-a contents');
 
     const mockServer = await createMultipartDocumentSummarizerServer();
@@ -438,5 +440,64 @@ describe('HttpProvider structured multipart requests', () => {
     });
     expect(result.metadata?.multipart.files[0]).not.toHaveProperty('sha256');
     expect(JSON.stringify(result.metadata)).not.toContain('Benign generated report');
+  });
+
+  describe('normalizeFilePath and resolvePath', () => {
+    it('preserves plain paths without file:// protocol', () => {
+      expect(normalizeFilePath('relative/path/to/doc.pdf')).toBe('relative/path/to/doc.pdf');
+      expect(normalizeFilePath('/absolute/path/to/doc.pdf')).toBe('/absolute/path/to/doc.pdf');
+      expect(normalizeFilePath('C:\\Windows\\Path\\doc.pdf')).toBe('C:\\Windows\\Path\\doc.pdf');
+    });
+
+    it('normalizes promptfoo relative shorthand file:// URLs', () => {
+      expect(normalizeFilePath('file://relative/path/doc.pdf')).toBe('relative/path/doc.pdf');
+      expect(normalizeFilePath('file://./relative/doc.pdf')).toBe('./relative/doc.pdf');
+      expect(normalizeFilePath('file://../parent/doc.pdf')).toBe('../parent/doc.pdf');
+      expect(normalizeFilePath('file://sample.pdf')).toBe('sample.pdf');
+    });
+
+    it('normalizes Windows drive letter file:// URLs correctly across formats', () => {
+      // 2 slashes with forward slashes
+      expect(normalizeFilePath('file://C:/Users/name/doc.pdf')).toBe(
+        path.normalize('C:/Users/name/doc.pdf'),
+      );
+      // 3 slashes with forward slashes
+      expect(normalizeFilePath('file:///C:/Users/name/doc.pdf')).toBe(
+        path.normalize('C:/Users/name/doc.pdf'),
+      );
+      // 2 slashes with backslashes
+      expect(normalizeFilePath('file://C:\\Users\\name\\doc.pdf')).toBe(
+        path.normalize('C:\\Users\\name\\doc.pdf'),
+      );
+      // 3 slashes with backslashes
+      expect(normalizeFilePath('file:///C:\\Users\\name\\doc.pdf')).toBe(
+        path.normalize('C:\\Users\\name\\doc.pdf'),
+      );
+      // localhost host
+      expect(normalizeFilePath('file://localhost/C:/Users/name/doc.pdf')).toBe(
+        path.normalize('C:/Users/name/doc.pdf'),
+      );
+      // URL-encoded spaces
+      expect(normalizeFilePath('file:///C:/My%20Documents/doc.pdf')).toBe(
+        path.normalize('C:/My Documents/doc.pdf'),
+      );
+      expect(normalizeFilePath('file://C:/My%20Documents/doc.pdf')).toBe(
+        path.normalize('C:/My Documents/doc.pdf'),
+      );
+    });
+
+    it('normalizes standard POSIX absolute file:// URLs', () => {
+      expect(normalizeFilePath('file:///var/log/doc.pdf')).toBe('/var/log/doc.pdf');
+      expect(normalizeFilePath('file://localhost/var/log/doc.pdf')).toBe('/var/log/doc.pdf');
+      expect(normalizeFilePath('file:///home/user/my%20file.pdf')).toBe('/home/user/my file.pdf');
+    });
+
+    it('resolves relative file URLs against base path and leaves absolute paths intact', () => {
+      const resolvedRelative = resolvePath('file://fixtures/report.txt');
+      expect(resolvedRelative).toBe(path.resolve(process.cwd(), 'fixtures/report.txt'));
+
+      const resolvedAbsolute = resolvePath('file:///tmp/report.txt');
+      expect(resolvedAbsolute).toBe('/tmp/report.txt');
+    });
   });
 });

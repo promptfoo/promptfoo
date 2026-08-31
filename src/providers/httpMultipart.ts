@@ -154,20 +154,49 @@ function createGeneratedFile(
   };
 }
 
-function normalizeFilePath(filePath: string): string {
+export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
     return filePath;
   }
 
-  try {
-    return fileURLToPath(filePath);
-  } catch {
-    // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
-    return filePath.slice('file://'.length);
+  let url = filePath;
+  if (url.startsWith('file://localhost/')) {
+    url = `file:///${url.slice('file://localhost/'.length)}`;
   }
+
+  // Windows drive paths: file://C:/..., file:///C:/..., file://C:\..., file:///C:\...
+  const winDriveMatch = url.match(/^file:\/\/(?:\/)?([a-zA-Z]:[\\/].*)$/);
+  if (winDriveMatch) {
+    const rawPath = winDriveMatch[1];
+    if (process.platform === 'win32') {
+      try {
+        const forwardSlashUrl = `file:///${rawPath.replace(/\\/g, '/')}`;
+        return fileURLToPath(forwardSlashUrl);
+      } catch {
+        // Fallback to path normalization
+      }
+    }
+    try {
+      return path.normalize(decodeURIComponent(rawPath));
+    } catch {
+      return path.normalize(rawPath);
+    }
+  }
+
+  // Standard absolute file URLs (e.g. file:///path/to/file or file:///C:/... on Windows)
+  if (url.startsWith('file:///')) {
+    try {
+      return fileURLToPath(url);
+    } catch {
+      return url.slice('file://'.length);
+    }
+  }
+
+  // Promptfoo shorthand for relative paths: file://relative/path.ext or file://./...
+  return url.slice('file://'.length);
 }
 
-function resolvePath(filePath: string): string {
+export function resolvePath(filePath: string): string {
   const withoutFileScheme = normalizeFilePath(filePath);
   if (path.isAbsolute(withoutFileScheme)) {
     return withoutFileScheme;
