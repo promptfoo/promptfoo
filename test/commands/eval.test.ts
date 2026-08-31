@@ -553,6 +553,14 @@ describe('evalCommand', () => {
     // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
     const watchBase = path.dirname(defaultConfigPath);
 
+    beforeEach(() => {
+      // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
+      // restore only its default in `finally`, which leaves the queue intact if the
+      // test bails early. A leftover "missing API keys" value fails the run before it
+      // reaches the watcher, which file order hides and CI's shuffled order does not.
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
     async function watchedPathsFor(
       resolvedTests: UnifiedConfig['tests'],
       rawConfigTests?: UnifiedConfig['tests'],
