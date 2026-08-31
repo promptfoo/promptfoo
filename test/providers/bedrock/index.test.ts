@@ -474,15 +474,13 @@ describe('AwsBedrockGenericProvider', () => {
       expect((provider.config as any).inferenceModelType).toBe('openai');
     });
 
-    it('should throw error for inference profile ARN without inferenceModelType', async () => {
+    it('should throw error for inference profile ARN without inferenceModelType', () => {
       const arnModelName =
         'arn:aws:bedrock:us-east-1:123456789012:inference-profile/some-inference';
 
-      const provider = new AwsBedrockCompletionProvider(arnModelName, { config: {} });
-
-      // This should throw when callApi is invoked and it tries to get the handler
-      expect(provider.modelName).toBe(arnModelName);
-      // The error will be thrown when actually trying to use the model
+      expect(() => getHandlerForModel(arnModelName, {})).toThrow(
+        'Inference profile requires inferenceModelType to be specified in config.',
+      );
     });
   });
 
