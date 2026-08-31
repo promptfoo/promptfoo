@@ -1895,6 +1895,50 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
         expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
+
+      it('should reject per-prompt restart_server_per_call overrides', async () => {
+        const provider = new OpenCodeSDKProvider();
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              raw: 'Test prompt',
+              label: 'test',
+              config: { restart_server_per_call: true },
+            },
+            vars: {},
+          }),
+        ).rejects.toThrow(/restart_server_per_call is provider-level configuration/);
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it('should reject restart_server_per_call for remote servers before cache lookup', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'https://opencode.example.test',
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /requires a locally managed server/,
+        );
+        expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
+      });
+
+      it('should reject persistent sessions with restart_server_per_call', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            persist_sessions: true,
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /cannot preserve persistent sessions/,
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
     });
 
     describe('model and provider config', () => {
