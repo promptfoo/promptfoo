@@ -4,9 +4,12 @@ import { createServer, type Server } from 'http';
 import { AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
+import { normalizeFilePath } from '../../src/providers/httpMultipart';
 
 interface MockFileSummary {
   filename: string;
@@ -438,5 +441,128 @@ describe('HttpProvider structured multipart requests', () => {
     });
     expect(result.metadata?.multipart.files[0]).not.toHaveProperty('sha256');
     expect(JSON.stringify(result.metadata)).not.toContain('Benign generated report');
+  });
+});
+
+describe('normalizeFilePath', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('converts an absolute file URL to a local path', () => {
+    const absolute = process.platform === 'win32' ? 'C:\\tmp\\report.pdf' : '/tmp/report.pdf';
+    expect(normalizeFilePath(pathToFileURL(absolute).toString())).toBe(absolute);
+  });
+
+  it('leaves paths without the file:// scheme alone', () => {
+    expect(normalizeFilePath('./fixtures/sample.pdf')).toBe('./fixtures/sample.pdf');
+  });
+
+  it.each([
+    ['file://fixtures/sample.pdf', 'fixtures/sample.pdf'],
+    ['file://./fixtures/sample.pdf', './fixtures/sample.pdf'],
+    ['file://../fixtures/sample.pdf', '../fixtures/sample.pdf'],
+  ])('treats %s as promptfoo relative-path shorthand', (input, expected) => {
+    expect(normalizeFilePath(input)).toBe(expected);
+  });
+
+  it.each([
+    // Empty authority, so it is not the relative shorthand. POSIX resolves it directly;
+    // on Windows fileURLToPath rejects the leading `//` and the fallback yields the same
+    // string, which path.win32.isAbsolute accepts as a UNC path either way.
+    ['file:////server/share/report.pdf', '//server/share/report.pdf'],
+    // No scheme at all, so it is returned untouched and stays absolute on win32.
+    ['\\\\server\\share\\report.pdf', '\\\\server\\share\\report.pdf'],
+  ])('keeps %s usable as a UNC path', (input, expected) => {
+    expect(normalizeFilePath(input)).toBe(expected);
+  });
+
+  it('falls back to the shorthand when the file URL cannot be parsed', () => {
+    expect(normalizeFilePath('file://[')).toBe('[');
+  });
+
+  it('keeps the shorthand relative when fileURLToPath converts it, as it does on Windows', async () => {
+    // fileURLToPath disagrees with itself across platforms for a non-empty
+    // authority: POSIX throws ERR_INVALID_FILE_URL_HOST, but Windows returns a
+    // UNC/device path such as \\.\fixtures\sample.pdf, which is never a valid
+    // local path and reaches the filesystem as an ENOENT. Stand in for the
+    // Windows conversion so the guard is exercised on every platform.
+    vi.resetModules();
+    vi.doMock('url', async () => {
+      const actual = await vi.importActual<typeof import('url')>('url');
+      return {
+        ...actual,
+        default: actual,
+        fileURLToPath: (input: string | URL) => {
+          const parsed = typeof input === 'string' ? new URL(input) : input;
+          if (parsed.host !== '') {
+            return `\\\\${parsed.host}${parsed.pathname.replace(/\//g, '\\')}`;
+          }
+          return actual.fileURLToPath(input);
+        },
+      };
+    });
+
+    try {
+      const { normalizeFilePath: normalizeOnWindows } = await import(
+        '../../src/providers/httpMultipart'
+      );
+      expect(normalizeOnWindows('file://./fixtures/sample.pdf')).toBe('./fixtures/sample.pdf');
+      expect(normalizeOnWindows('file://fixtures/sample.pdf')).toBe('fixtures/sample.pdf');
+    } finally {
+      vi.doUnmock('url');
+      vi.resetModules();
+    }
+  });
+});
+
+describe('HttpProvider multipart relative file:// sources', () => {
+  const originalBasePath = cliState.basePath;
+
+  afterEach(() => {
+    cliState.basePath = originalBasePath;
+  });
+
+  it('resolves a relative file:// path from the config directory', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-relative-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'sample.txt'), 'sample contents');
+    cliState.basePath = tempDir;
+
+    const mockServer = await createMultipartDocumentSummarizerServer();
+    const provider = new HttpProvider('http', {
+      config: {
+        url: mockServer.url,
+        headers: { 'X-API-Key': 'test-api-key' },
+        multipart: {
+          parts: [
+            {
+              kind: 'file',
+              name: 'files',
+              source: { type: 'path', path: 'file://{{documentPath}}' },
+            },
+            {
+              kind: 'field',
+              name: 'documentQuery',
+              value: '{{prompt}}',
+            },
+          ],
+        },
+        transformResponse: 'json.summary',
+      },
+    });
+
+    for (const documentPath of ['./fixtures/sample.txt', 'fixtures/sample.txt']) {
+      await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: { documentPath },
+      });
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'sample.txt',
+        sizeBytes: Buffer.byteLength('sample contents'),
+      });
+    }
   });
 });

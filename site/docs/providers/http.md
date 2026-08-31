@@ -141,6 +141,13 @@ Structured multipart requests bypass the HTTP response cache by default.
 `multipart` is mutually exclusive with `request` and `body`, and it cannot be
 used with `GET` or `HEAD`.
 
+A `file://` path with a host, like `file://fixtures/sample-report45.pdf`, is a
+path relative to the config directory on every platform. Use `file:///` for an
+absolute path. On Windows, write a network share either as a plain
+`\\server\share\report.pdf` with no scheme or as
+`file:////server/share/report.pdf`, since `file://server/share/report.pdf` is
+indistinguishable from a relative path and is read as one.
+
 ## Sending a raw HTTP request
 
 You can also send a raw HTTP request by specifying the `request` property in the provider configuration. This allows you to have full control over the request, including headers and body.
