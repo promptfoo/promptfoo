@@ -959,30 +959,26 @@ describe('writeOutput', () => {
     ]);
   });
 
-  it('keeps JUnit testcase classnames consistent within a suite when promptIdx varies', async () => {
-    const baseResult = (promptIdx: number, testIdx: number, promptId: string): EvaluateResult => ({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
+  it('separates JUnit suites in column order when result columns share identity', async () => {
+    const baseResult = (promptIdx: number, success: boolean): EvaluateResult => ({
+      success,
+      failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      score: success ? 1 : 0,
       namedScores: {},
       latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: `prompt ${promptId}`, label: '' },
+      provider: { id: 'echo', label: 'target' },
+      prompt: { raw: 'shared prompt', label: 'Shared prompt' },
       response: { output: '' },
       vars: {},
       promptIdx,
-      testIdx,
+      testIdx: 0,
       testCase: {},
-      promptId,
+      promptId: 'shared',
     });
     const eval_ = {
       createdAt: '2026-05-03T15:00:00.000Z',
       fetchResultsBatched: vi.fn(),
-      // Same promptId across non-contiguous promptIdx values would previously
-      // produce mixed classnames inside a single suite.
-      getResults: vi
-        .fn()
-        .mockResolvedValue([baseResult(0, 0, 'shared'), baseResult(2, 1, 'shared')]),
+      getResults: vi.fn().mockResolvedValue([baseResult(1, false), baseResult(0, true)]),
       persisted: false,
       results: [],
       useOldResults: () => true,
@@ -991,13 +987,20 @@ describe('writeOutput', () => {
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
-    expect(parsed.testsuites.testsuite).toMatchObject({
-      '@_name': '[echo] prompt 1',
-      '@_tests': '2',
-    });
-    for (const testcase of parsed.testsuites.testsuite.testcase) {
-      expect(testcase['@_classname']).toBe('[echo] prompt 1');
-    }
+    expect(parsed.testsuites.testsuite).toEqual([
+      expect.objectContaining({
+        '@_failures': '0',
+        '@_name': '[target] prompt 1',
+        '@_tests': '1',
+        testcase: expect.objectContaining({ '@_classname': '[target] prompt 1' }),
+      }),
+      expect.objectContaining({
+        '@_failures': '1',
+        '@_name': '[target] prompt 2',
+        '@_tests': '1',
+        testcase: expect.objectContaining({ '@_classname': '[target] prompt 2' }),
+      }),
+    ]);
   });
 
   it('omits raw JUnit error text when it matches the inline reason', async () => {
