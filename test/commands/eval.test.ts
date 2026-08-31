@@ -104,6 +104,7 @@ const chokidarMocks = vi.hoisted(() => {
       handlers.set(event, handler);
       return watcher;
     }),
+    close: vi.fn(async () => {}),
   };
 
   return {
@@ -774,6 +775,130 @@ describe('evalCommand', () => {
     it('tolerates tests being absent', async () => {
       const watched = await watchedPathsFor(undefined);
       expect(watched).toContain(defaultConfigPath);
+    });
+  });
+
+  describe('watch mode process lifecycle', () => {
+    // main() resolves as soon as the eval action handler returns, and its `finally`
+    // then runs shutdownGracefully(), which closes the database and HTTP dispatcher
+    // and calls process.exit() 100ms later. If doEval returns while the watcher is
+    // still running, that tears down everything a re-run needs and kills the process
+    // before chokidar can report a single change -- which is what made `--watch` a
+    // no-op in the shipped CLI.
+
+    /** Resolves when doEval reaches chokidar.watch(). */
+    const watcherCreated = () =>
+      new Promise<void>((resolve) => {
+        chokidarMocks.watch.mockImplementation(() => {
+          resolve();
+          return chokidarMocks.watcher;
+        });
+      });
+
+    const startWatch = (evaluateOptions: Record<string, unknown>) => {
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: path.dirname(defaultConfigPath),
+      });
+      // Own every mock this path reads. Sibling tests queue one-shot values on these
+      // shared mocks and restore only the default, so a leftover can fail the run
+      // before it reaches the watcher. mockReset() drains the queue; clearAllMocks()
+      // in the outer beforeEach does not. Queue one-shot values here in turn, so this
+      // block leaks nothing forward either.
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
+      return doEval(
+        { watch: true, write: false },
+        config,
+        defaultConfigPath,
+        evaluateOptions as never,
+      );
+    };
+
+    /**
+     * Wait for the watcher, failing loudly if doEval settles first: a run that bails
+     * early never installs the handler, and racing here reports that instead of
+     * hanging until the suite timeout.
+     */
+    const startWatching = async (evaluateOptions: Record<string, unknown>) => {
+      const created = watcherCreated();
+      const pending = startWatch(evaluateOptions);
+      const bailedEarly = pending.then(() => {
+        throw new Error('doEval returned before it created a watcher');
+      });
+      // When the watcher wins the race nothing awaits this branch, so keep its
+      // eventual rejection from surfacing as an unhandled rejection.
+      bailedEarly.catch(() => {});
+      await Promise.race([created, bailedEarly]);
+      // Wrapped so callers await the race, not the long-lived doEval promise.
+      return { pending };
+    };
+
+    const hasSettled = async (promise: Promise<unknown>) => {
+      let done = false;
+      void promise.then(() => {
+        done = true;
+      });
+      // Drain what is already queued; the watcher is up by the time this is called.
+      await new Promise((resolve) => setImmediate(resolve));
+      return done;
+    };
+
+    /** The listeners watch mode installed, without disturbing anyone else's. */
+    const installedSince = (before: NodeJS.SignalsListener[]) =>
+      process.listeners('SIGINT').filter((listener) => !before.includes(listener));
+
+    let before: NodeJS.SignalsListener[];
+
+    beforeEach(() => {
+      before = process.listeners('SIGINT');
+    });
+
+    afterEach(() => {
+      // Only remove what a test leaked; vitest installs its own SIGINT handler.
+      for (const listener of installedSince(before)) {
+        process.removeListener('SIGINT', listener);
+      }
+    });
+
+    it('does not resolve while the CLI is watching, and resolves on SIGINT', async () => {
+      const { pending } = await startWatching({ eventSource: 'cli' });
+
+      expect(await hasSettled(pending)).toBe(false);
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+
+      // Call watch mode's own handler rather than process.emit('SIGINT'), which
+      // would also run vitest's.
+      const [onSignal] = installedSince(before);
+      expect(onSignal).toBeDefined();
+      onSignal('SIGINT');
+      await pending;
+
+      expect(chokidarMocks.watcher.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes its signal handlers so a second Ctrl-C terminates', async () => {
+      const { pending } = await startWatching({ eventSource: 'cli' });
+      expect(installedSince(before)).toHaveLength(1);
+
+      const [onSignal] = installedSince(before);
+      onSignal('SIGINT');
+      await pending;
+
+      expect(installedSince(before)).toHaveLength(0);
+    });
+
+    it('still resolves immediately for library callers, which own their own lifetime', async () => {
+      // isCliEventSource() gates process-lifecycle behavior; a library embedder
+      // decides when to stop watching, so doEval must not block on a signal.
+      await expect(startWatch({})).resolves.toBeDefined();
+      expect(chokidarMocks.watch).toHaveBeenCalled();
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+      expect(installedSince(before)).toHaveLength(0);
     });
   });
 
