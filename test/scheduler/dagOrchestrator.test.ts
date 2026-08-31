@@ -220,7 +220,6 @@ describe('DagOrchestrator', () => {
     let maxActiveSeen = 0;
 
     const orchestrator = new DagOrchestrator({ maxConcurrency: 2 });
-    const resolvers: Array<() => void> = [];
 
     for (let i = 0; i < 6; i++) {
       orchestrator.addTask({
@@ -228,27 +227,17 @@ describe('DagOrchestrator', () => {
         run: async () => {
           active++;
           maxActiveSeen = Math.max(maxActiveSeen, active);
-          await new Promise<void>((resolve) => {
-            resolvers.push(resolve);
-          });
+          // Yield to microtasks to simulate async work and allow concurrency interleaving
+          for (let step = 0; step < 5; step++) {
+            await new Promise<void>((resolve) => queueMicrotask(resolve));
+          }
           active--;
           return i;
         },
       });
     }
 
-    const execPromise = orchestrator.execute();
-
-    while (resolvers.length < 6) {
-      expect(active).toBeLessThanOrEqual(2);
-      const resolveNext = resolvers.shift();
-      if (resolveNext) {
-        resolveNext();
-      }
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
-    }
-
-    const result = await execPromise;
+    const result = await orchestrator.execute();
     expect(result.stats.completedTasks).toBe(6);
     expect(maxActiveSeen).toBeLessThanOrEqual(2);
   });
@@ -318,31 +307,35 @@ describe('DagOrchestrator', () => {
 
   it('should respect overall timeoutMs and trigger cooperative AbortSignal using fake timers', async () => {
     vi.useFakeTimers();
-    let abortedViaSignal = false;
+    try {
+      let abortedViaSignal = false;
 
-    const orchestrator = new DagOrchestrator({ timeoutMs: 50 });
-    orchestrator.addTask({
-      id: 'slow-task',
-      run: async ({ signal }) => {
-        if (signal.aborted) {
-          abortedViaSignal = true;
-        } else {
-          signal.addEventListener('abort', () => {
+      const orchestrator = new DagOrchestrator({ timeoutMs: 50 });
+      orchestrator.addTask({
+        id: 'slow-task',
+        run: async ({ signal }) => {
+          if (signal.aborted) {
             abortedViaSignal = true;
+          } else {
+            signal.addEventListener('abort', () => {
+              abortedViaSignal = true;
+            });
+          }
+          return new Promise((resolve) => {
+            signal.addEventListener('abort', () => {
+              resolve('aborted');
+            });
           });
-        }
-        return new Promise((resolve) => {
-          signal.addEventListener('abort', () => {
-            resolve('aborted');
-          });
-        });
-      },
-    });
+        },
+      });
 
-    const execPromise = orchestrator.execute();
-    vi.advanceTimersByTime(60);
+      const execPromise = orchestrator.execute();
+      vi.advanceTimersByTime(60);
 
-    await expect(execPromise).rejects.toThrow('DAG execution timed out after 50ms');
-    expect(abortedViaSignal).toBe(true);
+      await expect(execPromise).rejects.toThrow('DAG execution timed out after 50ms');
+      expect(abortedViaSignal).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
