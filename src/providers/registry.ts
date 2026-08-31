@@ -57,6 +57,7 @@ import {
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { LlamaProvider } from './llama';
 import { createLlamaApiProvider } from './llamaApi';
+import { createLlmmanProvider } from './llmman';
 import {
   LocalAiChatProvider,
   LocalAiCompletionProvider,
@@ -781,6 +782,19 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createLiteLLMProvider } = await import('./litellm');
       return createLiteLLMProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('llmman:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLlmmanProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
