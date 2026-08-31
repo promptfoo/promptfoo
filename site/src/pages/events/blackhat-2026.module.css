@@ -310,41 +310,6 @@
   border-color: rgba(229, 58, 58, 0.28);
 }
 
-.hours {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
-  font-size: 0.95rem;
-  color: var(--bh-body);
-}
-
-.hours li {
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid var(--bh-border);
-}
-
-.hours li:last-child {
-  border-bottom: 0;
-}
-
-.hoursDay {
-  flex: 0 0 5.5rem;
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--bh-red-soft);
-}
-
-@media (max-width: 420px) {
-  .hours li {
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-}
-
 .findLabel {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.7rem;

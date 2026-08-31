@@ -1,3 +1,4 @@
+import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
@@ -53,8 +54,13 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
+  const propagatedHeaders: Record<string, string> = {};
+  propagation.inject(context.active(), propagatedHeaders);
+
   return {
     'Content-Type': 'application/json',
+    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
+    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
     ...extraHeaders,
   };
 }

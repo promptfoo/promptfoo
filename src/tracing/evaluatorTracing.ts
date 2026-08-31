@@ -1,8 +1,12 @@
 import { randomBytes } from 'crypto';
 
+import { ROOT_CONTEXT, type Span, SpanKind, TraceFlags, trace } from '@opentelemetry/api';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -35,6 +39,7 @@ export function resetTracingState(): void {
   otlpReceiverStartPromise = null;
   otlpReceiverStopPromise = null;
   otlpReceiverUsers = 0;
+  cliState.setActiveOtlpReceiver();
   logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
@@ -136,8 +141,11 @@ export async function startOtlpReceiverIfNeeded(
   testSuite: TestSuite,
   evaluationId?: string,
 ): Promise<boolean> {
+  const tracing = testSuite.tracing?.provider
+    ? { ...testSuite.tracing, provider: { id: testSuite.tracing.provider.id } }
+    : testSuite.tracing;
   logger.debug('[EvaluatorTracing] Checking tracing configuration', {
-    tracing: testSuite.tracing,
+    tracing,
     testSuiteKeys: Object.keys(testSuite),
   });
 
@@ -192,6 +200,7 @@ export async function startOtlpReceiverIfNeeded(
         redactAttributes,
         ...(tracePolicy ? { tracePolicy } : {}),
       });
+      cliState.setActiveOtlpReceiver({ host, port, acceptFormats });
       otlpReceiverStarted = true;
       otlpReceiverUsers += 1;
       logger.info(
@@ -290,6 +299,7 @@ export async function stopOtlpReceiverIfNeeded(
         logger.debug('[EvaluatorTracing] Stopping OTLP receiver');
         const { stopOTLPReceiver } = await import('./otlpReceiver');
         await stopOTLPReceiver();
+        cliState.setActiveOtlpReceiver();
         logger.info('[EvaluatorTracing] OTLP receiver stopped successfully');
       } catch (error) {
         otlpReceiverStarted = true;
@@ -330,17 +340,27 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
 /**
  * Generate trace context and create trace record if tracing is enabled
  */
+export interface EvaluationTraceContext {
+  traceparent?: string;
+  evaluationId?: string;
+  testCaseId?: string;
+  rootSpan?: Span;
+}
+
+interface TraceExecutionMetadata {
+  providerId?: string;
+  promptLabel?: string;
+  repeatIndex?: number;
+}
+
 export async function generateTraceContextIfNeeded(
   test: TestCase,
   evaluateOptions: InternalEvaluateOptions | undefined,
   testIdx: number,
   promptIdx: number,
   testSuite?: TestSuite,
-): Promise<{
-  traceparent?: string;
-  evaluationId?: string;
-  testCaseId?: string;
-} | null> {
+  executionMetadata: TraceExecutionMetadata = {},
+): Promise<EvaluationTraceContext | null> {
   const tracingEnabled = isTracingEnabled(test, testSuite);
 
   if (tracingEnabled) {
@@ -357,12 +377,6 @@ export async function generateTraceContextIfNeeded(
   const { getTraceStore } = await import('./store');
   const traceStore = getTraceStore();
 
-  // Generate trace context
-  const traceId = generateTraceId();
-  const spanId = generateSpanId();
-  const traceparent = generateTraceparent(traceId, spanId);
-  logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
-
   // Get evaluation ID from test metadata (set by Evaluator class)
   let evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
   if (!evaluationId) {
@@ -372,6 +386,39 @@ export async function generateTraceContextIfNeeded(
     evaluationId = `eval-${Date.now()}`;
   }
   const testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
+
+  const rootAttributes: Record<string, string | number> = {
+    [SPAN_ROLE_ATTRIBUTE]: 'test_case',
+    [PromptfooAttributes.EVAL_ID]: evaluationId,
+    [PromptfooAttributes.TEST_INDEX]: testIdx,
+    'promptfoo.test_case.id': testCaseId,
+    'promptfoo.prompt.index': promptIdx,
+  };
+  if (executionMetadata.providerId) {
+    rootAttributes[PromptfooAttributes.PROVIDER_ID] = executionMetadata.providerId;
+  }
+  if (executionMetadata.promptLabel) {
+    rootAttributes[PromptfooAttributes.PROMPT_LABEL] = executionMetadata.promptLabel;
+  }
+  if (executionMetadata.repeatIndex !== undefined) {
+    rootAttributes['promptfoo.repeat.index'] = executionMetadata.repeatIndex;
+  }
+
+  const candidateRootSpan = getGenAITracer().startSpan(
+    'promptfoo.test_case',
+    { kind: SpanKind.INTERNAL, attributes: rootAttributes },
+    ROOT_CONTEXT,
+  );
+  const rootSpanContext = candidateRootSpan.spanContext();
+  const rootSpan = trace.isSpanContextValid(rootSpanContext) ? candidateRootSpan : undefined;
+  const traceId = rootSpan ? rootSpanContext.traceId : generateTraceId();
+  const spanId = rootSpan ? rootSpanContext.spanId : generateSpanId();
+  const traceparent = generateTraceparent(
+    traceId,
+    spanId,
+    rootSpan ? (rootSpanContext.traceFlags & TraceFlags.SAMPLED) !== 0 : true,
+  );
+  logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Store trace association in trace store
   try {
@@ -383,6 +430,10 @@ export async function generateTraceContextIfNeeded(
       metadata: {
         testIdx,
         promptIdx,
+        ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
+        ...(executionMetadata.repeatIndex !== undefined && {
+          repeatIndex: executionMetadata.repeatIndex,
+        }),
         vars: test.vars,
         commandToolNames: testSuite?.tracing?.commandToolNames,
         otlpHttpRedactAttributes: testSuite?.tracing?.otlp?.http?.redactAttributes,
@@ -401,5 +452,6 @@ export async function generateTraceContextIfNeeded(
     traceparent,
     evaluationId,
     testCaseId,
+    ...(rootSpan && { rootSpan }),
   };
 }

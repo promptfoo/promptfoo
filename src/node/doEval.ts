@@ -36,6 +36,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
 import {
@@ -119,7 +120,17 @@ async function resolveReplayConfigs(
     );
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config);
+  let replayConfig = evalRecord.config;
+  if (replayConfig.tracing?.provider) {
+    const renderedReplayConfig = renderConfigEnvTemplates(replayConfig);
+    replayConfig = {
+      ...replayConfig,
+      ...(renderedReplayConfig.env && { env: renderedReplayConfig.env }),
+      tracing: renderedReplayConfig.tracing,
+    };
+  }
+
+  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -518,6 +529,8 @@ export async function doEval(
         ...evaluateOptions,
         ...config.evaluateOptions,
         eventSource: evaluateOptions.eventSource,
+        generationEventId: evaluateOptions.generationEventId,
+        generationTokenUsage: evaluateOptions.generationTokenUsage,
       };
     }
 
@@ -775,6 +788,24 @@ export async function doEval(
       ...(providerFilter ? { providerFilter } : {}),
     };
 
+    if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
+      const { generationAccounting: _staleGenerationAccounting, ...metadata } = config.metadata;
+      config = { ...config, metadata };
+    }
+
+    if (!resumeEval && evaluateOptions.generationTokenUsage) {
+      config = {
+        ...config,
+        metadata: {
+          ...(config.metadata ?? {}),
+          generationAccounting: {
+            id: evaluateOptions.generationEventId,
+            tokenUsage: evaluateOptions.generationTokenUsage,
+          },
+        },
+      };
+    }
+
     // Create or load eval record
     const author = getAuthor();
     const evalRecord = resumeEval
@@ -939,6 +970,10 @@ export async function doEval(
         errors += prompt.metrics.testErrorCount;
       }
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
+    }
+    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
+    if (generationTokenUsage) {
+      tokenUsage.generation = generationTokenUsage;
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;

@@ -2,7 +2,14 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+import {
+  type CallExpression,
+  type Expression,
+  type Node,
+  type Program,
+  parseSync,
+  visitorKeys,
+} from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 
 type TestControlKind = 'only' | 'skip' | 'skipIf';
@@ -294,7 +301,7 @@ function findTestFiles(dir: string): string[] {
 // per-detector lexical pre-filters that must stay in sync with what the parser can resolve.
 let cachedRootTestFiles: string[] | undefined;
 const sourceCache = new Map<string, string>();
-const parsedFixtureCache = new Map<string, ts.SourceFile>();
+const parsedFixtureCache = new Map<string, Program>();
 
 function findRootTestFiles(): string[] {
   cachedRootTestFiles ??= findTestFiles(testDir).filter((file) => file !== thisFile);
@@ -315,13 +322,30 @@ function readTestSource(file: string): string {
  * `sourceFile.fileName` — every caller passes the same placeholder name so trees are shared
  * across detectors that see identical source.
  */
-function parseFixture(source: string): ts.SourceFile {
+function parseFixture(source: string): Program {
   let sourceFile = parsedFixtureCache.get(source);
   if (!sourceFile) {
-    sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+    sourceFile = parseSync('fixture.test.ts', source).program;
     parsedFixtureCache.set(source, sourceFile);
   }
   return sourceFile;
+}
+
+function forEachTypeScriptChild(node: Node, callback: (child: Node) => void): void {
+  const properties = node as unknown as Record<string, unknown>;
+
+  for (const key of visitorKeys[node.type] ?? []) {
+    const children = properties[key];
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        if (child) {
+          callback(child as Node);
+        }
+      }
+    } else if (children) {
+      callback(children as Node);
+    }
+  }
 }
 
 function toPosixRelativePath(file: string) {
@@ -341,25 +365,25 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 // instantiated. Class static blocks are NOT included: they execute when the
 // class declaration is evaluated (i.e. at module load), so mock setters
 // inside them DO leak across tests if not reset.
-function isFunctionLikeNode(node: ts.Node): boolean {
+function isFunctionLikeNode(node: Node): boolean {
   return (
-    ts.isArrowFunction(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node) ||
-    ts.isConstructorDeclaration(node)
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'MethodDefinition' ||
+    node.type === 'TSAbstractMethodDefinition'
   );
 }
 
-function isViMockCall(node: ts.Node): node is ts.CallExpression {
+function isViMockCall(node: Node): node is CallExpression {
   return (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    ts.isIdentifier(node.expression.expression) &&
-    node.expression.expression.text === 'vi' &&
-    node.expression.name.text === 'mock'
+    node.type === 'CallExpression' &&
+    node.callee.type === 'MemberExpression' &&
+    !node.callee.computed &&
+    node.callee.object.type === 'Identifier' &&
+    node.callee.object.name === 'vi' &&
+    node.callee.property.type === 'Identifier' &&
+    node.callee.property.name === 'mock'
   );
 }
 
@@ -369,11 +393,11 @@ function isViMockCall(node: ts.Node): node is ts.CallExpression {
 // callback fires. Pass `enterRootFunction: true` for the body of a vi.mock(...)
 // factory, which IS executed synchronously at module load.
 function evaluatesPersistentMockSetter(
-  node: ts.Node,
+  node: Node,
   opts: { enterRootFunction?: boolean } = {},
 ): boolean {
   let found = false;
-  function visit(current: ts.Node, isRoot: boolean) {
+  function visit(current: Node, isRoot: boolean) {
     if (found) {
       return;
     }
@@ -384,14 +408,16 @@ function evaluatesPersistentMockSetter(
       return;
     }
     if (
-      ts.isCallExpression(current) &&
-      ts.isPropertyAccessExpression(current.expression) &&
-      persistentMockMethodNames.has(current.expression.name.text)
+      current.type === 'CallExpression' &&
+      current.callee.type === 'MemberExpression' &&
+      !current.callee.computed &&
+      current.callee.property.type === 'Identifier' &&
+      persistentMockMethodNames.has(current.callee.property.name)
     ) {
       found = true;
       return;
     }
-    ts.forEachChild(current, (child) => visit(child, false));
+    forEachTypeScriptChild(current, (child) => visit(child, false));
   }
   visit(node, true);
   return found;
@@ -405,50 +431,51 @@ function hasSleepPromise(source: string) {
   const sourceFile = parseFixture(source);
   let found = false;
 
-  function isSleepNewExpression(node: ts.Node): boolean {
+  function isSleepNewExpression(node: Node): boolean {
     if (
-      !ts.isNewExpression(node) ||
-      !ts.isIdentifier(node.expression) ||
-      node.expression.text !== 'Promise' ||
-      !node.arguments?.length
+      node.type !== 'NewExpression' ||
+      node.callee.type !== 'Identifier' ||
+      node.callee.name !== 'Promise' ||
+      node.arguments.length === 0
     ) {
       return false;
     }
     const executor = node.arguments[0];
-    if (!ts.isArrowFunction(executor) && !ts.isFunctionExpression(executor)) {
+    if (executor.type !== 'ArrowFunctionExpression' && executor.type !== 'FunctionExpression') {
       return false;
     }
-    if (executor.parameters.length === 0) {
+    if (executor.params.length === 0 || !executor.body) {
       return false;
     }
-    const first = executor.parameters[0];
-    if (!ts.isIdentifier(first.name)) {
+    const parameter = executor.params[0];
+    const first = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
+    if (first.type !== 'Identifier') {
       return false;
     }
-    const resolveName = first.name.text;
+    const resolveName = first.name;
     let inner = false;
-    function visit(node: ts.Node) {
+    function visit(node: Node) {
       if (inner) {
         return;
       }
       if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === 'setTimeout' &&
+        node.type === 'CallExpression' &&
+        node.callee.type === 'Identifier' &&
+        node.callee.name === 'setTimeout' &&
         node.arguments.length >= 1 &&
-        ts.isIdentifier(node.arguments[0]) &&
-        node.arguments[0].text === resolveName
+        node.arguments[0].type === 'Identifier' &&
+        node.arguments[0].name === resolveName
       ) {
         inner = true;
         return;
       }
-      ts.forEachChild(node, visit);
+      forEachTypeScriptChild(node, visit);
     }
     visit(executor.body);
     return inner;
   }
 
-  function visit(node: ts.Node) {
+  function visit(node: Node) {
     if (found) {
       return;
     }
@@ -456,146 +483,144 @@ function hasSleepPromise(source: string) {
       found = true;
       return;
     }
-    ts.forEachChild(node, visit);
+    forEachTypeScriptChild(node, visit);
   }
   visit(sourceFile);
   return found;
+}
+
+function findModuleMockFactories(statements: Node[]): Map<string, Node> {
+  const factories = new Map<string, Node>();
+
+  for (const stmt of statements) {
+    if (stmt.type === 'VariableDeclaration') {
+      for (const decl of stmt.declarations) {
+        if (
+          decl.id.type === 'Identifier' &&
+          decl.init &&
+          (decl.init.type === 'ArrowFunctionExpression' || decl.init.type === 'FunctionExpression')
+        ) {
+          factories.set(decl.id.name, decl.init);
+        }
+      }
+    } else if (stmt.type === 'FunctionDeclaration' && stmt.id) {
+      factories.set(stmt.id.name, stmt);
+    }
+  }
+
+  return factories;
+}
+
+function hasPersistentModuleScopeSetter(statement: Node, factories: Map<string, Node>): boolean {
+  if (statement.type === 'ExpressionStatement') {
+    const expression =
+      statement.expression.type === 'ChainExpression'
+        ? statement.expression.expression
+        : statement.expression;
+    if (isViMockCall(expression)) {
+      const factory = expression.arguments[1];
+      if (!factory) {
+        return false;
+      }
+
+      const resolvedFactory =
+        factory.type === 'Identifier' ? (factories.get(factory.name) ?? factory) : factory;
+      return evaluatesPersistentMockSetter(resolvedFactory, { enterRootFunction: true });
+    }
+
+    return evaluatesPersistentMockSetter(expression);
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    return statement.declarations.some(
+      (declaration) => declaration.init !== null && evaluatesPersistentMockSetter(declaration.init),
+    );
+  }
+
+  return (
+    statement.type === 'ClassDeclaration' &&
+    statement.body.body.some(
+      (member) => member.type === 'StaticBlock' && evaluatesPersistentMockSetter(member),
+    )
+  );
 }
 
 function hasModuleScopePersistentMockWithoutReset(source: string) {
   if (globalMockResetPattern.test(source)) {
     return false;
   }
+
   const sourceFile = parseFixture(source);
-
-  // Build a lookup for module-scope variable / function declarations whose
-  // value is a function literal, so that `vi.mock('x', factory)` with a
-  // factory passed by identifier can be resolved back to its body and scanned.
-  const moduleFactoryByName = new Map<string, ts.Node>();
-  for (const stmt of sourceFile.statements) {
-    if (ts.isVariableStatement(stmt)) {
-      for (const decl of stmt.declarationList.declarations) {
-        if (
-          ts.isIdentifier(decl.name) &&
-          decl.initializer &&
-          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
-        ) {
-          moduleFactoryByName.set(decl.name.text, decl.initializer);
-        }
-      }
-    } else if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-      moduleFactoryByName.set(stmt.name.text, stmt);
-    }
-  }
-
-  function resolveViMockFactoryArg(arg: ts.Expression): ts.Node {
-    if (ts.isIdentifier(arg) && moduleFactoryByName.has(arg.text)) {
-      return moduleFactoryByName.get(arg.text) as ts.Node;
-    }
-    return arg;
-  }
-
-  for (const stmt of sourceFile.statements) {
-    if (ts.isExpressionStatement(stmt)) {
-      if (ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) {
-        // vi.mock(path, factory): the factory body runs at module load. Resolve
-        // identifier-style factories back to their declaration first.
-        if (stmt.expression.arguments.length >= 2) {
-          const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1]);
-          if (evaluatesPersistentMockSetter(factoryNode, { enterRootFunction: true })) {
-            return true;
-          }
-        }
-        continue;
-      }
-      if (evaluatesPersistentMockSetter(stmt.expression)) {
-        return true;
-      }
-    }
-    if (
-      ts.isVariableStatement(stmt) &&
-      stmt.declarationList.declarations.some(
-        (decl) => decl.initializer && evaluatesPersistentMockSetter(decl.initializer),
-      )
-    ) {
-      return true;
-    }
-    // Class declarations: static blocks execute at module load when the class
-    // is evaluated, so any persistent setter inside one leaks across tests.
-    if (ts.isClassDeclaration(stmt)) {
-      for (const member of stmt.members) {
-        if (
-          ts.isClassStaticBlockDeclaration(member) &&
-          evaluatesPersistentMockSetter(member.body)
-        ) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
+  const statements = sourceFile.body.map((statement) =>
+    (statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration') &&
+    statement.declaration
+      ? statement.declaration
+      : statement,
+  );
+  const factories = findModuleMockFactories(statements);
+  return statements.some((statement) => hasPersistentModuleScopeSetter(statement, factories));
 }
 
-function isProcessIdentifier(node: ts.Node): node is ts.Identifier {
-  return ts.isIdentifier(node) && node.text === 'process';
-}
-
-function isEnvStringLiteral(node: ts.Node): boolean {
+function isEnvStringLiteral(node: Node): boolean {
   return (
-    (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === 'env'
+    (node.type === 'Literal' && node.value === 'env') ||
+    (node.type === 'TemplateLiteral' &&
+      node.expressions.length === 0 &&
+      node.quasis[0]?.value.cooked === 'env')
   );
 }
 
-function isProcessEnvExpression(
-  node: ts.Node,
-): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+function isProcessEnvExpression(node: Node): boolean {
+  const expression = node.type === 'ChainExpression' ? node.expression : node;
   return (
-    (ts.isPropertyAccessExpression(node) &&
-      node.name.text === 'env' &&
-      isProcessIdentifier(node.expression)) ||
-    (ts.isElementAccessExpression(node) &&
-      isProcessIdentifier(node.expression) &&
-      isEnvStringLiteral(node.argumentExpression))
+    expression.type === 'MemberExpression' &&
+    expression.object.type === 'Identifier' &&
+    expression.object.name === 'process' &&
+    ((!expression.computed &&
+      expression.property.type === 'Identifier' &&
+      expression.property.name === 'env') ||
+      (expression.computed && isEnvStringLiteral(expression.property)))
   );
 }
 
-function isProcessEnvMemberExpression(
-  node: ts.Node,
-): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
-  return (
-    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
-    isProcessEnvExpression(node.expression)
-  );
+function isProcessEnvMemberExpression(node: Node): boolean {
+  const expression = node.type === 'ChainExpression' ? node.expression : node;
+  return expression.type === 'MemberExpression' && isProcessEnvExpression(expression.object);
 }
 
-function containsProcessEnvMutationTarget(node: ts.Node): boolean {
+function containsProcessEnvMutationTarget(node: Node): boolean {
   if (isProcessEnvExpression(node) || isProcessEnvMemberExpression(node)) {
     return true;
   }
 
   let found = false;
-  ts.forEachChild(node, (child) => {
+  forEachTypeScriptChild(node, (child) => {
     found ||= containsProcessEnvMutationTarget(child);
   });
   return found;
 }
 
-function isProcessEnvMutationCall(node: ts.CallExpression): boolean {
-  if (!ts.isPropertyAccessExpression(node.expression) || node.arguments.length === 0) {
+function isProcessEnvMutationCall(node: CallExpression): boolean {
+  if (
+    node.callee.type !== 'MemberExpression' ||
+    node.callee.computed ||
+    node.callee.property.type !== 'Identifier' ||
+    node.arguments.length === 0
+  ) {
     return false;
   }
 
   const target = node.arguments[0];
-  const receiver = node.expression.expression;
-  const method = node.expression.name.text;
+  const receiver = node.callee.object;
+  const method = node.callee.property.name;
 
   return (
-    ts.isIdentifier(receiver) &&
+    receiver.type === 'Identifier' &&
     isProcessEnvExpression(target) &&
-    ((receiver.text === 'Object' &&
+    ((receiver.name === 'Object' &&
       ['assign', 'defineProperties', 'defineProperty'].includes(method)) ||
-      (receiver.text === 'Reflect' && ['defineProperty', 'deleteProperty', 'set'].includes(method)))
+      (receiver.name === 'Reflect' && ['defineProperty', 'deleteProperty', 'set'].includes(method)))
   );
 }
 
@@ -614,45 +639,36 @@ function hasDirectProcessEnvMutation(source: string) {
   const sourceFile = parseFixture(source);
   let found = false;
 
-  function visit(node: ts.Node) {
+  function visit(node: Node) {
     if (found) {
       return;
     }
 
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-      containsProcessEnvMutationTarget(node.left)
-    ) {
+    if (node.type === 'AssignmentExpression' && containsProcessEnvMutationTarget(node.left)) {
       found = true;
       return;
     }
 
     if (
-      ts.isDeleteExpression(node) &&
-      (isProcessEnvExpression(node.expression) || isProcessEnvMemberExpression(node.expression))
+      node.type === 'UnaryExpression' &&
+      node.operator === 'delete' &&
+      (isProcessEnvExpression(node.argument) || isProcessEnvMemberExpression(node.argument))
     ) {
       found = true;
       return;
     }
 
-    if (
-      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-      (node.operator === ts.SyntaxKind.PlusPlusToken ||
-        node.operator === ts.SyntaxKind.MinusMinusToken) &&
-      isProcessEnvMemberExpression(node.operand)
-    ) {
+    if (node.type === 'UpdateExpression' && isProcessEnvMemberExpression(node.argument)) {
       found = true;
       return;
     }
 
-    if (ts.isCallExpression(node) && isProcessEnvMutationCall(node)) {
+    if (node.type === 'CallExpression' && isProcessEnvMutationCall(node)) {
       found = true;
       return;
     }
 
-    ts.forEachChild(node, visit);
+    forEachTypeScriptChild(node, visit);
   }
 
   visit(sourceFile);
@@ -667,28 +683,28 @@ function hasProcessEnvReferenceSnapshot(source: string) {
   const sourceFile = parseFixture(source);
   let found = false;
 
-  function isSnapshotIdentifier(node: ts.Node): boolean {
-    return ts.isIdentifier(node) && processEnvSnapshotIdentifierPattern.test(node.text);
+  function isSnapshotIdentifier(node: Node): boolean {
+    return node.type === 'Identifier' && processEnvSnapshotIdentifierPattern.test(node.name);
   }
 
-  function visit(node: ts.Node) {
+  function visit(node: Node) {
     if (found) {
       return;
     }
 
     if (
-      ts.isVariableDeclaration(node) &&
-      isSnapshotIdentifier(node.name) &&
-      node.initializer &&
-      isProcessEnvExpression(node.initializer)
+      node.type === 'VariableDeclarator' &&
+      isSnapshotIdentifier(node.id) &&
+      node.init &&
+      isProcessEnvExpression(node.init)
     ) {
       found = true;
       return;
     }
 
     if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.type === 'AssignmentExpression' &&
+      node.operator === '=' &&
       isSnapshotIdentifier(node.left) &&
       isProcessEnvExpression(node.right)
     ) {
@@ -696,7 +712,7 @@ function hasProcessEnvReferenceSnapshot(source: string) {
       return;
     }
 
-    ts.forEachChild(node, visit);
+    forEachTypeScriptChild(node, visit);
   }
 
   visit(sourceFile);
@@ -779,25 +795,25 @@ function isTestControlKind(name: string): name is TestControlKind {
   return name === 'only' || name === 'skip' || name === 'skipIf';
 }
 
-function hasTestApiBase(expression: ts.Expression): boolean {
-  let current = expression;
+function hasTestApiBase(expression: Expression): boolean {
+  let current: Node = expression;
 
   while (true) {
-    if (ts.isIdentifier(current)) {
-      return testApiNames.has(current.text);
+    if (current.type === 'Identifier') {
+      return testApiNames.has(current.name);
     }
 
-    if (ts.isPropertyAccessExpression(current)) {
-      current = current.expression;
+    if (current.type === 'MemberExpression') {
+      current = current.object;
       continue;
     }
 
-    if (ts.isCallExpression(current)) {
-      current = current.expression;
+    if (current.type === 'CallExpression') {
+      current = current.callee;
       continue;
     }
 
-    if (ts.isParenthesizedExpression(current)) {
+    if (current.type === 'ParenthesizedExpression' || current.type === 'ChainExpression') {
       current = current.expression;
       continue;
     }
@@ -807,32 +823,35 @@ function hasTestApiBase(expression: ts.Expression): boolean {
 }
 
 function findTestControlUsages(file: string, source: string): TestControlUsage[] {
-  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseSync(file, source).program;
   const sourceLines = source.split(/\r?\n/);
   const usages: TestControlUsage[] = [];
 
-  function visit(node: ts.Node) {
+  function visit(node: Node) {
     if (
-      ts.isPropertyAccessExpression(node) &&
-      isTestControlKind(node.name.text) &&
-      hasTestApiBase(node.expression)
+      node.type === 'MemberExpression' &&
+      !node.computed &&
+      node.property.type === 'Identifier' &&
+      isTestControlKind(node.property.name) &&
+      hasTestApiBase(node.object)
     ) {
-      const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      const fullLineText = sourceLines[position.line] ?? '';
+      const line = source.slice(0, node.start).split('\n').length;
+      const lineStart = source.lastIndexOf('\n', node.start - 1) + 1;
+      const fullLineText = sourceLines[line - 1] ?? '';
       const trimmedLineText = fullLineText.trim();
 
       usages.push({
-        column: position.character + 1,
-        expression: node.getText(sourceFile).replace(/\s+/g, ' '),
+        column: node.start - lineStart + 1,
+        expression: source.slice(node.start, node.end).replace(/\s+/g, ' '),
         file,
-        kind: node.name.text,
-        line: position.line + 1,
+        kind: node.property.name,
+        line,
         fullLineText,
         trimmedLineText,
       });
     }
 
-    ts.forEachChild(node, visit);
+    forEachTypeScriptChild(node, visit);
   }
 
   visit(sourceFile);
@@ -873,6 +892,19 @@ describe('root test hygiene', () => {
       {
         expression,
         kind,
+      },
+    ]);
+  });
+
+  it('preserves test-control source locations after Unicode text', () => {
+    const source = '// 😀 café\n  it.skip("case", () => {});';
+
+    expect(findTestControlUsages('fixture.test.ts', source)).toMatchObject([
+      {
+        column: 3,
+        expression: 'it.skip',
+        fullLineText: '  it.skip("case", () => {});',
+        line: 2,
       },
     ]);
   });
@@ -973,10 +1005,13 @@ describe('root test hygiene', () => {
     '++process.env["OPENAI_API_KEY"];',
     'delete process.env.OPENAI_API_KEY;',
     'delete process.env["OPENAI_API_KEY"];',
+    'delete process.env?.OPENAI_API_KEY;',
+    'delete process?.env?.OPENAI_API_KEY;',
     'delete process["env"].OPENAI_API_KEY;',
     'delete process.env;',
     'process.env = { ...process.env, OPENAI_API_KEY: "test-key" };',
     'Object.assign(process.env, { OPENAI_API_KEY: "test-key" });',
+    'Object.assign(process?.env, { OPENAI_API_KEY: "test-key" });',
     'Object.assign(process["env"], { OPENAI_API_KEY: "test-key" });',
     'Object.defineProperty(process.env, "OPENAI_API_KEY", { value: "test-key" });',
     'Object.defineProperties(process.env, { OPENAI_API_KEY: { value: "test-key" } });',
@@ -1006,6 +1041,8 @@ describe('root test hygiene', () => {
 
   it.each([
     'const originalEnv = process.env;',
+    'const originalEnv = process?.env;',
+    'const originalEnv = process?.["env"];',
     'const originalEnv = process["env"];',
     'originalEnv = process.env;',
     'const ORIGINAL_ENV = process.env;',
@@ -1116,6 +1153,7 @@ describe('root test hygiene', () => {
     'await new Promise((r) => setTimeout(r, 250));',
     'await new Promise(function (resolve) { setTimeout(resolve, 1000); });',
     'await new Promise((resolve) => { setTimeout(resolve, 50); });',
+    'await new Promise((resolve = fallback) => setTimeout(resolve, 100));',
     'await new Pro\\u006dise((resolve) => setTi\\u006deout(resolve, 100));',
   ])('detects setTimeout-based sleep waits in %s', (source) => {
     expect(hasSleepPromise(source)).toBe(true);
@@ -1172,7 +1210,10 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
     ['const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
+    ['export const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
     ['vi.mocked(client).mockResolvedValue({ ok: true });'],
+    ["vi?.mock('foo', () => ({ fn: vi.fn().mockReturnValue('default') }));"],
+    ["vi.mock?.('foo', () => ({ fn: vi.fn().mockReturnValue('default') }));"],
     // Static blocks execute when the class declaration is evaluated (module
     // load), so persistent setters inside them DO leak across tests.
     [
@@ -1195,7 +1236,21 @@ describe('root test hygiene', () => {
     ],
     [
       [
+        "export const factory = () => ({ fn: vi.fn().mockReturnValue('default') });",
+        "vi.mock('foo', factory);",
+      ].join('\n'),
+    ],
+    [
+      [
         'function makeMockModule() {',
+        "  return { fn: vi.fn().mockReturnValue('default') };",
+        '}',
+        "vi.mock('foo', makeMockModule);",
+      ].join('\n'),
+    ],
+    [
+      [
+        'export function makeMockModule() {',
         "  return { fn: vi.fn().mockReturnValue('default') };",
         '}',
         "vi.mock('foo', makeMockModule);",

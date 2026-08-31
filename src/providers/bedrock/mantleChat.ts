@@ -58,6 +58,10 @@ export function getBedrockMantleChatBaseUrl(region: string, modelName?: string):
  * configured mantle `apiBaseUrl`.
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
+
   protected getCapabilityModelName(): string {
     return this.modelName.replace(/^(openai|xai)\./, '');
   }

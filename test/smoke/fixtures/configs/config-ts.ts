@@ -1,20 +1,4 @@
-/**
- * TypeScript config using export default (2.4.1)
- *
- * Uses inline type to avoid depcheck issues with 'promptfoo' import.
- * In real usage, you would import from 'promptfoo':
- * import type { UnifiedConfig } from 'promptfoo';
- */
-
-interface UnifiedConfig {
-  description?: string;
-  providers: string[];
-  prompts: string[];
-  tests: Array<{
-    vars: Record<string, string>;
-    assert: Array<{ type: string; value: string }>;
-  }>;
-}
+import type { UnifiedConfig } from '../../../../src/types';
 
 const config: UnifiedConfig = {
   description: 'Smoke test - TypeScript config format',

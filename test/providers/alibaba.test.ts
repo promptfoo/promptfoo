@@ -62,6 +62,14 @@ describe('Alibaba Cloud Provider', () => {
       );
     });
 
+    it('uses Alibaba as its telemetry provider independently of the configured provider ID', () => {
+      const provider = new AlibabaChatCompletionProvider('qwen-max', {
+        id: 'custom:customer-label',
+      } as ProviderOptions);
+
+      expect((provider as any).getGenAISystem()).toBe('alibaba');
+    });
+
     it('should create provider for visual language models', () => {
       const provider = new AlibabaChatCompletionProvider('qwen-vl-max', {});
 
