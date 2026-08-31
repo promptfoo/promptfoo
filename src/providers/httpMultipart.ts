@@ -159,11 +159,24 @@ function normalizeFilePath(filePath: string): string {
     return filePath;
   }
 
+  const filePathWithoutScheme = filePath.slice('file://'.length);
+
+  // `file://./path.ext` and `file://../path.ext` are promptfoo's config-relative
+  // shorthand. On Windows, fileURLToPath treats the first path segment as a
+  // UNC host instead, producing paths such as `\\.\\path.ext`.
+  if (/^(?:\.{1,2})(?:[\\/]|$)/.test(filePathWithoutScheme)) {
+    try {
+      return decodeURIComponent(filePathWithoutScheme);
+    } catch {
+      return filePathWithoutScheme;
+    }
+  }
+
   try {
     return fileURLToPath(filePath);
   } catch {
     // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
-    return filePath.slice('file://'.length);
+    return filePathWithoutScheme;
   }
 }
 

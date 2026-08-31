@@ -130,7 +130,7 @@ providers:
             contentType: application/pdf
             source:
               type: path
-              path: file://fixtures/sample-report45.pdf
+              path: file://./fixtures/sample-report45.pdf
           - kind: field
             name: documentQuery
             value: '{{prompt}}'
