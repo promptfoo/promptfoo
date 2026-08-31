@@ -122,23 +122,28 @@ function hasScenarioProviderOverride(scenarios: UnifiedConfig['scenarios']): boo
     (scenario) =>
       !isRecord(scenario) ||
       ['config', 'tests'].some((key) => {
-        if (!(key in scenario)) {
+        const scenarioRecord = scenario as Record<string, unknown>;
+        if (!(key in scenarioRecord)) {
           return false;
         }
-        const tests = scenario[key];
+        const tests = scenarioRecord[key];
         return !Array.isArray(tests) || tests.some(testCaseOverridesProvider);
       }),
   );
 }
 
-function hasPromptProviderOverride(prompts: UnifiedConfig['prompts']): boolean {
-  return Boolean(
-    prompts?.some(
-      (prompt) =>
-        isRecord(prompt) &&
-        'config' in prompt &&
-        (!isRecord(prompt.config) || Object.keys(prompt.config).length > 0),
-    ),
+function hasPromptProviderOverride(prompts: UnifiedConfig['prompts'] | undefined): boolean {
+  if (!prompts) {
+    return false;
+  }
+  if (!Array.isArray(prompts)) {
+    return true;
+  }
+  return prompts.some(
+    (prompt: unknown) =>
+      isRecord(prompt) &&
+      'config' in prompt &&
+      (!isRecord(prompt.config) || Object.keys(prompt.config).length > 0),
   );
 }
 

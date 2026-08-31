@@ -64,9 +64,10 @@ vi.mock('./ProvidersListSection', () => ({
 }));
 vi.mock('./RunOptionsSection', () => ({
   RunOptionsSection: vi.fn(({ isProviderCatalogReady }) => {
+    const configuredProviders = useStore.getState().config.providers;
     catalogReadinessRenders.push({
       ready: isProviderCatalogReady,
-      provider: useStore.getState().config.providers?.[0],
+      provider: Array.isArray(configuredProviders) ? configuredProviders[0] : configuredProviders,
     });
     return (
       <div
