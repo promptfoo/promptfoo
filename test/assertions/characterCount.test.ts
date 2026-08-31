@@ -97,6 +97,12 @@ describe('handleCharacterCount', () => {
       },
     );
 
+    it('rejects a whitespace-only exact count', () => {
+      expect(() => handleCharacterCount(makeParams('   ', 'abc'))).toThrow(
+        '"character-count" assertion count must be a non-negative finite number',
+      );
+    });
+
     it.each([
       { min: -1 },
       { max: -1 },
