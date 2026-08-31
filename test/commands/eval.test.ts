@@ -563,11 +563,15 @@ describe('evalCommand', () => {
         testSuite: { prompts: [], providers: [] } as TestSuite,
         basePath: path.dirname(defaultConfigPath),
       });
-      // Own every mock this path reads. Sibling tests queue `mockReturnValueOnce`
-      // values on the shared provider mock, and a leftover one would fail the run
-      // before it ever reaches the watcher.
+      // Own every mock this path reads. Sibling tests queue one-shot values on these
+      // shared mocks and restore only the default, so a leftover can fail the run
+      // before it reaches the watcher. mockReset() drains the queue; clearAllMocks()
+      // in the outer beforeEach does not. Queue one-shot values here in turn, so this
+      // block leaks nothing forward either.
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
-      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
       return doEval(
         { watch: true, write: false },
         config,
