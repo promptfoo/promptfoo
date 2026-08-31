@@ -45,7 +45,7 @@ const MISTRAL_HEADERS = {
   resetRequestsPlural: 'x-ratelimit-reset-requests-minute',
   resetTokens: 'x-ratelimit-reset-tok-minute',
   resetTokensPlural: 'x-ratelimit-reset-tokens-minute',
-  // Monthly variants
+  // Monthly fallback variants
   remainingRequestsMonth: 'x-ratelimit-remaining-req-month',
   remainingRequestsMonthPlural: 'x-ratelimit-remaining-requests-month',
   remainingTokensMonth: 'x-ratelimit-remaining-tok-month',
@@ -54,10 +54,6 @@ const MISTRAL_HEADERS = {
   limitRequestsMonthPlural: 'x-ratelimit-limit-requests-month',
   limitTokensMonth: 'x-ratelimit-limit-tok-month',
   limitTokensMonthPlural: 'x-ratelimit-limit-tokens-month',
-  resetRequestsMonth: 'x-ratelimit-reset-req-month',
-  resetRequestsMonthPlural: 'x-ratelimit-reset-requests-month',
-  resetTokensMonth: 'x-ratelimit-reset-tok-month',
-  resetTokensMonthPlural: 'x-ratelimit-reset-tokens-month',
 } as const;
 
 // Standard/generic headers (RFC 6585 style)
@@ -71,48 +67,57 @@ const STANDARD_HEADERS = {
   resetAlt: 'x-ratelimit-reset',
 } as const;
 
-interface QuotaResult {
-  remaining?: number;
-  limit?: number;
-}
+/**
+ * Parse rate limit headers from response.
+ */
+export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRateLimitHeaders {
+  const result: ParsedRateLimitHeaders = {};
+  const h = lowercaseKeys(headers);
 
-function resolveMultiWindowQuota(
-  h: Record<string, string>,
-  minuteRemainingKeys: readonly string[],
-  monthRemainingKeys: readonly string[],
-  minuteLimitKeys: readonly string[],
-  monthLimitKeys: readonly string[],
-  standardRemainingKeys: readonly string[],
-  standardLimitKeys: readonly string[],
-): QuotaResult {
-  const minuteRemaining = parseFirstMatch(h, minuteRemainingKeys);
-  const monthRemaining = parseFirstMatch(h, monthRemainingKeys);
+  // --- Remaining counts (ordered: OpenAI, Anthropic, Mistral, Standard) ---
+  result.remainingRequests = parseFirstMatch(h, [
+    OPENAI_HEADERS.remainingRequests,
+    ANTHROPIC_HEADERS.remainingRequests,
+    MISTRAL_HEADERS.remainingRequestsPlural,
+    MISTRAL_HEADERS.remainingRequests,
+    MISTRAL_HEADERS.remainingRequestsMonthPlural,
+    MISTRAL_HEADERS.remainingRequestsMonth,
+    STANDARD_HEADERS.remainingAlt,
+    STANDARD_HEADERS.remaining,
+  ]);
 
-  if (minuteRemaining !== undefined || monthRemaining !== undefined) {
-    const isMonthMoreRestrictive =
-      monthRemaining !== undefined &&
-      (minuteRemaining === undefined || monthRemaining < minuteRemaining);
+  result.remainingTokens = parseFirstMatch(h, [
+    OPENAI_HEADERS.remainingTokens,
+    ANTHROPIC_HEADERS.remainingTokens,
+    MISTRAL_HEADERS.remainingTokensPlural,
+    MISTRAL_HEADERS.remainingTokens,
+    MISTRAL_HEADERS.remainingTokensMonthPlural,
+    MISTRAL_HEADERS.remainingTokensMonth,
+  ]);
 
-    const remaining =
-      minuteRemaining !== undefined && monthRemaining !== undefined
-        ? Math.min(minuteRemaining, monthRemaining)
-        : (minuteRemaining ?? monthRemaining);
+  // --- Limits (ordered: OpenAI, Anthropic, Mistral, Standard) ---
+  result.limitRequests = parseFirstMatch(h, [
+    OPENAI_HEADERS.limitRequests,
+    ANTHROPIC_HEADERS.limitRequests,
+    MISTRAL_HEADERS.limitRequestsPlural,
+    MISTRAL_HEADERS.limitRequests,
+    MISTRAL_HEADERS.limitRequestsMonthPlural,
+    MISTRAL_HEADERS.limitRequestsMonth,
+    STANDARD_HEADERS.limitAlt,
+    STANDARD_HEADERS.limit,
+  ]);
 
-    const limit = isMonthMoreRestrictive
-      ? parseFirstMatch(h, monthLimitKeys)
-      : parseFirstMatch(h, minuteLimitKeys);
+  result.limitTokens = parseFirstMatch(h, [
+    OPENAI_HEADERS.limitTokens,
+    ANTHROPIC_HEADERS.limitTokens,
+    MISTRAL_HEADERS.limitTokensPlural,
+    MISTRAL_HEADERS.limitTokens,
+    MISTRAL_HEADERS.limitTokensMonthPlural,
+    MISTRAL_HEADERS.limitTokensMonth,
+  ]);
 
-    return { remaining, limit };
-  }
-
-  return {
-    remaining: parseFirstMatch(h, standardRemainingKeys),
-    limit: parseFirstMatch(h, standardLimitKeys),
-  };
-}
-
-function parseResetTimestamp(h: Record<string, string>): number | undefined {
-  const resetHeaderKeys = [
+  // --- Reset time (ordered: OpenAI, Anthropic, Mistral, Standard) ---
+  for (const name of [
     OPENAI_HEADERS.resetRequests,
     OPENAI_HEADERS.resetTokens,
     ANTHROPIC_HEADERS.resetRequests,
@@ -123,70 +128,17 @@ function parseResetTimestamp(h: Record<string, string>): number | undefined {
     MISTRAL_HEADERS.resetRequests,
     MISTRAL_HEADERS.resetTokensPlural,
     MISTRAL_HEADERS.resetTokens,
-    MISTRAL_HEADERS.resetRequestsMonthPlural,
-    MISTRAL_HEADERS.resetRequestsMonth,
-    MISTRAL_HEADERS.resetTokensMonthPlural,
-    MISTRAL_HEADERS.resetTokensMonth,
     STANDARD_HEADERS.resetAlt,
     STANDARD_HEADERS.reset,
-  ];
-
-  for (const name of resetHeaderKeys) {
+  ]) {
     if (h[name] !== undefined) {
       const parsed = parseResetTime(h[name]);
       if (parsed !== null) {
-        return parsed;
+        result.resetAt = parsed;
+        break;
       }
     }
   }
-  return undefined;
-}
-
-/**
- * Parse rate limit headers from response.
- */
-export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRateLimitHeaders {
-  const result: ParsedRateLimitHeaders = {};
-  const h = lowercaseKeys(headers);
-
-  // --- Requests ---
-  const reqQuota = resolveMultiWindowQuota(
-    h,
-    [MISTRAL_HEADERS.remainingRequestsPlural, MISTRAL_HEADERS.remainingRequests],
-    [MISTRAL_HEADERS.remainingRequestsMonthPlural, MISTRAL_HEADERS.remainingRequestsMonth],
-    [MISTRAL_HEADERS.limitRequestsPlural, MISTRAL_HEADERS.limitRequests],
-    [MISTRAL_HEADERS.limitRequestsMonthPlural, MISTRAL_HEADERS.limitRequestsMonth],
-    [
-      OPENAI_HEADERS.remainingRequests,
-      ANTHROPIC_HEADERS.remainingRequests,
-      STANDARD_HEADERS.remainingAlt,
-      STANDARD_HEADERS.remaining,
-    ],
-    [
-      OPENAI_HEADERS.limitRequests,
-      ANTHROPIC_HEADERS.limitRequests,
-      STANDARD_HEADERS.limitAlt,
-      STANDARD_HEADERS.limit,
-    ],
-  );
-  result.remainingRequests = reqQuota.remaining;
-  result.limitRequests = reqQuota.limit;
-
-  // --- Tokens ---
-  const tokQuota = resolveMultiWindowQuota(
-    h,
-    [MISTRAL_HEADERS.remainingTokensPlural, MISTRAL_HEADERS.remainingTokens],
-    [MISTRAL_HEADERS.remainingTokensMonthPlural, MISTRAL_HEADERS.remainingTokensMonth],
-    [MISTRAL_HEADERS.limitTokensPlural, MISTRAL_HEADERS.limitTokens],
-    [MISTRAL_HEADERS.limitTokensMonthPlural, MISTRAL_HEADERS.limitTokensMonth],
-    [OPENAI_HEADERS.remainingTokens, ANTHROPIC_HEADERS.remainingTokens],
-    [OPENAI_HEADERS.limitTokens, ANTHROPIC_HEADERS.limitTokens],
-  );
-  result.remainingTokens = tokQuota.remaining;
-  result.limitTokens = tokQuota.limit;
-
-  // --- Reset time ---
-  result.resetAt = parseResetTimestamp(h);
 
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {

@@ -246,48 +246,6 @@ describe('parseRateLimitHeaders', () => {
       expect(result.resetAt).toBe(now + 40000);
     });
 
-    it('should select the most restrictive remaining allowance when minute and monthly quotas coexist', () => {
-      // Plentiful minute capacity, but monthly allowance nearly exhausted
-      const headers = {
-        'x-ratelimit-remaining-requests-minute': '100',
-        'x-ratelimit-limit-requests-minute': '120',
-        'x-ratelimit-remaining-requests-month': '5',
-        'x-ratelimit-limit-requests-month': '5000',
-        'x-ratelimit-remaining-tokens-minute': '500000',
-        'x-ratelimit-limit-tokens-minute': '600000',
-        'x-ratelimit-remaining-tokens-month': '1000',
-        'x-ratelimit-limit-tokens-month': '10000000',
-      };
-
-      const result = parseRateLimitHeaders(headers);
-
-      // Must report the restrictive monthly remaining allowance and limit
-      expect(result.remainingRequests).toBe(5);
-      expect(result.limitRequests).toBe(5000);
-      expect(result.remainingTokens).toBe(1000);
-      expect(result.limitTokens).toBe(10000000);
-    });
-
-    it('should select the minute quota when minute is more restrictive than monthly quota', () => {
-      const headers = {
-        'x-ratelimit-remaining-requests-minute': '10',
-        'x-ratelimit-limit-requests-minute': '120',
-        'x-ratelimit-remaining-requests-month': '4000',
-        'x-ratelimit-limit-requests-month': '5000',
-        'x-ratelimit-remaining-tokens-minute': '50000',
-        'x-ratelimit-limit-tokens-minute': '600000',
-        'x-ratelimit-remaining-tokens-month': '8000000',
-        'x-ratelimit-limit-tokens-month': '10000000',
-      };
-
-      const result = parseRateLimitHeaders(headers);
-
-      expect(result.remainingRequests).toBe(10);
-      expect(result.limitRequests).toBe(120);
-      expect(result.remainingTokens).toBe(50000);
-      expect(result.limitTokens).toBe(600000);
-    });
-
     it('should parse Mistral monthly fallback rate limit headers', () => {
       const headers = {
         'x-ratelimit-remaining-req-month': '10000',
