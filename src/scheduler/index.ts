@@ -14,6 +14,17 @@ export {
   type ConcurrencyChangeResult,
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
+// DAG Orchestrator
+export {
+  CyclicDependencyError,
+  type DagExecutionContext,
+  type DagExecutionResult,
+  DagOrchestrator,
+  type DagOrchestratorOptions,
+  type DagStats,
+  type DagTask,
+  MissingDependencyError,
+} from './dagOrchestrator';
 // Header parsing
 export {
   type ParsedRateLimitHeaders,
@@ -54,17 +65,6 @@ export {
   SlotQueue,
   type SlotQueueOptions,
 } from './slotQueue';
-// DAG Orchestrator
-export {
-  CyclicDependencyError,
-  type DagExecutionContext,
-  type DagExecutionResult,
-  DagOrchestrator,
-  type DagOrchestratorOptions,
-  type DagStats,
-  type DagTask,
-  MissingDependencyError,
-} from './dagOrchestrator';
 // Shared types
 export type { RateLimitExecuteOptions } from './types';
 

@@ -220,20 +220,35 @@ describe('DagOrchestrator', () => {
     let maxActiveSeen = 0;
 
     const orchestrator = new DagOrchestrator({ maxConcurrency: 2 });
+    const resolvers: Array<() => void> = [];
+
     for (let i = 0; i < 6; i++) {
       orchestrator.addTask({
         id: `task-${i}`,
         run: async () => {
           active++;
           maxActiveSeen = Math.max(maxActiveSeen, active);
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          await new Promise<void>((resolve) => {
+            resolvers.push(resolve);
+          });
           active--;
           return i;
         },
       });
     }
 
-    const result = await orchestrator.execute();
+    const execPromise = orchestrator.execute();
+
+    while (resolvers.length < 6) {
+      expect(active).toBeLessThanOrEqual(2);
+      const resolveNext = resolvers.shift();
+      if (resolveNext) {
+        resolveNext();
+      }
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    }
+
+    const result = await execPromise;
     expect(result.stats.completedTasks).toBe(6);
     expect(maxActiveSeen).toBeLessThanOrEqual(2);
   });
