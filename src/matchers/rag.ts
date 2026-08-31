@@ -20,6 +20,7 @@ import {
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
+  stripLeadingHeaders,
   tryParse,
 } from './shared';
 
@@ -279,11 +280,13 @@ export async function matchesContextRelevance(
   // sentence when it is a single prose block. A retrieved context is typically a
   // single paragraph with no newlines; splitting on newlines alone would yield one
   // unit, forcing the score to ~1.0 regardless of relevance.
+  const cleanedContext = typeof context === 'string' ? stripLeadingHeaders(context) : context;
   const contextIsPreSegmented =
-    Array.isArray(context) || context.split('\n').filter((line) => line.trim() !== '').length > 1;
-  const contextUnits = Array.isArray(context)
-    ? context.filter((chunk) => chunk.trim().length > 0)
-    : splitTextIntoSentences(context);
+    Array.isArray(cleanedContext) ||
+    cleanedContext.split('\n').filter((line) => line.trim() !== '').length > 1;
+  const contextUnits = Array.isArray(cleanedContext)
+    ? cleanedContext.filter((chunk) => chunk.trim().length > 0)
+    : splitTextIntoSentences(cleanedContext);
   const totalContextUnits = contextUnits.length;
 
   // Numerator (relevant units): segment the grader output into the SAME kind of
