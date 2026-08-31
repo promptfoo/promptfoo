@@ -70,6 +70,12 @@ function extractVarsFromPrompts(prompts: string[]): string[] {
   return Array.from(varsSet);
 }
 
+function hasDefaultTestProviderOverride(defaultTest: UnifiedConfig['defaultTest']): boolean {
+  return Boolean(
+    defaultTest?.provider || (defaultTest?.options && Object.keys(defaultTest.options).length > 0),
+  );
+}
+
 function ErrorFallback({
   error,
   resetErrorBoundary,
@@ -229,6 +235,8 @@ const EvaluateTestSuiteCreator = () => {
   );
 
   const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
+  const hasRestrictedDefaultTestOverride =
+    hasCustomConfig === true && hasDefaultTestProviderOverride(config.defaultTest);
 
   const isReadyToRun =
     normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
@@ -753,7 +761,9 @@ const EvaluateTestSuiteCreator = () => {
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
                       isReadyToRun={isReadyToRun}
-                      isProviderCatalogReady={hasCustomConfig !== null}
+                      isProviderCatalogReady={
+                        hasCustomConfig !== null && !hasRestrictedDefaultTestOverride
+                      }
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({

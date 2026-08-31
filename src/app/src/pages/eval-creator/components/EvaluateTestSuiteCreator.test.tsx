@@ -62,7 +62,12 @@ vi.mock('./ProvidersListSection', () => ({
   ),
 }));
 vi.mock('./RunOptionsSection', () => ({
-  RunOptionsSection: vi.fn(() => <div data-testid="mock-run-options-section" />),
+  RunOptionsSection: vi.fn(({ isProviderCatalogReady }) => (
+    <div
+      data-testid="mock-run-options-section"
+      data-provider-catalog-ready={String(isProviderCatalogReady)}
+    />
+  )),
 }));
 vi.mock('./RunTestSuiteButton', () => ({
   default: vi.fn(() => <div data-testid="mock-run-test-suite-button" />),
@@ -862,6 +867,58 @@ describe('EvaluateTestSuiteCreator', () => {
     });
     expect(screen.queryByTestId('mock-configure-env-button')).not.toBeInTheDocument();
     expect(useStore.getState().config.providers).toEqual([]);
+  });
+
+  it.each([
+    ['provider identity', { provider: 'openai:unapproved' }],
+    ['provider settings', { options: { temperature: 1 } }],
+  ])('keeps Run disabled for defaultTest %s with a custom catalog', async (_, defaultTest) => {
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [approvedProvider],
+      prompts: ['Prompt'],
+      tests: [{ vars: { topic: 'test' } }],
+      defaultTest,
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+    await userEvent.click(screen.getAllByRole('button', { name: /Run Options:/ })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(
+        'data-provider-catalog-ready',
+        'false',
+      );
+    });
+  });
+
+  it('allows defaultTest provider overrides when no custom catalog is configured', async () => {
+    useStore.getState().updateConfig({
+      providers: ['openai:gpt-4'],
+      prompts: ['Prompt'],
+      tests: [{ vars: { topic: 'test' } }],
+      defaultTest: {
+        provider: 'openai:gpt-4o-mini',
+        options: { temperature: 1 },
+      },
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+    await userEvent.click(screen.getAllByRole('button', { name: /Run Options:/ })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(
+        'data-provider-catalog-ready',
+        'true',
+      );
+    });
   });
 
   it('keeps provider creation gated when the catalog request fails', async () => {
