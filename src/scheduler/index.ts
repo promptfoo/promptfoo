@@ -41,8 +41,8 @@ export {
 export {
   createProviderRateLimitOptions,
   isRateLimitWrapped,
-  wrapProviderWithRateLimiting,
   wrapProvidersWithRateLimiting,
+  wrapProviderWithRateLimiting,
 } from './providerWrapper';
 // Rate limit key generation
 export { getRateLimitKey } from './rateLimitKey';
@@ -65,6 +65,6 @@ export {
   SlotQueue,
   type SlotQueueOptions,
 } from './slotQueue';
+
 // Shared types
 export type { RateLimitExecuteOptions } from './types';
-
