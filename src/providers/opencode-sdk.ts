@@ -1261,6 +1261,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
         'OpenCode SDK baseUrl is provider-level configuration and cannot be overridden per prompt',
       );
     }
+    if (config.restart_server_per_call !== this.config.restart_server_per_call) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call is provider-level configuration and cannot be overridden per prompt',
+      );
+    }
+    if (config.restart_server_per_call && config.baseUrl) {
+      throw new Error(
+        'OpenCode restart_server_per_call requires a locally managed server; it cannot restart baseUrl servers.',
+      );
+    }
+    if (config.restart_server_per_call && config.persist_sessions) {
+      throw new Error(
+        'OpenCode restart_server_per_call cannot preserve persistent sessions across server restarts.',
+      );
+    }
 
     if (config.workspace && !config.baseUrl && !config.working_dir) {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');
@@ -1340,12 +1355,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const opencodeModule = await this.ensureOpenCodeModule();
 
     this.validateSessionPolicyConfiguration(config);
-
-    if (config.restart_server_per_call && config.baseUrl) {
-      throw new Error(
-        'OpenCode restart_server_per_call requires a locally managed server; it cannot restart baseUrl servers.',
-      );
-    }
 
     if (config.restart_server_per_call && this.client && this.activeTraceparent !== traceparent) {
       await this.resetClientForTraceparent();
