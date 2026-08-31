@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleCharacterCount } from '../../src/assertions/characterCount';
+import { handleCharacterCount } from '../../src/assertions/wordCount';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';

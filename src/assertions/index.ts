@@ -47,7 +47,6 @@ import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
-import { handleCharacterCount } from './characterCount';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -103,7 +102,7 @@ import {
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleWordCount } from './wordCount';
+import { handleCharacterCount, handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
