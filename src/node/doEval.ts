@@ -62,7 +62,6 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
-import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
 import type {
@@ -184,42 +183,6 @@ function handleRecoverableWatchError(error: unknown): boolean {
   return false;
 }
 
-/**
- * Keep the CLI alive for as long as watch mode is watching.
- *
- * `main()` resolves as soon as the eval command's action handler returns, and its
- * `finally` then runs `shutdownGracefully()`, which closes the database and the HTTP
- * dispatcher and calls `process.exit()` 100ms later. Returning while a watcher is still
- * running therefore tore down everything a re-run needs and killed the process before
- * chokidar could report a single change. Long-running commands avoid this by not
- * resolving until they are done -- `startServer()` does exactly this -- so watch mode
- * does the same and settles only once the watcher is closed.
- *
- * Signal handlers are removed as soon as one fires, so a second Ctrl-C falls back to
- * Node's default behaviour and terminates immediately.
- */
-function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onSignal = () => {
-      process.removeListener('SIGINT', onSignal);
-      process.removeListener('SIGTERM', onSignal);
-      logger.info('Stopping watch mode...');
-      // Resolve regardless: a watcher that fails to close must not wedge the CLI.
-      watcher
-        .close()
-        .catch((error) =>
-          logger.warn(
-            `Error closing file watcher: ${error instanceof Error ? error.message : error}`,
-          ),
-        )
-        .finally(() => resolve());
-    };
-
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
-  });
-}
-
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -317,10 +280,6 @@ export async function doEval(
     cmdObj.config = undefined;
     defaultConfigPath = undefined;
   }
-
-  // Set once watch mode starts watching; awaited before doEval returns so the CLI does
-  // not shut down underneath the watcher.
-  let watchTermination: Promise<void> | undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -1218,10 +1177,6 @@ export async function doEval(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
         const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
-        // Library callers own their own process lifetime, so only the CLI blocks here.
-        if (isCliInvocation) {
-          watchTermination = watchUntilTerminated(watcher);
-        }
 
         watcher
           .on('change', async (path) => {
@@ -1283,9 +1238,5 @@ export async function doEval(
     return ret;
   };
 
-  const result = await runEvaluation(true /* initialization */);
-  if (watchTermination) {
-    await watchTermination;
-  }
-  return result;
+  return await runEvaluation(true /* initialization */);
 }

@@ -564,20 +564,32 @@ describe('evalCommand', () => {
       );
     };
 
-    // doEval reaches the watcher several awaits in, so let the queue drain before
-    // asserting on anything it registers.
-    const flush = async () => {
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setImmediate(resolve));
+    // doEval reaches the watcher many awaits in, and how many event-loop turns that
+    // takes varies with machine load -- a fixed number of ticks races it and wedges
+    // the test on a slow runner. Wait for the observable effect instead.
+    const waitFor = async (predicate: () => boolean, description: string) => {
+      for (let i = 0; i < 2000; i++) {
+        if (predicate()) {
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
+      throw new Error(`Timed out waiting for ${description}`);
     };
+
+    const watching = (baseline: number) =>
+      waitFor(
+        () => process.listenerCount('SIGINT') > baseline,
+        'watch mode to install its signal handler',
+      );
 
     const settled = async (promise: Promise<unknown>) => {
       let done = false;
       void promise.then(() => {
         done = true;
       });
-      await flush();
+      // Only meaningful once the watcher is up; drain what is already queued.
+      await new Promise((resolve) => setImmediate(resolve));
       return done;
     };
 
@@ -601,7 +613,9 @@ describe('evalCommand', () => {
     });
 
     it('does not resolve while the CLI is watching, and resolves on SIGINT', async () => {
+      const baseline = process.listenerCount('SIGINT');
       const pending = startWatch({ eventSource: 'cli' });
+      await watching(baseline);
 
       expect(await settled(pending)).toBe(false);
       expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
@@ -615,7 +629,7 @@ describe('evalCommand', () => {
     it('removes its signal handlers so a second Ctrl-C terminates', async () => {
       const before = process.listenerCount('SIGINT');
       const pending = startWatch({ eventSource: 'cli' });
-      await flush();
+      await watching(before);
       expect(process.listenerCount('SIGINT')).toBe(before + 1);
 
       process.emit('SIGINT');
