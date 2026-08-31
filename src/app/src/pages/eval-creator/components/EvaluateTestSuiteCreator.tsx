@@ -71,9 +71,139 @@ function extractVarsFromPrompts(prompts: string[]): string[] {
 }
 
 function hasDefaultTestProviderOverride(defaultTest: UnifiedConfig['defaultTest']): boolean {
-  return Boolean(
-    defaultTest?.provider || (defaultTest?.options && Object.keys(defaultTest.options).length > 0),
+  if (typeof defaultTest === 'string') {
+    return defaultTest.length > 0;
+  }
+
+  return Boolean(defaultTest?.provider || hasProviderAffectingOptions(defaultTest?.options));
+}
+
+const SAFE_TEST_OPTION_KEYS = new Set([
+  'disableConversationVar',
+  'disableDefaultAsserts',
+  'disableVarExpansion',
+  'factuality',
+  'postprocess',
+  'prefix',
+  'repeat',
+  'rubricPrompt',
+  'runSerially',
+  'storeOutputAs',
+  'suffix',
+  'transform',
+  'transformVars',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasProviderAffectingOptions(options: unknown): boolean {
+  return isRecord(options) && Object.keys(options).some((key) => !SAFE_TEST_OPTION_KEYS.has(key));
+}
+
+function testCaseOverridesProvider(testCase: unknown): boolean {
+  return (
+    isRecord(testCase) &&
+    (Boolean(testCase.provider) ||
+      (Array.isArray(testCase.providers) && testCase.providers.length > 0) ||
+      hasProviderAffectingOptions(testCase.options))
   );
+}
+
+function hasScenarioProviderOverride(scenarios: UnifiedConfig['scenarios']): boolean {
+  if (!scenarios) {
+    return false;
+  }
+  if (!Array.isArray(scenarios)) {
+    return true;
+  }
+  return scenarios.some(
+    (scenario) =>
+      !isRecord(scenario) ||
+      ['config', 'tests'].some((key) => {
+        if (!(key in scenario)) {
+          return false;
+        }
+        const tests = scenario[key];
+        return !Array.isArray(tests) || tests.some(testCaseOverridesProvider);
+      }),
+  );
+}
+
+function hasPromptProviderOverride(prompts: UnifiedConfig['prompts']): boolean {
+  return Boolean(
+    prompts?.some(
+      (prompt) =>
+        isRecord(prompt) &&
+        'config' in prompt &&
+        (!isRecord(prompt.config) || Object.keys(prompt.config).length > 0),
+    ),
+  );
+}
+
+function collectCatalogEnvNames(value: unknown, names = new Set<string>()): Set<string> {
+  if (typeof value === 'string') {
+    const envPattern = /\benv(?:\.([A-Za-z_][\w]*)|\[['"]([^'"]+)['"]\])/g;
+    for (const match of value.matchAll(envPattern)) {
+      names.add(match[1] ?? match[2]);
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach((item) => collectCatalogEnvNames(item, names));
+  } else if (isRecord(value)) {
+    Object.values(value).forEach((item) => collectCatalogEnvNames(item, names));
+  }
+  return names;
+}
+
+function hasCatalogEnvOverride(
+  env: UnifiedConfig['env'],
+  availableProviders: ProviderOptions[],
+): boolean {
+  if (!isRecord(env)) {
+    return Boolean(env);
+  }
+  const catalogEnvNames = collectCatalogEnvNames(availableProviders);
+  return Object.keys(env).some((name) => catalogEnvNames.has(name));
+}
+
+function hasRestrictedProviderOverride(
+  config: Partial<UnifiedConfig>,
+  availableProviders: ProviderOptions[],
+): boolean {
+  return (
+    hasDefaultTestProviderOverride(config.defaultTest) ||
+    hasScenarioProviderOverride(config.scenarios) ||
+    hasPromptProviderOverride(config.prompts) ||
+    hasCatalogEnvOverride(config.env, availableProviders)
+  );
+}
+
+function reconcileProvidersWithCatalog(
+  providers: ProviderOptions[],
+  availableProviders: ProviderOptions[],
+): { providers: ProviderOptions[]; isReconciled: boolean } {
+  const approvedProviders = providers.flatMap((provider) => {
+    const matchingProviders = availableProviders.filter(
+      (availableProvider) => availableProvider.id === provider.id,
+    );
+    if (matchingProviders.length === 0) {
+      return [];
+    }
+    return [
+      matchingProviders.find(
+        (availableProvider) =>
+          availableProvider === provider || deepEqual(availableProvider, provider),
+      ) ?? matchingProviders[0],
+    ];
+  });
+
+  return {
+    providers: approvedProviders,
+    isReconciled:
+      approvedProviders.length === providers.length &&
+      approvedProviders.every((provider, index) => provider === providers[index]),
+  };
 }
 
 function ErrorFallback({
@@ -115,6 +245,13 @@ const EvaluateTestSuiteCreator = () => {
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
+  const providerReconciliation = React.useMemo(
+    () =>
+      hasCustomConfig === true && availableProviders !== null
+        ? reconcileProvidersWithCatalog(normalizedProviders, availableProviders)
+        : null,
+    [availableProviders, hasCustomConfig, normalizedProviders],
+  );
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -125,28 +262,10 @@ const EvaluateTestSuiteCreator = () => {
       return;
     }
 
-    const approvedProviders = normalizedProviders.flatMap((provider) => {
-      const matchingProviders = availableProviders.filter(
-        (availableProvider) => availableProvider.id === provider.id,
-      );
-      if (matchingProviders.length === 0) {
-        return [];
-      }
-
-      return [
-        matchingProviders.find(
-          (availableProvider) =>
-            availableProvider === provider || deepEqual(availableProvider, provider),
-        ) ?? matchingProviders[0],
-      ];
-    });
-
-    if (
-      approvedProviders.length === normalizedProviders.length &&
-      approvedProviders.every((provider, index) => provider === normalizedProviders[index])
-    ) {
+    if (!providerReconciliation || providerReconciliation.isReconciled) {
       return;
     }
+    const approvedProviders = providerReconciliation.providers;
 
     const removedUnapprovedProviders = approvedProviders.length !== normalizedProviders.length;
     const restoredProviderSettings =
@@ -173,6 +292,7 @@ const EvaluateTestSuiteCreator = () => {
     hasCustomConfig,
     isYamlEditorDirty,
     normalizedProviders,
+    providerReconciliation,
     showToast,
     updateConfig,
   ]);
@@ -235,8 +355,12 @@ const EvaluateTestSuiteCreator = () => {
   );
 
   const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
-  const hasRestrictedDefaultTestOverride =
-    hasCustomConfig === true && hasDefaultTestProviderOverride(config.defaultTest);
+  const isProviderCatalogReady =
+    hasCustomConfig === false ||
+    (hasCustomConfig === true &&
+      availableProviders !== null &&
+      providerReconciliation?.isReconciled === true &&
+      !hasRestrictedProviderOverride(config, availableProviders));
 
   const isReadyToRun =
     normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
@@ -761,9 +885,7 @@ const EvaluateTestSuiteCreator = () => {
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
                       isReadyToRun={isReadyToRun}
-                      isProviderCatalogReady={
-                        hasCustomConfig !== null && !hasRestrictedDefaultTestOverride
-                      }
+                      isProviderCatalogReady={isProviderCatalogReady}
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({
