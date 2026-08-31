@@ -174,6 +174,74 @@ describe('parseRateLimitHeaders', () => {
     });
   });
 
+  describe('Mistral format (x-ratelimit-*-minute / x-ratelimit-*-month)', () => {
+    it('should parse Mistral per-minute request rate limit headers', () => {
+      const headers = {
+        'x-ratelimit-remaining-req-minute': '60',
+        'x-ratelimit-limit-req-minute': '120',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.remainingRequests).toBe(60);
+      expect(result.limitRequests).toBe(120);
+    });
+
+    it('should parse Mistral per-minute token rate limit headers', () => {
+      const headers = {
+        'x-ratelimit-remaining-tok-minute': '400000',
+        'x-ratelimit-limit-tok-minute': '500000',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.remainingTokens).toBe(400000);
+      expect(result.limitTokens).toBe(500000);
+    });
+
+    it('should parse Mistral per-minute reset headers in relative seconds', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'x-ratelimit-reset-req-minute': '25',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.resetAt).toBe(now + 25000);
+    });
+
+    it('should fall back to Mistral token reset when request reset is absent', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'x-ratelimit-reset-tok-minute': '15',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.resetAt).toBe(now + 15000);
+    });
+
+    it('should parse Mistral monthly fallback rate limit headers', () => {
+      const headers = {
+        'x-ratelimit-remaining-req-month': '10000',
+        'x-ratelimit-limit-req-month': '50000',
+        'x-ratelimit-remaining-tok-month': '10000000',
+        'x-ratelimit-limit-tok-month': '50000000',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.remainingRequests).toBe(10000);
+      expect(result.limitRequests).toBe(50000);
+      expect(result.remainingTokens).toBe(10000000);
+      expect(result.limitTokens).toBe(50000000);
+    });
+  });
+
   describe('Generic format (ratelimit-*)', () => {
     it('should parse generic ratelimit headers', () => {
       const headers = {
