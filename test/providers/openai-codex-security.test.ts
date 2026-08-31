@@ -314,6 +314,27 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
+    it('reports multiple incompatible trusted SDK versions together', async () => {
+      const firstTrustedRoot = path.resolve(getDirectory(), '..');
+      vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
+        basePath === firstTrustedRoot
+          ? '/legacy/@openai/codex-security/dist/index.js'
+          : '/promptfoo/@openai/codex-security/dist/index.js',
+      );
+      vi.mocked(importModule).mockImplementation(async (entryPoint) =>
+        String(entryPoint).startsWith('/legacy/')
+          ? { ...mockModule, VERSION: '0.1.8' }
+          : { ...mockModule, VERSION: '0.1.10' },
+      );
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('package is incompatible (0.1.8, 0.1.10)');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
     it('reports malformed SDK versions as incompatible instead of import failures', async () => {
       vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: 'unknown' });
       const provider = new OpenAICodexSecurityProvider();
@@ -603,7 +624,7 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('does not fabricate usage or cost when the SDK omits both', async () => {
-      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: {} }));
+      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: undefined }));
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');

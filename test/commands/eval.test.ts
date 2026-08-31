@@ -488,14 +488,17 @@ describe('evalCommand', () => {
     });
   });
 
-  it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
-    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
-    cmd.exitOverride();
+  it.each(['invalid', '=value', ' =value', 'key= ', ' = '])(
+    'should reject malformed --tag value %s',
+    (tagValue) => {
+      const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+      cmd.exitOverride();
 
-    expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
-      '--tag must be specified in key=value format.',
-    );
-  });
+      expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    },
+  );
 
   it('should load cloud eval config when config is a single UUID', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';

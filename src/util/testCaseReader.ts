@@ -757,12 +757,20 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  */
 function collectNestedFileReferences(testsFile: string): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
-  if (!['yaml', 'yml', 'json'].includes(ext)) {
+  if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
   }
   try {
     const raw = fs.readFileSync(testsFile, 'utf-8');
-    const parsed = ext === 'json' ? JSON.parse(raw) : loadYaml(raw);
+    const parsed =
+      ext === 'json'
+        ? JSON.parse(raw)
+        : ext === 'jsonl'
+          ? raw
+              .split(/\r?\n/)
+              .filter((line) => line.trim().length > 0)
+              .map((line) => JSON.parse(line))
+          : loadYaml(raw);
     return collectConfigFileReferences(parsed, path.dirname(testsFile));
   } catch {
     return [];

@@ -9,7 +9,12 @@ export function collectKeyValueOption(
   const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
   const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
 
-  if (!key || val === undefined) {
+  if (
+    !key ||
+    key.trim() !== key ||
+    val === undefined ||
+    (val.length > 0 && val.trim().length === 0)
+  ) {
     throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
   }
 
