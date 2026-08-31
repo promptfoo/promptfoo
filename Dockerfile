@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.19.0-alpine AS base
+FROM node:24.20.0-alpine AS base
 
 # Update Alpine packages to get latest security patches
 RUN apk upgrade --no-cache

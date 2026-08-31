@@ -30,6 +30,14 @@
       "enabled": false
     },
     {
+      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/main.yml"],
+      "matchPackageNames": ["node"],
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "enabled": false
+    },
+    {
       "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
       "matchFileNames": ["renovate.json"],
       "matchPackageNames": ["npm"],
