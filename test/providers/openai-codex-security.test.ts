@@ -313,10 +313,24 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
       expect(mockRun).not.toHaveBeenCalled();
     });
+
+    it('reports malformed SDK versions as incompatible instead of import failures', async () => {
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: 'unknown' });
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('package is incompatible (unknown)');
+      expect(response.error).not.toContain('Failed to load @openai/codex-security');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
   });
 
   describe('repository scanning', () => {
     it('normalizes findings, usage, reasoning tokens, estimated cost, and artifacts', async () => {
+      const result = createScanResult();
+      const toJSON = vi.fn(result.toJSON);
+      mockRun.mockResolvedValue({ ...result, toJSON });
       const provider = new OpenAICodexSecurityProvider({
         config: {
           operation: 'security-scan',
@@ -369,6 +383,7 @@ describe('OpenAICodexSecurityProvider', () => {
         },
       });
       expect(JSON.parse(response.output)).toHaveProperty('findings.findings');
+      expect(toJSON).toHaveBeenCalledOnce();
       expect(response.latencyMs).toBeUndefined();
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
