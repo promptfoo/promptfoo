@@ -290,14 +290,17 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
     return false;
   }
 
-  // Check error.code first — more robust across Node.js versions than
-  // parsing error messages, since system errors always set .code.
-  const code = (error as SystemError).code;
+  // Check error.code first (and nested cause.code for Node native fetch/undici errors)
+  // — more robust across Node.js versions than parsing error messages, since system errors
+  // always set .code.
+  const code =
+    (error as SystemError).code || ((error as SystemError).cause as SystemError | undefined)?.code;
   if (code === 'ECONNRESET' || code === 'EPIPE') {
     return true;
   }
 
-  const message = (error.message ?? '').toLowerCase();
+  const causeMessage = ((error as SystemError).cause as Error | undefined)?.message ?? '';
+  const message = `${error.message ?? ''} ${causeMessage}`.toLowerCase();
   // EPROTO can wrap permanent TLS misconfigs. Exclude when paired with
   // known permanent error phrases to avoid futile retries.
   if (
