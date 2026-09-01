@@ -62,8 +62,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4': { input: 15, output: 75 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
-  // Claude Sonnet 4/4.5
-  // The Sonnet 4 point releases must precede the bare `-4` prefix: lookup is first-match-wins
+  // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
   // on `includes()`, and AWS publishes long-context meters only for Sonnet 4 itself. 4.5 and
   // 4.6 bill their full context flat, so they must not inherit Sonnet 4's surcharge — add an
   // explicit entry here for any future 4.x release for the same reason.
