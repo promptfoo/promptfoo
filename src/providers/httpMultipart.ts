@@ -154,8 +154,20 @@ function createGeneratedFile(
   };
 }
 
+/** Percent-decode a URL path, leaving it alone if it is not valid encoding. */
+function decodeUrlPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
+    // Plain paths pass through untouched, which is also how a Windows UNC share is
+    // addressed: `\\server\share\report.pdf` is already absolute, so resolvePath()
+    // leaves it alone. See the shorthand note below for why UNC cannot use file://.
     return filePath;
   }
 
@@ -164,35 +176,36 @@ export function normalizeFilePath(filePath: string): string {
     url = `file:///${url.slice('file://localhost/'.length)}`;
   }
 
-  // Windows drive paths: file://C:/..., file:///C:/..., file://C:\..., file:///C:\...
-  const winDriveMatch = url.match(/^file:\/\/(?:\/)?([a-zA-Z]:[\\/].*)$/);
+  // Windows drive paths, in any of file://C:/..., file:///C:/..., file://C:\...,
+  // file:///C:\... . path.normalize() converts separators per-platform and matches what
+  // fileURLToPath() returns for these on Windows, so no process.platform branch is needed
+  // and the behaviour stays deterministic in tests on every OS.
+  const winDriveMatch = url.match(/^file:\/\/\/?([a-zA-Z]:[\\/].*)$/);
   if (winDriveMatch) {
-    const rawPath = winDriveMatch[1];
-    if (process.platform === 'win32') {
-      try {
-        const forwardSlashUrl = `file:///${rawPath.replace(/\\/g, '/')}`;
-        return fileURLToPath(forwardSlashUrl);
-      } catch {
-        // Fallback to path normalization
-      }
-    }
-    try {
-      return path.normalize(decodeURIComponent(rawPath));
-    } catch {
-      return path.normalize(rawPath);
-    }
+    return path.normalize(decodeUrlPath(winDriveMatch[1]));
   }
 
-  // Standard absolute file URLs (e.g. file:///path/to/file or file:///C:/... on Windows)
+  // A rooted URL (file:///...) is a real file URL, so percent-encoding is meaningful.
   if (url.startsWith('file:///')) {
     try {
       return fileURLToPath(url);
     } catch {
-      return url.slice('file://'.length);
+      // fileURLToPath rejects a driveless path on Windows (ERR_INVALID_FILE_URL_PATH), so
+      // decode here too -- otherwise a %20 survives into the filename on Windows only.
+      return decodeUrlPath(url.slice('file://'.length));
     }
   }
 
-  // Promptfoo shorthand for relative paths: file://relative/path.ext or file://./...
+  // Promptfoo's long-standing shorthand for relative paths: file://relative/path.ext.
+  //
+  // This deliberately wins over reading the authority as a UNC host: `file://host/share`
+  // and `file://relative/path` are the same string shape, so supporting one necessarily
+  // breaks the other, and the shorthand is the documented, far more common form. A UNC
+  // share is still reachable by dropping the scheme (`\\server\share\report.pdf`),
+  // which returns above untouched.
+  //
+  // Not decoded, unlike the URL-shaped branches above: this is a path with a scheme
+  // prefix rather than a real URL, so a literal `%` in a filename must survive.
   return url.slice('file://'.length);
 }
 

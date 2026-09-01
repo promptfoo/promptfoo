@@ -443,6 +443,12 @@ describe('HttpProvider structured multipart requests', () => {
   });
 
   describe('normalizeFilePath and resolvePath', () => {
+    // Windows applies its own separators, so state the literal expectation per platform
+    // rather than reusing path.normalize() -- that is what the implementation calls, so
+    // asserting it back would restate the code instead of testing it.
+    const onWindows = process.platform === 'win32';
+    const winPath = (posix: string) => (onWindows ? posix.replace(/\//g, '\\') : posix);
+
     it('preserves plain paths without file:// protocol', () => {
       expect(normalizeFilePath('relative/path/to/doc.pdf')).toBe('relative/path/to/doc.pdf');
       expect(normalizeFilePath('/absolute/path/to/doc.pdf')).toBe('/absolute/path/to/doc.pdf');
@@ -456,48 +462,63 @@ describe('HttpProvider structured multipart requests', () => {
       expect(normalizeFilePath('file://sample.pdf')).toBe('sample.pdf');
     });
 
-    it('normalizes Windows drive letter file:// URLs correctly across formats', () => {
-      // 2 slashes with forward slashes
-      expect(normalizeFilePath('file://C:/Users/name/doc.pdf')).toBe(
-        path.normalize('C:/Users/name/doc.pdf'),
-      );
-      // 3 slashes with forward slashes
-      expect(normalizeFilePath('file:///C:/Users/name/doc.pdf')).toBe(
-        path.normalize('C:/Users/name/doc.pdf'),
-      );
-      // 2 slashes with backslashes
-      expect(normalizeFilePath('file://C:\\Users\\name\\doc.pdf')).toBe(
-        path.normalize('C:\\Users\\name\\doc.pdf'),
-      );
-      // 3 slashes with backslashes
-      expect(normalizeFilePath('file:///C:\\Users\\name\\doc.pdf')).toBe(
-        path.normalize('C:\\Users\\name\\doc.pdf'),
-      );
-      // localhost host
-      expect(normalizeFilePath('file://localhost/C:/Users/name/doc.pdf')).toBe(
-        path.normalize('C:/Users/name/doc.pdf'),
-      );
-      // URL-encoded spaces
-      expect(normalizeFilePath('file:///C:/My%20Documents/doc.pdf')).toBe(
-        path.normalize('C:/My Documents/doc.pdf'),
-      );
-      expect(normalizeFilePath('file://C:/My%20Documents/doc.pdf')).toBe(
-        path.normalize('C:/My Documents/doc.pdf'),
+    it('leaves a literal % in shorthand paths alone', () => {
+      // The shorthand is a path with a scheme prefix, not a real URL, so percent-decoding
+      // it would rewrite `report%20final.pdf` into a different, probably missing, file.
+      expect(normalizeFilePath('file://reports/report%20final.pdf')).toBe(
+        'reports/report%20final.pdf',
       );
     });
 
-    it('normalizes standard POSIX absolute file:// URLs', () => {
+    it('prefers the relative shorthand over reading the authority as a UNC host', () => {
+      // `file://host/share` and `file://relative/path` are the same shape, so one has to
+      // win; the shorthand does. A real UNC share is addressed without the scheme, which
+      // passes through untouched and is already absolute on Windows.
+      expect(normalizeFilePath('file://server/share/report.pdf')).toBe('server/share/report.pdf');
+      expect(normalizeFilePath('\\\\server\\share\\report.pdf')).toBe(
+        '\\\\server\\share\\report.pdf',
+      );
+    });
+
+    it.each([
+      ['two slashes, forward', 'file://C:/Users/name/doc.pdf', 'C:/Users/name/doc.pdf'],
+      ['three slashes, forward', 'file:///C:/Users/name/doc.pdf', 'C:/Users/name/doc.pdf'],
+      ['localhost authority', 'file://localhost/C:/Users/name/doc.pdf', 'C:/Users/name/doc.pdf'],
+      ['percent-encoded space', 'file:///C:/My%20Documents/doc.pdf', 'C:/My Documents/doc.pdf'],
+      [
+        'percent-encoded, two slashes',
+        'file://C:/My%20Documents/doc.pdf',
+        'C:/My Documents/doc.pdf',
+      ],
+    ])('normalizes a Windows drive URL (%s)', (_label, input, expected) => {
+      expect(normalizeFilePath(input)).toBe(winPath(expected));
+    });
+
+    it.each([['file://C:\\Users\\name\\doc.pdf'], ['file:///C:\\Users\\name\\doc.pdf']])(
+      'normalizes a Windows drive URL written with backslashes (%s)',
+      (input) => {
+        // Same on both platforms: win32 normalize() keeps the backslashes, and POSIX has no
+        // notion of `\` as a separator so it passes the value straight through.
+        expect(normalizeFilePath(input)).toBe('C:\\Users\\name\\doc.pdf');
+      },
+    );
+
+    it('normalizes standard POSIX absolute file:// URLs on every platform', () => {
+      // fileURLToPath() rejects a driveless path on Windows, so these exercise the decoded
+      // fallback. Before that fallback decoded, the %20 case returned a literal "%20" on
+      // Windows only -- which is what the Windows CI shard caught.
       expect(normalizeFilePath('file:///var/log/doc.pdf')).toBe('/var/log/doc.pdf');
       expect(normalizeFilePath('file://localhost/var/log/doc.pdf')).toBe('/var/log/doc.pdf');
       expect(normalizeFilePath('file:///home/user/my%20file.pdf')).toBe('/home/user/my file.pdf');
     });
 
     it('resolves relative file URLs against base path and leaves absolute paths intact', () => {
-      const resolvedRelative = resolvePath('file://fixtures/report.txt');
-      expect(resolvedRelative).toBe(path.resolve(process.cwd(), 'fixtures/report.txt'));
-
-      const resolvedAbsolute = resolvePath('file:///tmp/report.txt');
-      expect(resolvedAbsolute).toBe('/tmp/report.txt');
+      expect(resolvePath('file://fixtures/report.txt')).toBe(
+        path.resolve(process.cwd(), 'fixtures/report.txt'),
+      );
+      // Left as-is on Windows too: win32 treats a leading "/" as absolute, so resolvePath
+      // returns it without prepending basePath or rewriting separators.
+      expect(resolvePath('file:///tmp/report.txt')).toBe('/tmp/report.txt');
     });
   });
 });
