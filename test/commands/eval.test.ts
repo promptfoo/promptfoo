@@ -557,7 +557,23 @@ describe('evalCommand', () => {
     // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
     const watchBase = path.dirname(defaultConfigPath);
 
+    // doEval() -> runEvaluation() calls loadDefaultConfig(), which probes the default
+    // config filenames through the same `maybeReadConfig` mock these tests assert on and
+    // memoizes the answer in a module-level cache. Whether that probe runs at all -- and
+    // whether it "finds" the mocked config and rewrites cmdObj.config with it -- then
+    // depends on which sibling test warmed the cache first. Pin it to "no default config
+    // found" so every test here drives the same path and only the watch-path recovery
+    // branch under test can reach `maybeReadConfig`.
+    let loadDefaultConfigSpy: ReturnType<typeof vi.spyOn>;
+
+    afterEach(() => {
+      loadDefaultConfigSpy.mockRestore();
+    });
+
     beforeEach(() => {
+      loadDefaultConfigSpy = vi
+        .spyOn(defaultConfigModule, 'loadDefaultConfig')
+        .mockResolvedValue({ defaultConfig: {}, defaultConfigPath: undefined });
       // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
       // restore only its default in `finally`, which leaves the queue intact if the
       // test bails early. A leftover "missing API keys" value fails the run before it
