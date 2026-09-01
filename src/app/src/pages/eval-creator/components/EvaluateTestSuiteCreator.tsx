@@ -16,6 +16,12 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import {
+  hasRestrictedProviderOverride,
+  type ProviderOptions,
+  reconcileProvidersWithCatalog,
+  type UnifiedConfig,
+} from '@promptfoo/types';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import deepEqual from 'fast-deep-equal';
 import { Check, Upload } from 'lucide-react';
@@ -29,7 +35,6 @@ import { StepSection } from './StepSection';
 import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 // Local view of the /api/providers response. Kept app-local deliberately:
 // importing @promptfoo/types/api/providers here is a restricted app ->
@@ -68,147 +73,6 @@ function extractVarsFromPrompts(prompts: string[]): string[] {
   });
 
   return Array.from(varsSet);
-}
-
-function hasDefaultTestProviderOverride(defaultTest: UnifiedConfig['defaultTest']): boolean {
-  if (typeof defaultTest === 'string') {
-    return defaultTest.length > 0;
-  }
-
-  return Boolean(defaultTest?.provider || hasProviderAffectingOptions(defaultTest?.options));
-}
-
-const SAFE_TEST_OPTION_KEYS = new Set([
-  'disableConversationVar',
-  'disableDefaultAsserts',
-  'disableVarExpansion',
-  'factuality',
-  'postprocess',
-  'prefix',
-  'repeat',
-  'rubricPrompt',
-  'runSerially',
-  'storeOutputAs',
-  'suffix',
-  'transform',
-  'transformVars',
-]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hasProviderAffectingOptions(options: unknown): boolean {
-  return isRecord(options) && Object.keys(options).some((key) => !SAFE_TEST_OPTION_KEYS.has(key));
-}
-
-function testCaseOverridesProvider(testCase: unknown): boolean {
-  return (
-    isRecord(testCase) &&
-    (Boolean(testCase.provider) ||
-      (Array.isArray(testCase.providers) && testCase.providers.length > 0) ||
-      hasProviderAffectingOptions(testCase.options))
-  );
-}
-
-function hasScenarioProviderOverride(scenarios: UnifiedConfig['scenarios']): boolean {
-  if (!scenarios) {
-    return false;
-  }
-  if (!Array.isArray(scenarios)) {
-    return true;
-  }
-  return scenarios.some(
-    (scenario) =>
-      !isRecord(scenario) ||
-      ['config', 'tests'].some((key) => {
-        const scenarioRecord = scenario as Record<string, unknown>;
-        if (!(key in scenarioRecord)) {
-          return false;
-        }
-        const tests = scenarioRecord[key];
-        return !Array.isArray(tests) || tests.some(testCaseOverridesProvider);
-      }),
-  );
-}
-
-function hasPromptProviderOverride(prompts: UnifiedConfig['prompts'] | undefined): boolean {
-  if (!prompts) {
-    return false;
-  }
-  if (!Array.isArray(prompts)) {
-    return true;
-  }
-  return prompts.some(
-    (prompt: unknown) =>
-      isRecord(prompt) &&
-      'config' in prompt &&
-      (!isRecord(prompt.config) || Object.keys(prompt.config).length > 0),
-  );
-}
-
-function collectCatalogEnvNames(value: unknown, names = new Set<string>()): Set<string> {
-  if (typeof value === 'string') {
-    const envPattern = /\benv(?:\.([A-Za-z_][\w]*)|\[['"]([^'"]+)['"]\])/g;
-    for (const match of value.matchAll(envPattern)) {
-      names.add(match[1] ?? match[2]);
-    }
-  } else if (Array.isArray(value)) {
-    value.forEach((item) => collectCatalogEnvNames(item, names));
-  } else if (isRecord(value)) {
-    Object.values(value).forEach((item) => collectCatalogEnvNames(item, names));
-  }
-  return names;
-}
-
-function hasCatalogEnvOverride(
-  env: UnifiedConfig['env'],
-  availableProviders: ProviderOptions[],
-): boolean {
-  if (!isRecord(env)) {
-    return Boolean(env);
-  }
-  const catalogEnvNames = collectCatalogEnvNames(availableProviders);
-  return Object.keys(env).some((name) => catalogEnvNames.has(name));
-}
-
-function hasRestrictedProviderOverride(
-  config: Partial<UnifiedConfig>,
-  availableProviders: ProviderOptions[],
-): boolean {
-  return (
-    hasDefaultTestProviderOverride(config.defaultTest) ||
-    hasScenarioProviderOverride(config.scenarios) ||
-    hasPromptProviderOverride(config.prompts) ||
-    hasCatalogEnvOverride(config.env, availableProviders)
-  );
-}
-
-function reconcileProvidersWithCatalog(
-  providers: ProviderOptions[],
-  availableProviders: ProviderOptions[],
-): { providers: ProviderOptions[]; isReconciled: boolean } {
-  const approvedProviders = providers.flatMap((provider) => {
-    const matchingProviders = availableProviders.filter(
-      (availableProvider) => availableProvider.id === provider.id,
-    );
-    if (matchingProviders.length === 0) {
-      return [];
-    }
-    return [
-      matchingProviders.find(
-        (availableProvider) =>
-          availableProvider === provider || deepEqual(availableProvider, provider),
-      ) ?? matchingProviders[0],
-    ];
-  });
-
-  return {
-    providers: approvedProviders,
-    isReconciled:
-      approvedProviders.length === providers.length &&
-      approvedProviders.every((provider, index) => provider === providers[index]),
-  };
 }
 
 function ErrorFallback({

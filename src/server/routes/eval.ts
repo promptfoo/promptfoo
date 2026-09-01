@@ -7,6 +7,17 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import {
+  type EvalTableDTO,
+  type EvaluateSummaryV2,
+  type EvaluateTable,
+  type EvaluateTestSuite,
+  type GradingResult,
+  type PromptMetrics,
+  type ResultsFile,
+  type Vars,
+  validateProviderCatalogConfig,
+} from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -23,21 +34,11 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
-
-import type {
-  EvalTableDTO,
-  EvaluateSummaryV2,
-  EvaluateTable,
-  EvaluateTestSuite,
-  GradingResult,
-  PromptMetrics,
-  ResultsFile,
-  Vars,
-} from '../../types/index';
 
 export const evalRouter = Router();
 
@@ -160,6 +161,20 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);
+      return;
+    }
+  }
+
+  if (hasCustomProviderConfig()) {
+    // The env schema intentionally strips unknown names, but catalog templates may use
+    // arbitrary env keys. Preserve the raw, schema-validated request's env for this
+    // security check so those overrides cannot disappear before enforcement.
+    const catalogValidation = validateProviderCatalogConfig(
+      { ...testSuite, env: (req.body as { env?: unknown }).env },
+      getAvailableProviders(),
+    );
+    if (!catalogValidation.success) {
+      res.status(400).json({ error: catalogValidation.error });
       return;
     }
   }

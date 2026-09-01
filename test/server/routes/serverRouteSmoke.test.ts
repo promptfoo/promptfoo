@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => ({
   },
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
-  getServerConfigPath: vi.fn(),
+  hasCustomProviderConfig: vi.fn(),
   getBlobByHash: vi.fn(),
   getBlobUrl: vi.fn(),
   getDb: vi.fn(),
@@ -229,7 +229,7 @@ vi.mock('../../../src/node/testProvider', () => ({
 
 vi.mock('../../../src/server/config/serverConfig', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
-  getServerConfigPath: mocks.getServerConfigPath,
+  hasCustomProviderConfig: mocks.hasCustomProviderConfig,
 }));
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
@@ -304,7 +304,7 @@ function setupDefaultMocks() {
   mocks.determineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' });
   mocks.evalModel.findById.mockResolvedValue(null);
   mocks.getAvailableProviders.mockReturnValue([]);
-  mocks.getServerConfigPath.mockReturnValue(null);
+  mocks.hasCustomProviderConfig.mockReturnValue(false);
   mocks.getEnvBool.mockReturnValue(false);
   mocks.getEnvFloat.mockReturnValue(undefined);
   mocks.getEnvInt.mockReturnValue(undefined);

@@ -15,6 +15,7 @@ interface ServerConfig {
 }
 
 let cachedConfig: ServerConfig | null = null;
+let cachedHasCustomProviderConfig: boolean | null = null;
 
 /**
  * Get the path to the UI providers config file
@@ -54,6 +55,7 @@ export function loadServerConfig(): ServerConfig {
   }
 
   const configPath = getServerConfigPath();
+  cachedHasCustomProviderConfig = configPath !== null;
 
   if (!configPath) {
     logger.debug('No server config file found, using defaults');
@@ -121,6 +123,16 @@ export function loadServerConfig(): ServerConfig {
     cachedConfig = {};
     return cachedConfig;
   }
+}
+
+/**
+ * Whether a custom provider configuration was present when the server config was loaded.
+ * This shares the server config cache lifetime so a removed or unmounted file cannot
+ * reopen unrestricted provider access until the process restarts.
+ */
+export function hasCustomProviderConfig(): boolean {
+  loadServerConfig();
+  return cachedHasCustomProviderConfig === true;
 }
 
 /**

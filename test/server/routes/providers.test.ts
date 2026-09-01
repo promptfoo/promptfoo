@@ -30,7 +30,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   getAvailableProviders,
-  getServerConfigPath,
+  hasCustomProviderConfig,
 } from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
@@ -39,7 +39,7 @@ const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
-const mockedGetServerConfigPath = vi.mocked(getServerConfigPath);
+const mockedHasCustomProviderConfig = vi.mocked(hasCustomProviderConfig);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
@@ -72,7 +72,7 @@ describe('Providers Routes', () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue(undefined);
-    mockedGetServerConfigPath.mockReturnValue(null);
+    mockedHasCustomProviderConfig.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -90,7 +90,7 @@ describe('Providers Routes', () => {
         },
       ];
       mockedGetAvailableProviders.mockReturnValue(customProviders);
-      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+      mockedHasCustomProviderConfig.mockReturnValue(true);
 
       const response = await api.get('/api/providers');
 
@@ -115,7 +115,7 @@ describe('Providers Routes', () => {
 
     it('keeps an existing custom catalog restricted when every provider is invalid', async () => {
       mockedGetAvailableProviders.mockReturnValue([]);
-      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+      mockedHasCustomProviderConfig.mockReturnValue(true);
 
       const response = await api.get('/api/providers');
 
@@ -159,7 +159,7 @@ describe('Providers Routes', () => {
       ];
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
-      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+      mockedHasCustomProviderConfig.mockReturnValue(true);
 
       const response = await api.get('/api/providers/config-status');
 
@@ -172,7 +172,7 @@ describe('Providers Routes', () => {
 
     it('reports an existing custom catalog even when no configured providers are valid', async () => {
       mockedGetAvailableProviders.mockReturnValue([]);
-      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+      mockedHasCustomProviderConfig.mockReturnValue(true);
 
       const response = await api.get('/api/providers/config-status');
 

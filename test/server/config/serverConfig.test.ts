@@ -72,4 +72,43 @@ describe('getAvailableProviders', () => {
 
     expect(providers).toEqual([{ id: 'openai:chat:gpt-5.6' }]);
   });
+
+  it('keeps a loaded custom catalog restricted after its file is removed', async () => {
+    const fs = await import('fs');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('providers:\n  - echo');
+    const serverConfig = await import('../../../src/server/config/serverConfig');
+
+    expect(serverConfig.getAvailableProviders()).toEqual([{ id: 'echo' }]);
+    expect(serverConfig.hasCustomProviderConfig()).toBe(true);
+
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    expect(serverConfig.hasCustomProviderConfig()).toBe(true);
+    expect(serverConfig.getAvailableProviders()).toEqual([{ id: 'echo' }]);
+  });
+
+  it('keeps unrestricted startup state cached when a file appears later', async () => {
+    const fs = await import('fs');
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const serverConfig = await import('../../../src/server/config/serverConfig');
+
+    expect(serverConfig.hasCustomProviderConfig()).toBe(false);
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('providers:\n  - echo');
+
+    expect(serverConfig.hasCustomProviderConfig()).toBe(false);
+    expect(serverConfig.getAvailableProviders()).toEqual([]);
+  });
+
+  it('keeps an invalid custom catalog restricted', async () => {
+    const fs = await import('fs');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('providers: [');
+    const serverConfig = await import('../../../src/server/config/serverConfig');
+
+    expect(serverConfig.getAvailableProviders()).toEqual([]);
+    expect(serverConfig.hasCustomProviderConfig()).toBe(true);
+  });
 });

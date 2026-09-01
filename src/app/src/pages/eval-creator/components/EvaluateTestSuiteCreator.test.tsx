@@ -975,6 +975,92 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it.each([
+    [
+      'test assertion provider',
+      { tests: [{ assert: [{ type: 'llm-rubric', provider: 'openai:unapproved' }] }] },
+    ],
+    [
+      'defaultTest assertion provider',
+      { defaultTest: { assert: [{ type: 'llm-rubric', provider: 'openai:unapproved' }] } },
+    ],
+    [
+      'scenario nested assert-set provider',
+      {
+        scenarios: [
+          {
+            tests: [
+              {
+                assert: [
+                  {
+                    type: 'assert-set',
+                    assert: [
+                      {
+                        type: 'assert-set',
+                        assert: [{ type: 'llm-rubric', provider: 'openai:unapproved' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  ])('keeps Run disabled for %s with a custom catalog', async (_, override) => {
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [approvedProvider],
+      prompts: ['Prompt'],
+      tests: [{ vars: { topic: 'test' } }],
+      ...override,
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+    await userEvent.click(screen.getAllByRole('button', { name: /Run Options:/ })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(
+        'data-provider-catalog-ready',
+        'false',
+      );
+    });
+  });
+
+  it('allows assertions without providers with a custom catalog', async () => {
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [approvedProvider],
+      prompts: ['Prompt'],
+      tests: [{ assert: [{ type: 'contains', value: 'expected' }] }],
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+    await userEvent.click(screen.getAllByRole('button', { name: /Run Options:/ })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(
+        'data-provider-catalog-ready',
+        'true',
+      );
+    });
+  });
+
+  it.each([
     ['only a safe config list', { config: [{ options: { repeat: 2 } }] }, true],
     ['only a safe tests list', { tests: [{ options: { prefix: 'prefix' } }] }, true],
     ['an external scenario reference', 'file://scenarios.yaml', false],
@@ -1133,7 +1219,12 @@ describe('EvaluateTestSuiteCreator', () => {
     useStore.getState().updateConfig({
       providers: ['openai:gpt-4'],
       prompts: [{ raw: 'Prompt', label: 'Prompt', config: { temperature: 1 } }],
-      tests: [{ vars: { topic: 'test' } }],
+      tests: [
+        {
+          vars: { topic: 'test' },
+          assert: [{ type: 'llm-rubric', provider: 'openai:grader' }],
+        },
+      ],
       scenarios: [
         {
           config: [{ provider: 'openai:gpt-4o-mini' }],

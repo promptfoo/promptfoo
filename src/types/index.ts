@@ -71,6 +71,7 @@ export interface ProviderCallQueueRef {
 export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
+export * from './providerCatalogEnforcement';
 export * from './providers';
 export * from './shared';
 export * from './tracing';

@@ -13,7 +13,7 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders, getServerConfigPath } from '../config/serverConfig';
+import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -29,7 +29,7 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
     res.json(
       ProviderSchemas.Catalog.Response.parse({
         success: true,
-        data: { providers, hasCustomConfig: getServerConfigPath() !== null },
+        data: { providers, hasCustomConfig: hasCustomProviderConfig() },
       }),
     );
   } catch (error) {
@@ -52,7 +52,7 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
 providersRouter.get('/config-status', (_req: Request, res: Response): void => {
   try {
     getAvailableProviders();
-    const hasCustomConfig = getServerConfigPath() !== null;
+    const hasCustomConfig = hasCustomProviderConfig();
 
     res.json(
       ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),
