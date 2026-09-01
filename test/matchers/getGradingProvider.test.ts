@@ -398,4 +398,73 @@ describe('getGradingProvider', () => {
       expect(result).toBe(explicitProvider);
     });
   });
+
+  describe('generator-slot grading warn (#10581)', () => {
+    it('warns once when the grader falls back to defaultTest.provider', async () => {
+      vi.resetModules();
+      const { getGradingProvider: freshGetGradingProvider } = await import(
+        '../../src/matchers/providers'
+      );
+      const { default: freshLogger } = await import('../../src/logger');
+      const provider = createMockProvider({ id: 'openai:chat:gpt-4' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:chat:gpt-4',
+        },
+      };
+      vi.mocked(loadApiProvider).mockResolvedValue(provider);
+      const warnSpy = vi.spyOn(freshLogger, 'warn').mockImplementation(() => freshLogger);
+
+      await freshGetGradingProvider('text', undefined, null);
+      await freshGetGradingProvider('text', undefined, null);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain('openai:chat:gpt-4');
+    });
+
+    it('stays silent when grading comes from defaultTest.options.provider', async () => {
+      vi.resetModules();
+      const { getGradingProvider: freshGetGradingProvider } = await import(
+        '../../src/matchers/providers'
+      );
+      const { default: freshLogger } = await import('../../src/logger');
+      const provider = createMockProvider({ id: 'openai:chat:gpt-4o' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: 'openai:chat:gpt-4o',
+          },
+        },
+      };
+      vi.mocked(loadApiProvider).mockResolvedValue(provider);
+      const warnSpy = vi.spyOn(freshLogger, 'warn').mockImplementation(() => freshLogger);
+
+      await freshGetGradingProvider('text', undefined, null);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('stays silent with an explicit assertion provider', async () => {
+      vi.resetModules();
+      const { getGradingProvider: freshGetGradingProvider } = await import(
+        '../../src/matchers/providers'
+      );
+      const { default: freshLogger } = await import('../../src/logger');
+      const provider = createMockProvider({ id: 'openai:chat:gpt-4o-mini' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:chat:gpt-4',
+        },
+      };
+      vi.mocked(loadApiProvider).mockResolvedValue(provider);
+      const warnSpy = vi.spyOn(freshLogger, 'warn').mockImplementation(() => freshLogger);
+
+      await freshGetGradingProvider('text', 'openai:chat:gpt-4o-mini', null);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+  });
 });
