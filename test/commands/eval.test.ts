@@ -657,6 +657,7 @@ describe('evalCommand', () => {
       // vm.runInContext() for CommonJS and is not cached. Reading it again here to
       // recover the raw `tests` value would execute the user's config a second time,
       // so executable formats are skipped.
+      defaultConfigModule.clearConfigCache();
       const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
@@ -671,10 +672,11 @@ describe('evalCommand', () => {
       await doEval(
         { watch: true, write: false, config: ['promptfooconfig.js'] },
         config,
-        defaultConfigPath,
+        undefined,
         {},
       );
 
+      expect(chokidarMocks.watch).toHaveBeenCalledOnce();
       expect(maybeReadConfig).not.toHaveBeenCalled();
     });
 
