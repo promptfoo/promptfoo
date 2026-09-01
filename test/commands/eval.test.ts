@@ -558,11 +558,16 @@ describe('evalCommand', () => {
     const watchBase = path.dirname(defaultConfigPath);
 
     beforeEach(() => {
+      defaultConfigModule.clearConfigCache();
       // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
       // restore only its default in `finally`, which leaves the queue intact if the
       // test bails early. A leftover "missing API keys" value fails the run before it
       // reaches the watcher, which file order hides and CI's shuffled order does not.
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    afterEach(() => {
+      defaultConfigModule.clearConfigCache();
     });
 
     async function watchedPathsFor(
@@ -657,7 +662,6 @@ describe('evalCommand', () => {
       // vm.runInContext() for CommonJS and is not cached. Reading it again here to
       // recover the raw `tests` value would execute the user's config a second time,
       // so executable formats are skipped.
-      defaultConfigModule.clearConfigCache();
       const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
@@ -723,14 +727,15 @@ describe('evalCommand', () => {
         testSuite: { prompts: [], providers: [] } as TestSuite,
         basePath: watchBase,
       });
+      vi.mocked(globSync).mockImplementation((pattern) => [String(pattern)]);
       vi.mocked(evaluate).mockImplementationOnce(
         async (_testSuite, evalRecord) => evalRecord as Eval,
       );
 
       await doEval(
-        { watch: true, write: false, tests: 'file://cli-cases.csv' },
+        { watch: true, write: false, config: [defaultConfigPath], tests: 'file://cli-cases.csv' },
         config,
-        defaultConfigPath,
+        undefined,
         {},
       );
 
@@ -765,9 +770,9 @@ describe('evalCommand', () => {
       );
 
       await doEval(
-        { watch: true, write: false, vars: 'cli-cases.csv' },
+        { watch: true, write: false, config: [defaultConfigPath], vars: 'cli-cases.csv' },
         config,
-        defaultConfigPath,
+        undefined,
         {},
       );
 
