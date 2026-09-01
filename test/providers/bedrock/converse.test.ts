@@ -1988,6 +1988,37 @@ Third line`;
       )?.[0] as { inferenceConfig?: Record<string, unknown> };
       expect(call?.inferenceConfig?.temperature).toBe(0);
     });
+
+    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
+      const provider = new AwsBedrockConverseProvider(
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        {
+          config: {
+            region: 'us-east-1',
+            max_tokens: 10000,
+            temperature: 0.5,
+            topP: 0.9,
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        },
+      );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+          additionalModelRequestFields: {
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        }),
+      );
+    });
   });
 
   describe('performance and service tier configuration', () => {
@@ -2057,6 +2088,32 @@ Third line`;
         expect.objectContaining({
           guardrailConfig: {
             guardrailIdentifier: 'my-guardrail',
+            guardrailVersion: '2',
+          },
+        }),
+      );
+    });
+
+    it('should coerce numeric YAML guardrail identifiers and versions to strings', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          guardrailIdentifier: 12345 as unknown as string,
+          guardrailVersion: 2 as unknown as string,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailConfig: {
+            guardrailIdentifier: '12345',
             guardrailVersion: '2',
           },
         }),

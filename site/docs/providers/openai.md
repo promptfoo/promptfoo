@@ -37,6 +37,7 @@ The OpenAI provider supports the following model formats:
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
 - `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.5`
+- `openai:codex-security` - runs Codex Security scans and finding validation, with optional inline model selection
 - `openai:codex-app-server` / `openai:codex-desktop` - runs the experimental Codex app-server protocol for rich-client event, approval, sandbox, skill, plugin, and thread lifecycle evals
 
 The `openai:<endpoint>:<model name>` construction is useful for newly released or custom models.
@@ -569,12 +570,12 @@ the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selectio
 | Model           | Tier                    | Input      | Cached input | Output      |
 | --------------- | ----------------------- | ---------- | ------------ | ----------- |
 | `gpt-5.6-sol`   | Flagship                | $5.00 / 1M | $0.50 / 1M   | $30.00 / 1M |
-| `gpt-5.6-terra` | Balanced                | $2.50 / 1M | $0.25 / 1M   | $15.00 / 1M |
-| `gpt-5.6-luna`  | Fast and cost-efficient | $1.00 / 1M | $0.10 / 1M   | $6.00 / 1M  |
+| `gpt-5.6-terra` | Balanced                | $2.00 / 1M | $0.20 / 1M   | $12.00 / 1M |
+| `gpt-5.6-luna`  | Fast and cost-efficient | $0.20 / 1M | $0.02 / 1M   | $1.20 / 1M  |
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, the estimate includes the available token counts only. Requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request. Fast mode also accepts the previous `priority` service-tier name. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1700,6 +1701,20 @@ the output of a function tool call.
 
 This requires defining your config in a JavaScript file instead of YAML.
 
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal
+guard: the resolved path must stay inside the config's `basePath` (typically
+the directory containing your config). Paths that escape the base directory
+(e.g. `file:///etc/cb.js` when `basePath` is `~/projects/myeval`) are
+rejected with `Path traversal rejected: ...`.
+
+Move callback files into your project, or set
+`PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to opt out (not recommended —
+the guard mitigates malicious callback paths supplied via shared configs).
+
+:::
+
 ```js
 module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   prompts: 'Please add the following numbers together: {{a}} and {{b}}',
@@ -2190,8 +2205,8 @@ The Responses API supports a wide range of models, including:
 
 - `gpt-5.6` - Alias for GPT-5.6 Sol ($5/$30 per 1M tokens)
 - `gpt-5.6-sol` - GPT-5.6 flagship model ($5/$30 per 1M tokens)
-- `gpt-5.6-terra` - GPT-5.6 balanced model ($2.50/$15 per 1M tokens)
-- `gpt-5.6-luna` - GPT-5.6 efficient model ($1/$6 per 1M tokens)
+- `gpt-5.6-terra` - GPT-5.6 balanced model ($2/$12 per 1M tokens)
+- `gpt-5.6-luna` - GPT-5.6 efficient model ($0.20/$1.20 per 1M tokens)
 - `gpt-5.5` - GPT-5.5 model ($5/$30 per 1M tokens)
 - `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
 - `gpt-5.5-pro` - Premium GPT-5.5 model ($30/$180 per 1M tokens)
@@ -2807,6 +2822,20 @@ providers:
 ```
 
 See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.
+
+### Codex Security SDK
+
+Use the [OpenAI Codex Security SDK provider](/docs/providers/openai-codex-security) to compare standard, deep, and diff scans; validate findings; and track model reasoning, repository coverage, SDK-reported token usage, and estimated scan cost.
+
+```yaml
+providers:
+  - id: openai:codex-security:gpt-5.6-sol
+    config:
+      operation: deep-security-scan
+      repository: ./service
+      model_reasoning_effort: high
+      max_cost_usd: 2
+```
 
 ### Codex App Server
 

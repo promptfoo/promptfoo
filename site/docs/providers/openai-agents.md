@@ -175,7 +175,7 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
@@ -186,7 +186,9 @@ providers:
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 
@@ -409,6 +411,11 @@ providers:
           tracking: ABC123
 ```
 
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for side-effect-free mock handoffs.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:
@@ -439,9 +446,9 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo records the overall run as `invoke_agent` and normalizes Responses API model calls into `chat` spans with their model, token usage, and `openai.api.type: responses`. SDK tool spans become `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans become command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. The exporter follows the evaluation's configured HTTP receiver, including IPv6 hosts and JSON- or protobuf-only receivers. Passing a trace context by itself does not enable export unless a receiver or explicit `otlpEndpoint` is available. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
@@ -551,6 +558,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [Codex Security SDK](/docs/providers/openai-codex-security) - Repository scans, finding validation, coverage, and scan cost evals
 - [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
 - [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety

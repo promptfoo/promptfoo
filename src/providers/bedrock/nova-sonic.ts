@@ -505,7 +505,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
         // TODO: Add proper token usage tracking
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
         cached: false,
         metadata: {
           ...audioOutput,
