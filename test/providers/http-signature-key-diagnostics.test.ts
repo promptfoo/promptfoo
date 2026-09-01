@@ -154,12 +154,16 @@ describe('generateSignature key diagnostics', () => {
   });
 
   it('does not double-prefix the wrapped message, and keeps the original as cause', async () => {
-    const error = await generateSignature({ ...baseAuth, privateKey: 'not a key' }, 1).catch(
-      (e) => e as Error,
+    // `.catch(e => e)` widens to `string | Error` (the resolved type leaks in), so narrow
+    // on the rejection handler instead.
+    const error = await generateSignature({ ...baseAuth, privateKey: 'not a key' }, 1).then(
+      () => undefined,
+      (e: unknown) => (e instanceof Error ? e : new Error(String(e))),
     );
+    expect(error).toBeInstanceOf(Error);
     // Reads "Failed to generate signature: <reason>", not "...: Error: <reason>".
-    expect(error.message).not.toContain('Error: Error:');
-    expect(error.message).toBe(
+    expect(error?.message).not.toContain('Error: Error:');
+    expect(error?.message).toBe(
       'Failed to generate signature: Private key from the configured privateKey cannot be used: it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)',
     );
     expect((error as Error & { cause?: unknown }).cause).toBeInstanceOf(Error);
