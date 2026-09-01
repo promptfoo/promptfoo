@@ -622,8 +622,14 @@ export async function generateSignature(
       return signature.toString('base64');
     } catch (e) {
       logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
+        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length ?? 0}, algorithm=${signatureAuth.signatureAlgorithm}, keyProvided=${Boolean(privateKey)}`,
       );
+      // Provide clear context when the error is due to missing/private key
+      if (!privateKey) {
+        throw new Error(
+          'Private key not provided for signature generation. Ensure one of privateKey, privateKeyPath, keystoreContent, pfxContent, certContent, or keyContent is set.',
+        );
+      }
       throw e;
     }
   } catch (err) {
