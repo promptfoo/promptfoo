@@ -156,7 +156,7 @@ export class ReplicateProvider implements ApiProvider {
       temperature: this.config.temperature,
       topP: this.config.top_p,
       maxTokens: this.config.max_tokens ?? this.config.max_length ?? this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -234,12 +234,22 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug('Returning cached Replicate response', { modelName: this.modelName });
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedResponse = JSON.parse(cachedResponse as string);
+        return {
+          ...parsedResponse,
+          tokenUsage: {
+            ...parsedResponse.tokenUsage,
+            cached: parsedResponse.tokenUsage?.total ?? 0,
+            numRequests: 0,
+          },
+          cached: true,
+        };
       }
     }
 
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
+    let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
@@ -259,10 +269,12 @@ export class ReplicateProvider implements ApiProvider {
         'json',
       );
 
+      cached = createResponse.cached;
       response = createResponse.data as ReplicatePrediction;
 
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
+        cached = false;
         response = await this.pollForCompletion(response.id);
       }
 
@@ -274,6 +286,7 @@ export class ReplicateProvider implements ApiProvider {
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+        ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
     logger.debug('Replicate API response received', {
@@ -281,11 +294,16 @@ export class ReplicateProvider implements ApiProvider {
       ...getReplicateValueSummary('response', response),
     });
 
+    const responseMetadata = {
+      ...(cached && { cached: true }),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
+    };
+
     if (typeof response === 'string') {
       // It's text
       const ret = {
         output: response,
-        tokenUsage: createEmptyTokenUsage(),
+        ...responseMetadata,
       };
       if (cache && cacheKey) {
         try {
@@ -301,7 +319,7 @@ export class ReplicateProvider implements ApiProvider {
         const output = response.join('');
         const ret = {
           output,
-          tokenUsage: createEmptyTokenUsage(),
+          ...responseMetadata,
         };
         if (cache && cacheKey) {
           try {
@@ -317,6 +335,7 @@ export class ReplicateProvider implements ApiProvider {
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
     return {
       error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
+      ...responseMetadata,
     };
   }
 
@@ -335,7 +354,7 @@ export class ReplicateProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        false, // Don't cache polling requests
+        true, // Don't cache polling requests
       );
 
       const prediction = pollResponse.data as ReplicatePrediction;
@@ -381,13 +400,19 @@ export class ReplicateModerationProvider
   async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
     try {
       const response = await this.callApi(`Human: ${prompt}\n\nAssistant: ${assistant}`);
+      // LlamaGuard moderation runs as a chat completion. Preserve any token usage
+      // reported by that provider response for downstream assertion metrics.
+      const tokenUsageResult = response.tokenUsage ? { tokenUsage: response.tokenUsage } : {};
       if (response.error) {
-        return { error: response.error };
+        return { error: response.error, ...tokenUsageResult };
       }
 
       const { output } = response;
       if (!output || typeof output !== 'string') {
-        return { error: `Invalid moderation response: ${JSON.stringify(output)}` };
+        return {
+          error: `Invalid moderation response: ${JSON.stringify(output)}`,
+          ...tokenUsageResult,
+        };
       }
 
       // Parse the LlamaGuard output format
@@ -395,7 +420,7 @@ export class ReplicateModerationProvider
       const verdict = lines[0];
 
       if (verdict === 'safe') {
-        return { flags: [] };
+        return { flags: [], ...tokenUsageResult };
       }
 
       // Parse unsafe categories
@@ -415,7 +440,7 @@ export class ReplicateModerationProvider
         }
       }
 
-      return { flags };
+      return { flags, ...tokenUsageResult };
     } catch (err) {
       return { error: `Invalid moderation response: ${String(err)}` };
     }
@@ -425,8 +450,6 @@ export class ReplicateModerationProvider
 // LlamaGuard 4 is the preferred default on Replicate
 // LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
 export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
-export const LLAMAGUARD_3_MODEL_ID =
-  'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
   LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default

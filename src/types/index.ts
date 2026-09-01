@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema } from '../contracts/shared';
+import {
+  BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
+  type NunjucksFilterMap,
+  type TokenUsage,
+  type VarValue,
+} from '../contracts/shared';
+import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -21,7 +28,6 @@ export {
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -128,6 +134,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
   tags: z.record(z.string(), z.string()).optional(),
@@ -308,6 +315,12 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
 
+/** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Normalized value of --filter-providers or --filter-targets. */
+  providerFilter?: string;
+};
+
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
@@ -329,6 +342,7 @@ const PromptMetricsSchema = z.object({
     })
     .optional(),
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -394,8 +408,17 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -463,7 +486,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
@@ -548,6 +571,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // True when the complete grading response was reused without running a new task.
+    cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -578,6 +603,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -707,7 +733,7 @@ export const AssertionSchema = z.object({
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
@@ -834,6 +860,9 @@ export type ScoringFunction = (
       total: number;
       prompt: number;
       completion: number;
+      cached?: number;
+      numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;
@@ -891,6 +920,9 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+
+      // Number of times to repeat this specific test case.
+      repeat: z.number().int().positive().safe().optional(),
     })
     .catchall(z.any())
     .optional(),
@@ -1012,6 +1044,70 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
+  const url = new URL(endpoint);
+  const hasCredentialPath = url.pathname.split('/').some((segment) => {
+    try {
+      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+    } catch {
+      return true;
+    }
+  });
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    !hasCredentialPath
+  );
+}, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments');
+
+const TraceProviderAuthSchema = z
+  .object({
+    token: z.string().min(1).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+  })
+  .refine(
+    ({ token, username, password }) =>
+      !(token && (username || password)) && Boolean(username) === Boolean(password),
+    'Configure either a bearer token or both basic-auth credentials',
+  );
+
+const TraceProviderConfigSchema = z.discriminatedUnion('id', [
+  z.object({
+    id: z.literal('tempo'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: TraceProviderAuthSchema.optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('braintrust'),
+    endpoint: TraceProviderEndpointSchema,
+    projectId: z.uuid(),
+    auth: z.object({ token: z.string().min(1) }),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('langfuse'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: z
+      .object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+        token: z.never().optional(),
+      })
+      .strict(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+]);
+
+const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1095,6 +1191,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1103,6 +1201,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1115,7 +1214,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1126,6 +1229,8 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1234,6 +1339,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1241,8 +1356,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1270,6 +1388,9 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1404,7 +1525,7 @@ export interface OutputFile {
   shareableUrl: string | null;
   metadata?: OutputMetadata;
   vars?: string[];
-  runtimeOptions?: Partial<EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   traces?: TraceData[];
   blobAssets?: ExportedBlobAsset[];
 }

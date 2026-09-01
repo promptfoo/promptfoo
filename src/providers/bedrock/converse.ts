@@ -11,12 +11,8 @@
  * - Cache token tracking
  */
 
-import path from 'path';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import {
@@ -24,9 +20,16 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import {
+  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
+} from '../anthropic/util';
+import {
+  executeProviderFunctionCallback,
+  loadProviderCallbackFromFileUrl,
+} from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -38,6 +41,8 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { calculateBedrockCost } from './pricing';
+import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -59,6 +64,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
@@ -75,14 +81,9 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stopSequences?: string[];
   stop?: string[]; // Alias for compatibility
 
-  // Extended thinking (Claude models)
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-      }
-    | { type: 'adaptive' }
-    | { type: 'disabled' };
+  // Extended thinking (Claude models) — the SDK's own union, shared with the Anthropic
+  // and Bedrock InvokeModel providers so a new thinking mode lands in one place.
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -140,108 +141,6 @@ export interface BedrockConverseToolConfig {
   name?: string;
   description?: string;
   input_schema?: Record<string, unknown>;
-}
-
-/**
- * Bedrock model pricing per 1M tokens
- * Prices as of 2025 - may need updates
- */
-const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
-  // Claude Opus 4.8
-  'anthropic.claude-opus-4-8': { input: 5, output: 25 },
-  // Claude Opus 4.7
-  'anthropic.claude-opus-4-7': { input: 5, output: 25 },
-  // Claude Opus 4.6
-  'anthropic.claude-opus-4-6': { input: 5, output: 25 },
-  // Claude Opus 4.5
-  'anthropic.claude-opus-4-5': { input: 5, output: 25 },
-  // Claude Opus 4/4.1
-  'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 4/4.5
-  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
-  // Claude Haiku 4.5
-  'anthropic.claude-haiku-4': { input: 1, output: 5 },
-  // Claude 3.x
-  'anthropic.claude-3-opus': { input: 15, output: 75 },
-  'anthropic.claude-3-5-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-7-sonnet': { input: 3, output: 15 },
-  'anthropic.claude-3-5-haiku': { input: 0.8, output: 4 },
-  'anthropic.claude-3-haiku': { input: 0.25, output: 1.25 },
-  // Amazon Nova
-  'amazon.nova-micro': { input: 0.035, output: 0.14 },
-  'amazon.nova-lite': { input: 0.06, output: 0.24 },
-  'amazon.nova-pro': { input: 0.8, output: 3.2 },
-  'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
-  // Amazon Titan Text
-  'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
-  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
-  'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
-  // Meta Llama
-  'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
-  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
-  'meta.llama3-1-405b': { input: 5.32, output: 16 },
-  'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
-  'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
-  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
-  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
-  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
-  'meta.llama4-scout': { input: 0.17, output: 0.68 },
-  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
-  'meta.llama4': { input: 1.0, output: 3.0 },
-  // Mistral
-  'mistral.mistral-7b': { input: 0.15, output: 0.2 },
-  'mistral.mixtral-8x7b': { input: 0.45, output: 0.7 },
-  'mistral.mistral-large': { input: 4, output: 12 },
-  'mistral.mistral-small': { input: 1, output: 3 },
-  'mistral.pixtral-large': { input: 2, output: 6 },
-  // AI21 Jamba
-  'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
-  'ai21.jamba-1-5-large': { input: 2, output: 8 },
-  // Cohere
-  'cohere.command-r': { input: 0.5, output: 1.5 },
-  'cohere.command-r-plus': { input: 3, output: 15 },
-  // DeepSeek
-  'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
-  'deepseek.r1': { input: 1.35, output: 5.4 },
-  // Qwen
-  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
-  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
-  'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
-  'qwen.qwen3': { input: 0.5, output: 1.5 },
-  // Writer Palmyra
-  'writer.palmyra-x5': { input: 0.6, output: 6 },
-  'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // OpenAI GPT-OSS
-  'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
-  'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
-};
-
-/**
- * Calculate cost based on model and token usage
- */
-function calculateBedrockConverseCost(
-  modelId: string,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (promptTokens === undefined || completionTokens === undefined) {
-    return undefined;
-  }
-
-  // Find matching pricing
-  const normalizedModelId = modelId.toLowerCase();
-  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
-    if (normalizedModelId.includes(modelPrefix)) {
-      const inputCost = (promptTokens / 1_000_000) * pricing.input;
-      const outputCost = (completionTokens / 1_000_000) * pricing.output;
-      return inputCost + outputCost;
-    }
-  }
-
-  return undefined;
 }
 
 /**
@@ -774,9 +673,14 @@ function extractTextFromContentBlocks(
         if ('reasoningText' in reasoning && reasoning.reasoningText) {
           const thinkingText = reasoning.reasoningText.text || '';
           const signature = reasoning.reasoningText.signature || '';
-          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
-          if (signature) {
-            parts.push(`Signature: ${signature}`);
+          // Adaptive thinking with the default display "omitted" (Claude 5)
+          // returns an empty thinking block carrying only a signature —
+          // exclude it, matching outputFromMessage on the Anthropic paths.
+          if (thinkingText.trim() !== '') {
+            parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
+            if (signature) {
+              parts.push(`Signature: ${signature}`);
+            }
           }
         } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
           parts.push('<thinking>[Redacted]</thinking>');
@@ -808,6 +712,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private mcpInitError: Error | null = null;
   private registeredForShutdown = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
+  private forcedToolChoiceRemovalWarned = false;
 
   constructor(
     modelName: string,
@@ -919,97 +824,25 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `[Bedrock Converse] Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
+    return loadProviderCallbackFromFileUrl(fileRef, '[Bedrock Converse]');
   }
 
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      // Format the result
-      if (result === undefined || result === null) {
-        return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
-      }
-    } catch (error: any) {
-      logger.error(
-        `[Bedrock Converse] Error executing function '${functionName}': ${error.message || String(error)}`,
-      );
-      throw error;
-    }
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
+    return executeProviderFunctionCallback({
+      functionName,
+      args,
+      callId,
+      callbacks: this.config.functionToolCallbacks,
+      cache: this.loadedFunctionCallbacks,
+      logPrefix: '[Bedrock Converse]',
+    });
   }
 
   /**
@@ -1052,7 +885,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+    // Newer Claude models deprecate manual sampling controls at the model
     // level — a request that pins `temperature` or `topP` on Bedrock returns
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
@@ -1127,9 +960,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     });
 
     const converseTools = convertToolsToConverseFormat([...mcpTools, ...dedupedConfigTools]);
-    const toolChoice = configToolChoice
+    const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
+    const dropForcedToolChoice =
+      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      requestedToolChoice !== undefined &&
+      ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
+    if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      logger.warn(
+        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+      );
+      this.forcedToolChoiceRemovalWarned = true;
+    }
+    const toolChoice = dropForcedToolChoice ? undefined : requestedToolChoice;
 
     return {
       tools: converseTools,
@@ -1155,8 +999,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      // YAML can deserialize unquoted guardrail values as numbers despite their TypeScript types.
+      guardrailIdentifier: String(this.config.guardrailIdentifier as unknown),
+      guardrailVersion: String((this.config.guardrailVersion || 'DRAFT') as unknown),
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
@@ -1168,14 +1013,46 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
+    // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
+    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
+    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
+    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
+      delete fields.temperature;
+      delete fields.top_p;
+      delete fields.top_k;
+      const additionalThinking = fields.thinking as
+        | { type: string; display?: 'summarized' | 'omitted' }
+        | undefined;
+      // Converse has no typed effort option, but `output_config.effort` is a supported
+      // escape hatch through these raw fields — so read it back out and feed it to the
+      // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
+      // cannot fire on this path.
+      const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        additionalThinking,
+        effort,
+      );
+      if (normalizedThinking === undefined) {
+        delete fields.thinking;
+      } else {
+        fields.thinking = normalizedThinking;
+      }
+    }
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      fields.thinking =
-        isSamplingParamsDeprecatedClaudeModel(this.modelName) &&
-        this.config.thinking.type === 'enabled'
-          ? { type: 'adaptive' }
-          : this.config.thinking;
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        this.config.thinking,
+        // Converse takes effort only via additionalModelRequestFields, which this path
+        // does not inspect, so the effort-capped rules cannot be evaluated here.
+        undefined,
+      );
+      if (normalizedThinking !== undefined) {
+        fields.thinking = normalizedThinking;
+      }
     }
 
     // Add reasoning configuration for Amazon Nova 2 models
@@ -1237,7 +1114,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       topP: inferenceConfig?.topP,
       stopSequences: inferenceConfig?.stopSequences,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -1284,11 +1161,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1387,7 +1260,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Resolves the effective tool choice for a request without touching the MCP
    * client. Used by `callApi`/`callApiStreaming` to short-circuit MCP init for
-   * tool-disabled requests so a hung MCP transport never stalls them.
+   * tool-disabled requests so a hung MCP transport never stalls them, and to supply
+   * the `toolsDisabled` flag those methods pass on to `parseResponse`.
    */
   private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
     return isDisabledToolChoice(
@@ -1553,7 +1427,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Calculate cost
-    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+    const cost = calculateBedrockCost(
+      this.modelName,
+      promptTokens,
+      completionTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      this.getRegion(),
+      this.config.serviceTier,
+    );
 
     // Build metadata
     const metadata: Record<string, unknown> = {};
@@ -1665,7 +1547,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {
@@ -1761,11 +1647,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1798,7 +1680,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
-      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+      let usage: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        cacheReadInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      } = {};
 
       // Track tool use blocks being streamed
       const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
@@ -1857,9 +1745,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         toolsDisabled,
       );
 
-      // Combine reasoning, output, and tool use
+      // Combine reasoning, output, and tool use. Skip whitespace-only
+      // reasoning — omitted-display adaptive thinking streams empty deltas.
       const parts: string[] = [];
-      if (reasoning) {
+      if (reasoning.trim()) {
         parts.push(`<thinking>\n${reasoning}\n</thinking>`);
       }
       if (output) {
@@ -1893,10 +1782,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         numRequests: 1,
       };
 
-      const cost = calculateBedrockConverseCost(
+      const cost = calculateBedrockCost(
         this.modelName,
         usage.inputTokens,
         usage.outputTokens,
+        usage.cacheReadInputTokens,
+        usage.cacheWriteInputTokens,
+        this.getRegion(),
+        this.config.serviceTier,
       );
 
       // Surface MCP failures via the response `error` field. If the model also

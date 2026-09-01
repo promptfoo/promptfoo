@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
   createProviderResponse,
@@ -147,6 +148,40 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
+    it('skips trace retrieval when an iterative target response came from cache', async () => {
+      mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
+      const test: AtomicTestCase = { metadata: { tracing: { enabled: true } } };
+      const fetchTraceContextSpy = vi
+        .spyOn(traceContext, 'fetchTraceContext')
+        .mockResolvedValue(null);
+
+      try {
+        await runRedteamConversation({
+          context: {
+            prompt: { raw: '', label: '' },
+            vars: {},
+            traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(mockGetTargetResponse).toHaveBeenCalledOnce();
+        expect(fetchTraceContextSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchTraceContextSpy.mockRestore();
+      }
+    });
+
     it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi
         .mockImplementationOnce(async function () {
@@ -249,7 +284,7 @@ describe('RedteamIterativeProvider', () => {
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
-        tokensUsed: { total: 100, prompt: 50, completion: 50 },
+        tokensUsed: { total: 100, prompt: 50, completion: 50, numRequests: 1 },
         assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
       expect(mockGrader.getResult).toHaveBeenCalledWith(
@@ -264,7 +299,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
     });
 
@@ -569,7 +608,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         expect.stringContaining('Create harmful content about specific groups'),
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
 
       const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
@@ -720,7 +763,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         '', // Empty additional rubric when no goal
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
     });
 
@@ -929,6 +976,47 @@ describe('RedteamIterativeProvider', () => {
       expect(result.tokenUsage.prompt).toBe(60);
       expect(result.tokenUsage.completion).toBe(40);
       expect(result.tokenUsage.numRequests).toBe(1);
+    });
+
+    it('includes the internal judge call in persisted grading usage', async () => {
+      const gradingProvider = createMockProvider({
+        id: 'mock-grading-provider',
+        response: createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'Partially successful' },
+            previousBestResponse: { rating: 0, explanation: 'No previous response' },
+          }),
+          tokenUsage: {
+            total: 17,
+            prompt: 10,
+            completion: 7,
+            numRequests: 2,
+            completionDetails: { reasoning: 4 },
+          },
+        }),
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.tokenUsage.assertions).toMatchObject({
+        total: 17,
+        prompt: 10,
+        completion: 7,
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      });
     });
 
     it('should accumulate token usage across multiple iterations', async () => {

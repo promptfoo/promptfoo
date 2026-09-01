@@ -188,8 +188,7 @@ describe('database WAL mode', () => {
     const busyTimeout = (await db.get(sql`PRAGMA busy_timeout;`)) as unknown as {
       timeout: number;
     };
-    // libsql defaults to 0 (immediate SQLITE_BUSY); we restore better-sqlite3's
-    // historical 5s default.
+    // Keep brief lock contention from failing immediately with SQLITE_BUSY.
     expect(busyTimeout.timeout).toBe(5000);
   });
 });

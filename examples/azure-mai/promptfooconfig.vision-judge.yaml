@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LLM-as-judge on MAI-generated images (vision rubric)
+
+# Grade generated images with a vision-capable LLM. The grader must receive the
+# actual image, so run this with inline media so {{output}} is a base64 data URL
+# the vision model can read (otherwise the output is a promptfoo://blob/... ref
+# that the grader's API can't fetch):
+#
+#   PROMPTFOO_INLINE_MEDIA=true promptfoo eval --no-cache
+#
+# Requires AZURE_API_HOST + AZURE_API_KEY (image provider) and OPENAI_API_KEY
+# (vision grader).
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: azure:image:mai-image-2-5
+    config:
+      model: MAI-Image-2.5
+      width: 1024
+      height: 1024
+
+defaultTest:
+  options:
+    # Any vision-capable grader works (e.g. openai:chat:gpt-5.4-mini,
+    # anthropic:messages:claude-sonnet-4-6).
+    provider: openai:chat:gpt-5.4-mini
+    # Custom rubric prompt that passes the generated image to the grader as an
+    # image_url block. {{output}} is the image; {{rubric}} is the assertion value.
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          "content": "You grade whether a generated image satisfies a rubric. Respond ONLY with a JSON object: {\"reason\": string, \"pass\": boolean, \"score\": number}."
+        },
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{output}}" } },
+            { "type": "text", "text": "Rubric: {{rubric}}\n\nDoes the image satisfy the rubric?" }
+          ]
+        }
+      ]
+
+tests:
+  - vars:
+      prompt: A photorealistic single red cube on a clean white background, studio lighting
+    assert:
+      - type: llm-rubric
+        value: The image shows a single red cube on a plain white background
+  - vars:
+      prompt: An isometric illustration of a cozy reading nook with warm lighting
+    assert:
+      - type: llm-rubric
+        value: The image depicts an indoor reading nook with warm/cozy lighting

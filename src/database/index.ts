@@ -1,11 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { sleep } from '../util/time';
 import {
   closeTestDatabaseClient,
   registerTestDatabaseClient,
@@ -32,8 +35,113 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+function isMissingPathError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+function resolveDatabaseFileSymlinks(filePath: string): string {
+  let resolvedPath = path.resolve(filePath);
+  const visitedPaths = new Set<string>();
+
+  while (visitedPaths.size < 40) {
+    if (visitedPaths.has(resolvedPath)) {
+      throw new Error(`Refusing to resolve a database symlink cycle at ${resolvedPath}`);
+    }
+    visitedPaths.add(resolvedPath);
+
+    let stats: fs.Stats;
+    try {
+      stats = fs.lstatSync(resolvedPath);
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return resolvedPath;
+      }
+      throw error;
+    }
+
+    if (!stats.isSymbolicLink()) {
+      return resolvedPath;
+    }
+
+    const linkTarget = fs.readlinkSync(resolvedPath);
+    resolvedPath = path.isAbsolute(linkTarget)
+      ? linkTarget
+      : `${path.dirname(resolvedPath)}${path.sep}${linkTarget}`;
+  }
+
+  throw new Error(`Refusing to resolve an excessive database symlink chain at ${resolvedPath}`);
+}
+
+function databasePathsReferToSameFile(firstPath: string, secondPath: string): boolean {
+  const resolvedFirstPath = resolveDatabaseFileSymlinks(firstPath);
+  const resolvedSecondPath = resolveDatabaseFileSymlinks(secondPath);
+  if (resolvedFirstPath === resolvedSecondPath) {
+    return true;
+  }
+
+  try {
+    const firstStats = fs.statSync(resolvedFirstPath, { bigint: true });
+    const secondStats = fs.statSync(resolvedSecondPath, { bigint: true });
+    if (
+      firstStats.ino !== 0n &&
+      firstStats.dev === secondStats.dev &&
+      firstStats.ino === secondStats.ino
+    ) {
+      return true;
+    }
+  } catch (error) {
+    // Missing files can still resolve through a shared directory alias below, but any
+    // other identity error (EIO, ESTALE, EACCES, ...) is indeterminate — propagating it
+    // fails closed instead of letting a test runner mutate user data.
+    if (!isMissingPathError(error)) {
+      throw error;
+    }
+  }
+
+  try {
+    return (
+      path.join(
+        fs.realpathSync.native(path.dirname(resolvedFirstPath)),
+        path.basename(resolvedFirstPath),
+      ) ===
+      path.join(
+        fs.realpathSync.native(path.dirname(resolvedSecondPath)),
+        path.basename(resolvedSecondPath),
+      )
+    );
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw error;
+    }
+    return false;
+  }
+}
+
 export function getDbPath() {
-  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
+  const configDirectoryPath = getConfigDirectoryPath();
+  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
+  // Runner-owned globals survive helpers that clear process.env; JEST_WORKER_ID alone does not
+  // identify Jest because the generic jest-worker package sets it for ordinary tasks.
+  const isTestProcess =
+    process.env.VITEST === 'true' ||
+    Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__') ||
+    Object.prototype.hasOwnProperty.call(globalThis, Symbol.for('jest-native-promise'));
+  const assertSafeTestPath = () => {
+    if (
+      isTestProcess &&
+      databasePathsReferToSameFile(dbPath, path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db'))
+    ) {
+      throw new Error(
+        'Refusing to open the default Promptfoo database while running tests. ' +
+          'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
+      );
+    }
+  };
+  assertSafeTestPath();
+  getConfigDirectoryPath(true /* createIfNotExists */);
+  assertSafeTestPath();
+  return dbPath;
 }
 
 export function getDbSignalPath() {
@@ -44,10 +152,8 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   // Enable foreign key constraints (required for referential integrity)
   await client.execute('PRAGMA foreign_keys = ON');
 
-  // better-sqlite3 applied a 5s busy timeout by default; libsql defaults to 0,
-  // i.e. fail immediately when the write lock is held. Restore the prior
-  // behavior so a writer that briefly contends with another process or
-  // connection for the lock waits instead of erroring with SQLITE_BUSY.
+  // Wait briefly when a writer contends with another process or connection for
+  // the lock instead of failing immediately with SQLITE_BUSY.
   await client.execute('PRAGMA busy_timeout = 5000');
 
   // Configure WAL mode unless explicitly disabled or using in-memory database
@@ -84,6 +190,66 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   }
 }
 
+// A statement that fails to acquire its lock never executed, so retrying it is
+// safe (no risk of double-applying a write). Shared-cache table locks surface as
+// SQLITE_LOCKED, which busy_timeout does NOT retry — it only covers SQLITE_BUSY.
+const TRANSIENT_LOCK_RETRY_ATTEMPTS = 10;
+const TRANSIENT_LOCK_RETRY_BASE_MS = 5;
+const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
+
+/**
+ * Detects the transient SQLite lock errors that clear once a contending writer
+ * releases its lock. drizzle re-wraps the libsql error (its own message is just
+ * `Failed query: ...`), so walk the cause chain and match on code/message.
+ */
+function isTransientDatabaseLockError(error: unknown): boolean {
+  for (
+    let current = error as {
+        code?: unknown;
+        extendedCode?: unknown;
+        message?: unknown;
+        cause?: unknown;
+      } | null,
+      depth = 0;
+    current != null && depth < 6;
+    current = (current.cause ?? null) as typeof current, depth++
+  ) {
+    const code = typeof current.code === 'string' ? current.code : '';
+    const extendedCode = typeof current.extendedCode === 'string' ? current.extendedCode : '';
+    if (
+      code.startsWith('SQLITE_BUSY') ||
+      code.startsWith('SQLITE_LOCKED') ||
+      extendedCode.startsWith('SQLITE_BUSY') ||
+      extendedCode.startsWith('SQLITE_LOCKED')
+    ) {
+      return true;
+    }
+    const message = typeof current.message === 'string' ? current.message : '';
+    if (
+      /\bSQLITE_(?:BUSY|LOCKED)\b/.test(message) ||
+      /database (?:is|table is) locked/i.test(message)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+        throw error;
+      }
+      await sleep(
+        Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
+      );
+    }
+  }
+}
+
 function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
@@ -107,17 +273,24 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
     return (...args: TArgs) => {
       // The outer transaction already owns the serialized queue. If a helper
       // called from that transaction uses the root db handle for a read, queueing
-      // it behind the outer transaction would deadlock.
+      // it behind the outer transaction would deadlock. Retrying here would also
+      // deadlock (the contending lock is the very transaction we are inside), so
+      // run it directly.
       if (activeTransaction.getStore()) {
         return method(...args);
       }
-      return runSerialized(() => method(...args));
+      // Statement-level methods are atomic, so a transient lock failure means
+      // nothing was applied. libsql runs interactive transactions on their own
+      // connection, so a prior writer's table lock can briefly outlive the JS
+      // promise that settled it; retry rides through that window without
+      // weakening isolation (reads still observe only committed rows).
+      return runSerialized(() => withTransientLockRetry(() => method(...args)));
     };
   };
 
-  // better-sqlite3 executed statements synchronously on one connection. libsql opens a
-  // new logical connection for top-level statements and interactive transactions, so an
-  // ordinary write started while a transaction owns the write lock fails with SQLITE_BUSY.
+  // libSQL opens a new logical connection for top-level statements and interactive
+  // transactions, so an ordinary write started while a transaction owns the write lock
+  // fails with SQLITE_BUSY unless root-handle operations are serialized.
   client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
   client.batch = serializeClientMethod(client.batch.bind(client));
   client.migrate = serializeClientMethod(client.migrate.bind(client));

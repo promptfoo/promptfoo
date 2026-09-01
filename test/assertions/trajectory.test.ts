@@ -109,6 +109,71 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('treats configured shell tool names as command steps', () => {
+    const customShellTrace: TraceData = {
+      traceId: 'custom-shell',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'pytest tests/' }),
+          },
+        },
+      ],
+    };
+
+    // By default, a tool named 'bash' normalizes to type:tool, not type:command.
+    expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
+
+    const steps = extractTrajectorySteps({
+      ...customShellTrace,
+      metadata: { commandToolNames: ['bash'] },
+    });
+    expect(steps[0].type).toBe('command');
+    // The command argument should also be reflected in the step name.
+    expect(steps[0].name).toBe('pytest tests/');
+  });
+
+  it('matches configured command tool names case-insensitively and ignores invalid entries', () => {
+    const trace: TraceData = {
+      traceId: 'custom-shell-2',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'ls -la' }),
+          },
+        },
+      ],
+    };
+
+    // An uppercase override matches the lowercase tool name.
+    const upper = extractTrajectorySteps({ ...trace, metadata: { commandToolNames: ['BASH'] } });
+    expect(upper[0].type).toBe('command');
+    expect(upper[0].name).toBe('ls -la');
+
+    // Non-string / blank entries are ignored without throwing; the valid name still applies.
+    const mixed = extractTrajectorySteps({
+      ...trace,
+      metadata: { commandToolNames: ['bash', 123, '', '  '] as any },
+    });
+    expect(mixed[0].type).toBe('command');
+  });
+
   it('extracts normalized trajectory steps from trace spans', () => {
     const steps = extractTrajectorySteps(mockTraceData);
 
@@ -2177,6 +2242,47 @@ describe('trajectory assertions', () => {
           'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
         );
       });
+
+      it('strips a literal "*" default only when the observed value is exactly "*"', () => {
+        // A default of "*" is an ordinary value compared with deep equality — it must not
+        // act as an any-value wildcard (#9842); use `ignore` to drop a key unconditionally.
+        const runWithFields = (fields: string) => {
+          const trace: TraceData = {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'literal-star-default',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                  'tool.arguments': JSON.stringify({ status: 'Q', fields }),
+                },
+              },
+            ],
+          };
+          const value = {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { fields: '*' },
+          };
+          return handleTrajectoryToolArgsMatch({
+            ...defaultParams,
+            assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+            baseType: 'trajectory:tool-args-match',
+            assertion: { type: 'trajectory:tool-args-match', value },
+            renderedValue: value,
+          } as AssertionParams);
+        };
+
+        const stripped = runWithFields('*');
+        expect(stripped.pass).toBe(true);
+        expect(stripped.reason).toContain('Ignored default argument(s): fields');
+
+        expect(runWithFields('ssn,password').pass).toBe(false);
+      });
     });
 
     describe('ignore', () => {
@@ -2224,6 +2330,21 @@ describe('trajectory assertions', () => {
           handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
             .pass,
         ).toBe(true);
+      });
+
+      it('drops an ignored key across varying value types', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['cursor'],
+        };
+
+        for (const cursor of ['eyJvZmZzZXQiOjQyfQ==', null, 0, { page: 3 }]) {
+          expect(
+            handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', cursor }, value)).pass,
+          ).toBe(true);
+        }
       });
 
       it('accepts a bare string ignore value', () => {

@@ -8,11 +8,11 @@ import {
   validateResolution,
   XAIVideoProvider,
 } from '../../../src/providers/xai/video';
-import * as fetch from '../../../src/util/fetch';
+import * as fetch from '../../../src/util/fetch/index';
 import { sleep } from '../../../src/util/time';
 
 vi.mock('../../../src/logger');
-vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/util/fetch/index');
 
 // Only mock specific functions from video utils, not the validators
 vi.mock('../../../src/providers/video/utils', async (importOriginal) => {

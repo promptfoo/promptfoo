@@ -1,11 +1,11 @@
 import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getDefaultShareViewBaseUrl } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import ModelAudit from '../models/modelAudit';
+import { notCloudEnabledShareInstructions } from '../node/shareInstructions';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -19,19 +19,8 @@ import {
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
-export function notCloudEnabledShareInstructions(): void {
-  const cloudUrl = getDefaultShareViewBaseUrl();
-  const welcomeUrl = `${cloudUrl}/welcome`;
-
-  logger.info(dedent`
-
-    » You need to have a cloud account to securely share your results.
-
-    1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
-    2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
-    3. Run ${chalk.greenBright.bold('promptfoo share')}
-  `);
-}
+// Preserve the established command-module import while the implementation lives in the node layer.
+export { notCloudEnabledShareInstructions };
 
 export async function createAndDisplayShareableUrl(
   evalRecord: Eval,

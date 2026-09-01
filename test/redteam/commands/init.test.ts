@@ -1,20 +1,14 @@
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
-import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
-import { Command } from 'commander';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import {
-  redteamInit,
-  initCommand as redteamInitCommand,
-  renderRedteamConfig,
-} from '../../../src/redteam/commands/init';
+import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
 
@@ -216,29 +210,63 @@ describe('redteamInit', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('should mark prompt cancellation without hard-exiting', async () => {
-    process.exitCode = undefined;
-    vi.mocked(input).mockRejectedValueOnce(new ExitPromptError());
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    const program = new Command();
-    redteamInitCommand(program);
+  it('offers current Gemini models for AI Studio and Vertex targets', async () => {
+    await redteamInit(undefined);
 
-    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+    const modelPrompt = vi
+      .mocked(select)
+      .mock.calls.find(([options]) => options.message.includes('Choose a model to target'));
 
-    expect(process.exitCode).toBe(130);
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(modelPrompt?.[0].choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
+        expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
+      ]),
+    );
   });
 
-  it('should mark prompt abort without hard-exiting', async () => {
-    process.exitCode = undefined;
-    vi.mocked(input).mockRejectedValueOnce(new AbortPromptError());
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    const program = new Command();
-    redteamInitCommand(program);
+  it.each(['vertex:gemini-3.7-flash', 'vertex:gemini-3.6-flash', 'vertex:gemini-3.5-flash-lite'])(
+    'configures the global Vertex region for %s',
+    async (modelName) => {
+      vi.mocked(select)
+        .mockReset()
+        .mockResolvedValueOnce('prompt_model_chatbot')
+        .mockResolvedValueOnce('now')
+        .mockResolvedValueOnce(modelName)
+        .mockResolvedValueOnce('default')
+        .mockResolvedValueOnce('default');
 
-    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+      await redteamInit(undefined);
 
-    expect(process.exitCode).toBe(130);
-    expect(exitSpy).not.toHaveBeenCalled();
+      const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
+        targets: Array<{ id: string; config: { region: string } }>;
+      };
+
+      expect(config.targets[0]).toMatchObject({ id: modelName, config: { region: 'global' } });
+    },
+  );
+
+  it('offers supported Anthropic targets instead of retired Opus 4.1', async () => {
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await redteamInit(undefined);
+
+    const providerPrompt = vi
+      .mocked(select)
+      .mock.calls.find(([options]) => options.message === 'Choose a model to target:');
+    const choices = providerPrompt?.[0].choices as Array<{ value: string }>;
+
+    expect(choices).toEqual(
+      expect.arrayContaining([
+        { name: 'anthropic:claude-opus-4-6', value: 'anthropic:messages:claude-opus-4-6' },
+      ]),
+    );
+    expect(choices.map((choice) => choice.value)).not.toContain(
+      'anthropic:messages:claude-opus-4-1-20250805',
+    );
   });
 });

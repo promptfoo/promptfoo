@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import path from 'path';
 
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -25,8 +25,16 @@ import {
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
 
+const hasGlobMagic = (candidatePath: string) => {
+  return /[*?[\]{}()!+@]/.test(candidatePath) || candidatePath.includes('\\');
+};
+
 vi.mock('proxy-agent', () => ({
-  ProxyAgent: vi.fn().mockImplementation(() => ({})),
+  ProxyAgent: vi.fn().mockImplementation(() => ({
+    isMockProxyAgent: true,
+    addRequest: vi.fn(),
+    connect: vi.fn(),
+  })),
 }));
 
 vi.mock('fs', async () => {
@@ -52,9 +60,7 @@ vi.mock('fs/promises', async () => {
 
 vi.mock('glob', () => ({
   globSync: vi.fn(),
-  hasMagic: vi.fn((path: string) => {
-    return /[*?[\]{}]/.test(path) && !path.includes('\\');
-  }),
+  hasMagic: vi.fn((candidatePath: string) => hasGlobMagic(candidatePath)),
 }));
 
 vi.mock('../../src/esm', () => ({
@@ -79,6 +85,14 @@ describe('file utilities', () => {
       expect(isJavascriptFile('test.mts')).toBe(true);
       expect(isJavascriptFile('test.txt')).toBe(false);
       expect(isJavascriptFile('test.py')).toBe(false);
+    });
+
+    it('matches extensions case-insensitively', () => {
+      expect(isJavascriptFile('test.JS')).toBe(true);
+      expect(isJavascriptFile('test.Ts')).toBe(true);
+      expect(isJavascriptFile('test.MJS')).toBe(true);
+      expect(isJavascriptFile('test.CTS')).toBe(true);
+      expect(isJavascriptFile('test.TXT')).toBe(false);
     });
   });
 
@@ -137,7 +151,7 @@ describe('file utilities', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
       vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
         const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+        return hasGlobMagic(p);
       });
       cliState.basePath = '/mock/base/path';
     });

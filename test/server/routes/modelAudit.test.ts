@@ -11,12 +11,10 @@ import { asMockChildProcess, createMockChildProcess } from '../../util/mockChild
 
 // Mock dependencies
 vi.mock('child_process');
-vi.mock('../../../src/commands/modelScan', () => ({
+vi.mock('../../../src/util/modelAuditInstall', () => ({
   checkModelAuditInstalled: vi.fn(),
 }));
 
-// Import after mocking
-import { checkModelAuditInstalled } from '../../../src/commands/modelScan';
 import { getDb } from '../../../src/database/index';
 import { modelAuditsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
@@ -30,6 +28,8 @@ import {
   ListScansResponseSchema,
   ModelAuditSchemas,
 } from '../../../src/types/api/modelAudit';
+// Import after mocking
+import { checkModelAuditInstalled } from '../../../src/util/modelAuditInstall';
 
 const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
 const mockedSpawn = vi.mocked(spawn);

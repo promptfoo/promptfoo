@@ -1,0 +1,34 @@
+description: A2A provider example
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    label: A2A send
+    config:
+      mode: send
+      agentCardUrl: https://agent.example.com/.well-known/agent-card.json
+      auth:
+        type: bearer
+        token: '{{ env.A2A_API_KEY }}'
+      polling:
+        enabled: true
+        intervalMs: 1000
+        timeoutMs: 300000
+
+  - id: a2a:https://agent.example.com/a2a/v1
+    label: A2A stream
+    config:
+      mode: stream
+      agentCardUrl: https://agent.example.com/.well-known/agent-card.json
+      auth:
+        type: bearer
+        token: '{{ env.A2A_API_KEY }}'
+
+tests:
+  - vars:
+      prompt: Explain what this A2A agent can do in one sentence.
+    assert:
+      - type: not-contains
+        value: A2A Provider error

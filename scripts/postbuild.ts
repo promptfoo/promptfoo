@@ -45,12 +45,23 @@ const WRAPPER_FILES: Record<WrapperType, string[]> = {
  */
 const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
 
+export function shouldCopyDrizzlePath(src: string): boolean {
+  const basename = path.basename(src);
+  return !DRIZZLE_EXCLUDE_PATTERNS.some(
+    (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
+  );
+}
+
 /**
  * Critical build outputs that must exist for the build to be valid.
  */
 const REQUIRED_BUILD_OUTPUTS = [
   'dist/src/entrypoint.js', // CLI entry (Node version check wrapper)
   'dist/src/main.js', // CLI main module
+  'dist/src/contracts.js', // ESM contracts subpath
+  'dist/src/contracts.cjs', // CJS contracts subpath
+  'dist/src/contracts.d.ts', // ESM contracts declarations
+  'dist/src/contracts.d.cts', // CJS contracts declarations
   'dist/src/index.js', // ESM library entry
   'dist/src/index.cjs', // CJS library entry
   'dist/src/server/index.js', // Server entry
@@ -144,12 +155,7 @@ function getDrizzleTask(): CopyTask {
     src: path.join(ROOT, 'drizzle'),
     dest: path.join(DIST, 'drizzle'),
     recursive: true,
-    filter: (src: string) => {
-      const basename = path.basename(src);
-      return !DRIZZLE_EXCLUDE_PATTERNS.some(
-        (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
-      );
-    },
+    filter: shouldCopyDrizzlePath,
   };
 }
 

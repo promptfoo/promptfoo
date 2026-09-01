@@ -31,7 +31,7 @@ export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Leetspeak`,
+        metric: assertion.metric ? `${assertion.metric}/Leetspeak` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

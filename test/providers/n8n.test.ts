@@ -260,6 +260,32 @@ describe('N8nProvider', () => {
       );
     });
 
+    it('should preserve JSON array body templates when a session ID is supplied', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: '[{"message":"{{prompt}}"}]',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'session-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify([{ message: 'Hello' }]),
+        }),
+        expect.any(Number),
+        'text',
+        true,
+        0,
+      );
+    });
+
     it('should use custom headers', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -619,20 +645,18 @@ describe('N8nProvider', () => {
       });
     });
 
-    it.each([
-      false,
-      null,
-      '',
-      0,
-    ])('should accept successful responses with a falsey error status (%j)', async (error) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
+    it.each([false, null, '', 0])(
+      'should accept successful responses with a falsey error status (%j)',
+      async (error) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
 
-      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      const result = await provider.callApi('Hello');
+        const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+        const result = await provider.callApi('Hello');
 
-      expect(result.output).toBe('ok');
-      expect(result.error).toBeUndefined();
-    });
+        expect(result.output).toBe('ok');
+        expect(result.error).toBeUndefined();
+      },
+    );
 
     it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue(

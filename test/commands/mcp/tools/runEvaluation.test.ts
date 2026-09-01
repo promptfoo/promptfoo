@@ -29,7 +29,7 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../../../../src/commands/eval', () => ({
+vi.mock('../../../../src/node/doEval', () => ({
   doEval: vi.fn().mockResolvedValue({
     id: 'test-eval-123',
     toEvaluateSummary: vi.fn().mockResolvedValue({

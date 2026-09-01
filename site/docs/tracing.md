@@ -5,19 +5,21 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 # Tracing
 
-Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations.
+Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did behind each response and bring that information into your evals.
 
-This feature allows you to collect detailed performance metrics and debug complex provider implementations.
+Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
 ![traces in promptfoo](/img/docs/trace.png)
 
 ## Overview
 
-Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
+Promptfoo can receive traces directly from your application or pull them from a tracing service you already use. Those traces give your evals more context about what your application actually did. The built-in receiver works without additional infrastructure during development and testing.
 
 Tracing provides visibility into:
 
 - **Provider execution flow**: See how your providers process requests internally
+- **Tool calls and agent actions**: Check which tools ran, in what order, and with which inputs
+- **Grading and red teaming**: Evaluate the steps behind a response and use them to guide attacks
 - **Performance bottlenecks**: Identify slow operations in RAG pipelines or multi-step workflows
 - **Error tracking**: Trace failures to specific operations
 - **Resource usage**: Monitor external API calls, database queries, and other operations
@@ -26,17 +28,22 @@ Tracing provides visibility into:
 
 - **Standard OpenTelemetry support**: Use any OpenTelemetry SDK in any language
 - **Built-in OTLP receiver**: No external collector required for basic usage
+- **Trace-aware assertions**: Check tool usage, execution paths, timing, and errors
+- **Trace-informed grading and attacks**: Give graders and red-team strategies more context
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+- **Existing tracing services**: Pull traces from the service your application already uses
 
 ## Built-in Provider Instrumentation
 
-Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, with target requests and grading recorded beneath it. Every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace. Multi-turn tests keep their target requests and grading together in the same trace.
+
+Instrumented model and agent providers add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). HTTP targets receive their automatic target span, and the application behind that target can add its own child spans using the propagated `traceparent`. Agent providers can distinguish an overall `invoke_agent` run from the individual model calls it contains.
 
 ### Supported Providers
 
-The following providers have built-in instrumentation:
+The following providers support automatic tracing. Model and agent providers can also include GenAI spans for the work they perform; HTTP targets record the target request and any spans emitted by the application.
 
 | Provider                                       | Automatic Tracing |
 | ---------------------------------------------- | ----------------- |
@@ -58,12 +65,16 @@ The following providers have built-in instrumentation:
 
 ### GenAI Span Attributes
 
-Each provider call creates a span with these attributes:
+Instrumented model and agent calls can include these attributes on their GenAI spans:
 
 **Request Attributes:**
 
-- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.provider.name` - Provider name (e.g., "openai", "anthropic", "azure.ai.openai", "aws.bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "text_completion", "embeddings", "invoke_agent", or "execute_tool")
+- `gen_ai.agent.id` - Stable identifier for hosted agents
+- `gen_ai.agent.name` - Agent name for agent invocations
+- `gen_ai.tool.name` - Tool name for tool executions
+- `openai.api.type` - OpenAI API used ("chat_completions" or "responses")
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
@@ -74,9 +85,9 @@ Each provider call creates a span with these attributes:
 
 - `gen_ai.usage.input_tokens` - Input/prompt token count
 - `gen_ai.usage.output_tokens` - Output/completion token count
-- `gen_ai.usage.total_tokens` - Total token count
-- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
-- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.usage.reasoning.output_tokens` - Reasoning token count (when available)
+- `gen_ai.usage.cache_read.input_tokens` - Input tokens read from the provider's prompt cache
+- `gen_ai.usage.cache_creation.input_tokens` - Input tokens written to the provider's prompt cache
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
 
 **Promptfoo-specific Attributes:**
@@ -85,8 +96,17 @@ Each provider call creates a span with these attributes:
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
 - `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.usage.total_tokens` - Total token count reported by the provider
+- `promptfoo.usage.cached_response_tokens` - Tokens associated with a cached Promptfoo response
+- `promptfoo.usage.accepted_prediction_tokens` - Accepted prediction tokens, when available
+- `promptfoo.usage.rejected_prediction_tokens` - Rejected prediction tokens, when available
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+Grading spans describe each assertion with `gen_ai.evaluation.name`,
+`gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
+reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
+by the grader appears in a child span.
 
 ### Example Trace Output
 
@@ -94,14 +114,14 @@ When calling OpenAI's GPT-4:
 
 ```
 Span: chat gpt-4
-├─ gen_ai.system: openai
+├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
 ├─ gen_ai.request.model: gpt-4
 ├─ gen_ai.request.max_tokens: 1000
 ├─ gen_ai.request.temperature: 0.7
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
-├─ gen_ai.usage.total_tokens: 235
+├─ promptfoo.usage.total_tokens: 235
 ├─ gen_ai.response.finish_reasons: ["stop"]
 ├─ promptfoo.provider.id: openai:chat:gpt-4
 └─ promptfoo.test.index: 0
@@ -126,7 +146,7 @@ tracing:
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
 ```javascript
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
@@ -151,7 +171,7 @@ module.exports = {
   async callApi(prompt, promptfooContext) {
     // Parse trace context from Promptfoo
     if (promptfooContext.traceparent) {
-      const activeContext = trace.propagation.extract(context.active(), {
+      const activeContext = propagation.extract(context.active(), {
         traceparent: promptfooContext.traceparent,
       });
 
@@ -290,13 +310,72 @@ External providers that wrap their own agent loops can adopt the same convention
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
+  # Abort the eval if the OTLP receiver can't start (default: false — log and continue without traces)
+  failOnReceiverStartFailure: true
+  # Extra tool names treated as command steps, merged with the built-ins (shell, exec_command, local_shell)
+  commandToolNames: ['bash']
   otlp:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
-      # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
+      # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
+  storage:
+    type: sqlite # sqlite is the only supported store
+    # Remove trace and span records older than this many days
+    retentionDays: 30
 ```
+
+`redactAttributes` is matched case-insensitively as a **substring** of each attribute
+key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
+`key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
+Patterns are matched against each attribute key **at every nesting level individually**: a
+nested key like `authorization` inside a `headers` object is matched by the pattern
+`authorization`, but a full dotted path such as `request.headers.authorization` will **not**
+match the nested leaf key — use the key's own name.
+Redaction covers span **attributes** (recursively, including nested objects and arrays),
+and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
+attribute**. A secret that appears solely in a span name, status/error message, or log
+body — without also being a redacted attribute value — is not detected. Redaction also does
+**not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
+secrets in test variables when traces are retained.
+
+:::warning Scope of `redactAttributes`
+
+`redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
+`/v1/traces` and `/v1/logs`, and to traces fetched through a configured **trace provider**
+before they are saved. Spans emitted by Promptfoo's **built-in provider instrumentation**
+are exported in-process and are **not** filtered by `redactAttributes`; values like
+`promptfoo.request.body` and request headers can therefore be stored in the local trace DB.
+A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_key`,
+`token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
+from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
+
+:::
+
+Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
+of days from the local store at the **start of each traced eval**. The default is **30 days**,
+applied only when a `storage` block is present — omit `storage` to keep traces indefinitely, or
+set `retentionDays` to `0` or less to disable pruning. Pruning permanently deletes rows.
+
+When several evaluations run in the same process (e.g. the Promptfoo server), they **share a
+single OTLP receiver**: it starts on first use and stops when the last evaluation finishes. The
+receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a later overlapping
+evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
+are tracked per trace so each evaluation's traces use its own policy.
+
+For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
+`commandToolNames` policy with that trace so overlapping evaluations do not change one
+another's results — each trace is redacted with its own policy, not the active receiver's.
+Traces created only when spans arrive at the receiver (no evaluation row) use the
+registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
+startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
+and is not changed by an overlapping evaluation.
+
+The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
+different container or host and must reach the receiver over the network, set
+`host: '0.0.0.0'` explicitly and restrict access to trusted networks.
 
 ### Supported Formats
 
@@ -343,6 +422,79 @@ tracing:
     headers:
       'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
+
+### Pulling Traces From Another Service
+
+If your application already sends traces to another service, you do not need to change where they go. Promptfoo can look up the trace for each request and bring those steps into your eval.
+
+Here's how it works:
+
+1. Promptfoo includes a `traceparent` header when it calls your application.
+2. Your application adds its own steps to that trace and sends them to its usual tracing service.
+3. After the response, Promptfoo pulls the matching trace from that service.
+4. Promptfoo uses the trace in assertions, grading, and red-team strategies, and shows it alongside your results.
+
+To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
+
+#### Grafana Tempo
+
+Use the `tempo` trace provider to pull traces from Grafana Tempo:
+
+```yaml
+tracing:
+  enabled: true
+  queryDelay: 3000 # Allow spans to reach Tempo before looking up the trace
+  provider:
+    id: tempo
+    endpoint: 'http://tempo:3200'
+    auth:
+      token: '{{ env.TEMPO_API_TOKEN }}'
+    headers:
+      X-Scope-OrgID: '{{ env.TEMPO_TENANT_ID }}'
+    timeout: 10000
+```
+
+After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+
+Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
+
+Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
+
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+
+#### Braintrust
+
+Promptfoo can retrieve application spans from a Braintrust project's logs:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: braintrust
+    endpoint: 'https://api.braintrust.dev'
+    projectId: '12345678-1234-4123-8123-123456789abc'
+    auth:
+      token: '{{ env.BRAINTRUST_API_KEY }}'
+```
+
+Braintrust's native trace identifiers are not necessarily the same as OpenTelemetry trace IDs. Your application must copy the trace ID from Promptfoo's `traceparent` into Braintrust span metadata as `trace_id`, `promptfoo_trace_id`, or `promptfoo.trace_id`. Promptfoo then queries the Braintrust project's recent traces and imports all spans belonging to the matching trace.
+
+#### Langfuse
+
+Use the `langfuse` trace provider to pull observations from Langfuse Cloud or a self-hosted Langfuse v4 instance:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: langfuse
+    endpoint: 'https://cloud.langfuse.com'
+    auth:
+      username: '{{ env.LANGFUSE_PUBLIC_KEY }}'
+      password: '{{ env.LANGFUSE_SECRET_KEY }}'
+```
+
+Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace ID propagated in `traceparent`. It preserves original OpenTelemetry span and resource attributes, normalizes generation, embedding, tool, agent, workflow, and retrieval observations to GenAI semantic conventions, and imports parent-child relationships, inputs, outputs, models, token usage, and costs. Langfuse Python SDK 4.7.0+, JavaScript SDK 5.4.0+, or an OpenTelemetry exporter configured with the `x-langfuse-ingestion-version: 4` header makes new observations available in real time; older ingestion paths can delay visibility by up to ten minutes. This delay makes earlier versions of Langfuse unusable for fetching traces during an evaluation.
 
 ## Provider Implementation Guide
 
@@ -441,7 +593,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
@@ -452,6 +604,23 @@ Click the **Export Traces** button to download all traces for the current evalua
 - Trace data with spans and redacted attributes
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
+
+### Trace Linkage on Result Rows
+
+When tracing is enabled, every `EvaluateResult` row carries `traceId` and `evaluationId` at the top level so external tooling can correlate result rows to traces without re-deriving the linkage:
+
+```json
+{
+  "promptIdx": 0,
+  "testIdx": 0,
+  "success": true,
+  "traceId": "b01f108667a48e148ee80deb42c7f16d",
+  "evaluationId": "eval-Lie-2026-05-08T13:43:46",
+  "metadata": { "...": "..." }
+}
+```
+
+Use the `traceId` to look up an individual trace via `GET /api/traces/:traceId`, or pass the `evaluationId` to `GET /api/traces/evaluation/:evaluationId` to fetch every trace for the eval. Both fields are absent when tracing is not enabled for the row, so their presence is an unambiguous "this row was traced" signal.
 
 ## Best Practices
 
@@ -537,13 +706,13 @@ const provider = new NodeTracerProvider({
 Trace across multiple services:
 
 ```javascript
-// Service A: Forward trace context
+// Service A: Forward trace context (import `propagation` from '@opentelemetry/api')
 const headers = {};
-trace.propagation.inject(context.active(), headers);
+propagation.inject(context.active(), headers);
 await fetch(serviceB, { headers });
 
 // Service B: Extract and continue trace
-const extractedContext = trace.propagation.extract(context.active(), request.headers);
+const extractedContext = propagation.extract(context.active(), request.headers);
 ```
 
 ## Troubleshooting
@@ -679,14 +848,14 @@ Example trace summary provided to an attacker:
 Trace 0af76519 • 5 spans
 
 Execution Flow:
-1. [1.2s] llm.generate (client) | model=gpt-4
+1. [1.2s] chat gpt-4.1-mini (internal) | model=gpt-4.1-mini
 2. [300ms] guardrail.check (internal) | tool=content-filter
-3. [150ms] tool.database_query (server) | tool=search
+3. [150ms] execute_tool search (internal) | tool=search
 4. [50ms] guardrail.check (internal) | ERROR: Rate limit exceeded
 
 Key Observations:
 • Guardrail content-filter decision: blocked
-• Tool call search via "tool.database_query"
+• Tool call search via "execute_tool search"
 • Error span "guardrail.check": Rate limit exceeded
 ```
 
@@ -714,16 +883,35 @@ redteam:
     includeInAttack: true
     # Feed traces to grading (default: true)
     includeInGrading: true
-    # Filter which spans to include
-    spanFilter:
-      - 'llm.*'
-      - 'guardrail.*'
-      - 'tool.*'
   plugins:
     - harmful
   strategies:
     - jailbreak # Iterative strategy that benefits from trace feedback
 ```
+
+Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
+decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
+guardrail attributes, and older `llm.*` attributes. Useful spans are included even when the
+instrumentation marks them as internal, while ordinary HTTP requests and framework handlers
+stay out of the attack context. Set `includeInternalSpans: true` to include the full trace
+instead.
+
+To focus on operations with particular names, add an optional `spanFilter`. Filters are
+case-insensitive and support `*` and `?` wildcards:
+
+```yaml
+redteam:
+  tracing:
+    enabled: true
+    spanFilter:
+      - 'chat*'
+      - 'execute_tool*'
+      - '*guardrail*'
+```
+
+Span names come from your application's instrumentation, so choose patterns that match the
+names in your traces. An explicit filter can also include an operation that Promptfoo would
+otherwise leave out.
 
 ### Strategy-Specific Configuration
 
@@ -742,7 +930,7 @@ redteam:
       crescendo:
         includeInAttack: true
         spanFilter:
-          - 'guardrail.*'
+          - '*guardrail*'
 ```
 
 ### Example

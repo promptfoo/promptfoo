@@ -32,7 +32,7 @@ src/types/api/     # Shared Zod validation schemas
 
 ## Logging
 
-See `docs/logging.md` - use logger with object context (auto-sanitized).
+See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 ## Error Handling
 
@@ -54,15 +54,17 @@ replyValidationError(res, bodyResult.error);
 ## Database Access
 
 ```typescript
-import { db } from '../database';
-import { evaluations } from '../database/schema';
-const results = await db.select().from(evaluations).where(eq(evaluations.id, id));
+import { getDb } from '../../database/index';
+import { evalsTable } from '../../database/tables';
+
+const db = await getDb();
+const results = await db.select().from(evalsTable).where(eq(evalsTable.id, id));
 ```
 
 ## Development
 
 ```bash
-npm run dev:server   # Runs on localhost:3000
+npm run dev:server   # Runs on localhost:15500
 npm run dev          # Both server + frontend
 ```
 

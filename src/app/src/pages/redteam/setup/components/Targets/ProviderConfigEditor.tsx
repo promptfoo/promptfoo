@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import deepEqual from 'fast-deep-equal';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
+import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CodexSecurityConfiguration, {
+  CODEX_SECURITY_AUTH_OPTIONS,
+  CODEX_SECURITY_OPERATION_OPTIONS,
+  CODEX_SECURITY_REASONING_OPTIONS,
+} from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
@@ -37,6 +45,34 @@ const shouldRemoveMcpConfig = (
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
 
+const containsNunjucksTemplate = (value: string): boolean =>
+  /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
+
+const isRestoredTargetConfigDraft = (
+  draft: string | null,
+  config: ProviderOptions['config'],
+): boolean => {
+  if (draft === null) {
+    return true;
+  }
+  try {
+    return deepEqual(JSON.parse(draft), config);
+  } catch {
+    return false;
+  }
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const getStructuredProvider = (provider: ProviderOptions): ProviderOptions =>
+  isPlainObject(provider.config) ? provider : { ...provider, config: {} };
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -52,15 +88,112 @@ function ProviderConfigEditor({
   mode = 'redteam',
 }: ProviderConfigEditorProps) {
   const { config, updateConfig } = useRedTeamConfig();
+  const {
+    targetConfigError,
+    setTargetConfigError,
+    targetConfigDraft,
+    setTargetConfigDraft,
+    clearTargetConfigValidation,
+  } = useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const isTargetConfigInvalid = useCallback(
+    () => isRedTeam && Boolean(useRedTeamTargetConfigValidation.getState().targetConfigError),
+    [isRedTeam],
+  );
+  const structuredProvider = useMemo(() => getStructuredProvider(provider), [provider]);
+  const preserveConfigErrorOnUnchangedConfig =
+    isRedTeam &&
+    Boolean(targetConfigError) &&
+    isRestoredTargetConfigDraft(targetConfigDraft, provider.config);
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [rawConfigJson, setRawConfigJson] = useState<string>(
-    JSON.stringify(provider.config, null, 2),
+  const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
+    isRedTeam && targetConfigDraft !== null
+      ? targetConfigDraft
+      : JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
+  const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
+  const [customConfigError, setCustomConfigError] = useState<string | null>(
+    isRedTeam ? (targetConfigError ?? null) : null,
+  );
+  const previousProviderType = useRef(providerType);
+  const providerRef = useRef(provider);
+
+  useEffect(() => {
+    providerRef.current = provider;
+  }, [provider]);
+
+  useEffect(() => {
+    if (isRedTeam && !targetConfigError && customConfigError) {
+      setCustomConfigError(null);
+      setError?.(null);
+    }
+  }, [isRedTeam, targetConfigError, customConfigError, setError]);
+
+  const handleCustomConfigErrorChange = (
+    error: string | null,
+    expectedTarget?: ProviderOptions,
+  ) => {
+    if (isRedTeam && !error && targetConfigError) {
+      let cleared = false;
+      try {
+        cleared =
+          clearTargetConfigValidation?.(JSON.stringify(expectedTarget ?? provider), false) ?? false;
+      } catch {}
+      if (!cleared) {
+        const retainedError =
+          useRedTeamTargetConfigValidation.getState().targetConfigError ??
+          'Invalid JSON configuration';
+        setCustomConfigError(retainedError);
+        setError?.(retainedError);
+        return;
+      }
+    }
+    setCustomConfigError(error);
+    setError?.(error);
+    if (isRedTeam) {
+      if (error) {
+        setTargetConfigError?.(error);
+      }
+    }
+  };
+
+  const handleCustomRawConfigJsonChange = (value: string) => {
+    setRawConfigJson(value);
+    if (isRedTeam) {
+      setTargetConfigDraft?.(value);
+    }
+  };
+
+  useEffect(() => {
+    if (previousProviderType.current !== providerType) {
+      previousProviderType.current = providerType;
+      setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      if (isRedTeam) {
+        let cleared = false;
+        try {
+          cleared = clearTargetConfigValidation?.(JSON.stringify(provider)) ?? false;
+        } catch {}
+        if (!cleared) {
+          const retainedError =
+            useRedTeamTargetConfigValidation.getState().targetConfigError ??
+            'Invalid JSON configuration';
+          setCustomConfigError(retainedError);
+          setError?.(retainedError);
+          return;
+        }
+      }
+      setCustomConfigError(null);
+      setError?.(null);
+      setBodyError(null);
+    }
+  }, [isRedTeam, provider, providerType, setError, clearTargetConfigValidation]);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
+    if (type === 'http' && containsNunjucksTemplate(url)) {
+      return true;
+    }
     try {
       const parsedUrl = new URL(url);
       if (type === 'http') {
@@ -74,18 +207,30 @@ function ProviderConfigEditor({
     }
   }, []);
 
+  const getA2AShorthandUrl = useCallback((id?: string): string | undefined => {
+    if (!id?.startsWith('a2a:')) {
+      return undefined;
+    }
+    const url = id.slice('a2a:'.length);
+    return url.trim().length > 0 ? url : undefined;
+  }, []);
+
   const updateCustomTarget = (field: string, value: unknown) => {
     // Shallow-clone the config along with the target so subsequent
     // assignments and `delete` don't mutate the original provider object
     // by reference (which is React state owned by our parent).
+    const currentProvider = providerRef.current;
     const updatedTarget = {
-      ...provider,
-      config: { ...(provider.config ?? {}) },
+      ...currentProvider,
+      config: { ...getStructuredProvider(currentProvider).config },
     } as ProviderOptions;
 
     if (field === 'id') {
       updatedTarget.id = value as string;
-      if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
+      if (providerType === 'codex-security') {
+        delete updatedTarget.config.model;
+      }
+      if (shouldRemoveMcpConfig(currentProvider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
     } else if (field === 'url') {
@@ -104,7 +249,7 @@ function ProviderConfigEditor({
           : String(value);
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
       const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (bodyStr.includes('{{prompt}}') || hasInputs) {
+      if (!isRedTeam || bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
         setBodyError(
@@ -126,7 +271,13 @@ function ProviderConfigEditor({
     } else if (field === 'request') {
       updatedTarget.config.request = value as string;
       const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
+      if (
+        isRedTeam &&
+        value &&
+        typeof value === 'string' &&
+        !value.includes('{{prompt}}') &&
+        !hasInputs
+      ) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
         setBodyError(null);
@@ -154,11 +305,16 @@ function ProviderConfigEditor({
       updatedTarget.config[field] = value;
     }
 
+    providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    const currentProvider = providerRef.current;
+    const updatedTarget = {
+      ...currentProvider,
+      config: { ...getStructuredProvider(currentProvider).config },
+    } as ProviderOptions;
     if (field === 'url') {
       updatedTarget.config.url = value as string;
       if (validateUrl(value as string, 'websocket')) {
@@ -169,12 +325,16 @@ function ProviderConfigEditor({
     } else if (
       field in updatedTarget.config ||
       field === 'streamResponse' ||
-      field === 'transformResponse'
+      field === 'transformResponse' ||
+      field === 'protocols' ||
+      field === 'messageTemplate' ||
+      field === 'timeoutMs'
     ) {
       (updatedTarget.config as Record<string, unknown>)[field] = value;
     } else if (field === 'label') {
       updatedTarget.label = value as string;
     }
+    providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
 
@@ -183,14 +343,15 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request === undefined) {
+      if (structuredProvider.config.request === undefined) {
         // Structured mode: validate URL
-        if (!provider.config.url || !validateUrl(provider.config.url)) {
+        const url = structuredProvider.config.url || provider.id;
+        if (!url || !validateUrl(url)) {
           errors.push('Valid URL is required');
         }
       } else {
         // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
+        if (!structuredProvider.config.request || structuredProvider.config.request.trim() === '') {
           errors.push('HTTP request content is required');
         }
       }
@@ -199,8 +360,76 @@ function ProviderConfigEditor({
         errors.push(bodyError);
       }
     } else if (providerType === 'websocket') {
-      if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
+      const url = structuredProvider.config.url || provider.id;
+      if (!url || !validateUrl(url, 'websocket')) {
         errors.push('Valid WebSocket URL is required');
+      }
+    } else if (providerType === 'codex-security') {
+      if (
+        provider.id !== 'openai:codex-security' &&
+        !provider.id.startsWith('openai:codex-security:')
+      ) {
+        errors.push('Codex Security provider ID must start with openai:codex-security');
+      }
+      if (
+        provider.config.operation !== undefined &&
+        !CODEX_SECURITY_OPERATION_OPTIONS.some(
+          (option) => option.value === provider.config.operation,
+        )
+      ) {
+        errors.push('Unsupported Codex Security operation');
+      }
+      if (
+        provider.config.auth !== undefined &&
+        !CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === provider.config.auth)
+      ) {
+        errors.push('Unsupported Codex Security authentication method');
+      }
+      if (
+        [provider.config.model_reasoning_effort, provider.config.reasoning_effort].some(
+          (effort) =>
+            effort !== undefined &&
+            !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
+        )
+      ) {
+        errors.push('Unsupported Codex Security reasoning effort');
+      }
+      const repository = provider.config.repository ?? provider.config.working_dir;
+      if (typeof repository !== 'string' || !repository.trim()) {
+        errors.push('Repository path is required');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        !provider.config.base_ref &&
+        !provider.config.working_tree
+      ) {
+        errors.push('A base Git reference or working tree target is required for diff scans');
+      }
+      if (provider.config.working_tree && provider.config.head_ref) {
+        errors.push('Working-tree scans cannot specify a head Git reference');
+      }
+      if (
+        provider.config.operation !== 'security-diff-scan' &&
+        (provider.config.base_ref || provider.config.head_ref || provider.config.working_tree)
+      ) {
+        errors.push('Git diff target options require the diff scan operation');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        Array.isArray(provider.config.paths) &&
+        provider.config.paths.length > 0
+      ) {
+        errors.push('Scoped repository paths cannot be combined with diff scans');
+      }
+      if (
+        provider.config.model_reasoning_effort &&
+        provider.config.reasoning_effort &&
+        provider.config.model_reasoning_effort !== provider.config.reasoning_effort
+      ) {
+        errors.push('Reasoning effort settings must match');
+      }
+      if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
+        errors.push('Maximum scan cost must be greater than 0');
       }
     } else if (
       [
@@ -249,12 +478,66 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
+        providerType || '',
+      )
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
       }
+      if (
+        providerType === 'openinterpreter' &&
+        provider.id?.trim() &&
+        provider.id !== 'openinterpreter' &&
+        !provider.id.startsWith('openinterpreter:')
+      ) {
+        errors.push(
+          'Open Interpreter Provider ID must be "openinterpreter" or start with "openinterpreter:"',
+        );
+      }
+      if (providerType === 'a2a') {
+        if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
+          errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
+        }
+        const configuredUrl =
+          typeof provider.config?.url === 'string' ? provider.config.url.trim() : '';
+        const agentCardUrl =
+          typeof provider.config?.agentCardUrl === 'string'
+            ? provider.config.agentCardUrl.trim()
+            : '';
+        const shorthandUrl = getA2AShorthandUrl(provider.id) ?? '';
+
+        const hasUrl =
+          configuredUrl.length > 0 &&
+          (validateUrl(configuredUrl) || containsNunjucksTemplate(configuredUrl));
+        const hasShorthandUrl =
+          shorthandUrl.length > 0 &&
+          (validateUrl(shorthandUrl) || containsNunjucksTemplate(shorthandUrl));
+        const hasAgentCardUrl =
+          agentCardUrl.length > 0 &&
+          (validateUrl(agentCardUrl) || containsNunjucksTemplate(agentCardUrl));
+
+        if (configuredUrl.length > 0 && !hasUrl) {
+          errors.push('A2A endpoint URL must be a valid HTTP(S) URL');
+        }
+        if (agentCardUrl.length > 0 && !hasAgentCardUrl) {
+          errors.push('A2A Agent Card URL must be a valid HTTP(S) URL');
+        }
+        if (shorthandUrl.length > 0 && !hasShorthandUrl) {
+          errors.push('A2A shorthand URL must be a valid HTTP(S) URL');
+        }
+        if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
+          errors.push('A valid A2A endpoint URL or Agent Card URL is required');
+        }
+        if (a2aAdvancedConfigError) {
+          errors.push(a2aAdvancedConfigError);
+        }
+      }
+    }
+
+    if (customConfigError) {
+      errors.push(customConfigError);
     }
 
     if (extensionErrors) {
@@ -270,7 +553,19 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  }, [providerType, provider, bodyError, extensionErrors, setError, onValidate, validateUrl]);
+  }, [
+    providerType,
+    provider,
+    structuredProvider,
+    bodyError,
+    extensionErrors,
+    a2aAdvancedConfigError,
+    customConfigError,
+    setError,
+    onValidate,
+    validateUrl,
+    getA2AShorthandUrl,
+  ]);
 
   useEffect(() => {
     if (validateAll) {
@@ -287,20 +582,22 @@ function ProviderConfigEditor({
 
   return (
     <div>
-      {providerType === 'custom' && (
+      {(providerType === 'custom' || providerType === 'openinterpreter') && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
       {providerType === 'http' && (
         <HttpEndpointConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           bodyError={bodyError}
           setBodyError={setBodyError}
@@ -308,12 +605,13 @@ function ProviderConfigEditor({
           setUrlError={setUrlError}
           onTargetTested={onTargetTested}
           onSessionTested={onSessionTested}
+          isTargetConfigInvalid={isTargetConfigInvalid}
         />
       )}
 
       {providerType === 'websocket' && (
         <WebSocketEndpointConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateWebSocketTarget={updateWebSocketTarget}
           urlError={urlError}
         />
@@ -321,6 +619,24 @@ function ProviderConfigEditor({
 
       {providerType === 'browser' && (
         <BrowserAutomationConfiguration
+          selectedTarget={structuredProvider}
+          updateCustomTarget={updateCustomTarget}
+        />
+      )}
+
+      {providerType === 'a2a' && (
+        <A2AEndpointConfiguration
+          selectedTarget={structuredProvider}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={rawConfigJson}
+          setRawConfigJson={setRawConfigJson}
+          bodyError={bodyError}
+          onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
+        />
+      )}
+
+      {providerType === 'codex-security' && (
+        <CodexSecurityConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
         />
@@ -343,7 +659,7 @@ function ProviderConfigEditor({
         'cerebras',
       ].includes(providerType || '') && (
         <FoundationModelConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           providerType={providerType || ''}
         />
@@ -363,9 +679,11 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -377,9 +695,11 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -391,16 +711,18 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
       {/* Agent frameworks */}
       {AGENT_FRAMEWORKS.includes(providerType || '') && (
         <AgentFrameworkConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           agentType={providerType || ''}
         />
@@ -412,15 +734,17 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
+          setRawConfigJson={handleCustomRawConfigJsonChange}
+          bodyError={customConfigError ?? bodyError}
           providerType={providerType}
+          onConfigErrorChange={handleCustomConfigErrorChange}
+          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
       <div className="mt-6">
         <CommonConfigurationOptions
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}

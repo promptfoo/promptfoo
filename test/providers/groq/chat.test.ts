@@ -30,6 +30,20 @@ describe('GroqProvider', () => {
       expect(provider.id()).toBe('groq:mixtral-8x7b-32768');
     });
 
+    it('identifies the actual provider instead of its OpenAI-compatible transport', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {});
+      expect(provider['getGenAISystem']()).toBe('groq');
+    });
+
+    it('keeps Groq telemetry independent of a customer-defined provider ID', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        id: 'customer:custom-label',
+      });
+
+      expect(provider.id()).toBe('customer:custom-label');
+      expect(provider['getGenAISystem']()).toBe('groq');
+    });
+
     it('should return correct string representation', () => {
       const provider = new GroqProvider('mixtral-8x7b-32768', {});
       expect(provider.toString()).toBe('[Groq Provider mixtral-8x7b-32768]');
@@ -61,7 +75,7 @@ describe('GroqProvider', () => {
     });
 
     it('should identify qwen as reasoning model', () => {
-      const provider = new GroqProvider('qwen/qwen3-32b', {});
+      const provider = new GroqProvider('qwen/qwen3.6-27b', {});
       expect(provider['isReasoningModel']()).toBe(true);
     });
 
@@ -83,7 +97,7 @@ describe('GroqProvider', () => {
     });
 
     it('should support temperature for qwen models', () => {
-      const provider = new GroqProvider('qwen/qwen3-32b', {});
+      const provider = new GroqProvider('qwen/qwen3.6-27b', {});
       expect(provider['supportsTemperature']()).toBe(true);
     });
 

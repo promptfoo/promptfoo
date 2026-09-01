@@ -14,6 +14,7 @@ import {
   UserEmailStatus,
 } from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
+import { cloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
@@ -192,7 +193,9 @@ export async function checkEmailStatus(options?: {
       logger.info(`Checking email...`);
     }
 
-    const host = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+    const host = cloudConfig.isEnabled()
+      ? cloudConfig.getApiHost()
+      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')?.replace(/\/+$/, '');
 
     const resp = await fetchWithTimeout(
       `${host}/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,
@@ -216,7 +219,7 @@ export async function checkEmailStatus(options?: {
           setUserEmailValidated(false);
           setUserEmailNeedsValidation(true);
         }
-        // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
+        // Tracking filtered emails via this telemetry endpoint for now to gauge sensitivity of validation
         // We should take it out once we're happy with the sensitivity
         if (
           data.status === EmailValidationStatus.RISKY_EMAIL ||

@@ -16,6 +16,7 @@ import type { ProviderOptions } from '../../types';
 const priorityOrder = [
   // Most common ways to test your own application
   'http',
+  'a2a',
   'python',
   'javascript',
   // Most popular AI providers (direct API access)
@@ -42,6 +43,13 @@ const allProviderOptions = [
     label: 'WebSocket',
     description: 'Real-time WebSocket connections',
     tag: 'app',
+  },
+  {
+    value: 'a2a',
+    label: 'A2A Agent',
+    description: 'Connect to Agent2Agent HTTP+JSON agents',
+    tag: 'agents',
+    recommended: true,
   },
   {
     value: 'python',
@@ -94,9 +102,22 @@ const allProviderOptions = [
     recommended: true,
   },
   {
+    value: 'openinterpreter',
+    label: 'Open Interpreter',
+    description: 'Local coding agent with sandbox and approval controls',
+    tag: 'agents',
+  },
+  {
     value: 'openai-agents-sdk',
     label: 'OpenAI Agents SDK',
     description: "OpenAI's official agent framework",
+    tag: 'agents',
+    recommended: true,
+  },
+  {
+    value: 'codex-security',
+    label: 'Codex Security SDK',
+    description: 'Evaluate security scans, finding validation, model reasoning, and cost',
     tag: 'agents',
     recommended: true,
   },
@@ -526,6 +547,17 @@ export default function ProviderTypeSelector({
         },
         'websocket',
       );
+    } else if (value === 'a2a') {
+      setProvider(
+        {
+          id: 'a2a',
+          label: currentLabel,
+          config: {
+            url: '',
+          },
+        },
+        'a2a',
+      );
     } else if (value === 'browser') {
       setProvider(
         {
@@ -572,7 +604,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-2.5-pro',
+          id: 'google:gemini-3.7-flash',
           config: {},
           label: currentLabel,
         },
@@ -581,8 +613,8 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-2.5-pro',
-          config: {},
+          id: 'vertex:gemini-3.7-flash',
+          config: { region: 'global' },
           label: currentLabel,
         },
         'vertex',
@@ -635,7 +667,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          id: 'bedrock:global.anthropic.claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -914,6 +946,21 @@ export default function ProviderTypeSelector({
         },
         'openai-agents-sdk',
       );
+    } else if (value === 'codex-security') {
+      setProvider(
+        {
+          id: 'openai:codex-security:gpt-5.6-luna',
+          config: {
+            operation: 'security-scan',
+            repository: '',
+            auth: 'auto',
+            model_reasoning_effort: 'high',
+            max_cost_usd: 1,
+          },
+          label: currentLabel ?? 'Codex Security SDK',
+        },
+        'codex-security',
+      );
     } else if (value === 'pydantic-ai') {
       setProvider(
         {
@@ -940,6 +987,15 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'claude-agent-sdk',
+      );
+    } else if (value === 'openinterpreter') {
+      setProvider(
+        {
+          id: 'openinterpreter',
+          config: {},
+          label: currentLabel,
+        },
+        'openinterpreter',
       );
     } else if (value === 'fireworks') {
       setProvider(

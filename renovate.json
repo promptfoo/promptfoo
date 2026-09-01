@@ -6,8 +6,9 @@
   "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
-    "npm": ">= 11"
+    "npm": ">=11.18.0 <12"
   },
+  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true\nmin-release-age=10",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -29,6 +30,28 @@
       "enabled": false
     },
     {
+      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/main.yml"],
+      "matchPackageNames": ["node"],
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "enabled": false
+    },
+    {
+      "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
+      "matchFileNames": ["renovate.json"],
+      "matchPackageNames": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
+      "matchPackageNames": ["node"],
+      "enabled": false
+    },
+    {
       "description": "Group example directory updates as a fallback so package-specific groups still win",
       "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
@@ -38,12 +61,6 @@
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
-    },
-    {
-      "description": "Disable Chevrotain major updates while Node 20 is supported",
-      "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
-      "matchUpdateTypes": ["major"],
-      "enabled": false
     },
     {
       "description": "Group Anthropic packages together across all dependency types",
@@ -102,7 +119,7 @@
     },
     {
       "description": "Group IBM packages together across all dependency types",
-      "matchPackagePatterns": ["^@ibm-cloud/", "^@ibm-generative-ai/", "^ibm-cloud-sdk-core$"],
+      "matchPackagePatterns": ["^@ibm-cloud/", "^ibm-cloud-sdk-core$"],
       "matchDepTypes": [
         "dependencies",
         "devDependencies",
@@ -181,6 +198,11 @@
       "groupName": "TanStack packages"
     },
     {
+      "description": "Keep TanStack Table on v8 until the shared data tables migrate to v9's feature registration, hooks, row models, state APIs, and generic types; the v9 upgrade currently breaks the production build and every shared-table interaction.",
+      "matchPackageNames": ["@tanstack/react-table", "@tanstack/table-core"],
+      "allowedVersions": "<9"
+    },
+    {
       "description": "Group Testing Library packages together",
       "matchPackagePatterns": ["^@testing-library/"],
       "groupName": "Testing Library packages"
@@ -217,9 +239,28 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep jsdom in sync across all workspaces",
+      "description": "Keep jsdom in sync across all workspaces, and hold it below 30. jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, but this package publishes engines.node >=22.22.0 and .npmrc sets engine-strict=true, so `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that exist precisely to test that floor (see the closed #10311). jsdom is a dev-only Vitest environment, so raising the published runtime floor for it would make promptfoo refuse to start on Node 22.22.0/22.22.1 for no user-facing gain. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
       "matchPackageNames": ["jsdom"],
+      "allowedVersions": "<30",
       "groupName": "jsdom"
+    },
+    {
+      "description": "Keep jsdom's CSS color parser below 7 while promptfoo supports Node 22.22.0. @asamuzakjp/css-color 7 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, so engine-strict clean installs fail on the minimum supported Node version even though jsdom itself remains below 30. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
+      "matchPackageNames": ["@asamuzakjp/css-color"],
+      "allowedVersions": "<7"
+    },
+    {
+      "description": "Chevrotain ships as one lockstep release train: chevrotain@X declares @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast, @chevrotain/utils and @chevrotain/cst-dts-gen at exactly X, and all six reach npm within about a minute of each other. Renovate bumps one of them at a time and rewrites package.json overrides without regenerating package-lock.json, so the resulting PRs fail at `npm ci` with EUSAGE (see the closed #10293, #10294 and #10297) or leave a mixed tree (#10345 pulled @chevrotain/cst-dts-gen to 13.1.0 under chevrotain 11.2.0, which asks for 11.2.0 exactly). The family stays frozen until langium, chevrotain-allstar and every @chevrotain/* pin move together in one PR that also regenerates the lockfile; langium@4.3.1 declares chevrotain ~12.0.0, so 12.x is the next coherent target, not 13.x. test/package-manifests.test.ts asserts this rule keeps the whole family disabled and that the grammar pins equal the pinned parser version.",
+      "matchPackageNames": [
+        "chevrotain",
+        "chevrotain-allstar",
+        "@chevrotain/gast",
+        "@chevrotain/types",
+        "@chevrotain/regexp-to-ast",
+        "@chevrotain/utils",
+        "@chevrotain/cst-dts-gen"
+      ],
+      "enabled": false
     },
     {
       "description": "Keep undici in sync across root and code-scan-action",
@@ -238,7 +279,26 @@
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "LLM provider packages: frequent updates with a one-week stabilization window",
+      "description": "Keep ModelAudit schema generator pins current",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["scripts/modelaudit_schema_requirements.txt"],
+      "groupName": "ModelAudit schema generator"
+    },
+    {
+      "description": "ModelAudit schema generator: only modelaudit (the top-level package) drives updates. Its transitive pins (pydantic, pydantic-core, and typing helpers) are a matched set that must move together — pydantic enforces an exact pydantic-core pair at import time, and pydantic-core releases ahead of pydantic stable — so an independent bump of any one creates an incompatible pair. They are refreshed by regenerating the schema when modelaudit bumps.",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["scripts/modelaudit_schema_requirements.txt"],
+      "matchPackageNames": [
+        "pydantic",
+        "pydantic-core",
+        "annotated-types",
+        "typing-extensions",
+        "typing-inspection"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "LLM provider packages: frequent updates with a ten-day stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -247,7 +307,6 @@
         "^@azure/openai",
         "^@fal-ai/",
         "^@ibm-cloud/watsonx",
-        "^@ibm-generative-ai/",
         "^@modelcontextprotocol/",
         "^@openai/",
         "^google-auth-library$",
@@ -256,49 +315,54 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
-      "description": "All npm packages: wait 7 days to match the Socket minimum release age floor",
+      "description": "All npm packages: wait 10 days, a buffer above the 7-day Socket minimum release age floor",
       "matchDatasources": ["npm"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
 
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "AWS SDK packages: weekly updates to reduce noise",
       "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Biome: weekly updates",
       "matchPackageNames": ["@biomejs/biome"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Hold Knip below 6.28 until existing public barrel re-exports have been audited; 6.28 changed ignoreExportsUsedInFile and flags 130 established exports",
+      "matchPackageNames": ["knip"],
+      "allowedVersions": "<6.28.0"
     },
     {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "framer-motion: monthly updates (animation library, low urgency)",
       "matchPackageNames": ["framer-motion"],
       "schedule": ["before 6am on the first day of the month"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "satori: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["satori"],
       "schedule": ["before 6am on the first day of the month"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
@@ -306,42 +370,42 @@
       "groupName": "Vercel AI SDK",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Storybook: monthly updates to reduce noise from frequent patch releases",
       "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "PostHog packages: monthly updates to reduce noise from frequent patch releases",
       "matchPackagePatterns": ["^posthog-"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "undici: monthly updates to reduce noise",
       "matchPackageNames": ["undici"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "postcss: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["postcss"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "fast-xml-parser: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["fast-xml-parser"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     }
   ]
 }

@@ -39,6 +39,8 @@ You can override this by setting the `provider` option (see below).
 
 Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
+When a judge needs to inspect files or use coding-agent tools as part of grading, use [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric). Although an agent provider can also be supplied to `llm-rubric`, `agent-rubric` makes the capability intentional, validates that the grader is an agent runtime, and uses an agent-oriented safety prompt.
+
 It asks the model to output a JSON object that looks like this:
 
 ```json
@@ -230,13 +232,13 @@ assert:
 assert:
   - type: llm-rubric
     # German: "Responds politely and helpfully. Provide reasoning in German."
-    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+    value: 'Antwortet höflich und hilfreich. Begründung auf Deutsch geben.'
 
 # Japanese
 assert:
   - type: llm-rubric
     # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
-    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+    value: '有害なコンテンツを含まない。評価理由は日本語で答えてください。'
 ```
 
 **Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.

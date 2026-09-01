@@ -7,7 +7,7 @@ import type { BlobStoreResult } from './types';
 
 interface RemoteBlobUploadTarget {
   url: string;
-  apiKey: string;
+  authHeaders: Record<string, string>;
 }
 
 function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
@@ -16,15 +16,15 @@ function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
   }
 
   const baseUrl = cloudConfig.getApiHost();
-  const apiKey = cloudConfig.getApiKey();
+  const authHeaders = cloudConfig.getAuthHeaders();
 
-  if (!baseUrl || !apiKey || !isLoggedIntoCloud()) {
+  if (!baseUrl || !authHeaders || !isLoggedIntoCloud()) {
     return null;
   }
 
   try {
     const url = new URL('/api/blobs', baseUrl);
-    return { url: url.toString(), apiKey };
+    return { url: url.toString(), authHeaders };
   } catch (error) {
     logger.debug('[RemoteBlob] Invalid remote blob URL', {
       error: error instanceof Error ? error.message : String(error),
@@ -55,12 +55,12 @@ export async function uploadBlobRemote(
   }
 
   try {
-    const { fetchWithProxy } = await import('../util/fetch');
+    const { fetchWithProxy } = await import('../util/fetch/index');
     const response = await fetchWithProxy(target.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${target.apiKey}`,
+        ...target.authHeaders,
       },
       body: JSON.stringify({
         data: buffer.toString('base64'),

@@ -4,7 +4,7 @@ import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } fro
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
@@ -224,6 +224,9 @@ export interface PluginActionParams {
   n: number;
   delayMs: number;
   config?: PluginConfig;
+  /** Cloud target database ID used by remote task handlers to resolve target context. */
+  targetId?: string;
+  redteamGenerationContext?: RedteamGenerationContext;
 }
 
 // Context for testing multiple security contexts/states
@@ -263,11 +266,15 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   defaultConfigPath?: string;
   description?: string;
   envFile?: string;
+  filterProviders?: string;
+  filterTargets?: string;
   maxConcurrency?: number;
   output?: string;
   force?: boolean;
   write: boolean;
   inRedteamRun?: boolean;
+  /** Internal run identifier used to distinguish fresh generation from suite reuse. */
+  generationRunId?: string;
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
@@ -286,6 +293,9 @@ export interface RedteamFileConfig extends CommonOptions {
 
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
+  redteamGenerationContext?: RedteamGenerationContext;
+  /** Cloud target database ID used to preserve target-owned task context during generation. */
+  cloudTargetDatabaseId?: string;
   entities?: string[];
   // Multi-variable inputs for test case generation (from target)
   inputs?: Inputs;
@@ -298,6 +308,8 @@ export interface SynthesizeOptions extends CommonOptions {
   targetIds: string[];
   showProgressBar?: boolean;
 }
+
+export type RedteamGenerationContext = RemoteGenerationContext;
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 

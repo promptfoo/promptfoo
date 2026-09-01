@@ -729,9 +729,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with minimax', async () => {
-    const provider = await loadApiProvider('minimax:MiniMax-M2.7');
+    const provider = await loadApiProvider('minimax:MiniMax-M3');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
     expect(provider.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
     expect(provider.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
@@ -915,6 +915,15 @@ describe('loadApiProvider', () => {
       env: { MODELSLAB_API_KEY: 'context-key' } as any,
     });
     expect((provider as any).apiKey).toBe('provider-key');
+  });
+
+  it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('moonshot:kimi-k2.6', {
+      options: { env: { MOONSHOT_API_KEY: 'provider-key' } },
+      env: { MOONSHOT_API_KEY: 'context-key' },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.getApiKey()).toBe('provider-key');
   });
 
   it('loadApiProvider with file://*.py', async () => {

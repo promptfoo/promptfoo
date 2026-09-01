@@ -39,7 +39,7 @@ for (const dependency of Object.keys(packageJson.optionalDependencies ?? {})) {
 const usages = new Map<string, DependencyUsage>();
 const undeclaredUsages = new Map<string, DependencyUsage>();
 
-for (const sourceFile of getSourceFiles(repoRoot, false)) {
+for (const sourceFile of getSourceFiles(repoRoot, false, config.ignoredRoots)) {
   const sourceText = fs.readFileSync(path.join(repoRoot, sourceFile), 'utf8');
   const layer = getLayerForFile(sourceFile, config);
 
