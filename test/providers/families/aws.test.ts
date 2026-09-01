@@ -62,24 +62,61 @@ describe('aws bedrock provider factory routing', () => {
     },
   );
 
-  it('rejects prefixed Grok ids before native Converse routing', async () => {
+  it('rejects prefixed Grok ids that have no native inference profile', async () => {
+    // grok-4.3 is mantle-only: AWS publishes no `us.`/`global.` profile for it.
     await expect(
       bedrockFactory.create(
         'bedrock:converse:us.xai.grok-4.3',
         { config: { apiKey: 'bedrock-key' } },
         ctx,
       ),
-    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id instead/);
+    ).rejects.toThrow(/is not a valid Grok mantle id/);
   });
 
   it('rejects prefixed Grok ids before mantle chat routing', async () => {
-    await expect(
-      bedrockFactory.create(
-        'bedrock:mantle:us.xai.grok-4.3',
-        { config: { apiKey: 'bedrock-key' } },
-        ctx,
-      ),
-    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id instead/);
+    // Inference profiles are never mantle ids, even for a model that has one, so an explicit
+    // bedrock:mantle: request must fail rather than 404 against the mantle endpoint.
+    for (const id of ['bedrock:mantle:us.xai.grok-4.3', 'bedrock:mantle:us.xai.grok-4.6']) {
+      await expect(
+        bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx),
+      ).rejects.toThrow(/is not a valid Grok mantle id/);
+    }
+  });
+
+  it.each(['bedrock:us.xai.grok-4.6', 'bedrock:global.xai.grok-4.6'])(
+    'routes the Grok 4.6 inference profile %s to the native InvokeModel provider',
+    async (id) => {
+      // Verified live 2026-08-31: grok-4.6 reports inferenceTypesSupported
+      // ["INFERENCE_PROFILE"] and its profiles answer InvokeModel/Converse with ordinary AWS
+      // credentials — no mantle bearer token. It must not be routed to the mantle endpoint.
+      const provider = await bedrockFactory.create(id, { config: { region: 'us-west-2' } }, ctx);
+      expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+      expect((provider as any).config?.apiBaseUrl).toBeUndefined();
+      expect(provider.id()).toBe(id);
+    },
+  );
+
+  it('routes the explicit converse form of a Grok 4.6 profile to the Converse provider', async () => {
+    const { AwsBedrockConverseProvider } = await import('../../../src/providers/bedrock/converse');
+    const provider = await bedrockFactory.create(
+      'bedrock:converse:us.xai.grok-4.6',
+      { config: { region: 'us-west-2' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+  });
+
+  it('keeps the bare xai.grok-4.6 id on the mantle Responses path', async () => {
+    // The bare id has no on-demand throughput on InvokeModel, but mantle does serve it.
+    const provider = await bedrockFactory.create(
+      'bedrock:xai.grok-4.6',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
   });
 
   it('routes bedrock:mantle:<id> to the Chat Completions provider on the mantle /v1 endpoint', async () => {

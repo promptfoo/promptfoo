@@ -2480,6 +2480,14 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-20b': BEDROCK_MODEL.OPENAI,
 
+  // xAI Grok 4.6 is served natively by InvokeModel/Converse, unlike grok-4.3 (mantle only).
+  // AWS reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]` for it, so only the profile
+  // ids are invocable — the bare `xai.grok-4.6` id is deliberately absent here and instead
+  // reaches the mantle Responses path, which does serve it. Both paths verified live
+  // 2026-08-31 (us-west-2); the native responses use the OpenAI chat-completions shape.
+  'us.xai.grok-4.6': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.xai.grok-4.6': BEDROCK_MODEL.OPENAI_COMPAT,
+
   // Qwen Models via Bedrock
   'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-coder-480b-a35b-v1:0': BEDROCK_MODEL.QWEN,
@@ -2738,9 +2746,12 @@ export function getHandlerForModel(
     // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
     // direct or prefixed ids that bypass the factory's supported bare-id route.
     throw new Error(
-      `xAI model "${modelName}" is not served by Bedrock's InvokeModel API. Grok runs on the ` +
-        `OpenAI-compatible Responses API (mantle endpoint) — use "bedrock:xai.grok-4.3" and set ` +
-        `AWS_BEARER_TOKEN_BEDROCK. See https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
+      `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
+        `Grok 4.6 is invocable through an inference profile — use "bedrock:us.xai.grok-4.6" or ` +
+        `"bedrock:global.xai.grok-4.6" with ordinary AWS credentials. Other Grok models run on ` +
+        `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
+        `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
     );
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);

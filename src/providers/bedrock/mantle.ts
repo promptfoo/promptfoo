@@ -20,6 +20,48 @@ export function isBedrockGrokModel(modelName: string): boolean {
   return modelName.startsWith('xai.grok-');
 }
 
+/**
+ * Inference-profile ids for Grok models that Bedrock serves natively through
+ * InvokeModel/Converse rather than the mantle endpoint.
+ *
+ * Grok 4.6 reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]`, so it is invocable only
+ * through these profile ids — and with ordinary AWS credentials, not a mantle bearer token.
+ * Its bare `xai.grok-4.6` id is served by mantle instead. Earlier Grok models (grok-4.3) are
+ * mantle-only and have no inference profile. Verified live 2026-08-31 in us-west-2.
+ */
+const NATIVE_GROK_PROFILE_MODELS: ReadonlySet<string> = new Set([
+  'us.xai.grok-4.6',
+  'global.xai.grok-4.6',
+]);
+
+/**
+ * Whether a Bedrock model id is a Grok inference profile served by the native
+ * InvokeModel/Converse APIs (rather than the mantle Responses endpoint).
+ */
+export function isBedrockNativeGrokProfileModel(modelName: string): boolean {
+  return NATIVE_GROK_PROFILE_MODELS.has(modelName);
+}
+
+/**
+ * Whether a prefixed Grok id must be rejected instead of routed.
+ *
+ * Inference profiles are never valid mantle ids, so an explicit `bedrock:mantle:` request for
+ * one always fails. Otherwise a prefixed id is rejected only when it names no real profile —
+ * the Grok 4.6 profiles are served natively and route on to InvokeModel/Converse.
+ *
+ * @param modelName The routed Bedrock model id.
+ * @param explicitMantleRequest Whether the caller used the `bedrock:mantle:` subtype.
+ */
+export function isRejectedPrefixedGrokId(
+  modelName: string,
+  explicitMantleRequest: boolean,
+): boolean {
+  if (!modelName.includes('.xai.')) {
+    return false;
+  }
+  return explicitMantleRequest || !isBedrockNativeGrokProfileModel(modelName);
+}
+
 /** Whether a Bedrock model id is served through the mantle Responses API. */
 export function isBedrockMantleResponsesModel(modelName: string): boolean {
   return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);

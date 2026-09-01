@@ -1,6 +1,6 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
-import { isBedrockMantleResponsesModel } from '../bedrock/mantle';
+import { isBedrockMantleResponsesModel, isRejectedPrefixedGrokId } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -80,11 +80,16 @@ export const awsProviderFactories: ProviderFactory[] = [
           : splits.length === 2
             ? splits[1]
             : undefined;
+      // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
+      // simply invalid, but Grok 4.6 publishes real inference profiles that the native
+      // InvokeModel/Converse APIs serve with ordinary AWS credentials, so those fall through to
+      // the handlers below. An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
-      if (routedGrokModel?.includes('.xai.')) {
+      if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(
-          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. ` +
-            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
+            `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
+            `such as "bedrock:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
