@@ -1104,6 +1104,8 @@ describe('evalCommand', () => {
 
   it('should handle --no-cache option', async () => {
     const cmdObj = { cache: false };
+    // Scope this assertion to this invocation in this test.
+    vi.mocked(disableCache).mockClear();
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(disableCache).toHaveBeenCalledTimes(1);
   });
@@ -2545,10 +2547,10 @@ describe('checkCloudPermissions', () => {
 });
 
 describe('showRedteamProviderLabelMissingWarning', () => {
-  const mockWarn = vi.spyOn(logger, 'warn');
+  const warnSpy = vi.spyOn(logger, 'warn');
 
   beforeEach(() => {
-    mockWarn.mockClear();
+    warnSpy.mockClear();
   });
 
   it('should show warning when provider has no label', () => {
@@ -2564,7 +2566,7 @@ describe('showRedteamProviderLabelMissingWarning', () => {
     } as unknown as TestSuite;
 
     showRedteamProviderLabelMissingWarning(testSuite);
-    expect(mockWarn).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should not show warning when all providers have labels', () => {
@@ -2580,7 +2582,7 @@ describe('showRedteamProviderLabelMissingWarning', () => {
     } as unknown as TestSuite;
 
     showRedteamProviderLabelMissingWarning(testSuite);
-    expect(mockWarn).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('should handle empty providers array', () => {
@@ -2590,17 +2592,17 @@ describe('showRedteamProviderLabelMissingWarning', () => {
     } as unknown as TestSuite;
 
     showRedteamProviderLabelMissingWarning(testSuite);
-    expect(mockWarn).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 
 describe('Provider Token Tracking', () => {
   let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-  const mockLogger = vi.spyOn(logger, 'info');
+  const loggerInfoSpy = vi.spyOn(logger, 'info');
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLogger.mockClear();
+    loggerInfoSpy.mockClear();
 
     mockTokenUsageTracker = {
       getProviderIds: vi.fn(),
