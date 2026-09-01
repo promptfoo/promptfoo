@@ -40,13 +40,12 @@ import type {
 export type XaiVideoModel = 'grok-imagine-video' | 'grok-imagine-video-1.5';
 
 /**
- * Maps every video slug xAI publishes (including dated and -preview aliases, as
- * listed by `/v1/models`) to its canonical id, so pricing and request routing stay
- * consistent when a caller targets an alias. Verified live 2026-08-31.
+ * Maps the non-canonical video slugs xAI publishes (dated and -preview aliases, as
+ * listed by `/v1/models`) to their canonical id, so pricing and request routing stay
+ * consistent when a caller targets an alias. Verified live 2026-08-31. Canonical ids
+ * need no entry — `resolveVideoModel` passes through anything it does not find here.
  */
 const VIDEO_MODEL_ALIASES: Record<string, XaiVideoModel> = {
-  'grok-imagine-video': 'grok-imagine-video',
-  'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
   'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5',
   'grok-imagine-video-1.5-2026-05-30': 'grok-imagine-video-1.5',
 };
@@ -168,9 +167,6 @@ const COST_PER_SECOND_BY_MODEL: Record<XaiVideoModel, number> = {
   'grok-imagine-video-1.5': 0.08,
 };
 
-/** Rate used for the base model and for any slug promptfoo has not indexed. */
-const COST_PER_SECOND = COST_PER_SECOND_BY_MODEL['grok-imagine-video'];
-
 // =============================================================================
 // Validation
 // =============================================================================
@@ -199,7 +195,11 @@ export function calculateVideoCost(
   if (cached) {
     return 0;
   }
-  const rate = (model && COST_PER_SECOND_BY_MODEL[resolveVideoModel(model)]) || COST_PER_SECOND;
+  // `??` rather than `||` so a future $0 tier is billed as free instead of silently
+  // falling back to the base rate. Unindexed slugs fall back to the base model.
+  const rate =
+    COST_PER_SECOND_BY_MODEL[resolveVideoModel(model ?? DEFAULT_MODEL)] ??
+    COST_PER_SECOND_BY_MODEL[DEFAULT_MODEL];
   return rate * seconds;
 }
 
