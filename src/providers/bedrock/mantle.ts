@@ -38,7 +38,7 @@ const NATIVE_GROK_PROFILE_MODELS: ReadonlySet<string> = new Set([
  * Whether a Bedrock model id is a Grok inference profile served by the native
  * InvokeModel/Converse APIs (rather than the mantle Responses endpoint).
  */
-export function isBedrockNativeGrokProfileModel(modelName: string): boolean {
+function isBedrockNativeGrokProfileModel(modelName: string): boolean {
   return NATIVE_GROK_PROFILE_MODELS.has(modelName);
 }
 
