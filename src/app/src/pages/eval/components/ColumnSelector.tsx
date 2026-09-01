@@ -52,6 +52,11 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
   const variablesVisible =
     variableColumns.length > 0 && variableColumns.every((col) => selectedColumns.includes(col));
 
+  const selectedVisibleCount = React.useMemo(() => {
+    const columnValues = new Set(columnData.map((column) => column.value));
+    return selectedColumns.filter((column) => columnValues.has(column)).length;
+  }, [columnData, selectedColumns]);
+
   const handleToggleVariables = () => {
     if (variablesVisible) {
       // Hide all variables - keep non-variable columns
@@ -83,8 +88,8 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
     <>
       <Button onClick={handleOpen} variant="outline" size="sm">
         <Columns3 className="size-4 mr-2" />
-        Columns ({selectedColumns.length}
-        {selectedColumns.length < columnData.length && `/${columnData.length}`})
+        Columns ({selectedVisibleCount}
+        {selectedVisibleCount < columnData.length && `/${columnData.length}`})
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
