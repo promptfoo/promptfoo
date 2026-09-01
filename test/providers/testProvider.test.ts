@@ -26,6 +26,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     cloudConfig: {
       getApiHost: vi.fn(() => 'https://api.promptfoo.app'),
       getApiKey: vi.fn(() => 'test-api-key'),
+      getAuthHeaders: vi.fn(() => ({ Authorization: 'Bearer test-api-key' })),
       isEnabled: vi.fn(() => true),
     },
   };
