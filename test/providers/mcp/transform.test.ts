@@ -693,7 +693,7 @@ describe('transformMCPToolsToGoogle', () => {
   });
 });
 
-describe('transformMCPConfigToClaudeCode', () => {
+describe('transformMCPConfigToClaudeCode per-server env forwarding', () => {
   it('forwards per-server env for command-type stdio servers', async () => {
     const servers = await transformMCPConfigToClaudeCode({
       enabled: true,
