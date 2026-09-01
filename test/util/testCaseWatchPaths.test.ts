@@ -145,6 +145,13 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
+  it('watches file references nested inside a .jsonl tests file', () => {
+    fs.writeFileSync(path.join(base, 'nested.jsonl'), '{"vars":{"data":"file://vars.csv"}}\n');
+    const watched = resolve('file://nested.jsonl' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested.jsonl'));
+    expect(watched).toContain(path.join(base, 'vars.csv'));
+  });
+
   it('tolerates a self-referential generator config', () => {
     // A YAML anchor produces a cyclic object, which naive recursion would follow until
     // the stack overflows -- crashing a run that had already evaluated successfully.
