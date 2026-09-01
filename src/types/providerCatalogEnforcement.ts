@@ -38,31 +38,77 @@ function assertionsOverrideProvider(assertions: unknown): boolean {
   );
 }
 
-function testCaseOverridesProvider(testCase: unknown): boolean {
+function providerReferenceMatchesCatalog(
+  reference: unknown,
+  availableProviders: ProviderOptions[],
+): boolean {
+  if (typeof reference !== 'string') {
+    return false;
+  }
+  return availableProviders.some((provider) => {
+    const candidates = [provider.id, provider.label].filter(
+      (candidate): candidate is string => typeof candidate === 'string',
+    );
+    if (reference.endsWith('*')) {
+      const prefix = reference.slice(0, -1);
+      return candidates.some((candidate) => candidate.startsWith(prefix));
+    }
+    return candidates.some(
+      (candidate) => candidate === reference || candidate.startsWith(`${reference}:`),
+    );
+  });
+}
+
+function providerFilterOverridesCatalog(
+  providers: unknown,
+  availableProviders: ProviderOptions[],
+): boolean {
+  return (
+    !Array.isArray(providers) ||
+    providers.some((reference) => !providerReferenceMatchesCatalog(reference, availableProviders))
+  );
+}
+
+function testCaseOverridesProvider(
+  testCase: unknown,
+  availableProviders: ProviderOptions[],
+): boolean {
   return (
     !isRecord(testCase) ||
     Boolean(testCase.provider) ||
-    (Array.isArray(testCase.providers) && testCase.providers.length > 0) ||
+    ('providers' in testCase &&
+      providerFilterOverridesCatalog(testCase.providers, availableProviders)) ||
     hasProviderAffectingOptions(testCase.options) ||
     assertionsOverrideProvider(testCase.assert)
   );
 }
 
-function testCasesOverrideProvider(tests: unknown): boolean {
+function testCasesOverrideProvider(tests: unknown, availableProviders: ProviderOptions[]): boolean {
   if (tests === undefined) {
     return false;
   }
-  return !Array.isArray(tests) || tests.some(testCaseOverridesProvider);
+  return (
+    !Array.isArray(tests) ||
+    tests.some((testCase) => testCaseOverridesProvider(testCase, availableProviders))
+  );
 }
 
-function defaultTestOverridesProvider(defaultTest: unknown): boolean {
+function defaultTestOverridesProvider(
+  defaultTest: unknown,
+  availableProviders: ProviderOptions[],
+): boolean {
   if (defaultTest === undefined) {
     return false;
   }
-  return typeof defaultTest === 'string' || testCaseOverridesProvider(defaultTest);
+  return (
+    typeof defaultTest === 'string' || testCaseOverridesProvider(defaultTest, availableProviders)
+  );
 }
 
-function scenariosOverrideProvider(scenarios: unknown): boolean {
+function scenariosOverrideProvider(
+  scenarios: unknown,
+  availableProviders: ProviderOptions[],
+): boolean {
   if (scenarios === undefined) {
     return false;
   }
@@ -74,7 +120,7 @@ function scenariosOverrideProvider(scenarios: unknown): boolean {
       return true;
     }
     return ['config', 'tests'].some(
-      (key) => key in scenario && testCasesOverrideProvider(scenario[key]),
+      (key) => key in scenario && testCasesOverrideProvider(scenario[key], availableProviders),
     );
   });
 }
@@ -123,12 +169,33 @@ function normalizeSubmittedProvider(provider: unknown): unknown {
   return typeof provider === 'string' ? { id: provider } : provider;
 }
 
+function toJsonWireValue(value: unknown): { success: true; value: unknown } | { success: false } {
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined
+      ? { success: false }
+      : { success: true, value: JSON.parse(serialized) };
+  } catch {
+    return { success: false };
+  }
+}
+
+function jsonWireValuesEqual(left: unknown, right: unknown): boolean {
+  const leftWireValue = toJsonWireValue(left);
+  const rightWireValue = toJsonWireValue(right);
+  return (
+    leftWireValue.success &&
+    rightWireValue.success &&
+    deepEqual(leftWireValue.value, rightWireValue.value)
+  );
+}
+
 function providersMatchCatalog(providers: unknown, availableProviders: ProviderOptions[]): boolean {
   return (
     Array.isArray(providers) &&
     providers.every((provider) =>
       availableProviders.some((availableProvider) =>
-        deepEqual(normalizeSubmittedProvider(provider), availableProvider),
+        jsonWireValuesEqual(normalizeSubmittedProvider(provider), availableProvider),
       ),
     )
   );
@@ -169,10 +236,12 @@ export function hasRestrictedProviderOverride(
     return true;
   }
   return (
-    testCasesOverrideProvider(config.tests) ||
-    defaultTestOverridesProvider(config.defaultTest) ||
-    scenariosOverrideProvider(config.scenarios) ||
+    testCasesOverrideProvider(config.tests, availableProviders) ||
+    defaultTestOverridesProvider(config.defaultTest, availableProviders) ||
+    scenariosOverrideProvider(config.scenarios, availableProviders) ||
     promptsOverrideProvider(config.prompts) ||
+    (config.extensions !== undefined &&
+      (!Array.isArray(config.extensions) || config.extensions.length > 0)) ||
     envOverridesCatalog(config.env, availableProviders)
   );
 }

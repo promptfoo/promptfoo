@@ -119,6 +119,45 @@ describe('Eval Routes - provider catalog enforcement', () => {
     expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
   });
 
+  it('accepts provider filters that only reference approved top-level providers', async () => {
+    const response = await api.post('/api/eval/job').send({
+      ...minimalTestSuite,
+      tests: [{ providers: ['echo'] }],
+      defaultTest: { providers: ['echo'] },
+      scenarios: [{ config: [{ providers: ['echo'] }], tests: [{ providers: ['echo'] }] }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+  });
+
+  it('rejects executable extensions while the custom catalog is active', async () => {
+    const response = await api.post('/api/eval/job').send({
+      ...minimalTestSuite,
+      extensions: ['file://extension.py:beforeAll'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('outside the administrator catalog');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('compares YAML-native catalog values using their JSON wire representation', async () => {
+    const datedProvider = {
+      id: 'echo',
+      config: { releaseDate: new Date('2026-09-01T00:00:00.000Z') },
+    };
+    mockedGetAvailableProviders.mockReturnValue([datedProvider] as never);
+
+    const response = await api.post('/api/eval/job').send({
+      ...minimalTestSuite,
+      providers: [{ id: 'echo', config: { releaseDate: '2026-09-01T00:00:00.000Z' } }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+  });
+
   it('does not restrict providers when no custom catalog is configured', async () => {
     mockedHasCustomProviderConfig.mockReturnValue(false);
 
