@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.235",
+    "@anthropic-ai/claude-agent-sdk": "0.3.239",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.235",
+    "@anthropic-ai/claude-agent-sdk": "0.3.239",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -300,7 +300,7 @@
     "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.18",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.62.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.62.5",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.16.1",
@@ -323,7 +323,7 @@
     "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.117.1",
+    "@anthropic-ai/sdk": "0.120.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.0",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -342,7 +342,7 @@
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.190",
+    "ai": "^6.0.264",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
