@@ -152,6 +152,47 @@ describe('calculateBedrockCost', () => {
     );
   });
 
+  describe('Claude Sonnet 4 long-context tier', () => {
+    // AWS publishes `-long-context-` meters for Claude Sonnet 4 only, at 2x input / 1.5x output
+    // (verified 2026-09-01 across us-east-1, us-east-2, us-west-2, eu-west-1, ap-northeast-1).
+    const ID = 'global.anthropic.claude-sonnet-4-20250514-v1:0';
+
+    it('bills below the threshold at the standard rate', () => {
+      expect(calculateBedrockCost(ID, 199_999, 1_000)).toBeCloseTo(
+        (199_999 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+    });
+
+    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+      expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
+        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('counts cache tokens toward the threshold and prices cache off the tier rate', () => {
+      // 150k uncached + 60k cache reads crosses 200k, so the whole request bills at the tier:
+      // AWS's long-context cache-read meter is 10% of the $6 tier input rate.
+      expect(calculateBedrockCost(ID, 150_000, 1_000, 60_000, 0)).toBeCloseTo(
+        (150_000 / 1e6) * 6 + (60_000 / 1e6) * 6 * 0.1 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('does not leak the tier onto the 4.5 or 4.6 point releases', () => {
+      for (const id of [
+        'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'global.anthropic.claude-sonnet-4-6',
+      ]) {
+        expect(calculateBedrockCost(id, 500_000, 1_000)).toBeCloseTo(
+          (500_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+          6,
+        );
+      }
+    });
+  });
+
   it('prices Claude Opus 5 at $5/$25 on the global endpoint (base rate)', () => {
     expect(calculateBedrockCost('global.anthropic.claude-opus-5', 100_000, 1_000)).toBeCloseTo(
       (100_000 / 1e6) * 5 + (1_000 / 1e6) * 25,

@@ -11,7 +11,16 @@ export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex';
 };
 
-type BedrockPricing = { input: number; output: number };
+type BedrockPricing = {
+  input: number;
+  output: number;
+  /**
+   * Rates that replace `input`/`output` once total input tokens reach `threshold`.
+   * Cache rates are derived from the tier's input rate, matching how AWS prices the
+   * `-cache-read/-cache-write-...-long-context-...` meters.
+   */
+  longContext?: { threshold: number; input: number; output: number };
+};
 
 /**
  * Amazon Nova bills prompt-cache reads at 25% of the model's input rate and cache writes at
@@ -54,7 +63,22 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4/4.5
-  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
+  // The Sonnet 4 point releases must precede the bare `-4` prefix: lookup is first-match-wins
+  // on `includes()`, and AWS publishes long-context meters only for Sonnet 4 itself. 4.5 and
+  // 4.6 bill their full context flat, so they must not inherit Sonnet 4's surcharge — add an
+  // explicit entry here for any future 4.x release for the same reason.
+  'anthropic.claude-sonnet-4-6': { input: 3, output: 15 },
+  'anthropic.claude-sonnet-4-5': { input: 3, output: 15 },
+  // Claude Sonnet 4 is the only Bedrock Claude model with published long-context meters
+  // (verified 2026-09-01 in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1):
+  // above 200K input tokens input doubles to $6 and output is 1.5x at $22.50. The matching
+  // `-cache-read/-cache-write-...-long-context-...` meters are 10% and 1.25x of the tier's
+  // input rate, which falls out of deriving the cache rates from it.
+  'anthropic.claude-sonnet-4': {
+    input: 3,
+    output: 15,
+    longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
   // Claude 3.x
@@ -422,13 +446,21 @@ export function calculateBedrockCost(
   const serviceTierMultiplier =
     serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
   const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
-  const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
+  // Long-context tiers are billed on total input size, which for Anthropic means the uncached
+  // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
+  const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
+  const tier =
+    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
+      ? pricing.longContext
+      : pricing;
+
+  const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
     ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
     : isNovaPromptCachingModel(normalizedModelId)
       ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
       : promptTokens * inputRate;
-  const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
+  const outputCost = (completionTokens / 1_000_000) * tier.output * pricingMultiplier;
   return inputCost + outputCost;
 }
 
