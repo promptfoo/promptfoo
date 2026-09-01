@@ -10,6 +10,43 @@ const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
 describe('calculateBedrockCost', () => {
+  describe('Amazon Nova prompt caching', () => {
+    // AWS Price List (us-east-1, 2026-09-01): every Nova `-cache-read-input-token-count`
+    // meter is exactly 25% of the model's input rate, and every cache-write meter is $0.
+    // Before this, cache reads on Nova were billed at $0 — a silent undercharge.
+    it('bills Nova cache reads at 25% of the input rate', () => {
+      const cost = calculateBedrockCost('amazon.nova-lite-v1:0', 1000, 0, 10_000, 0, 'us-east-1');
+      // 1000 uncached * $0.06/M + 10000 cached * $0.015/M
+      expect(cost).toBeCloseTo((1000 * 0.06 + 10_000 * 0.015) / 1e6, 12);
+    });
+
+    it('treats Nova cache writes as free', () => {
+      const withWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        50_000,
+        'us-east-1',
+      );
+      const withoutWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        0,
+        'us-east-1',
+      );
+      expect(withWrites).toBeCloseTo(withoutWrites as number, 12);
+    });
+
+    it('does not apply the Nova ratio to non-Nova, non-Claude models', () => {
+      // No published cache meter: cache tokens stay out of the estimate.
+      const cost = calculateBedrockCost('meta.llama3-3-70b-instruct-v1:0', 1000, 0, 9999, 0);
+      expect(cost).toBeCloseTo((1000 * 0.72) / 1e6, 12);
+    });
+  });
+
   it.each([
     // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
     { id: 'zai.glm-5', input: 1.0, output: 3.2 },
@@ -55,6 +92,15 @@ describe('calculateBedrockCost', () => {
   });
 
   it.each([
+    // Reconciled against the AWS Price List API per region on 2026-09-01. These five had
+    // been derived from the US rate via a regional uplift rather than read from the real
+    // meters, so they drifted from AWS's published values.
+    { id: 'zai.glm-4.7', region: 'ap-southeast-2', input: 0.62, output: 2.27 },
+    { id: 'zai.glm-4.7-flash', region: 'ap-southeast-2', input: 0.07, output: 0.41 },
+    { id: 'minimax.minimax-m2.1', region: 'ap-southeast-2', input: 0.31, output: 1.24 },
+    { id: 'moonshotai.kimi-k2.5', region: 'ap-southeast-2', input: 0.62, output: 3.09 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-west-1', input: 0.23, output: 0.7 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-south-1', input: 0.23, output: 0.7 },
     { id: 'google.gemma-3-12b-it', region: 'eu-west-2', input: 0.14, output: 0.45 },
     { id: 'minimax.minimax-m2.1', region: 'eu-west-1', input: 0.36, output: 1.44 },
     { id: 'minimax.minimax-m2.5', region: 'eu-south-1', input: 0.36, output: 1.44 },

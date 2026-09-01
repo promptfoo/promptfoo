@@ -14,6 +14,21 @@ export type BedrockServiceTier = {
 type BedrockPricing = { input: number; output: number };
 
 /**
+ * Amazon Nova bills prompt-cache reads at 25% of the model's input rate and cache writes at
+ * $0.00. Confirmed for every Nova model AWS publishes a cache meter for (Micro, Lite, Pro,
+ * Premier, 2.0 Lite) from the AWS Price List API on 2026-09-01 — the ratio is exactly 0.25 in
+ * each case, and every `-cache-write-input-token-count` meter is zero.
+ *
+ * Claude has its own (different) cache economics and is handled by `calculateCacheInputCost`.
+ * Models with no published cache meter keep the previous behaviour of ignoring cache tokens.
+ */
+const NOVA_CACHE_READ_RATIO = 0.25;
+
+function isNovaPromptCachingModel(normalizedModelId: string): boolean {
+  return normalizedModelId.includes('amazon.nova-');
+}
+
+/**
  * Bedrock model pricing per 1M tokens.
  *
  * Rates are the plain us-east-1 on-demand meters from the AWS Price List API
@@ -247,7 +262,7 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
   'minimax.minimax-m2': { input: 0.35, output: 1.41 },
   'kimi-k2.5': { input: 0.72, output: 3.6 },
   'kimi-k2-thinking': { input: 0.72, output: 3.0 },
-  'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
+  'nemotron-nano-12b-v2': { input: 0.23, output: 0.7 },
   'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
   'nemotron-nano': { input: 0.07, output: 0.27 },
   'nemotron-super': { input: 0.18, output: 0.78 },
@@ -282,14 +297,16 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
     'gemma-3-12b': { input: 0.11, output: 0.34 },
     'gemma-3-27b': { input: 0.27, output: 0.45 },
   },
+  // These are AWS's published ap-southeast-2 meters, not the US rate scaled by a regional
+  // uplift. Four entries had been derived that way and drifted from the real values.
   'ap-southeast-2': {
     'zai.glm-5': { input: 1.03, output: 3.3 },
-    'zai.glm-4.7-flash': { input: 0.0721, output: 0.412 },
-    'zai.glm-4.7': { input: 0.618, output: 2.266 },
+    'zai.glm-4.7-flash': { input: 0.07, output: 0.41 },
+    'zai.glm-4.7': { input: 0.62, output: 2.27 },
     'minimax.minimax-m2.5': { input: 0.31, output: 1.24 },
-    'minimax.minimax-m2.1': { input: 0.309, output: 1.236 },
+    'minimax.minimax-m2.1': { input: 0.31, output: 1.24 },
     'minimax.minimax-m2': { input: 0.309, output: 1.236 },
-    'kimi-k2.5': { input: 0.618, output: 3.09 },
+    'kimi-k2.5': { input: 0.62, output: 3.09 },
     'kimi-k2-thinking': { input: 0.618, output: 2.575 },
     'nemotron-nano-12b-v2': { input: 0.206, output: 0.618 },
     'nemotron-nano-3-30b': { input: 0.0618, output: 0.2472 },
@@ -408,7 +425,9 @@ export function calculateBedrockCost(
   const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
     ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
-    : promptTokens * inputRate;
+    : isNovaPromptCachingModel(normalizedModelId)
+      ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
+      : promptTokens * inputRate;
   const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
   return inputCost + outputCost;
 }
