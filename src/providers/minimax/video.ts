@@ -1,16 +1,6 @@
 /** MiniMax H3 video generation provider. */
-import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { sleep } from '../../util/time';
+import { fetchWithProviderProxy } from '../fetch';
 import { buildStorageRefUrl, formatVideoOutput, storeVideoContent } from '../video';
-
-import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../../types/index';
 
 export type MiniMaxVideoContent = {
   type: 'text' | 'image_url' | 'video_url' | 'audio_url';
@@ -34,6 +24,13 @@ export interface MiniMaxVideoOptions {
   headers?: Record<string, string>;
 }
 
+type MiniMaxVideoContext = {
+  evaluationId?: string;
+  prompt?: { config?: unknown };
+};
+
+type MiniMaxVideoEnv = Record<string, string | undefined>;
+
 const DEFAULT_API_BASE_URL = 'https://api.minimax.io/v2/video_generation';
 const DEFAULT_MODEL = 'MiniMax-H3';
 const DEFAULT_RESOLUTION = '2K';
@@ -42,7 +39,7 @@ const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_MAX_POLL_TIME_MS = 600000;
 const _VALID_RATIOS = new Set(['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']);
 
-function getApiKey(config: MiniMaxVideoOptions, env?: EnvOverrides): string | undefined {
+function getApiKey(config: MiniMaxVideoOptions, env?: MiniMaxVideoEnv): string | undefined {
   return config.apiKey || env?.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY;
 }
 
@@ -86,15 +83,15 @@ function validateContent(content: MiniMaxVideoContent[]): string | undefined {
   return undefined;
 }
 
-export class MiniMaxVideoProvider implements ApiProvider {
+export class MiniMaxVideoProvider {
   modelName: string;
   config: MiniMaxVideoOptions;
   private providerId?: string;
-  env?: EnvOverrides;
+  env?: MiniMaxVideoEnv;
 
   constructor(
     modelName: string = DEFAULT_MODEL,
-    options: { config?: MiniMaxVideoOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: MiniMaxVideoOptions; id?: string; env?: MiniMaxVideoEnv } = {},
   ) {
     this.modelName = modelName || DEFAULT_MODEL;
     this.config = options.config || {};
@@ -118,11 +115,7 @@ export class MiniMaxVideoProvider implements ApiProvider {
   // The provider lifecycle (submit, poll, download, store) is intentionally
   // kept together so every failure maps to a provider error.
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: provider lifecycle intentionally stays together
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: MiniMaxVideoContext) {
     const apiKey = getApiKey(this.config, this.env);
     if (!apiKey) {
       return {
@@ -159,7 +152,7 @@ export class MiniMaxVideoProvider implements ApiProvider {
     };
     const started = Date.now();
     try {
-      const response = await fetchWithProxy(this.getApiUrl(), {
+      const response = await fetchWithProviderProxy(this.getApiUrl(), {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -184,7 +177,7 @@ export class MiniMaxVideoProvider implements ApiProvider {
       let videoUrl: string | undefined;
       let taskStatus: string | undefined;
       while (Date.now() < deadline) {
-        const poll = await fetchWithProxy(queryUrl, { method: 'GET', headers });
+        const poll = await fetchWithProviderProxy(queryUrl, { method: 'GET', headers });
         const statusData = (await poll.json().catch(() => ({}))) as any;
         if (
           !poll.ok ||
@@ -203,12 +196,12 @@ export class MiniMaxVideoProvider implements ApiProvider {
         if (['Fail', 'Failed', 'failed', 'error'].includes(String(taskStatus))) {
           return { error: `MiniMax video generation failed (status=${taskStatus}).` };
         }
-        await sleep(interval);
+        await new Promise((resolve) => setTimeout(resolve, interval));
       }
       if (!videoUrl) {
         return { error: `MiniMax video generation timed out (status=${taskStatus || 'unknown'}).` };
       }
-      const download = await fetchWithProxy(videoUrl, { method: 'GET' });
+      const download = await fetchWithProviderProxy(videoUrl, { method: 'GET' });
       if (!download.ok) {
         return { error: `MiniMax video download failed: ${download.status}` };
       }
@@ -237,7 +230,6 @@ export class MiniMaxVideoProvider implements ApiProvider {
         metadata: { taskId, status: taskStatus, model, resolution, duration },
       };
     } catch (err) {
-      logger.debug('[MiniMax Video] request failed', { error: String(err) });
       return { error: `MiniMax video request failed: ${String(err)}` };
     }
   }
@@ -245,8 +237,8 @@ export class MiniMaxVideoProvider implements ApiProvider {
 
 export function createMiniMaxVideoProvider(
   providerPath: string,
-  options: { config?: MiniMaxVideoOptions; id?: string; env?: EnvOverrides } = {},
-): ApiProvider {
+  options: { config?: MiniMaxVideoOptions; id?: string; env?: MiniMaxVideoEnv } = {},
+) {
   const modelName = providerPath.split(':').slice(2).join(':') || DEFAULT_MODEL;
   return new MiniMaxVideoProvider(modelName, options);
 }
