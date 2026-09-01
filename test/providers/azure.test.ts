@@ -727,6 +727,17 @@ describe('Azure Provider Tests', () => {
         expect(body.reasoning_effort).toBeUndefined();
       });
 
+      it('keeps a future Grok 10 on the restricted path', async () => {
+        const provider = new AzureChatCompletionProvider('grok-10-preview', {
+          config: { apiHost: 'test.openai.azure.com', stop: ['x'] },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeUndefined();
+        expect(body.stop).toBeUndefined();
+      });
+
       it('leaves Grok 3 and grok-code-fast deployments alone', async () => {
         // Only Grok 4 and newer restrict these parameters.
         for (const deployment of ['grok-3', 'grok-3-mini', 'grok-code-fast-1']) {

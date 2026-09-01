@@ -122,10 +122,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * xAI provider strips the same three parameters for its GROK_4_MODELS list.
    *
    * Matched on the deployment name, like the other Azure model heuristics. Grok 3 and
-   * grok-code-fast accept these parameters, so only Grok 4 and newer are matched.
+   * grok-code-fast accept these parameters, so only Grok 4 and newer are matched — the
+   * two-or-more-digit alternative keeps a future `grok-10` on the restricted path rather
+   * than silently regressing it to the failing default.
    */
   protected isGrok4OrNewerModel(): boolean {
-    return /grok-[4-9]/.test(this.deploymentName.toLowerCase());
+    return /grok-(?:[4-9]|\d{2,})/.test(this.deploymentName.toLowerCase());
   }
 
   /**
