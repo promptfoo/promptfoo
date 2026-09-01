@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { Plus, Trash2 } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
@@ -53,7 +54,9 @@ export default function Prompts() {
 
   return (
     <div>
-      <h2 className="mb-2 text-xl font-medium">Prompts</h2>
+      <Typography variant="title" as="h2" className="mb-2">
+        Prompts
+      </Typography>
       <p className="mb-4 text-muted-foreground">
         Enter your prompts below. Use{' '}
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">{'{{ prompt }}'}</code> as
