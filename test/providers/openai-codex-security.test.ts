@@ -624,13 +624,29 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('does not fabricate usage or cost when the SDK omits both', async () => {
+      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: {} }));
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toBeUndefined();
+      expect(response.tokenUsage).toBeUndefined();
+      expect(response.cost).toBeUndefined();
+    });
+
+    // A future SDK could drop `turnResult` entirely. Missing usage metadata must degrade
+    // to "no usage reported" -- it must not discard the findings the scan already produced.
+    it('still reports findings when the SDK omits turnResult entirely', async () => {
       mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: undefined }));
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
+      expect(response.error).toBeUndefined();
       expect(response.tokenUsage).toBeUndefined();
       expect(response.cost).toBeUndefined();
+      expect(response.metadata).toMatchObject({ findingsCount: 1, repository: expect.any(String) });
+      expect(response.metadata?.model).toBeUndefined();
     });
 
     it('renders provider configuration variables for each eval row', async () => {

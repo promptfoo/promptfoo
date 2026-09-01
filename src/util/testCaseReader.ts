@@ -766,10 +766,7 @@ function collectNestedFileReferences(testsFile: string): string[] {
       ext === 'json'
         ? JSON.parse(raw)
         : ext === 'jsonl'
-          ? raw
-              .split(/\r?\n/)
-              .filter((line) => line.trim().length > 0)
-              .map((line) => JSON.parse(line))
+          ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
     return collectConfigFileReferences(parsed, path.dirname(testsFile));
   } catch {

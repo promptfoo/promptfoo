@@ -488,7 +488,7 @@ describe('evalCommand', () => {
     });
   });
 
-  it.each(['invalid', '=value', ' =value', 'key= ', ' = '])(
+  it.each(['invalid', '=value', ' =value', ' = ', 'key =value', 'key\t=value'])(
     'should reject malformed --tag value %s',
     (tagValue) => {
       const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
