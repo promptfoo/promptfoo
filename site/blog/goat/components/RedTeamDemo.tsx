@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -18,6 +17,7 @@ import {
   Type,
   User,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
 import RedTeamSuggestions from './RedTeamSuggestions';
