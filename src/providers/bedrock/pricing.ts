@@ -13,7 +13,14 @@ export type BedrockServiceTier = {
 
 type BedrockPricing = { input: number; output: number };
 
-/** Bedrock model pricing per 1M tokens. */
+/**
+ * Bedrock model pricing per 1M tokens.
+ *
+ * Rates are the plain us-east-1 on-demand meters from the AWS Price List API
+ * (`aws pricing get-products --service-code AmazonBedrock`), which is the authority — the
+ * `-batch`, `-custom-model`, `-flex`, `-priority` and `-cross-region-global` meters carry
+ * different rates and must not be used here. Last reconciled 2026-09-01.
+ */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
   'anthropic.claude-fable-5': { input: 10, output: 50 },
@@ -45,24 +52,25 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-micro': { input: 0.035, output: 0.14 },
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
-  'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
+  'amazon.nova-premier': { input: 2.5, output: 12.5 },
+  // Amazon Nova 2 (reasoning models). The cross-region global profile is cheaper
+  // ($0.30/$2.50); this is the plain us-east-1 on-demand rate.
+  'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
-  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
+  'amazon.titan-text-express': { input: 0.2, output: 0.6 },
   'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
   // Meta Llama
   'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
-  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
+  'meta.llama3-1-70b': { input: 0.72, output: 0.72 },
   'meta.llama3-1-405b': { input: 5.32, output: 16 },
   'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
   'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
-  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
-  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
-  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
-  'meta.llama4-scout': { input: 0.17, output: 0.68 },
-  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
+  'meta.llama3-2-11b': { input: 0.16, output: 0.16 },
+  'meta.llama3-2-90b': { input: 0.72, output: 0.72 },
+  'meta.llama3-3-70b': { input: 0.72, output: 0.72 },
+  'meta.llama4-scout': { input: 0.17, output: 0.66 },
+  'meta.llama4-maverick': { input: 0.24, output: 0.97 },
   'meta.llama4': { input: 1.0, output: 3.0 },
   // Mistral
   'mistral.mistral-7b': { input: 0.15, output: 0.2 },
@@ -80,9 +88,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
   'deepseek.r1': { input: 1.35, output: 5.4 },
   // Qwen
-  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-32b': { input: 0.15, output: 0.6 },
   'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
-  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-coder-30b': { input: 0.15, output: 0.6 },
   'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
   'qwen.qwen3': { input: 0.5, output: 1.5 },
   // Writer Palmyra

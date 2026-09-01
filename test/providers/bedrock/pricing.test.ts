@@ -31,6 +31,20 @@ describe('calculateBedrockCost', () => {
     { id: 'google.gemma-3-4b-it', input: 0.04, output: 0.08 },
     { id: 'google.gemma-3-12b-it', input: 0.09, output: 0.29 },
     { id: 'google.gemma-3-27b-it', input: 0.23, output: 0.38 },
+    // Reconciled against the AWS Price List API (us-east-1 plain on-demand meters) on
+    // 2026-09-01. Each of these carried a stale rate before that sweep, so they are pinned
+    // here to catch the next drift.
+    { id: 'amazon.nova-premier-v1:0', input: 2.5, output: 12.5 },
+    { id: 'amazon.nova-2-lite-v1:0', input: 0.33, output: 2.75 },
+    { id: 'amazon.titan-text-express-v1', input: 0.2, output: 0.6 },
+    { id: 'meta.llama3-1-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-2-11b-instruct-v1:0', input: 0.16, output: 0.16 },
+    { id: 'meta.llama3-2-90b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-3-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama4-scout-17b-instruct-v1:0', input: 0.17, output: 0.66 },
+    { id: 'meta.llama4-maverick-17b-instruct-v1:0', input: 0.24, output: 0.97 },
+    { id: 'qwen.qwen3-32b-v1:0', input: 0.15, output: 0.6 },
+    { id: 'qwen.qwen3-coder-30b-a3b-v1:0', input: 0.15, output: 0.6 },
     { id: 'writer.palmyra-vision-7b', input: 0.15, output: 0.6 },
     { id: 'us.writer.palmyra-x5-v1:0', input: 0.6, output: 6 },
   ])('uses the base rate for $id', ({ id, input, output }) => {
