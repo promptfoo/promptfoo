@@ -1199,7 +1199,8 @@ specifically want the Responses API surface.
 
 :::note
 
-Cost is not reported for either Grok path; see the
+Cost is not reported for either Grok path — promptfoo has no Bedrock pricing table entry for
+Grok, so the provider leaves `cost` undefined and evals show `$0`. See the
 [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for current rates.
 
 :::
