@@ -47,7 +47,7 @@
     "clsx": "^2.1.1",
     "dedent": "^1.7.2",
     "docusaurus-plugin-image-zoom": "^3.0.1",
-    "framer-motion": "^12.34.3",
+    "motion": "^12.34.3",
     "gray-matter": "^4.0.3",
     "jsdom": "^29.0.0",
     "langium": "4.3.1",
