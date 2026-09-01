@@ -3,6 +3,10 @@ export function getProviderType(providerId?: string): string | undefined {
     return undefined;
   }
 
+  if (providerId === 'openai:codex-security' || providerId.startsWith('openai:codex-security:')) {
+    return 'codex-security';
+  }
+
   if (providerId.startsWith('file://')) {
     if (/\.(js|ts)(?::[^/\\]+)?$/i.test(providerId)) {
       return 'javascript';
