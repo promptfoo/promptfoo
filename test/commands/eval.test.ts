@@ -557,6 +557,18 @@ describe('evalCommand', () => {
     // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
     const watchBase = path.dirname(defaultConfigPath);
 
+    // doEval() also probes the default config filenames via loadDefaultConfig(), which
+    // shares this module-level mock and memoizes into a module-level cache. Whether that
+    // probe reaches the mock at all depends on which sibling test warmed the cache first,
+    // so `not.toHaveBeenCalled()` on the raw mock passes or fails by test order alone.
+    // The watch-path recovery branch resolves through globSync() before reading, so only
+    // its reads carry an absolute path -- count those and ignore the discovery probe.
+    const configRecoveryReads = () =>
+      vi
+        .mocked(maybeReadConfig)
+        .mock.calls.map(([configPath]) => String(configPath))
+        .filter((configPath) => path.isAbsolute(configPath));
+
     beforeEach(() => {
       // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
       // restore only its default in `finally`, which leaves the queue intact if the
@@ -675,7 +687,7 @@ describe('evalCommand', () => {
         {},
       );
 
-      expect(maybeReadConfig).not.toHaveBeenCalled();
+      expect(configRecoveryReads()).toEqual([]);
     });
 
     it('expands a --config glob before recovering raw tests', async () => {
@@ -732,7 +744,7 @@ describe('evalCommand', () => {
         {},
       );
 
-      expect(maybeReadConfig).not.toHaveBeenCalled();
+      expect(configRecoveryReads()).toEqual([]);
       const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
       expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cli-cases.csv'));
     });
@@ -769,7 +781,7 @@ describe('evalCommand', () => {
         {},
       );
 
-      expect(maybeReadConfig).not.toHaveBeenCalled();
+      expect(configRecoveryReads()).toEqual([]);
       const watched = (chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]])[0];
       expect(watched).toContain(path.resolve(watchBase, 'cli-cases.csv'));
       expect(watched).not.toContain(path.resolve(watchBase, 'config-cases.yaml'));
