@@ -37,6 +37,11 @@ describe('calculateMeteorScore', () => {
     expect(withPadding).toBeCloseTo(withoutPadding, 5);
   });
 
+  it('does not let a whitespace-only answer satisfy an empty reference', async () => {
+    expect(await calculateMeteorScore('   ', [''])).toBe(0);
+    expect(await calculateMeteorScore('the cat sat', [''])).toBe(0);
+  });
+
   it('matches inflected forms through the stemming stage', async () => {
     const stemmed = await calculateMeteorScore('cats running', ['cat runs']);
 
