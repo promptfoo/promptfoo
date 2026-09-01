@@ -508,8 +508,12 @@ describeEvaluator('evaluator metrics and scoring', () => {
       for (const result of summary.results) {
         expect(result.gradingResult?.metadata?.cachedResponse).toBeUndefined();
         expect(result.tokenUsage?.assertions).toMatchObject({
-          total: 13,
+          total: 110,
           cached: 97,
+          numRequests: 2,
+        });
+        expect(result.tokenUsage?.incurredTokenUsage?.assertions).toMatchObject({
+          total: 13,
           numRequests: 1,
         });
       }

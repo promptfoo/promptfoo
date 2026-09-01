@@ -16,8 +16,10 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { buildIsolatedAnthropicClientOptions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -422,6 +424,19 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
       hasApiKey: !!providerOptions.config?.apiKey,
       hasCfAigToken: !!cfAigToken,
     });
+  }
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
+  protected override allowsClaudeGenerationFallback(): boolean {
+    // The dedicated Anthropic gateway forwards canonical model IDs to Anthropic unchanged.
+    return true;
   }
 
   id(): string {

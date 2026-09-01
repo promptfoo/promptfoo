@@ -19,6 +19,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
+    getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -44,6 +45,7 @@ describe('monkeyPatchFetch', () => {
   beforeEach(() => {
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue(undefined);
     vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
   });
@@ -105,6 +107,43 @@ describe('monkeyPatchFetch', () => {
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
+    });
+  });
+
+  it('should attach the cloud credential under a configured custom header name', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    const apiKey = 'test-api-key-123';
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+    const url = CLOUD_API_HOST + '/api/test';
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        'X-Promptfoo-Api-Key': `Bearer ${apiKey}`,
+      },
+    });
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).has('authorization')).toBe(false);
+  });
+
+  it('should not override a caller-supplied header under the configured custom header name', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+    const url = CLOUD_API_HOST + '/api/v1/users/me';
+    await monkeyPatchFetch(url, {
+      headers: { 'X-Promptfoo-Api-Key': 'Bearer caller-token' },
+    });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: { 'X-Promptfoo-Api-Key': 'Bearer caller-token' },
     });
   });
 
