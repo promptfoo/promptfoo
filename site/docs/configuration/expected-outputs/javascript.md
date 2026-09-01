@@ -8,7 +8,7 @@ description: Build sophisticated JavaScript validators for LLM outputs with asyn
 
 The `javascript` [assertion](/docs/configuration/expected-outputs) allows you to provide a custom JavaScript function to validate the LLM output.
 
-A variable named `output` is injected into the context. String-valued expressions and external file scripts receive the raw provider output, which may be a string, object, or another value. Function-valued inline assertions receive the output as a string. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
+A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
 You can use any valid JavaScript code in your function. The output of the LLM is provided as the `output` variable:
 
@@ -49,13 +49,15 @@ assert:
 
 ## Handling objects
 
-For string-valued expressions and external file scripts, if the provider returns a JSON object (such as for a tool/function call), `output` is the original object:
+If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
 
 ```yaml
 assert:
   - type: javascript
     value: output[0].function.name === 'get_current_weather'
 ```
+
+This applies when `value` is a string, whether it's an inline expression or a `file://` script. Function values (see [Inline assertions](#inline-assertions)) always receive a string, with objects JSON-stringified. Either way, `output` is the value that reaches the assertion, so any [transform](/docs/configuration/guide#transforming-outputs) on the provider, the test, or the assertion itself has already been applied.
 
 ## Return type
 
@@ -335,7 +337,7 @@ If you are using promptfoo as a JS package, you can build your assertion inline:
 }
 ```
 
-For a function-valued inline assertion, `output` is always a string. If your [custom response parser](/docs/providers/http/#function-parser) returned an object, use `JSON.parse(output)` to convert it back to an object.
+Here `output` is always a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, use `JSON.parse(output)` to convert it back.
 
 ## Using trace data
 
