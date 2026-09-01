@@ -814,6 +814,9 @@ describe('evalCommand', () => {
         });
       });
 
+    /** Every doEval this block starts, so afterEach can guarantee none outlives its test. */
+    let started: Promise<unknown>[] = [];
+
     const startWatch = (evaluateOptions: Record<string, unknown>) => {
       const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -830,12 +833,14 @@ describe('evalCommand', () => {
       vi.mocked(evaluate)
         .mockReset()
         .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
-      return doEval(
+      const run = doEval(
         { watch: true, write: false },
         config,
         defaultConfigPath,
         evaluateOptions as never,
       );
+      started.push(run);
+      return run;
     };
 
     /**
@@ -875,10 +880,21 @@ describe('evalCommand', () => {
 
     beforeEach(() => {
       before = process.listeners('SIGINT');
+      started = [];
     });
 
-    afterEach(() => {
-      // Only remove what a test leaked; vitest installs its own SIGINT handler.
+    afterEach(async () => {
+      // Signal rather than just unregister. Watch mode only returns on a signal, so
+      // removing the listener would strand doEval forever -- and a stranded run keeps
+      // executing, landing its mock calls inside whichever test comes next. A failing
+      // test never reaches its own signal, so this has to happen here.
+      for (const listener of installedSince(before)) {
+        listener('SIGINT');
+      }
+      await Promise.allSettled(started);
+      // Anything still registered after that is not going to settle; drop it so it
+      // cannot fire during another test. vitest installs its own handler, so only
+      // remove what this block added.
       for (const listener of installedSince(before)) {
         process.removeListener('SIGINT', listener);
       }
