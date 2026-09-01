@@ -25,7 +25,7 @@ type XaiImageOptions = OpenAiSharedOptions & {
   response_format?: 'url' | 'b64_json';
   user?: string;
   aspect_ratio?: string;
-  quality?: 'low' | 'medium' | 'high';
+  quality?: 'low' | 'medium' | 'high' | 'auto';
   resolution?: '1k' | '2k';
   image?: { url: string };
   images?: { url: string }[];
@@ -86,6 +86,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       'grok-imagine-image': 'grok-imagine-image',
       // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
+      'grok-imagine-image-2.0': 'grok-imagine-image-2.0',
       'grok-imagine-image-quality': 'grok-imagine-image-quality',
       // xAI exposes dated and -latest aliases for the quality model; route them to
       // the canonical slug so fallback pricing and request routing stay consistent.
@@ -112,7 +113,12 @@ export class XAIImageProvider extends OpenAiImageProvider {
     n: number = 1,
     resolution: XaiImageOptions['resolution'] = '1k',
     sourceImageCount: number = 0,
+    quality?: XaiImageOptions['quality'],
   ): number {
+    if (model === 'grok-imagine-image-2.0') {
+      return this.calculateImagine20Cost(n, resolution, sourceImageCount, quality);
+    }
+
     // grok-imagine-image-pro is redirected to the quality model after
     // 2026-05-15; any other unrecognized grok-imagine-* slug (e.g. a future
     // alias promptfoo has not indexed) is priced at the quality tier too,
@@ -132,6 +138,31 @@ export class XAIImageProvider extends OpenAiImageProvider {
 
     // Legacy grok-2-image pricing.
     return 0.07 * n;
+  }
+
+  /**
+   * grok-imagine-image-2.0 prices per (quality, resolution) tier rather than at a
+   * flat per-image rate. Tiers are taken from xAI's `/v1/models/grok-imagine-image-2.0`
+   * `pricing` array (USD ticks at $1e-10 each), verified live 2026-08-31.
+   *
+   * The model accepts only `low`, `medium`, and `auto` quality. `auto` resolves to the
+   * `low` tier, which matches the $0.04 that xAI billed for a default 1k request.
+   * Any other value (e.g. `high`, which the API rejects) is priced at the most
+   * expensive tier for the resolution so a fallback estimate never undercharges.
+   */
+  private calculateImagine20Cost(
+    n: number,
+    resolution: XaiImageOptions['resolution'] = '1k',
+    sourceImageCount: number = 0,
+    quality?: XaiImageOptions['quality'],
+  ): number {
+    const is2k = resolution === '2k';
+    const isLowTier = quality === undefined || quality === 'auto' || quality === 'low';
+    const perImage = isLowTier ? (is2k ? 0.06 : 0.04) : is2k ? 0.08 : 0.06;
+    // xAI does not publish a separate source-image surcharge for this model; mirror
+    // the quality tier's rate so edit requests are not under-estimated. The billed
+    // figure from `usage.cost_in_usd_ticks` takes precedence whenever it is present.
+    return perImage * n + 0.01 * sourceImageCount;
   }
 
   private countSourceImages(config: XaiImageOptions): number {
@@ -238,6 +269,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
             config.n || 1,
             config.resolution,
             this.countSourceImages(config),
+            config.quality,
           ));
       const images = buildStructuredImageOutputs(data);
 

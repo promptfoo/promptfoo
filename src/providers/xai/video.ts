@@ -37,7 +37,24 @@ import type {
 // Types
 // =============================================================================
 
-export type XaiVideoModel = 'grok-imagine-video';
+export type XaiVideoModel = 'grok-imagine-video' | 'grok-imagine-video-1.5';
+
+/**
+ * Maps every video slug xAI publishes (including dated and -preview aliases, as
+ * listed by `/v1/models`) to its canonical id, so pricing and request routing stay
+ * consistent when a caller targets an alias. Verified live 2026-08-31.
+ */
+const VIDEO_MODEL_ALIASES: Record<string, XaiVideoModel> = {
+  'grok-imagine-video': 'grok-imagine-video',
+  'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
+  'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5',
+  'grok-imagine-video-1.5-2026-05-30': 'grok-imagine-video-1.5',
+};
+
+/** Resolve a user-supplied slug to a canonical model id, preserving unknown slugs. */
+export function resolveVideoModel(modelName: string): XaiVideoModel {
+  return VIDEO_MODEL_ALIASES[modelName] ?? (modelName as XaiVideoModel);
+}
 
 export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
 
@@ -143,10 +160,16 @@ const MAX_REFERENCE_IMAGE_DURATION = 10;
 const MAX_REFERENCE_IMAGES = 7;
 
 /**
- * Cost per second for Grok Imagine video generation
- * Note: This is an estimate - verify with xAI pricing
+ * Cost per second for Grok Imagine video generation, from xAI's published pricing
+ * table (https://docs.x.ai/docs/pricing), checked 2026-08-31.
  */
-const COST_PER_SECOND = 0.05;
+const COST_PER_SECOND_BY_MODEL: Record<XaiVideoModel, number> = {
+  'grok-imagine-video': 0.05,
+  'grok-imagine-video-1.5': 0.08,
+};
+
+/** Rate used for the base model and for any slug promptfoo has not indexed. */
+const COST_PER_SECOND = COST_PER_SECOND_BY_MODEL['grok-imagine-video'];
 
 // =============================================================================
 // Validation
@@ -168,11 +191,16 @@ export function validateDuration(duration: number): { valid: boolean; message?: 
 /**
  * Calculate video generation cost
  */
-export function calculateVideoCost(seconds: number, cached: boolean = false): number {
+export function calculateVideoCost(
+  seconds: number,
+  cached: boolean = false,
+  model?: string,
+): number {
   if (cached) {
     return 0;
   }
-  return COST_PER_SECOND * seconds;
+  const rate = (model && COST_PER_SECOND_BY_MODEL[resolveVideoModel(model)]) || COST_PER_SECOND;
+  return rate * seconds;
 }
 
 // =============================================================================
@@ -189,7 +217,7 @@ export class XAIVideoProvider implements ApiProvider {
     modelName: string,
     options: { config?: XaiVideoOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    this.modelName = (modelName || DEFAULT_MODEL) as XaiVideoModel;
+    this.modelName = resolveVideoModel(modelName || DEFAULT_MODEL);
     this.config = options.config || {};
     this.providerId = options.id;
     this.env = options.env;
@@ -602,7 +630,7 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = reportedCost ?? calculateVideoCost(actualDuration, false);
+    const cost = reportedCost ?? calculateVideoCost(actualDuration, false, this.modelName);
 
     // Store cache mapping (skip for edits)
     if (!isEdit) {
