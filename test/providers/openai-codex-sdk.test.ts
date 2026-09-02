@@ -1484,6 +1484,55 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
+      it('should serialize the same explicit thread across Codex instance changes', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockResolvedValue(createMockResponse('Second response')),
+          runStreamed: mockRunStreamed,
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'existing-thread-123' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', {
+          prompt: { config: { cli_config: { profile: 'first' } } },
+        } as any);
+        await vi.waitFor(() => expect(firstThread.run).toHaveBeenCalledTimes(1));
+
+        const secondCall = provider.callApi('Second', {
+          prompt: { config: { cli_config: { profile: 'second' } } },
+        } as any);
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(secondThread.run).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response' }),
+        );
+        expect(secondThread.run).toHaveBeenCalledTimes(1);
+      });
+
       it('should reuse cached thread when resuming same thread_id', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1503,6 +1552,92 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt 2');
         expect(mockResumeThread).toHaveBeenCalledTimes(1); // Still 1
         expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
+      });
+
+      it('should not reuse an explicit thread cache entry across authority changes', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+
+        expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'danger-full-access',
+          approvalPolicy: 'never',
+        });
+        expect(mockResumeThread).toHaveBeenNthCalledWith(2, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'read-only',
+          approvalPolicy: 'on-request',
+        });
+      });
+
+      it('should evict stale explicit thread cache entries when options change', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+        await provider.callApi('Broad prompt again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+      });
+
+      it('should keep delimiter-like explicit thread IDs in separate cache families', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'thread:a', persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Nested ID');
+        await provider.callApi('Short ID', {
+          prompt: { config: { thread_id: 'thread' } },
+        } as any);
+        await provider.callApi('Short ID changed', {
+          prompt: { config: { thread_id: 'thread', sandbox_mode: 'read-only' } },
+        } as any);
+        await provider.callApi('Nested ID again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+        expect(mockRun).toHaveBeenCalledTimes(4);
       });
 
       it('should enforce thread pool size limits', async () => {
@@ -2349,9 +2484,94 @@ describe('OpenAICodexSDKProvider', () => {
                 `deployment.environment=test,promptfoo.trace_id=${traceId},` +
                 `promptfoo.parent_span_id=${spanId}`,
             }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.1:4318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
           }),
         );
       });
+
+      it('routes native Codex spans to the receiver configured for the active eval', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+          async () => provider.callApi('Test prompt'),
+        );
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
+            }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.2:14318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
+          }),
+        );
+      });
+
+      it.each([
+        [['json'], 'http/json', 'json'],
+        [['protobuf'], 'http/protobuf', 'binary'],
+      ])(
+        'matches Codex SDK tracing protocol to receiver formats %j',
+        async (acceptFormats, protocol, exporterProtocol) => {
+          mockRun.mockResolvedValue(createMockResponse('Response'));
+          const provider = new OpenAICodexSDKProvider({
+            config: { deep_tracing: true },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await cliState.withRequestTracingConfig(
+            {
+              enabled: true,
+              otlp: {
+                http: {
+                  enabled: true,
+                  port: 4318,
+                  acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+                },
+              },
+            },
+            () => provider.callApi('Test prompt'),
+          );
+
+          expect(MockCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({ OTEL_EXPORTER_OTLP_PROTOCOL: protocol }),
+              config: expect.objectContaining({
+                otel: {
+                  trace_exporter: {
+                    'otlp-http': {
+                      endpoint: 'http://127.0.0.1:4318/v1/traces',
+                      protocol: exporterProtocol,
+                    },
+                  },
+                },
+              }),
+            }),
+          );
+        },
+      );
 
       it('should prefer a valid active traceparent over the evaluator trace', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
@@ -3569,8 +3789,8 @@ describe('OpenAICodexSDKProvider', () => {
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
-        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
-        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });
     });
@@ -3603,6 +3823,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.server': 'inventory',
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input': '{"query":"quantum computing","limit":3}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(
@@ -3645,6 +3867,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input':
           '{"query":"quantum computing","email":"[REDACTED]","apiKey":"[REDACTED]","headers":{"Authorization":"[REDACTED]"}}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { createMockProvider } from '../../factories/provider';
 
@@ -105,6 +106,33 @@ describe('IntentPlugin', () => {
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
+  });
+
+  it('accounts for every remote intent extraction exactly once', async () => {
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { intent: 'First goal', tokenUsage: { total: 9, prompt: 6, completion: 3 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      })
+      .mockResolvedValueOnce({
+        data: { intent: 'Second goal', tokenUsage: { total: 11, prompt: 7, completion: 4 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+    const usage = {};
+    const plugin = new IntentPlugin(
+      trackGenerationTokenUsage(mockProvider, usage),
+      'test-purpose',
+      'prompt',
+      { intent: ['intent1', 'intent2'] },
+    );
+
+    await plugin.generateTests(1, 0);
+
+    expect(usage).toMatchObject({ total: 20, prompt: 13, completion: 7, numRequests: 2 });
   });
 
   it('should initialize with a list of list of strings', async () => {

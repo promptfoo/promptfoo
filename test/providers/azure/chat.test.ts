@@ -911,6 +911,26 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('top_p', 0.9);
     });
 
+    it.each(['claude-prod-5', 'claude-prod-25', 'claude-team-blue-12', 'claude-prod-20260811'])(
+      'keeps sampling params for custom Claude deployment alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hi');
+
+        expect(body).toHaveProperty('temperature', 0.5);
+        expect(body).toHaveProperty('top_p', 0.9);
+      },
+    );
+
     it('omits sampling params for an opus-4-7-named deployment even without the flag', async () => {
       // Baseline name-match path: deployment name matches opus-4-7, so sampling
       // params are stripped without setting isClaudeOpus47OrLater.

@@ -19,8 +19,8 @@ providers:
         list: allow
         edit: deny
         bash:
-          'git status': allow
           '*': deny
+          'git status': allow
         webfetch: deny
         external_directory: deny
 

@@ -7,11 +7,6 @@ import {
 } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import {
-  buildChatSpanContext,
-  extractProviderResponseAttributes,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
@@ -28,8 +23,10 @@ import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
+import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
 import {
@@ -868,11 +865,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...context?.prompt?.config,
     };
 
+    // Chat-format content parts are translated to their Responses equivalents so multimodal
+    // prompts authored for the chat API work here too (the Responses API rejects
+    // `type: "text"` / `"image_url"` outright).
     let input;
     try {
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
-        input = parsedJson;
+        input = normalizeResponsesInput(parsedJson);
       } else {
         input = prompt;
       }
@@ -1047,13 +1047,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
-  // through the Responses wire format override this so traces attribute to the
-  // actual provider system.
-  protected getGenAISystem(): string {
-    return 'openai';
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1095,7 +1088,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, openaiApiType: 'responses' },
       () =>
         this.callApiInternal(context, {
           ...resolved,
