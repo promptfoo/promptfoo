@@ -860,9 +860,16 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
+  const threshold =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
   // A grader response that omits the verdict must not default to passing.
-  // Derive from score when present (the pre-#2999 behavior), and fail
-  // closed when the response carries neither a verdict nor a score.
+  // With a configured threshold, derive the verdict from score >= threshold
+  // (so a score-only result exactly at its threshold passes, matching the
+  // threshold semantics asserted elsewhere). Without one, fall back to the
+  // pre-#2999 score > 0 derivation, and fail closed when the response
+  // carries neither a verdict nor a score.
   let pass: boolean;
   if (parsed.pass === undefined || parsed.pass === null) {
     if (parsed.score === undefined || parsed.score === null) {
@@ -871,7 +878,7 @@ export async function runJsonGradingPrompt({
         resp,
       );
     }
-    pass = Number(parsed.score) > 0;
+    pass = hasThreshold ? Number(parsed.score) >= threshold : Number(parsed.score) > 0;
   } else if (typeof parsed.pass === 'boolean') {
     pass = parsed.pass;
   } else {
@@ -883,9 +890,7 @@ export async function runJsonGradingPrompt({
     score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
   }
 
-  const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+  if (hasThreshold) {
     pass = pass && score >= threshold;
   }
 
