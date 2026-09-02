@@ -804,6 +804,41 @@ function graderFailureFromResponse(
   return failure;
 }
 
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean | null; score: number } {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // A grader response that omits the verdict must not default to passing.
+  // With a configured threshold, derive the verdict from score >= threshold
+  // (so a score-only result exactly at its threshold passes, matching the
+  // threshold semantics asserted elsewhere). Without one, fall back to the
+  // pre-#2999 score > 0 derivation, and fail closed (null) when the
+  // response carries neither a verdict nor a score.
+  let pass: boolean | null;
+  if (parsed.pass === undefined || parsed.pass === null) {
+    if (parsed.score === undefined || parsed.score === null) {
+      return { pass: null, score: 0 };
+    }
+    pass = hasThreshold ? Number(parsed.score) >= threshold : Number(parsed.score) > 0;
+  } else if (typeof parsed.pass === 'boolean') {
+    pass = parsed.pass;
+  } else {
+    pass = /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
+
+  if (hasThreshold) {
+    pass = pass && score >= threshold;
+  }
+  return { pass, score };
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -862,36 +897,13 @@ export async function runJsonGradingPrompt({
 
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
 
-  // A grader response that omits the verdict must not default to passing.
-  // With a configured threshold, derive the verdict from score >= threshold
-  // (so a score-only result exactly at its threshold passes, matching the
-  // threshold semantics asserted elsewhere). Without one, fall back to the
-  // pre-#2999 score > 0 derivation, and fail closed when the response
-  // carries neither a verdict nor a score.
-  let pass: boolean;
-  if (parsed.pass === undefined || parsed.pass === null) {
-    if (parsed.score === undefined || parsed.score === null) {
-      return graderFailureFromResponse(
-        'Grader response contained neither a pass verdict nor a score',
-        resp,
-      );
-    }
-    pass = hasThreshold ? Number(parsed.score) >= threshold : Number(parsed.score) > 0;
-  } else if (typeof parsed.pass === 'boolean') {
-    pass = parsed.pass;
-  } else {
-    pass = /^(true|yes|pass|y)$/i.test(String(parsed.pass));
-  }
-
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
-
-  if (hasThreshold) {
-    pass = pass && score >= threshold;
+  const { pass, score } = deriveVerdictFromGrader(parsed, threshold);
+  if (pass === null) {
+    return graderFailureFromResponse(
+      'Grader response contained neither a pass verdict nor a score',
+      resp,
+    );
   }
 
   const reason =
