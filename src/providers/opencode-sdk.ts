@@ -833,6 +833,47 @@ function setProcessEnvValue(key: string, value: string | undefined): void {
 }
 
 /**
+ * Applies `serverEnv` to `process.env` for exactly as long as it takes `spawn()` to reach the
+ * child-process launch, then restores it.
+ *
+ * `@opencode-ai/sdk`'s `createOpencodeServer()` spawns `opencode serve` with a hard-coded
+ * `{ ...process.env, OPENCODE_CONFIG_CONTENT }` and never reads the `env` option it is handed
+ * — its `ServerOptions` type has no `env` field at all (still true as of 1.18.26). The only
+ * environment the child actually inherits is this process's `process.env` at the instant of
+ * the spawn, so everything `buildServerEnv()` computed was previously discarded in full.
+ *
+ * `createOpencode()` reaches `cross-spawn` synchronously: it awaits `createOpencodeServer()`,
+ * whose body runs straight through to `launch()` before its own first `await`. So we invoke
+ * `spawn()` *without* awaiting it and restore `process.env` in a `finally` that therefore runs
+ * before any suspension point. Because the mutation window spans no `await`, concurrently
+ * running providers can neither observe these values nor leak them into their own children.
+ *
+ * The `env` option is still passed through in the server options so that this collapses into a
+ * harmless no-op if upstream ever starts honoring it.
+ */
+export function spawnWithServerEnv<T>(
+  serverEnv: Record<string, string | undefined>,
+  spawn: () => Promise<T>,
+): Promise<T> {
+  const restore: [string, string | undefined][] = [];
+  for (const [key, value] of Object.entries(serverEnv)) {
+    if (process.env[key] === value) {
+      continue;
+    }
+    restore.push([key, process.env[key]]);
+    setProcessEnvValue(key, value);
+  }
+
+  try {
+    return spawn();
+  } finally {
+    for (const [key, value] of restore) {
+      setProcessEnvValue(key, value);
+    }
+  }
+}
+
+/**
  * Queue key used to serialize the entire server lifecycle (start -> session -> prompt) when
  * `restart_server_per_call` swaps the shared server between calls.
  */
@@ -1440,47 +1481,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return this.opencodeModule;
   }
 
-  /**
-   * Applies `serverEnv` to `process.env` for exactly as long as it takes `spawn()` to reach the
-   * child-process launch, then restores it.
-   *
-   * `@opencode-ai/sdk`'s `createOpencodeServer()` spawns `opencode serve` with a hard-coded
-   * `{ ...process.env, OPENCODE_CONFIG_CONTENT }` and never reads the `env` option it is handed
-   * — its `ServerOptions` type has no `env` field at all (still true as of 1.18.26). The only
-   * environment the child actually inherits is this process's `process.env` at the instant of
-   * the spawn, so everything `buildServerEnv()` computed was previously discarded in full.
-   *
-   * `createOpencode()` reaches `cross-spawn` synchronously: it awaits `createOpencodeServer()`,
-   * whose body runs straight through to `launch()` before its own first `await`. So we invoke
-   * `spawn()` *without* awaiting it and restore `process.env` in a `finally` that therefore runs
-   * before any suspension point. Because the mutation window spans no `await`, concurrently
-   * running providers can neither observe these values nor leak them into their own children.
-   *
-   * The `env` option is still passed through in the server options so that this collapses into a
-   * harmless no-op if upstream ever starts honoring it.
-   */
-  private spawnWithServerEnv<T>(
-    serverEnv: Record<string, string | undefined>,
-    spawn: () => Promise<T>,
-  ): Promise<T> {
-    const restore: [string, string | undefined][] = [];
-    for (const [key, value] of Object.entries(serverEnv)) {
-      if (process.env[key] === value) {
-        continue;
-      }
-      restore.push([key, process.env[key]]);
-      setProcessEnvValue(key, value);
-    }
-
-    try {
-      return spawn();
-    } finally {
-      for (const [key, value] of restore) {
-        setProcessEnvValue(key, value);
-      }
-    }
-  }
-
   private async ensureClient(config: OpenCodeSDKConfig, traceparent?: string): Promise<void> {
     const opencodeModule = await this.ensureOpenCodeModule();
 
@@ -1541,9 +1541,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await this.spawnWithServerEnv(serverEnv, () =>
-        createOpencode(serverOptions),
-      );
+      const opencode = await spawnWithServerEnv(serverEnv, () => createOpencode(serverOptions));
       this.client = opencode.client;
       this.server = opencode.server;
       this.activeTraceparent = desiredTraceparent;

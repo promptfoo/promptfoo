@@ -97,6 +97,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires an API key and optional Codex SDK dependency',
   },
   {
+    file: 'providers/opencode-sdk.spawn-env.test.ts',
+    kind: 'skip',
+    linePattern: /hasSdk && canSpawnStub \? describe : describe\.skip/,
+    reason: 'Real-SDK spawn contract needs the optional OpenCode SDK and a POSIX stub CLI on PATH',
+  },
+  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:
