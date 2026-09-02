@@ -544,6 +544,21 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['substring1', 'substring2']);
   });
 
+  it('should parse a llama-guard category list into a string array', () => {
+    // The handler requires a string array, so the generic branch's raw "S1,S10"
+    // string would be rejected and category-filtered assertions could not load
+    // from CSV.
+    const result: Assertion = assertionFromString('llama-guard:S1,S10');
+    expect(result.type).toBe('llama-guard');
+    expect(result.value).toEqual(['S1', 'S10']);
+  });
+
+  it('should parse a not-llama-guard category list into a string array', () => {
+    const result: Assertion = assertionFromString('not-llama-guard:S1');
+    expect(result.type).toBe('not-llama-guard');
+    expect(result.value).toEqual(['S1']);
+  });
+
   it.each([
     'contains-any',
     'contains-all',

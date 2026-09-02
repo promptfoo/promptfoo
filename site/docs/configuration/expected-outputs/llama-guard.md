@@ -1,7 +1,8 @@
 ---
+title: LlamaGuard Assertion
+description: Classify LLM outputs for safety with Meta's LlamaGuard models through any standard chat provider, including local Ollama, Fireworks, vLLM, and Replicate.
 sidebar_position: 102
 sidebar_label: LlamaGuard
-description: Classify LLM outputs for safety with Meta's LlamaGuard models through any standard chat provider
 ---
 
 # LlamaGuard
@@ -18,7 +19,7 @@ tests:
       foo: bar
     assert:
       - type: llama-guard
-        provider: ollama:llama-guard3:1b
+        provider: ollama:chat:llama-guard3:1b
 ```
 
 If `provider` is omitted, promptfoo looks for a text-grading provider elsewhere in your config (for example `defaultTest.options.provider`). It deliberately does **not** fall back to the general-purpose grading model, because a model that isn't LlamaGuard cannot produce this output format and would silently misclassify every response.
@@ -37,7 +38,7 @@ tests:
       foo: bar
     assert:
       - type: llama-guard
-        provider: ollama:llama-guard3:1b
+        provider: ollama:chat:llama-guard3:1b
 ```
 
 ## Fireworks AI
@@ -111,7 +112,7 @@ tests:
       foo: bar
     assert:
       - type: llama-guard
-        provider: ollama:llama-guard3:1b
+        provider: ollama:chat:llama-guard3:1b
         // highlight-start
         value:
           - S1

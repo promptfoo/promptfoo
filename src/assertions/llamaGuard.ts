@@ -1,11 +1,12 @@
 import { matchesLlamaGuard } from '../matchers/llamaGuard';
 import { isGraderFailure } from '../matchers/llmGrading';
-import { resolveClassifierPrompt } from './classifierPrompt';
+import { resolveClassifierConversation, resolveClassifierPrompt } from './classifierPrompt';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleLlamaGuard = async ({
   assertion,
+  renderedValue,
   test,
   outputString,
   providerResponse,
@@ -17,9 +18,15 @@ export const handleLlamaGuard = async ({
   if (!promptToClassify) {
     throw new Error('llama-guard assertion type must have a prompt');
   }
+
+  // Use the rendered value: runAssertionInternal resolves nunjucks templates, file://
+  // references, and script results into `renderedValue`, so reading assertion.value
+  // would leave a configured allow-list such as ['{{ category }}'] unrendered and
+  // silently match nothing — turning a template into a safety false negative.
+  const configuredValue = renderedValue ?? assertion.value;
   if (
-    assertion.value &&
-    !(Array.isArray(assertion.value) && typeof assertion.value[0] === 'string')
+    configuredValue &&
+    !(Array.isArray(configuredValue) && typeof configuredValue[0] === 'string')
   ) {
     throw new Error('llama-guard assertion value must be a string array if set');
   }
@@ -28,7 +35,8 @@ export const handleLlamaGuard = async ({
     {
       userPrompt: promptToClassify,
       assistantResponse: outputString,
-      categories: Array.isArray(assertion.value) ? assertion.value : [],
+      categories: Array.isArray(configuredValue) ? (configuredValue as string[]) : [],
+      conversation: resolveClassifierConversation(providerResponse, prompt || ''),
     },
     test.options,
     providerCallContext,

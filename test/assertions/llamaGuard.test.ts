@@ -239,11 +239,11 @@ describe('handleLlamaGuard', () => {
     });
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         userPrompt: 'prompt',
         assistantResponse: 'output',
         categories: ['S1'],
-      },
+      }),
       {},
       undefined,
     );
@@ -267,11 +267,11 @@ describe('handleLlamaGuard', () => {
     });
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         userPrompt: 'Classify this user request',
         assistantResponse: 'output',
         categories: ['S1'],
-      },
+      }),
       {},
       undefined,
     );
@@ -293,13 +293,80 @@ describe('handleLlamaGuard', () => {
     });
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         userPrompt: 'modified prompt',
         assistantResponse: 'output',
         categories: ['S1'],
-      },
+      }),
       {},
       undefined,
     );
+  });
+
+  it('uses the rendered category allow-list rather than the raw templated value', async () => {
+    // Regression: reading assertion.value left `['{{ category }}']` unrendered, so a
+    // real S1 violation matched nothing and silently passed.
+    mockedMatchesLlamaGuard.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'LlamaGuard flagged: Violent Crimes (S1)',
+    });
+
+    await handleLlamaGuard({
+      ...baseParams,
+      assertion: { type: 'llama-guard', value: ['{{ category }}'] },
+      renderedValue: ['S1'],
+    });
+
+    expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: ['S1'] }),
+      {},
+      undefined,
+    );
+  });
+
+  it('forwards the full conversation for multi-turn prompts', async () => {
+    mockedMatchesLlamaGuard.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'LlamaGuard classified the response as safe',
+    });
+
+    await handleLlamaGuard({
+      ...baseParams,
+      prompt: JSON.stringify([
+        { role: 'user', content: 'earlier harmful setup' },
+        { role: 'assistant', content: 'ok' },
+        { role: 'user', content: 'continue' },
+      ]),
+    });
+
+    expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: [
+          { role: 'user', content: 'earlier harmful setup' },
+          { role: 'assistant', content: 'ok' },
+          { role: 'user', content: 'continue' },
+        ],
+      }),
+      {},
+      undefined,
+    );
+  });
+
+  it('throws when there is no prompt to classify', async () => {
+    await expect(
+      handleLlamaGuard({ ...baseParams, prompt: undefined, providerResponse: { output: 'o' } }),
+    ).rejects.toThrow('llama-guard assertion type must have a prompt');
+  });
+
+  it('throws when the configured value is not a string array', async () => {
+    await expect(
+      handleLlamaGuard({
+        ...baseParams,
+        assertion: { type: 'llama-guard', value: 'S1' },
+        renderedValue: 'S1',
+      }),
+    ).rejects.toThrow('llama-guard assertion value must be a string array if set');
   });
 });

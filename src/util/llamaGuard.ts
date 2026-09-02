@@ -38,6 +38,10 @@ export function describeLlamaGuardCategory(code: string): string {
   return LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] ?? code;
 }
 
+export function isKnownLlamaGuardCategory(code: string): boolean {
+  return Object.hasOwn(LLAMAGUARD_CATEGORY_DESCRIPTIONS, code);
+}
+
 /**
  * Parses LlamaGuard's classification output: a first line of `safe` or `unsafe`,
  * followed (when unsafe) by a comma-separated list of hazard category codes.

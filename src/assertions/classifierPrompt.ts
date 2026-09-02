@@ -66,7 +66,10 @@ export function resolveClassifierPrompt(
 
   try {
     const parsedPrompt = parseChatPrompt<ChatMessage[] | null>(resolved, null);
-    if (parsedPrompt && parsedPrompt.length > 0) {
+    // Require a real array: parseChatPrompt passes through any parsed JSON, so an
+    // attacker-controlled object such as {"length":1000000000} would otherwise satisfy
+    // a bare `.length > 0` check and drive the loops below a billion times.
+    if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
       return getLastUserMessage(parsedPrompt) ?? resolved;
     }
   } catch {
@@ -74,4 +77,35 @@ export function resolveClassifierPrompt(
   }
 
   return resolved;
+}
+
+/**
+ * Like {@link resolveClassifierPrompt}, but preserves every turn when the evaluated
+ * prompt is a serialized multi-turn chat. Used by conversation-aware classifiers
+ * (LlamaGuard) that judge the final turn in the context of what preceded it; returns
+ * undefined when the prompt is not a chat array, so callers fall back to single-turn.
+ */
+export function resolveClassifierConversation(
+  providerResponse: ProviderResponse | undefined,
+  prompt: string,
+): { role: string; content: string }[] | undefined {
+  const resolved = getActualPromptWithFallback(providerResponse, prompt);
+
+  try {
+    const parsedPrompt = parseChatPrompt<ChatMessage[] | null>(resolved, null);
+    if (!Array.isArray(parsedPrompt) || parsedPrompt.length === 0) {
+      return undefined;
+    }
+
+    const turns = parsedPrompt
+      .map((message) => ({
+        role: typeof message?.role === 'string' ? message.role : 'user',
+        content: getChatMessageText(message?.content),
+      }))
+      .filter((turn): turn is { role: string; content: string } => turn.content !== undefined);
+
+    return turns.length > 0 ? turns : undefined;
+  } catch {
+    return undefined;
+  }
 }

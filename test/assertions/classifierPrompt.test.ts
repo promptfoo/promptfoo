@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveClassifierPrompt } from '../../src/assertions/classifierPrompt';
+import {
+  resolveClassifierConversation,
+  resolveClassifierPrompt,
+} from '../../src/assertions/classifierPrompt';
 
 describe('resolveClassifierPrompt', () => {
   it('returns the original prompt when the response carries none', () => {
@@ -114,5 +117,74 @@ describe('resolveClassifierPrompt', () => {
     // Unbalanced braces: not valid JSON or YAML.
     const prompt = '{ this is not: [valid';
     expect(resolveClassifierPrompt({ output: 'out' }, prompt)).toBe(prompt);
+  });
+
+  it('ignores a non-array JSON object masquerading as chat messages', () => {
+    // Regression (DoS): parseChatPrompt passes through any parsed JSON, so
+    // {"length":1000000000} satisfied a bare `.length > 0` check and drove the
+    // message-walk loops a billion times on attacker-controlled input.
+    const prompt = JSON.stringify({ length: 1000000000 });
+    const start = Date.now();
+    expect(resolveClassifierPrompt({ output: 'out' }, prompt)).toBe(prompt);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+});
+
+describe('resolveClassifierConversation', () => {
+  it('returns every turn of a multi-turn chat prompt', () => {
+    const prompt = JSON.stringify([
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+      { role: 'user', content: 'second' },
+    ]);
+
+    expect(resolveClassifierConversation({ output: 'out' }, prompt)).toEqual([
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+      { role: 'user', content: 'second' },
+    ]);
+  });
+
+  it('flattens multimodal content parts into text turns', () => {
+    const prompt = JSON.stringify([
+      { role: 'user', content: [{ type: 'input_text', text: 'look at this' }] },
+    ]);
+
+    expect(resolveClassifierConversation({ output: 'out' }, prompt)).toEqual([
+      { role: 'user', content: 'look at this' },
+    ]);
+  });
+
+  it('drops turns with no usable text', () => {
+    const prompt = JSON.stringify([
+      { role: 'user', content: 'keep me' },
+      { role: 'assistant', content: null },
+    ]);
+
+    expect(resolveClassifierConversation({ output: 'out' }, prompt)).toEqual([
+      { role: 'user', content: 'keep me' },
+    ]);
+  });
+
+  it('defaults a missing role to user', () => {
+    const prompt = JSON.stringify([{ content: 'no role given' }]);
+
+    expect(resolveClassifierConversation({ output: 'out' }, prompt)).toEqual([
+      { role: 'user', content: 'no role given' },
+    ]);
+  });
+
+  it('returns undefined for a plain-text prompt', () => {
+    expect(resolveClassifierConversation({ output: 'out' }, 'just text')).toBeUndefined();
+  });
+
+  it('returns undefined for a non-array JSON object', () => {
+    expect(
+      resolveClassifierConversation({ output: 'out' }, JSON.stringify({ length: 5 })),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for an empty chat array', () => {
+    expect(resolveClassifierConversation({ output: 'out' }, '[]')).toBeUndefined();
   });
 });
