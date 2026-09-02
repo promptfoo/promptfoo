@@ -140,10 +140,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * `max_completion_tokens`) and do not accept `reasoning_effort`, so we only
    * strip the sampling params here and leave the rest of the chat body intact.
    */
-  protected isSamplingParamsDeprecatedClaudeModel(): boolean {
+  protected isSamplingParamsDeprecatedClaudeModel(config = this.config): boolean {
     return (
-      Boolean(this.config.isClaudeOpus47OrLater) ||
-      isSamplingParamsDeprecatedClaudeModel(this.deploymentName, {
+      Boolean(config.isClaudeOpus47OrLater) ||
+      isSamplingParamsDeprecatedClaudeModel(config.modelName ?? this.deploymentName, {
         allowGenerationFallback: false,
       })
     );
@@ -197,7 +197,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
-    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel();
+    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
@@ -289,7 +289,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     if (
-      isForcedToolChoiceUnsupportedClaudeModel(this.deploymentName) &&
+      isForcedToolChoiceUnsupportedClaudeModel(config.modelName ?? this.deploymentName) &&
       body.tool_choice &&
       body.tool_choice !== 'auto' &&
       body.tool_choice !== 'none'
@@ -577,7 +577,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         logProbs,
         finishReason,
         cost: calculateAzureCost(
-          this.deploymentName,
+          config.modelName ?? this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,

@@ -831,7 +831,9 @@ supports InvokeModel and Converse with the `global.anthropic.claude-fable-5-1` a
 `bedrock:global.anthropic.claude-fable-5-1` or
 `bedrock:converse:global.anthropic.claude-fable-5-1`.
 The explicit `bedrock:messages:anthropic.claude-fable-5-1` route uses the
-Anthropic-compatible Messages endpoint in `us-east-1`.
+Anthropic-compatible Messages endpoint in `us-east-1`. For another provisioned
+endpoint, including AWS GovCloud, set `config.apiBaseUrl` to the Anthropic base
+URL supplied by AWS.
 
 Use `bedrock:anthropic.claude-mythos-5-1` for Mythos 5.1 through the Messages
 endpoint, with the API key configuration shown below. Mythos access requires

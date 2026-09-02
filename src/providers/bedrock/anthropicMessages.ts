@@ -71,10 +71,15 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
+  if (
+    !config.apiBaseUrl &&
+    (modelName === 'anthropic.claude-mythos-5' || modelName === 'anthropic.claude-fable-5-1') &&
+    region !== 'us-east-1'
+  ) {
     throw new Error(
-      `Amazon Bedrock model "${modelName}" is only available in us-east-1. ` +
-        `Set config.region or AWS_BEDROCK_REGION to us-east-1.`,
+      `Amazon Bedrock model "${modelName}" is only available in us-east-1 through the default ` +
+        `Anthropic Messages endpoint. Set config.region or AWS_BEDROCK_REGION to us-east-1, ` +
+        `or set config.apiBaseUrl for another provisioned endpoint.`,
     );
   }
 

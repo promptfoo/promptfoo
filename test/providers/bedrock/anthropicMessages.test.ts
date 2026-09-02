@@ -59,6 +59,25 @@ describe('Bedrock Anthropic Messages provider', () => {
     ).toThrow(/only in us-east-1 and eu-north-1/);
   });
 
+  it('rejects an unsupported default Fable 5.1 Messages region', () => {
+    expect(() =>
+      createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+        config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+      }),
+    ).toThrow(/only available in us-east-1/);
+  });
+
+  it('allows a provisioned Fable 5.1 endpoint to override the default region restriction', () => {
+    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+      config: {
+        region: 'us-gov-west-1',
+        apiKey: 'bedrock-key',
+        apiBaseUrl: 'https://provisioned.example/anthropic',
+      },
+    });
+    expect(provider.getApiBaseUrl()).toBe('https://provisioned.example/anthropic');
+  });
+
   it('uses promptfoo env overrides for the key and region', async () => {
     restoreEnv = mockProcessEnv({
       AWS_BEARER_TOKEN_BEDROCK: undefined,
