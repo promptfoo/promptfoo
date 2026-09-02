@@ -72,6 +72,7 @@ import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
+import { handleLlamaGuard } from './llamaGuard';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
@@ -129,6 +130,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'context-recall',
   'context-relevance',
   'factuality',
+  'llama-guard',
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
@@ -266,6 +268,7 @@ const ASSERTION_HANDLERS: Record<
   javascript: handleJavascript,
   latency: handleLatency,
   levenshtein: handleLevenshtein,
+  'llama-guard': handleLlamaGuard,
   'llm-rubric': handleLlmRubric,
   meteor: async (params: AssertionParams) => {
     try {

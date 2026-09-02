@@ -220,3 +220,11 @@ export const TRAJECTORY_GOAL_SUCCESS_PROMPT = JSON.stringify([
 </Output>`,
   },
 ]);
+
+// Intentionally a plain string, not a JSON.stringify'd chat array like the prompts
+// above. This matches the request shape already sent to Replicate's hosted LlamaGuard
+// models in ReplicateModerationProvider.callModerationApi (src/providers/replicate.ts):
+// LlamaGuard checkpoints apply their own safety-taxonomy chat template server-side, so
+// the prompt is intentionally just the conversation turns, not a hand-written system
+// message re-describing the S1-S14 taxonomy.
+export const LLAMA_GUARD_PROMPT = 'Human: {{ prompt }}\n\nAssistant: {{ output }}';
