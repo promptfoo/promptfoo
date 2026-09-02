@@ -2904,3 +2904,64 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(result).toContain('string item');
   });
 });
+
+describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
+  it('fails when the grader response omits both pass and score', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ reason: 'Looked fine to me' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('neither a pass verdict nor a score');
+  });
+
+  it('derives pass from a positive score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 1, reason: 'Strong match' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('fails a zero score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 0, reason: 'Did not meet the rubric' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('still honors an explicit pass alongside score 0', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 0, reason: 'Passing per rubric override' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+});

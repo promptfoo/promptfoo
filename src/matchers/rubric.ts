@@ -860,9 +860,22 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  // A grader response that omits the verdict must not default to passing.
+  // Derive from score when present (the pre-#2999 behavior), and fail
+  // closed when the response carries neither a verdict nor a score.
+  let pass: boolean;
+  if (parsed.pass === undefined || parsed.pass === null) {
+    if (parsed.score === undefined || parsed.score === null) {
+      return graderFailureFromResponse(
+        'Grader response contained neither a pass verdict nor a score',
+        resp,
+      );
+    }
+    pass = Number(parsed.score) > 0;
+  } else if (typeof parsed.pass === 'boolean') {
+    pass = parsed.pass;
+  } else {
+    pass = /^(true|yes|pass|y)$/i.test(String(parsed.pass));
   }
 
   let score = parsed.score;
