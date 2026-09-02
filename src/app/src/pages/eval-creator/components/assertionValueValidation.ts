@@ -1,7 +1,77 @@
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
-const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
+const BASE_ASSERTION_TYPES = [
+  'agent-rubric',
+  'answer-relevance',
+  'bleu',
+  'classifier',
+  'contains',
+  'contains-all',
+  'contains-any',
+  'contains-html',
+  'contains-json',
+  'contains-sql',
+  'contains-xml',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'conversation-relevance',
+  'cost',
+  'equals',
+  'factuality',
+  'finish-reason',
+  'g-eval',
+  'gleu',
+  'guardrails',
+  'icontains',
+  'icontains-all',
+  'icontains-any',
+  'is-html',
+  'is-json',
+  'is-refusal',
+  'is-sql',
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'is-xml',
+  'javascript',
+  'latency',
+  'levenshtein',
+  'llm-rubric',
+  'meteor',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'moderation',
+  'perplexity',
+  'perplexity-score',
+  'pi',
+  'python',
+  'regex',
+  'rouge-n',
+  'ruby',
+  'search-rubric',
+  'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
+  'skill-used',
+  'starts-with',
+  'tool-call-f1',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+  'trajectory:goal-success',
+  'trajectory:step-count',
+  'trajectory:step-status',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-used',
+  'webhook',
+  'word-count',
+] as const satisfies AssertionType[];
+
+const BASE_ASSERTION_TYPE_SET = new Set<string>(BASE_ASSERTION_TYPES);
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
 function isSupportedAssertionType(type: string): boolean {
@@ -377,6 +447,20 @@ function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   return undefined;
 }
 
+function getTrajectoryStepStatusValueError(value: unknown): string | undefined {
+  if (!isRecord(value) || !hasMatcherName(value)) {
+    return 'Enter JSON with a trajectory step name or pattern and status.';
+  }
+  if (
+    value.status !== 'success' &&
+    value.status !== 'error' &&
+    (typeof value.status !== 'number' || !Number.isFinite(value.status))
+  ) {
+    return 'Set trajectory step status to "success", "error", or a numeric code.';
+  }
+  return undefined;
+}
+
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
@@ -417,6 +501,12 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:step-count'
   ) {
     return getTrajectoryStepCountValueError(assertion.value);
+  }
+  if (
+    assertion.type === 'trajectory:step-status' ||
+    assertion.type === 'not-trajectory:step-status'
+  ) {
+    return getTrajectoryStepStatusValueError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-sequence' ||
