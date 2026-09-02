@@ -3468,6 +3468,13 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5']).toBeUndefined();
+    // Grok 4.6 is served natively only through its inference profiles; the bare id has no
+    // on-demand throughput and is handled by the mantle Responses path instead.
+    expect(getHandlerForModel('us.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(getHandlerForModel('global.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(() => getHandlerForModel('xai.grok-4.6')).toThrow(/inference profile/);
+    expect(() => getHandlerForModel('us.xai.grok-4.3')).toThrow(/inference profile/);
+
     expect(getHandlerForModel('anthropic.claude-fable-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(() => getHandlerForModel('anthropic.claude-mythos-5')).toThrow(/Anthropic Messages API/);
     expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
