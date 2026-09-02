@@ -18,6 +18,13 @@ export interface TrajectoryStepMatcher {
   type?: TrajectoryStepType | TrajectoryStepType[];
 }
 
+export type TrajectoryStatusValue = 'success' | 'error' | number;
+
+export interface TrajectoryStepStatusMatcher extends TrajectoryStepMatcher {
+  status: TrajectoryStatusValue;
+  message?: string;
+}
+
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
@@ -443,6 +450,34 @@ export function matchesTrajectoryStep(
   }
 
   return step.aliases.some((alias) => matchesPattern(alias, matchPattern));
+}
+
+export function matchesTrajectoryStepStatus(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepStatusMatcher,
+): boolean {
+  if (!matchesTrajectoryStep(step, matcher)) {
+    return false;
+  }
+
+  const status = matcher.status;
+  const code = step.statusCode;
+  const isSet = code !== undefined && code !== 0;
+  if (!isSet) {
+    return false;
+  }
+
+  const statusMatches =
+    typeof status === 'number'
+      ? code === status
+      : status === 'success'
+        ? code === 1 || (code >= 200 && code < 400)
+        : code === 2 || code >= 400;
+  if (!statusMatches) {
+    return false;
+  }
+
+  return matcher.message ? matchesPattern(step.statusMessage || '', matcher.message) : true;
 }
 
 export function formatTrajectoryStep(step: TrajectoryStep): string {

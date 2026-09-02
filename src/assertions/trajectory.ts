@@ -7,9 +7,11 @@ import {
   formatTrajectoryArgs,
   formatTrajectoryStep,
   matchesTrajectoryStep,
+  matchesTrajectoryStepStatus,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
   type TrajectoryStepMatcher,
+  type TrajectoryStepStatusMatcher,
 } from './trajectoryUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -37,6 +39,8 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   defaults?: ToolArgsDefaults;
   ignore?: string | string[];
 }
+
+interface TrajectoryStepStatusValue extends TrajectoryStepStatusMatcher {}
 
 function getTraceOrThrow(params: AssertionParams) {
   const trace = params.assertionValueContext.trace;
@@ -216,6 +220,40 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
     reason,
     assertion: params.assertion,
   };
+};
+
+function resolveStepStatusValue(value: unknown): TrajectoryStepStatusValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('trajectory:step-status assertion must have an object value');
+  }
+  const candidate = value as Partial<TrajectoryStepStatusValue>;
+  if (
+    !(
+      candidate.status === 'success' ||
+      candidate.status === 'error' ||
+      typeof candidate.status === 'number'
+    )
+  ) {
+    throw new Error(
+      'trajectory:step-status assertion status must be "success", "error", or a number',
+    );
+  }
+  requireNamedTrajectoryMatcher(candidate, 'trajectory:step-status');
+  return candidate as TrajectoryStepStatusValue;
+}
+
+export const handleTrajectoryStepStatus = (params: AssertionParams): GradingResult => {
+  const trace = getTraceOrThrow(params);
+  const matcher = resolveStepStatusValue(params.renderedValue ?? params.assertion.value);
+  const matchingSteps = extractTrajectorySteps(trace).filter((step) =>
+    matchesTrajectoryStepStatus(step, matcher),
+  );
+  const pass = params.inverse ? matchingSteps.length === 0 : matchingSteps.length > 0;
+  const label = matcher.pattern || matcher.name || '*';
+  const reason = pass
+    ? `Trajectory step "${label}" matched status ${String(matcher.status)}`
+    : `No trajectory step "${label}" matched status ${String(matcher.status)}`;
+  return { pass, score: pass ? 1 : 0, reason, assertion: params.assertion };
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {

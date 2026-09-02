@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   handleTrajectoryStepCount,
+  handleTrajectoryStepStatus,
   handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
@@ -578,6 +579,53 @@ describe('trajectory utilities', () => {
       type: 'tool',
       name: 'tool_25',
     });
+  });
+});
+
+describe('trajectory:step-status', () => {
+  const statusParams = (statusCode?: number, statusMessage?: string, inverse = false) =>
+    ({
+      ...defaultParams,
+      baseType: 'trajectory:step-status' as const,
+      inverse,
+      assertion: {
+        type: 'trajectory:step-status' as const,
+        value: { name: 'search_orders', status: 'error' as const },
+      },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceData,
+          spans: mockTraceData.spans.map((span) =>
+            span.spanId === 'span-2' ? { ...span, statusCode, statusMessage } : span,
+          ),
+        },
+      },
+    }) as AssertionParams;
+
+  it('matches the execution status of a named trajectory step', () => {
+    expect(handleTrajectoryStepStatus(statusParams(500, 'timeout'))).toMatchObject({
+      pass: true,
+      score: 1,
+    });
+  });
+
+  it('does not treat a missing or zero status as success or error', () => {
+    const params = statusParams(undefined);
+    params.assertion.value = { name: 'search_orders', status: 'success' };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
+
+    params.assertionValueContext.trace!.spans[1].statusCode = 0;
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it('matches an exact numeric code and inverts the result', () => {
+    const params = statusParams(429, 'rate limited');
+    params.assertion.value = { name: 'search_orders', status: 429 };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true, score: 1 });
+
+    params.inverse = true;
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
   });
 });
 

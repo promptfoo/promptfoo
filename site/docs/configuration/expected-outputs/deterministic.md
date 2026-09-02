@@ -59,6 +59,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
+| [trajectory:step-status](#trajectorystep-status)                | Match execution status of a normalized trajectory step             |
 | [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -940,6 +941,32 @@ tests:
           pattern: 'reasoning*'
           min: 1
 ```
+
+### trajectory:step-status {#trajectorystep-status}
+
+The `trajectory:step-status` assertion checks whether a normalized trajectory step
+matching a name or glob pattern completed with the expected execution status. Use
+`success` for an OpenTelemetry OK status (`1`) or a 2xx/3xx status, `error` for an
+OpenTelemetry ERROR status (`2`) or a 4xx/5xx status, or an exact numeric status
+code. A missing status (or status code `0`) does not match either semantic status.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:step-status
+        value:
+          name: search_orders
+          status: success
+      - type: not-trajectory:step-status
+        value:
+          pattern: 'delete_*'
+          status: error
+```
+
+Add `message` to match the recorded status message with a glob pattern, or add
+`type: tool`, `command`, or another trajectory step type to narrow the match. This
+assertion is useful for distinguishing a correctly selected tool that failed from a
+tool that completed successfully, including retry and forbidden-error evaluations.
 
 ### Javascript
 

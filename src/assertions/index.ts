@@ -96,6 +96,7 @@ import { handleTraceSpanDuration } from './traceSpanDuration';
 import {
   handleTrajectoryGoalSuccess,
   handleTrajectoryStepCount,
+  handleTrajectoryStepStatus,
   handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
@@ -145,6 +146,7 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'trace-span-duration',
   'trajectory:goal-success',
   'trajectory:step-count',
+  'trajectory:step-status',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
   'trajectory:tool-used',
@@ -309,6 +311,7 @@ const ASSERTION_HANDLERS: Record<
   'trajectory:goal-success': handleTrajectoryGoalSuccess,
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
   'trajectory:step-count': handleTrajectoryStepCount,
+  'trajectory:step-status': handleTrajectoryStepStatus,
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
   'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
