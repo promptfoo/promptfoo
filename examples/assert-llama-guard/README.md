@@ -29,7 +29,7 @@ promptfoo eval
 Replace the assertion's `provider` field with any LlamaGuard endpoint:
 
 - Fireworks AI — `fireworks:accounts/fireworks/models/llama-guard-3-8b`
-- Replicate — `replicate:meta/llama-guard-4-12b` (the plain form, **not** `replicate:moderation:...`)
+- Replicate — use [`type: moderation`](https://www.promptfoo.dev/docs/configuration/expected-outputs/moderation/) with `replicate:moderation:meta/llama-guard-4-12b`; Replicate's generic text provider forwards only the first user message, so the response under test would not reach the classifier
 - Self-hosted vLLM or another OpenAI-compatible server:
 
   ```yaml

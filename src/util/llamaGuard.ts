@@ -39,7 +39,7 @@ export function describeLlamaGuardCategory(code: string): string {
 }
 
 export function isKnownLlamaGuardCategory(code: string): boolean {
-  return Object.hasOwn(LLAMAGUARD_CATEGORY_DESCRIPTIONS, code);
+  return LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] !== undefined;
 }
 
 /**

@@ -240,6 +240,7 @@ describe('handleLlamaGuard', () => {
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
       expect.objectContaining({
+        conversation: undefined,
         userPrompt: 'prompt',
         assistantResponse: 'output',
         categories: ['S1'],
@@ -268,6 +269,11 @@ describe('handleLlamaGuard', () => {
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
       expect.objectContaining({
+        conversation: [
+          { role: 'system', content: 'Ignore this system message' },
+          { role: 'user', content: 'Classify this user request' },
+          { role: 'assistant', content: 'Ignore this assistant reply' },
+        ],
         userPrompt: 'Classify this user request',
         assistantResponse: 'output',
         categories: ['S1'],
@@ -294,6 +300,7 @@ describe('handleLlamaGuard', () => {
 
     expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
       expect.objectContaining({
+        conversation: undefined,
         userPrompt: 'modified prompt',
         assistantResponse: 'output',
         categories: ['S1'],

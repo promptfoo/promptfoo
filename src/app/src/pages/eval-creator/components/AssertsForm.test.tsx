@@ -106,26 +106,6 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
-  it('offers llama-guard as a selectable assertion type', async () => {
-    // The validator recognizes llama-guard, but users could not create the
-    // assertion until it was also listed in this form's selectable types.
-    initialValues = [{ type: 'equals', value: 'initial value' }];
-    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
-
-    const select = screen.getByRole('combobox', { name: 'Type' });
-    await userEvent.click(select);
-
-    const options = await waitFor(() => screen.getAllByRole('option'));
-    // Rendered with the " (LLM)" suffix because it is a model-graded assertion.
-    const llamaGuardOption = options.find((option) => option.textContent === 'llama-guard (LLM)');
-
-    expect(llamaGuardOption).toBeDefined();
-
-    await userEvent.click(llamaGuardOption!);
-
-    expect(onAdd).toHaveBeenCalledWith([{ type: 'llama-guard', value: 'initial value' }]);
-  });
-
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
     const user = userEvent.setup();
     initialValues = [

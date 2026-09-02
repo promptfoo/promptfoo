@@ -1,6 +1,6 @@
 ---
 title: LlamaGuard Assertion
-description: Classify LLM outputs for safety with Meta's LlamaGuard models through any standard chat provider, including local Ollama, Fireworks, vLLM, and Replicate.
+description: Classify LLM outputs for safety with Meta's LlamaGuard models through any standard chat provider, including local Ollama, Fireworks AI, or self-hosted vLLM.
 sidebar_position: 102
 sidebar_label: LlamaGuard
 ---
@@ -9,7 +9,7 @@ sidebar_label: LlamaGuard
 
 Use the `llama-guard` assert type to classify LLM outputs with Meta's LlamaGuard models.
 
-Unlike [`moderation`](/docs/configuration/expected-outputs/moderation), which requires a provider implementing a dedicated moderation API, `llama-guard` works with **any standard chat or completion provider** — a local Ollama install, Fireworks AI, a self-hosted vLLM deployment, or Replicate — as long as it is pointed at a LlamaGuard model. Switching endpoints needs no new provider code.
+Unlike [`moderation`](/docs/configuration/expected-outputs/moderation), which requires a provider implementing a dedicated moderation API, `llama-guard` works with **any standard chat provider** — a local Ollama install, Fireworks AI, or a self-hosted vLLM deployment — as long as it is pointed at a LlamaGuard model. Switching endpoints needs no new provider code.
 
 LlamaGuard replies with `safe`, or `unsafe` followed by the violated hazard-category codes (S1-S14). The `provider` field selects the model that does the classifying; the assertion parses that response identically no matter which provider produced it.
 
@@ -70,16 +70,18 @@ tests:
 
 ## Replicate
 
-Use the plain `replicate:<model>` form — **not** `replicate:moderation:<model>`. The latter routes to promptfoo's dedicated moderation-provider interface used by [`type: moderation`](/docs/configuration/expected-outputs/moderation), which returns a different response shape that this assertion does not parse.
+Use [`type: moderation`](/docs/configuration/expected-outputs/moderation) for Replicate rather than `llama-guard`:
 
 ```yaml
 tests:
   - vars:
       foo: bar
     assert:
-      - type: llama-guard
-        provider: replicate:meta/llama-guard-4-12b
+      - type: moderation
+        provider: 'replicate:moderation:meta/llama-guard-4-12b'
 ```
+
+`llama-guard` sends the conversation as chat turns so the classifier can judge the assistant's reply in context. Replicate's generic text provider forwards only the first user message to the model, so the response under test would never reach the classifier. The `moderation` assertion routes through `ReplicateModerationProvider`, which formats the exchange correctly for Replicate's hosted LlamaGuard endpoints.
 
 ## Categories
 
