@@ -353,8 +353,8 @@
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "framer-motion: monthly updates (animation library, low urgency)",
-      "matchPackageNames": ["framer-motion"],
+      "description": "motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["motion"],
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "10 days"
     },
