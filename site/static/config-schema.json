@@ -71,9 +71,14 @@
           "$ref": "#/definitions/__schema80"
         }
       },
-      "required": ["prompts"],
+      "required": [
+        "prompts"
+      ],
       "not": {
-        "required": ["providers", "targets"]
+        "required": [
+          "providers",
+          "targets"
+        ]
       }
     },
     "__schema0": {
@@ -735,7 +740,9 @@
                 "$ref": "#/definitions/__schema12"
               }
             },
-            "required": ["description"]
+            "required": [
+              "description"
+            ]
           }
         ]
       }
@@ -769,7 +776,12 @@
     },
     "__schema12": {
       "type": "string",
-      "enum": ["text", "pdf", "docx", "image"]
+      "enum": [
+        "text",
+        "pdf",
+        "docx",
+        "image"
+      ]
     },
     "__schema13": {
       "anyOf": [
@@ -796,7 +808,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["id"]
+                "required": [
+                  "id"
+                ]
               },
               {
                 "type": "object",
@@ -819,7 +833,10 @@
                   "function": {},
                   "config": {}
                 },
-                "required": ["raw", "label"]
+                "required": [
+                  "raw",
+                  "label"
+                ]
               }
             ]
           }
@@ -948,7 +965,10 @@
           ]
         }
       },
-      "required": ["id", "callApi"]
+      "required": [
+        "id",
+        "callApi"
+      ]
     },
     "__schema20": {
       "type": "array",
@@ -1014,7 +1034,10 @@
                 "additionalProperties": {}
               }
             },
-            "required": ["type", "assert"]
+            "required": [
+              "type",
+              "assert"
+            ]
           },
           {
             "$ref": "#/definitions/__schema24"
@@ -1039,7 +1062,11 @@
             },
             {
               "type": "string",
-              "enum": ["select-best", "human", "max-score"]
+              "enum": [
+                "select-best",
+                "human",
+                "max-score"
+              ]
             },
             {}
           ]
@@ -1076,12 +1103,19 @@
             },
             {
               "type": "string",
-              "enum": ["NFC", "NFD", "NFKC", "NFKD"]
+              "enum": [
+                "NFC",
+                "NFD",
+                "NFKC",
+                "NFKD"
+              ]
             }
           ]
         }
       },
-      "required": ["type"]
+      "required": [
+        "type"
+      ]
     },
     "__schema25": {
       "type": "string",
@@ -1146,6 +1180,7 @@
         "trajectory:goal-success",
         "trajectory:tool-args-match",
         "trajectory:step-count",
+        "trajectory:step-status",
         "trajectory:tool-sequence",
         "trajectory:tool-used",
         "trace-error-spans",
@@ -1209,7 +1244,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["role", "content"]
+                "required": [
+                  "role",
+                  "content"
+                ]
               }
             }
           ]
@@ -1312,7 +1350,11 @@
               {
                 "type": "array",
                 "items": {
-                  "type": ["string", "number", "boolean"]
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
                 }
               },
               {
@@ -1327,7 +1369,9 @@
           }
         }
       },
-      "required": ["path"]
+      "required": [
+        "path"
+      ]
     },
     "__schema31": {
       "type": "array",
@@ -1434,7 +1478,10 @@
                 }
               }
             },
-            "required": ["config", "tests"]
+            "required": [
+              "config",
+              "tests"
+            ]
           }
         ]
       }
@@ -1532,7 +1579,11 @@
             "type": "string"
           },
           "additionalProperties": {
-            "type": ["string", "number", "boolean"]
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
           }
         }
       ]
@@ -1554,7 +1605,10 @@
             ]
           }
         },
-        "required": ["name", "value"]
+        "required": [
+          "name",
+          "value"
+        ]
       }
     },
     "__schema38": {
@@ -1653,7 +1707,9 @@
           ]
         },
         "plugins": {
-          "default": ["default"],
+          "default": [
+            "default"
+          ],
           "type": "array",
           "items": {
             "$ref": "#/definitions/__schema53"
@@ -1661,7 +1717,9 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
-          "default": ["default"],
+          "default": [
+            "default"
+          ],
           "type": "array",
           "items": {
             "$ref": "#/definitions/__schema61"
@@ -1811,7 +1869,9 @@
             ]
           }
         },
-        "required": ["id"]
+        "required": [
+          "id"
+        ]
       }
     },
     "__schema51": {
@@ -1878,7 +1938,9 @@
               ]
             }
           },
-          "required": ["id"]
+          "required": [
+            "id"
+          ]
         }
       ]
     },
@@ -2494,7 +2556,13 @@
     },
     "__schema60": {
       "type": "string",
-      "enum": ["critical", "high", "medium", "low", "informational"]
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational"
+      ]
     },
     "__schema61": {
       "anyOf": [
@@ -2516,7 +2584,9 @@
               ]
             }
           },
-          "required": ["id"]
+          "required": [
+            "id"
+          ]
         }
       ]
     },
@@ -2675,7 +2745,12 @@
             "type": "string"
           }
         },
-        "required": ["output", "pass", "score", "reason"]
+        "required": [
+          "output",
+          "pass",
+          "score",
+          "reason"
+        ]
       }
     },
     "__schema70": {
@@ -2716,11 +2791,17 @@
                   "type": "string"
                 },
                 "acceptFormats": {
-                  "default": ["json", "protobuf"],
+                  "default": [
+                    "json",
+                    "protobuf"
+                  ],
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["protobuf", "json"]
+                    "enum": [
+                      "protobuf",
+                      "json"
+                    ]
                   }
                 },
                 "redactAttributes": {
@@ -2752,7 +2833,9 @@
             "type": {
               "default": "sqlite",
               "type": "string",
-              "enum": ["sqlite"]
+              "enum": [
+                "sqlite"
+              ]
             },
             "retentionDays": {
               "default": 30,
@@ -2780,7 +2863,9 @@
               }
             }
           },
-          "required": ["endpoint"]
+          "required": [
+            "endpoint"
+          ]
         },
         "provider": {
           "oneOf": [
@@ -2823,7 +2908,10 @@
                   "maximum": 300000
                 }
               },
-              "required": ["id", "endpoint"]
+              "required": [
+                "id",
+                "endpoint"
+              ]
             },
             {
               "type": "object",
@@ -2848,7 +2936,9 @@
                       "minLength": 1
                     }
                   },
-                  "required": ["token"]
+                  "required": [
+                    "token"
+                  ]
                 },
                 "headers": {
                   "type": "object",
@@ -2865,7 +2955,12 @@
                   "maximum": 300000
                 }
               },
-              "required": ["id", "endpoint", "projectId", "auth"]
+              "required": [
+                "id",
+                "endpoint",
+                "projectId",
+                "auth"
+              ]
             },
             {
               "type": "object",
@@ -2892,7 +2987,10 @@
                       "not": {}
                     }
                   },
-                  "required": ["username", "password"],
+                  "required": [
+                    "username",
+                    "password"
+                  ],
                   "additionalProperties": false
                 },
                 "headers": {
@@ -2910,7 +3008,11 @@
                   "maximum": 300000
                 }
               },
-              "required": ["id", "endpoint", "auth"]
+              "required": [
+                "id",
+                "endpoint",
+                "auth"
+              ]
             }
           ]
         },
