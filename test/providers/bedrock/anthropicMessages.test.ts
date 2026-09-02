@@ -21,6 +21,10 @@ describe('Bedrock Anthropic Messages provider', () => {
   it('recognizes only the Anthropic models served by the Bedrock Messages endpoint', () => {
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('global.anthropic.claude-mythos-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('us.anthropic.claude-fable-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5-1')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-preview')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(false);
   });
@@ -30,6 +34,10 @@ describe('Bedrock Anthropic Messages provider', () => {
       'https://bedrock-mantle.us-east-1.api.aws/anthropic',
     );
     expect(() => getBedrockAnthropicBaseUrl('evil.example/x')).toThrow(/Invalid AWS region/);
+    expect(getBedrockAnthropicBaseUrl('us-west-2', true)).toBe(
+      'https://bedrock-runtime.us-west-2.amazonaws.com/anthropic',
+    );
+    expect(() => getBedrockAnthropicBaseUrl('evil.example/x', true)).toThrow(/Invalid AWS region/);
   });
 
   it('requires a Bedrock API key', () => {
@@ -55,6 +63,46 @@ describe('Bedrock Anthropic Messages provider', () => {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       }),
     ).toThrow(/only in us-east-1 and eu-north-1/);
+  });
+
+  it('rejects a Fable 5.1 Mantle ID outside GovCloud West', () => {
+    expect(() =>
+      createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+        config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+      }),
+    ).toThrow(/uses Mantle only in us-gov-west-1/);
+  });
+
+  it('uses Mantle for the Fable 5.1 GovCloud West deployment', () => {
+    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+      config: { region: 'us-gov-west-1', apiKey: 'bedrock-key' },
+    });
+    expect(provider.getApiBaseUrl()).toBe('https://bedrock-mantle.us-gov-west-1.api.aws/anthropic');
+  });
+
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('uses the requested Runtime region for %s', (model) => {
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+    });
+    expect(provider.getApiBaseUrl()).toBe(
+      'https://bedrock-runtime.us-west-2.amazonaws.com/anthropic',
+    );
+  });
+
+  it('allows a provisioned Fable 5.1 endpoint to override the default region restriction', () => {
+    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+      config: {
+        region: 'us-west-2',
+        apiKey: 'bedrock-key',
+        apiBaseUrl: 'https://provisioned.example/anthropic',
+      },
+    });
+    expect(provider.getApiBaseUrl()).toBe('https://provisioned.example/anthropic');
   });
 
   it('uses promptfoo env overrides for the key and region', async () => {
@@ -188,47 +236,49 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['anthropic.claude-fable-5', 'anthropic.claude-mythos-5'])(
-    'sends %s while reusing Anthropic compatibility and billing logic',
-    async (bedrockModel) => {
-      disableCache();
-      const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
-        id: `bedrock:${bedrockModel}`,
-        config: {
-          region: 'us-east-1',
-          apiKey: 'bedrock-key',
-          max_tokens: 4096,
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'disabled' },
-        },
-      });
-      const response = {
-        content: [{ type: 'text', text: 'ok' }],
-        model: bedrockModel,
-        id: 'msg-1',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 5, output_tokens: 1 },
-      } as Anthropic.Messages.Message;
-      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
+  it.each([
+    'anthropic.claude-fable-5',
+    'anthropic.claude-mythos-5',
+    'us.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('sends %s while reusing Anthropic compatibility and billing logic', async (bedrockModel) => {
+    disableCache();
+    const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
+      id: `bedrock:${bedrockModel}`,
+      config: {
+        region: 'us-east-1',
+        apiKey: 'bedrock-key',
+        max_tokens: 4096,
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+        thinking: { type: 'disabled' },
+      },
+    });
+    const response = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: bedrockModel,
+      id: 'msg-1',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 5, output_tokens: 1 },
+    } as Anthropic.Messages.Message;
+    const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
 
-      const result = await provider.callApi('hello');
+    const result = await provider.callApi('hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
-      expect(provider['getGenAISystem']()).toBe('bedrock');
-      expect(params.model).toBe(bedrockModel);
-      expect(params).not.toHaveProperty('temperature');
-      expect(params).not.toHaveProperty('top_p');
-      expect(params).not.toHaveProperty('top_k');
-      expect(params).not.toHaveProperty('thinking');
-      expect(result.output).toBe('ok');
-      expect(result.cost).toBeCloseTo(0.00011, 8);
-    },
-  );
+    const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
+    expect(provider['getGenAISystem']()).toBe('bedrock');
+    expect(params.model).toBe(bedrockModel);
+    expect(params).not.toHaveProperty('temperature');
+    expect(params).not.toHaveProperty('top_p');
+    expect(params).not.toHaveProperty('top_k');
+    expect(params).not.toHaveProperty('thinking');
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00011, 8);
+  });
 });

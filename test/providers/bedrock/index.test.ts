@@ -3451,6 +3451,15 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
+    for (const prefix of ['', 'us.', 'global.']) {
+      const model = `${prefix}anthropic.claude-${family}-5-1`;
+      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${family}-5-1`]).toBeUndefined();
+  });
+
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3876,6 +3885,38 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.output).toBe('ok');
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
+
+  it.each([
+    ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
+    ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
+    ['global.anthropic.claude-fable-5', 0, 0.02645],
+  ] as const)(
+    'prices Claude Runtime cache tokens once for %s',
+    async (modelName, inputTokens, expectedCost) => {
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: 500,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 100,
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelName, {
+        config: { region: 'us-west-2' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.tokenUsage?.prompt).toBe(inputTokens + 300);
+      expect(result.cost).toBeCloseTo(expectedCost, 8);
+    },
+  );
 
   it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
     const responseJson = JSON.stringify({

@@ -2345,6 +2345,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2447,6 +2449,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2550,6 +2554,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Claude Fable 5 base, global, and geo inference profiles.
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2560,13 +2566,14 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
-  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
+  const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
+  if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, so always point at the bare
     // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
     // bounce the user into the factory's prefixed-Mythos rejection.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:anthropic.claude-mythos-5" instead.`,
+        `InvokeModel. Load it as "bedrock:${messagesOnlyModel[1]}" instead.`,
     );
   }
 
@@ -2897,9 +2904,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Claude's displayed prompt count includes cache reads and writes. Billing
+      // needs the API's uncached input count because cache tokens are priced separately.
+      const billablePromptTokens =
+        model === BEDROCK_MODEL.CLAUDE_MESSAGES
+          ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
+          : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
-        tokenUsage.prompt,
+        billablePromptTokens,
         tokenUsage.completion,
         tokenUsage.completionDetails?.cacheReadInputTokens ??
           coerceStrToNum(output.usage?.cache_read_input_tokens),
