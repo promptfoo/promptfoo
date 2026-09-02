@@ -216,6 +216,42 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('routes Codex Security provider IDs without treating them as OpenAI API models', async () => {
+      const provider = await registry.create('openai:codex-security', {
+        ...mockContext,
+        options: {
+          config: { operation: 'security-scan', model: 'gpt-5.6-terra' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security');
+      expect(provider.config).toMatchObject({
+        operation: 'security-scan',
+        model: 'gpt-5.6-terra',
+      });
+    });
+
+    it('supports inline Codex Security model selection and preserves provider environment metadata', async () => {
+      const provider = await registry.create('openai:codex-security:gpt-5.6-sol', {
+        ...mockContext,
+        env: { OPENAI_API_KEY: 'context-key' },
+        options: {
+          config: { operation: 'deep-security-scan' },
+          env: { CODEX_API_KEY: 'provider-key' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security:gpt-5.6-sol');
+      expect(provider.config).toMatchObject({
+        operation: 'deep-security-scan',
+        model: 'gpt-5.6-sol',
+      });
+      expect((provider as any).env).toEqual({
+        OPENAI_API_KEY: 'context-key',
+        CODEX_API_KEY: 'provider-key',
+      });
+    });
+
     it('fails fast for xAI embedding aliases since xAI has no public embeddings API', async () => {
       const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
       expect(factory).toBeDefined();
@@ -520,6 +556,29 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('anthropic:non-existent-model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Anthropic model type or model name');
+    });
+
+    it('resolves the anthropic shorthand for models not yet in the catalog', async () => {
+      // The shorthand used to require an exact ANTHROPIC_MODELS entry, so every new Claude
+      // release broke `anthropic:<model>` until promptfoo shipped a catalog update — while
+      // `anthropic:messages:<model>` worked fine for the same id.
+      const factory = providerMap.find((f) => f.test('anthropic:claude-haiku-5'));
+      const options = { ...mockProviderOptions, id: undefined };
+      for (const model of ['claude-haiku-5', 'claude-some-future-model-9']) {
+        const provider = await factory!.create(`anthropic:${model}`, options, mockContext);
+        expect(provider.id()).toBe(`anthropic:${model}`);
+      }
+    });
+
+    it('still rejects an anthropic shorthand that is not shaped like a Claude id', async () => {
+      // The shape check is what keeps a typo failing at config load rather than as a
+      // request-time 404.
+      const factory = providerMap.find((f) => f.test('anthropic:sonnet-5'));
+      for (const bad of ['sonnet-5', 'gpt-4', 'claude']) {
+        await expect(
+          factory!.create(`anthropic:${bad}`, mockProviderOptions, mockContext),
+        ).rejects.toThrow('Unknown Anthropic model type or model name');
+      }
     });
 
     it('should handle azure providers correctly', async () => {
@@ -1339,12 +1398,36 @@ describe('Provider Registry', () => {
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
+        'google:gemini-3.7-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:gemini-3.7-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
         'vertex:chat:gemini-2.5-flash',

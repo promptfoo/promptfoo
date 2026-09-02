@@ -1114,6 +1114,70 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('attributes generation metadata once without increasing target tokens or probes', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+          },
+        },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
+        { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
+      ] as any;
+
+      const stats = eval1.getStats();
+
+      expect(stats.tokenUsage).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      });
+    });
+
+    it('does not attribute historical suite generation metadata without a run charge', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generation: { id: 'old-generation', tokenUsage: { total: 40, numRequests: 4 } },
+          generationTokenUsage: { total: 40, numRequests: 4 },
+        },
+      });
+
+      expect(eval1.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('preserves cached generation separately from incurred target usage', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: {
+              total: 40,
+              prompt: 25,
+              completion: 15,
+              cached: 40,
+              numRequests: 1,
+              incurredTokenUsage: { total: 0, numRequests: 0 },
+            },
+          },
+        },
+      });
+      eval1.prompts = [{ metrics: { tokenUsage: { total: 10, numRequests: 1 } } }] as any;
+
+      expect(eval1.getStats().tokenUsage).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 40, cached: 40, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          numRequests: 1,
+          generation: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
@@ -1131,6 +1195,7 @@ describe('evaluator', () => {
                 prompt: 40,
                 completion: 50,
                 cached: 10,
+                numRequests: 3,
               },
             },
           },
@@ -1149,6 +1214,7 @@ describe('evaluator', () => {
                 prompt: 80,
                 completion: 100,
                 cached: 20,
+                numRequests: 5,
               },
             },
           },
@@ -1161,7 +1227,7 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
-        numRequests: 0,
+        numRequests: 8,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,

@@ -91,10 +91,21 @@ module.exports = class OpenAIProvider {
   cached: false,
   conversationEnded: false, // Optional: set true to stop multi-turn redteam gracefully
   conversationEndReason: 'thread_closed', // Optional reason when conversationEnded=true
+  guardrails: { // Optional: normalized target guardrail decision
+    flagged: false,
+    flaggedInput: false,
+    flaggedOutput: false,
+  },
   metadata: {}, // Additional data
   ...
 }
 ```
+
+### Guardrail Responses
+
+To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
+
+Return expected policy blocks as a scorable `output`. If the guardrail itself failed, return `error` so Promptfoo cannot mistake the failure for a clean decision. See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for the full mapping pattern.
 
 ### Context Parameter
 
