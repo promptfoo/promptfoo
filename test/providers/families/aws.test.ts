@@ -149,9 +149,15 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:anthropic.claude-mythos-5');
   });
 
-  it('keeps Fable 5.1 on Bedrock Runtime', async () => {
+  it.each([
+    'anthropic.claude-mythos-5-1',
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('keeps %s on Bedrock Runtime', async (model) => {
     const provider = await bedrockFactory.create(
-      'bedrock:global.anthropic.claude-fable-5-1',
+      `bedrock:${model}`,
       { config: { region: 'us-east-1' } },
       ctx,
     );
@@ -159,9 +165,10 @@ describe('aws bedrock provider factory routing', () => {
   });
 
   it.each([
-    'bedrock:anthropic.claude-mythos-5-1',
-    'bedrock:messages:anthropic.claude-mythos-5-1',
-    'bedrock:messages:anthropic.claude-fable-5-1',
+    'bedrock:messages:global.anthropic.claude-mythos-5-1',
+    'bedrock:messages:us.anthropic.claude-mythos-5-1',
+    'bedrock:messages:global.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-1',
   ])('routes %s through Anthropic Messages', async (providerPath) => {
     const provider = await bedrockFactory.create(
       providerPath,
@@ -170,12 +177,24 @@ describe('aws bedrock provider factory routing', () => {
     );
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
     expect(provider.id()).toBe(providerPath);
+    expect((provider as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(
+      'https://bedrock-runtime.us-east-1.amazonaws.com/anthropic',
+    );
   });
 
-  it.each(['converse', 'completion'])('rejects %s for Mythos 5.1', async (api) => {
+  it.each(['fable', 'mythos'])('routes %s 5.1 through Converse', async (family) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:converse:global.anthropic.claude-${family}-5-1`,
+      {},
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+  });
+
+  it('requires an inference profile for Mythos 5.1 Messages', async () => {
     await expect(
-      bedrockFactory.create(`bedrock:${api}:anthropic.claude-mythos-5-1`, {}, ctx),
-    ).rejects.toThrow(/Anthropic Messages API/);
+      bedrockFactory.create('bedrock:messages:anthropic.claude-mythos-5-1', {}, ctx),
+    ).rejects.toThrow(/Use a us. or global. inference profile/);
   });
 
   it('supports the explicit messages form for Bedrock Fable', async () => {
@@ -224,8 +243,6 @@ describe('aws bedrock provider factory routing', () => {
     'bedrock:us.anthropic.claude-mythos-5',
     'bedrock:converse:global.anthropic.claude-mythos-5',
     'bedrock:completion:us.anthropic.claude-mythos-5',
-    'bedrock:us.anthropic.claude-mythos-5-1',
-    'bedrock:messages:global.anthropic.claude-mythos-5-1',
   ])('rejects unsupported prefixed Mythos ID %s', async (providerPath) => {
     await expect(
       bedrockFactory.create(providerPath, { config: { apiKey: 'bedrock-key' } }, ctx),

@@ -48,6 +48,7 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
+  'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
   // Claude Opus 5 (same list rates as Opus 4.8; full 1M context bills at the standard rate)
   'anthropic.claude-opus-5': { input: 5, output: 25 },

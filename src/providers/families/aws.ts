@@ -12,9 +12,8 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
-      // Mythos is only available through Bedrock's Anthropic-compatible
-      // Messages endpoint. Fable also supports that endpoint when explicitly
-      // selected, while its bare form continues through Bedrock Runtime below.
+      // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
+      // Runtime, including an explicit Messages route with US/global profiles.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const anthropicModel =
         modelType === 'messages'
@@ -24,16 +23,14 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      const prefixedMythosModel = anthropicModel?.match(
-        /^[^.]+\.(anthropic\.claude-mythos-5(?:-1)?)$/,
-      );
+      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
       if (prefixedMythosModel) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
             `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (anthropicModel?.startsWith('anthropic.claude-')) {
+      if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
         const {
           createBedrockAnthropicMessagesProvider,
           isBedrockAnthropicMessagesModel,
@@ -59,8 +56,9 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Supported models: anthropic.claude-fable-5, anthropic.claude-fable-5-1, ` +
-            `anthropic.claude-mythos-5, and anthropic.claude-mythos-5-1.`,
+            `provider. Use a us. or global. inference profile for Fable/Mythos 5.1. ` +
+            `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
+            `anthropic.claude-fable-5-1 (GovCloud West).`,
         );
       }
 

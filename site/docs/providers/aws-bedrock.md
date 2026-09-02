@@ -825,20 +825,31 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`
 
 #### Claude Fable and Mythos models
 
-[Claude Fable 5.1](https://aws.amazon.com/blogs/machine-learning/introducing-claude-fable-5-1-on-aws/)
-supports InvokeModel and Converse with the `global.anthropic.claude-fable-5-1` and
-`us.anthropic.claude-fable-5-1` inference profiles. For example, use
-`bedrock:global.anthropic.claude-fable-5-1` or
-`bedrock:converse:global.anthropic.claude-fable-5-1`.
-The explicit `bedrock:messages:anthropic.claude-fable-5-1` route uses the
-Anthropic-compatible Messages endpoint in `us-east-1`. For another provisioned
-endpoint, including AWS GovCloud, set `config.apiBaseUrl` to the Anthropic base
-URL supplied by AWS.
+[Claude Fable 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-1.html)
+and [Claude Mythos 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-1.html)
+support InvokeModel, Converse, and the Anthropic-compatible Messages API on
+**Bedrock Runtime**. Use a `us.` or `global.` inference profile:
 
-Use `bedrock:anthropic.claude-mythos-5-1` for Mythos 5.1 through the Messages
-endpoint, with the API key configuration shown below. Mythos access requires
-provider approval. Both 5.1 models retain always-on thinking and use a lower
-cache-read price of $0.25 per million tokens before regional premiums.
+```yaml
+providers:
+  - bedrock:us.anthropic.claude-fable-5-1
+  - bedrock:converse:us.anthropic.claude-mythos-5-1
+  - id: bedrock:messages:global.anthropic.claude-mythos-5-1
+    config:
+      region: us-east-1
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+```
+
+The `us.` profile keeps routing within its geography; `global.` permits worldwide
+routing. The Messages route uses
+`https://bedrock-runtime.<region>.amazonaws.com/anthropic` and requires a Bedrock
+API key. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
+thinking and use a cache-read price of $0.25 per million tokens before regional
+premiums.
+
+Fable 5.1 also supports Mantle in **GovCloud West**: use
+`bedrock:messages:anthropic.claude-fable-5-1` with `region: us-gov-west-1`.
+Set `config.apiBaseUrl` when AWS provides a custom Anthropic endpoint.
 
 [Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
 supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`

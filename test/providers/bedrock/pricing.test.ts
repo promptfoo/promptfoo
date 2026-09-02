@@ -220,9 +220,13 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(15, 6);
   });
 
-  it.each(['global.', 'us.'])('prices Fable 5.1 cache reads on the %s endpoint', (prefix) => {
-    const model = `${prefix}anthropic.claude-fable-5-1`;
-    const expected = 0.0363 * (prefix === 'global.' ? 1 : 1.1);
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('prices 5.1 cache reads for %s', (model) => {
+    const expected = 0.0363 * (model.startsWith('global.') ? 1 : 1.1);
     expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
     expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
   });

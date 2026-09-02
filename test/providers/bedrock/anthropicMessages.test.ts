@@ -22,7 +22,9 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5-1')).toBe(true);
-    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('global.anthropic.claude-mythos-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('us.anthropic.claude-fable-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5-1')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-preview')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(false);
   });
@@ -32,6 +34,10 @@ describe('Bedrock Anthropic Messages provider', () => {
       'https://bedrock-mantle.us-east-1.api.aws/anthropic',
     );
     expect(() => getBedrockAnthropicBaseUrl('evil.example/x')).toThrow(/Invalid AWS region/);
+    expect(getBedrockAnthropicBaseUrl('us-west-2', true)).toBe(
+      'https://bedrock-runtime.us-west-2.amazonaws.com/anthropic',
+    );
+    expect(() => getBedrockAnthropicBaseUrl('evil.example/x', true)).toThrow(/Invalid AWS region/);
   });
 
   it('requires a Bedrock API key', () => {
@@ -59,18 +65,39 @@ describe('Bedrock Anthropic Messages provider', () => {
     ).toThrow(/only in us-east-1 and eu-north-1/);
   });
 
-  it('rejects an unsupported default Fable 5.1 Messages region', () => {
+  it('rejects a Fable 5.1 Mantle ID outside GovCloud West', () => {
     expect(() =>
       createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       }),
-    ).toThrow(/only available in us-east-1/);
+    ).toThrow(/uses Mantle only in us-gov-west-1/);
+  });
+
+  it('uses Mantle for the Fable 5.1 GovCloud West deployment', () => {
+    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
+      config: { region: 'us-gov-west-1', apiKey: 'bedrock-key' },
+    });
+    expect(provider.getApiBaseUrl()).toBe('https://bedrock-mantle.us-gov-west-1.api.aws/anthropic');
+  });
+
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('uses the requested Runtime region for %s', (model) => {
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+    });
+    expect(provider.getApiBaseUrl()).toBe(
+      'https://bedrock-runtime.us-west-2.amazonaws.com/anthropic',
+    );
   });
 
   it('allows a provisioned Fable 5.1 endpoint to override the default region restriction', () => {
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5-1', {
       config: {
-        region: 'us-gov-west-1',
+        region: 'us-west-2',
         apiKey: 'bedrock-key',
         apiBaseUrl: 'https://provisioned.example/anthropic',
       },
@@ -212,8 +239,8 @@ describe('Bedrock Anthropic Messages provider', () => {
   it.each([
     'anthropic.claude-fable-5',
     'anthropic.claude-mythos-5',
-    'anthropic.claude-fable-5-1',
-    'anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-mythos-5-1',
   ])('sends %s while reusing Anthropic compatibility and billing logic', async (bedrockModel) => {
     disableCache();
     const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {

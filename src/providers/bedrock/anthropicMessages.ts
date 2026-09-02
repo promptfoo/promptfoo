@@ -11,12 +11,18 @@ import type { ProviderOptions } from '../../types/providers';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
+const RUNTIME_MESSAGES_MODELS = new Set([
+  'us.anthropic.claude-fable-5-1',
+  'global.anthropic.claude-fable-5-1',
+  'us.anthropic.claude-mythos-5-1',
+  'global.anthropic.claude-mythos-5-1',
+]);
 
 const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
   'anthropic.claude-fable-5',
   'anthropic.claude-mythos-5',
   'anthropic.claude-fable-5-1',
-  'anthropic.claude-mythos-5-1',
+  ...RUNTIME_MESSAGES_MODELS,
 ];
 
 export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
@@ -24,18 +30,22 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
 }
 
 export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return modelName === 'anthropic.claude-mythos-5' || modelName === 'anthropic.claude-mythos-5-1';
+  return modelName === 'anthropic.claude-mythos-5';
 }
 
-export function getBedrockAnthropicBaseUrl(region: string): string {
-  return `${getBedrockMantleOrigin(region)}/anthropic`;
+export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
+  // Validate the region before interpolating either host, which receives an API key.
+  const mantleOrigin = getBedrockMantleOrigin(region);
+  return useRuntime
+    ? `https://bedrock-runtime.${region}.amazonaws.com/anthropic`
+    : `${mantleOrigin}/anthropic`;
 }
 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
   // x-api-key (the factory guarantees one). Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
-  // Bedrock mantle host.
+  // Bedrock host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
@@ -71,15 +81,25 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  if (
-    !config.apiBaseUrl &&
-    (modelName === 'anthropic.claude-mythos-5' || modelName === 'anthropic.claude-fable-5-1') &&
-    region !== 'us-east-1'
-  ) {
+  if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
     throw new Error(
       `Amazon Bedrock model "${modelName}" is only available in us-east-1 through the default ` +
         `Anthropic Messages endpoint. Set config.region or AWS_BEDROCK_REGION to us-east-1, ` +
         `or set config.apiBaseUrl for another provisioned endpoint.`,
+    );
+  }
+
+  // AWS's Fable 5.1 model card lists Mantle only in GovCloud West. Commercial
+  // regions use the Runtime Messages endpoint with a US or global inference profile.
+  if (
+    !config.apiBaseUrl &&
+    modelName === 'anthropic.claude-fable-5-1' &&
+    region !== 'us-gov-west-1'
+  ) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" uses Mantle only in us-gov-west-1. ` +
+        `For other regions, use "bedrock:messages:us.${modelName}" or ` +
+        `"bedrock:messages:global.${modelName}" with the Runtime Messages endpoint.`,
     );
   }
 
@@ -95,7 +115,8 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  const apiBaseUrl = config.apiBaseUrl || getBedrockAnthropicBaseUrl(region);
+  const apiBaseUrl =
+    config.apiBaseUrl || getBedrockAnthropicBaseUrl(region, RUNTIME_MESSAGES_MODELS.has(modelName));
 
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
