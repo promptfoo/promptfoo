@@ -2,6 +2,7 @@ import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
+
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
 function isSupportedAssertionType(type: string): boolean {
@@ -377,6 +378,20 @@ function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   return undefined;
 }
 
+function getTrajectoryStepStatusValueError(value: unknown): string | undefined {
+  if (!isRecord(value) || !hasMatcherName(value)) {
+    return 'Enter JSON with a trajectory step name or pattern and status.';
+  }
+  if (
+    value.status !== 'success' &&
+    value.status !== 'error' &&
+    (typeof value.status !== 'number' || !Number.isFinite(value.status))
+  ) {
+    return 'Set trajectory step status to "success", "error", or a numeric code.';
+  }
+  return undefined;
+}
+
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
@@ -417,6 +432,12 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:step-count'
   ) {
     return getTrajectoryStepCountValueError(assertion.value);
+  }
+  if (
+    assertion.type === 'trajectory:step-status' ||
+    assertion.type === 'not-trajectory:step-status'
+  ) {
+    return getTrajectoryStepStatusValueError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-sequence' ||
