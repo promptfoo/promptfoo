@@ -359,6 +359,22 @@ export interface OpenCodeSDKConfig {
   persist_sessions?: boolean;
 
   /**
+   * Restart the OpenCode server whenever the per-call W3C traceparent changes, so spans
+   * emitted by `opencode serve` are parented under the test case that produced them.
+   *
+   * OpenCode's OpenTelemetry plugin reads `OPENCODE_TRACEPARENT` exactly once, at process
+   * boot, so a single long-lived server can only ever report one trace. Restarting is the
+   * only way to give it a fresh one. Required for `trajectory:*` assertions to correlate.
+   *
+   * This costs a full server restart per test case, so it is opt-in. Incompatible with
+   * `baseUrl` (promptfoo does not own that server), and with `persist_sessions` /
+   * `session_id` (a restart discards server-side session state).
+   *
+   * @default false
+   */
+  restart_server_per_call?: boolean;
+
+  /**
    * MCP server configuration
    */
   mcp?: Record<string, OpenCodeMCPServerConfig>;
@@ -781,6 +797,47 @@ function normalizeStructuredText(value: string): string | undefined {
   return tryParseJson(fencedJsonMatch[1]);
 }
 
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+/**
+ * Mirrors the check the other agentic providers use (see `openai/codex-sdk.ts`): a traceparent
+ * is only useful for correlation if it carries a non-zero trace id and span id.
+ */
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
+
+/**
+ * Env var read by OpenCode's OpenTelemetry plugin at process boot to parent its spans.
+ * OpenCode ships no built-in tracing, so this is the only trace-correlation hook available
+ * for the spawned `opencode serve` process.
+ */
+const OPENCODE_TRACEPARENT_ENV = 'OPENCODE_TRACEPARENT';
+
+/**
+ * Writes a single `process.env` entry, using the same `Object.assign` / `Reflect.deleteProperty`
+ * mechanics as the repo's env helpers (`test/util/utils.ts`). See `spawnWithServerEnv()` for why
+ * mutating the real environment is unavoidable here.
+ */
+function setProcessEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, key);
+  } else {
+    Object.assign(process.env, { [key]: value });
+  }
+}
+
+/**
+ * Queue key used to serialize the entire server lifecycle (start -> session -> prompt) when
+ * `restart_server_per_call` swaps the shared server between calls.
+ */
+const SERVER_LIFECYCLE_QUEUE_KEY = 'opencode:sdk:server-lifecycle';
+
 /**
  * Helper to load the OpenCode SDK ESM module
  *
@@ -836,6 +893,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
+  private opencodeModuleLoad?: Promise<LoadedOpenCodeSDKModule>;
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
@@ -844,6 +902,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessionQueues = new Map<string, Promise<void>>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  /** Traceparent the currently-running server was booted with, if any. */
+  private activeTraceparent?: string;
 
   constructor(
     options: {
@@ -913,6 +973,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.sessionOrder = [];
     this.sessionQueues.clear();
 
+    await this.closeServer();
+  }
+
+  /**
+   * Tears down the client and, if we started one, the server. Leaves session bookkeeping to
+   * the caller: `cleanup()` deletes sessions over the wire first, while a per-call restart
+   * just drops the now-dangling handles.
+   */
+  private async closeServer(): Promise<void> {
+    await this.clientInitialization?.catch(() => undefined);
+    this.clientInitialization = undefined;
+
     // Close server if we started one
     if (this.server) {
       try {
@@ -923,6 +995,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.server = undefined;
     }
     this.client = undefined;
+    this.activeTraceparent = undefined;
   }
 
   /**
@@ -1055,8 +1128,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     });
   }
 
-  private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
-    const serverEnv: Record<string, string> = {};
+  /**
+   * Builds the environment the spawned `opencode serve` process should see.
+   *
+   * A `undefined` value means "unset this variable for the child", which matters for
+   * `OPENCODE_TRACEPARENT`: a stale value inherited from the ambient environment would
+   * silently mis-parent every span the server emits.
+   */
+  private buildServerEnv(
+    config: OpenCodeSDKConfig,
+    traceparent?: string,
+  ): Record<string, string | undefined> {
+    const serverEnv: Record<string, string | undefined> = {};
 
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) {
@@ -1083,6 +1166,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!serverEnv.PATH?.includes(opencodeBinPath)) {
       serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
+    }
+
+    // When restarting per call, promptfoo owns the traceparent: set it for this call, or clear
+    // it so the server never inherits a stale one. Otherwise seed it only if the ambient
+    // environment has not already set it, matching claude-agent-sdk's precedence.
+    if (config.restart_server_per_call) {
+      serverEnv[OPENCODE_TRACEPARENT_ENV] = isValidTraceparent(traceparent)
+        ? traceparent
+        : undefined;
+    } else if (isValidTraceparent(traceparent) && !serverEnv[OPENCODE_TRACEPARENT_ENV]) {
+      serverEnv[OPENCODE_TRACEPARENT_ENV] = traceparent;
     }
 
     return serverEnv;
@@ -1248,6 +1342,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');
     }
 
+    this.validateTraceRestartConfiguration(config);
+
     if (config.apiKey && !config.provider_id && !config.baseUrl) {
       logger.warn(
         '[OpenCode SDK] apiKey is set without provider_id. Prefer setting provider_id so promptfoo can wire the credential into the spawned OpenCode server.',
@@ -1289,20 +1385,120 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
-    if (!this.opencodeModule) {
-      this.opencodeModule = await loadOpenCodeSDK();
+  /**
+   * Whether this call should get its own freshly-booted server. Guarded on `baseUrl` as well as
+   * the flag because promptfoo cannot restart a server it did not start.
+   */
+  private restartsServerPerCall(config: OpenCodeSDKConfig): boolean {
+    return Boolean(config.restart_server_per_call) && !config.baseUrl;
+  }
+
+  /**
+   * `restart_server_per_call` swaps the server between calls, which only makes sense for a
+   * server promptfoo owns and whose session state it is free to discard. Rejecting the
+   * conflicting combinations is better than silently emitting uncorrelated traces.
+   */
+  private validateTraceRestartConfiguration(config: OpenCodeSDKConfig): void {
+    if (!config.restart_server_per_call) {
+      return;
     }
+
+    if (config.baseUrl) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call requires a server promptfoo manages and cannot be combined with baseUrl. Remove baseUrl so the provider starts its own server, or drop restart_server_per_call and accept that every span shares the traceparent captured when that server booted.',
+      );
+    }
+
+    const conflicting = [
+      config.persist_sessions ? 'persist_sessions' : undefined,
+      config.session_id ? 'session_id' : undefined,
+    ].filter(Boolean);
+    if (conflicting.length > 0) {
+      throw new Error(
+        `OpenCode SDK restart_server_per_call discards server-side session state on every restart, so it cannot be combined with: ${conflicting.join(', ')}.`,
+      );
+    }
+  }
+
+  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
+    if (this.opencodeModule) {
+      return this.opencodeModule;
+    }
+
+    // Concurrent calls have to share a single load. `loadOpenCodeSDK()` walks several import
+    // strategies in turn, so letting two of them race is last-writer-wins on the cached module
+    // and a partially-resolved namespace can win.
+    if (!this.opencodeModuleLoad) {
+      this.opencodeModuleLoad = loadOpenCodeSDK().catch((err) => {
+        // Drop the memo so a later call can retry the resolution.
+        this.opencodeModuleLoad = undefined;
+        throw err;
+      });
+    }
+    this.opencodeModule = await this.opencodeModuleLoad;
     return this.opencodeModule;
   }
 
-  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+  /**
+   * Applies `serverEnv` to `process.env` for exactly as long as it takes `spawn()` to reach the
+   * child-process launch, then restores it.
+   *
+   * `@opencode-ai/sdk`'s `createOpencodeServer()` spawns `opencode serve` with a hard-coded
+   * `{ ...process.env, OPENCODE_CONFIG_CONTENT }` and never reads the `env` option it is handed
+   * — its `ServerOptions` type has no `env` field at all (still true as of 1.18.26). The only
+   * environment the child actually inherits is this process's `process.env` at the instant of
+   * the spawn, so everything `buildServerEnv()` computed was previously discarded in full.
+   *
+   * `createOpencode()` reaches `cross-spawn` synchronously: it awaits `createOpencodeServer()`,
+   * whose body runs straight through to `launch()` before its own first `await`. So we invoke
+   * `spawn()` *without* awaiting it and restore `process.env` in a `finally` that therefore runs
+   * before any suspension point. Because the mutation window spans no `await`, concurrently
+   * running providers can neither observe these values nor leak them into their own children.
+   *
+   * The `env` option is still passed through in the server options so that this collapses into a
+   * harmless no-op if upstream ever starts honoring it.
+   */
+  private spawnWithServerEnv<T>(
+    serverEnv: Record<string, string | undefined>,
+    spawn: () => Promise<T>,
+  ): Promise<T> {
+    const restore: [string, string | undefined][] = [];
+    for (const [key, value] of Object.entries(serverEnv)) {
+      if (process.env[key] === value) {
+        continue;
+      }
+      restore.push([key, process.env[key]]);
+      setProcessEnvValue(key, value);
+    }
+
+    try {
+      return spawn();
+    } finally {
+      for (const [key, value] of restore) {
+        setProcessEnvValue(key, value);
+      }
+    }
+  }
+
+  private async ensureClient(config: OpenCodeSDKConfig, traceparent?: string): Promise<void> {
     const opencodeModule = await this.ensureOpenCodeModule();
 
     this.validateSessionPolicyConfiguration(config);
 
+    const desiredTraceparent = isValidTraceparent(traceparent) ? traceparent : undefined;
+    const restartsPerCall = this.restartsServerPerCall(config);
+
     if (this.client) {
-      return;
+      if (!restartsPerCall || this.activeTraceparent === desiredTraceparent) {
+        return;
+      }
+      logger.debug(
+        `[OpenCode SDK] Restarting server to re-parent spans (traceparent ${this.activeTraceparent ?? 'none'} -> ${desiredTraceparent ?? 'none'})`,
+      );
+      await this.closeServer();
+      // Sessions lived on the server we just stopped; their handles are now dangling.
+      this.sessions.clear();
+      this.sessionOrder = [];
     }
     if (this.clientInitialization !== undefined) {
       return this.clientInitialization;
@@ -1318,6 +1514,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return;
       }
 
+      const serverEnv = this.buildServerEnv(config, desiredTraceparent);
+      const passThroughEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(serverEnv)) {
+        if (value !== undefined) {
+          passThroughEnv[key] = value;
+        }
+      }
+
       const serverOptions: {
         hostname: string;
         port: number;
@@ -1328,7 +1532,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
-        env: this.buildServerEnv(config),
+        env: passThroughEnv,
       };
 
       const serverConfig = this.buildServerConfig(config);
@@ -1336,9 +1540,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await createOpencode(serverOptions);
+      const opencode = await this.spawnWithServerEnv(serverEnv, () =>
+        createOpencode(serverOptions),
+      );
       this.client = opencode.client;
       this.server = opencode.server;
+      this.activeTraceparent = desiredTraceparent;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
     })();
     this.clientInitialization = initialization;
@@ -1753,8 +1960,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
+      // A cache hit short-circuits the agent entirely, so no spans are emitted and the
+      // trajectory:* assertions this flag exists to serve would have nothing to read. Per-call
+      // traces require per-call execution.
+      const perCallTracing = this.restartsServerPerCall(config);
       const cacheResult =
-        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
+        statefulSession ||
+        hasPermissionRules ||
+        sensitiveMcpConfig ||
+        sensitiveBaseUrl ||
+        perCallTracing
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
@@ -1779,12 +1994,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      await this.ensureClient(config);
-      const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
+      // When the server is restarted per call it is itself per-call state, so the whole
+      // start -> session -> prompt lifecycle has to be serialized on this provider instance;
+      // the session queue alone starts too late to protect a server swap.
+      const sessionQueueKey = this.restartsServerPerCall(config)
+        ? SERVER_LIFECYCLE_QUEUE_KEY
+        : this.getSessionQueueKey(config, workingDir);
       return await this.runSerializedSessionCall(
         sessionQueueKey,
         callOptions?.abortSignal,
         async () => {
+          await this.ensureClient(config, context?.traceparent);
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
           if (callOptions?.abortSignal?.aborted) {

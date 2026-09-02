@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,7 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -57,6 +58,19 @@ const mockServerClose = vi.fn();
 // Mock createOpencode function that returns { client, server }
 const mockCreateOpencode = vi.fn();
 const mockCreateOpencodeClient = vi.fn();
+
+// Mock client with session.prompt(). Defined at module scope so tests that install their own
+// createOpencode implementation can hand back the same client the default setup uses.
+const mockClient = {
+  session: {
+    create: mockSessionCreate,
+    prompt: mockSessionPrompt,
+    messages: mockSessionMessages,
+    delete: mockSessionDelete,
+    list: mockSessionList,
+    abort: mockSessionAbort,
+  },
+};
 
 // Helper to create mock session create response
 // SDK returns: { id, title, version, time }
@@ -136,18 +150,6 @@ describe('OpenCodeSDKProvider', () => {
     mockSessionPrompt.mockReset();
     mockSessionDelete.mockReset();
     mockSessionAbort.mockReset();
-
-    // Setup mock client with session.prompt()
-    const mockClient = {
-      session: {
-        create: mockSessionCreate,
-        prompt: mockSessionPrompt,
-        messages: mockSessionMessages,
-        delete: mockSessionDelete,
-        list: mockSessionList,
-        abort: mockSessionAbort,
-      },
-    };
 
     // Setup mock server
     const mockServer = {
@@ -2679,6 +2681,248 @@ describe('OpenCodeSDKProvider', () => {
       expect(result.error).toBe('OpenCode SDK call aborted before it started');
       expect(mockSessionPrompt).not.toHaveBeenCalled();
       expect(mockSessionAbort).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('traceparent propagation', () => {
+    const TRACEPARENT_A = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+    const TRACEPARENT_B = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    const TRACEPARENT_ZERO = '00-00000000000000000000000000000000-0000000000000000-00';
+
+    const contextWith = (traceparent?: string): CallApiContextParams => ({
+      prompt: { raw: 'Test prompt', label: 'test' },
+      vars: {},
+      ...(traceparent === undefined ? {} : { traceparent }),
+    });
+
+    /**
+     * The SDK ignores its own `env` option and spawns with `process.env`, so what matters is
+     * what `process.env` holds at the instant `createOpencode()` is invoked. Capture it there.
+     */
+    const captureSpawnEnv = () => {
+      const seen: Array<Record<string, string | undefined>> = [];
+      mockCreateOpencode.mockImplementation(async () => {
+        seen.push({
+          OPENCODE_TRACEPARENT: process.env.OPENCODE_TRACEPARENT,
+          PATH: process.env.PATH,
+        });
+        return {
+          client: mockClient,
+          server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+        };
+      });
+      return seen;
+    };
+
+    let restoreEnv: (() => void) | undefined;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({ OPENCODE_TRACEPARENT: undefined });
+    });
+
+    afterEach(() => {
+      restoreEnv?.();
+      restoreEnv = undefined;
+    });
+
+    it('exposes the call traceparent to the spawned server', async () => {
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].OPENCODE_TRACEPARENT).toBe(TRACEPARENT_A);
+    });
+
+    it('restores process.env after the spawn so the value never leaks', async () => {
+      captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+      expect(process.env.OPENCODE_TRACEPARENT).toBeUndefined();
+    });
+
+    it('restores a pre-existing OPENCODE_TRACEPARENT rather than deleting it', async () => {
+      mockProcessEnv({ OPENCODE_TRACEPARENT: 'ambient-value' });
+      captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({
+        config: { restart_server_per_call: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+      expect(process.env.OPENCODE_TRACEPARENT).toBe('ambient-value');
+    });
+
+    it('does not override an ambient traceparent when not restarting per call', async () => {
+      mockProcessEnv({ OPENCODE_TRACEPARENT: 'ambient-value' });
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+      expect(seen[0].OPENCODE_TRACEPARENT).toBe('ambient-value');
+    });
+
+    it('clears an ambient traceparent when restarting per call without one', async () => {
+      mockProcessEnv({ OPENCODE_TRACEPARENT: 'ambient-value' });
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({
+        config: { restart_server_per_call: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt', contextWith(undefined));
+
+      expect(seen[0].OPENCODE_TRACEPARENT).toBeUndefined();
+      expect(process.env.OPENCODE_TRACEPARENT).toBe('ambient-value');
+    });
+
+    it('treats an all-zero traceparent as absent', async () => {
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_ZERO));
+
+      expect(seen[0].OPENCODE_TRACEPARENT).toBeUndefined();
+    });
+
+    it('applies the rest of buildServerEnv to the spawn, not just the traceparent', async () => {
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+      // Regression: the SDK never read the `env` option, so the ~/.opencode/bin PATH entry
+      // (and every other computed variable) used to be dropped on the floor.
+      expect(seen[0].PATH).toContain(path.join(os.homedir(), '.opencode', 'bin'));
+    });
+
+    describe('restart_server_per_call', () => {
+      it('restarts the server when the traceparent changes', async () => {
+        const seen = captureSpawnEnv();
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_B));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        expect(mockServerClose).toHaveBeenCalledTimes(1);
+        expect(seen.map((entry) => entry.OPENCODE_TRACEPARENT)).toEqual([
+          TRACEPARENT_A,
+          TRACEPARENT_B,
+        ]);
+      });
+
+      it('reuses the server when the traceparent is unchanged', async () => {
+        captureSpawnEnv();
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockServerClose).not.toHaveBeenCalled();
+      });
+
+      it('does not restart when the flag is unset, leaving the boot traceparent in place', async () => {
+        const seen = captureSpawnEnv();
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_B));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockServerClose).not.toHaveBeenCalled();
+        expect(seen.map((entry) => entry.OPENCODE_TRACEPARENT)).toEqual([TRACEPARENT_A]);
+      });
+
+      it('serializes concurrent calls so server swaps never interleave', async () => {
+        const spawnOrder: string[] = [];
+        const promptOrder: string[] = [];
+        mockCreateOpencode.mockImplementation(async () => {
+          spawnOrder.push(`spawn:${process.env.OPENCODE_TRACEPARENT}`);
+          return {
+            client: mockClient,
+            server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+          };
+        });
+        mockSessionPrompt.mockImplementation(async () => {
+          // Whatever server this prompt lands on must still be the one booted for it, so
+          // record the boundary and yield to give an interleaving a chance to show up.
+          promptOrder.push(`prompt:${spawnOrder.length}`);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return createMockPromptResponse([{ type: 'text', text: 'Test response' }]);
+        });
+
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await Promise.all([
+          provider.callApi('Test prompt', contextWith(TRACEPARENT_A)),
+          provider.callApi('Test prompt', contextWith(TRACEPARENT_B)),
+        ]);
+
+        // Each call booted its own server, and each prompt ran against the newest one.
+        expect(spawnOrder).toHaveLength(2);
+        expect(promptOrder).toEqual(['prompt:1', 'prompt:2']);
+      });
+
+      it('bypasses the response cache so every call produces spans', async () => {
+        enableCache();
+        try {
+          captureSpawnEnv();
+          const provider = new OpenCodeSDKProvider({
+            config: { restart_server_per_call: true },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+          await provider.callApi('Test prompt', contextWith(TRACEPARENT_B));
+
+          expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+        } finally {
+          disableCache();
+        }
+      });
+
+      it('rejects baseUrl, which promptfoo cannot restart', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true, baseUrl: 'http://127.0.0.1:4096' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await expect(provider.callApi('Test prompt', contextWith(TRACEPARENT_A))).rejects.toThrow(
+          'cannot be combined with baseUrl',
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['persist_sessions', { persist_sessions: true }],
+        ['session_id', { session_id: 'session-abc' }],
+      ])('rejects %s, whose state a restart would discard', async (name, extra) => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true, ...extra },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await expect(provider.callApi('Test prompt', contextWith(TRACEPARENT_A))).rejects.toThrow(
+          name,
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
     });
   });
 });

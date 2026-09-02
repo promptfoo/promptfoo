@@ -188,29 +188,30 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter           | Type    | Description                                                                | Default                                |
-| ------------------- | ------- | -------------------------------------------------------------------------- | -------------------------------------- |
-| `apiKey`            | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
-| `baseUrl`           | string  | URL for an existing OpenCode server                                        | Auto-start server                      |
-| `hostname`          | string  | Server hostname when starting a new server                                 | `127.0.0.1`                            |
-| `port`              | number  | Server port when starting a new server                                     | Auto-select                            |
-| `timeout`           | number  | Server startup timeout in milliseconds                                     | `30000`                                |
-| `log_level`         | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
-| `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
-| `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
-| `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
-| `model`             | string  | Model to use for this request                                              | OpenCode default                       |
-| `format`            | object  | Output format, including JSON Schema structured output                     | Text                                   |
-| `variant`           | string  | Provider/model variant defined in OpenCode config                          | Default variant                        |
-| `tools`             | object  | Tool configuration                                                         | None; read-only with `working_dir`     |
-| `permission`        | object  | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
-| `agent`             | string  | Built-in or preconfigured agent to use                                     | Default agent                          |
-| `custom_agent`      | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
-| `session_id`        | string  | Resume an existing session                                                 | Create new session                     |
-| `parent_session_id` | string  | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
-| `persist_sessions`  | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                                |
-| `mcp`               | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
-| `cache_mcp`         | boolean | Enable caching when MCP is configured                                      | `false`                                |
+| Parameter                 | Type    | Description                                                                | Default                                |
+| ------------------------- | ------- | -------------------------------------------------------------------------- | -------------------------------------- |
+| `apiKey`                  | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
+| `baseUrl`                 | string  | URL for an existing OpenCode server                                        | Auto-start server                      |
+| `hostname`                | string  | Server hostname when starting a new server                                 | `127.0.0.1`                            |
+| `port`                    | number  | Server port when starting a new server                                     | Auto-select                            |
+| `timeout`                 | number  | Server startup timeout in milliseconds                                     | `30000`                                |
+| `log_level`               | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
+| `working_dir`             | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
+| `workspace`               | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
+| `provider_id`             | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
+| `model`                   | string  | Model to use for this request                                              | OpenCode default                       |
+| `format`                  | object  | Output format, including JSON Schema structured output                     | Text                                   |
+| `variant`                 | string  | Provider/model variant defined in OpenCode config                          | Default variant                        |
+| `tools`                   | object  | Tool configuration                                                         | None; read-only with `working_dir`     |
+| `permission`              | object  | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
+| `agent`                   | string  | Built-in or preconfigured agent to use                                     | Default agent                          |
+| `custom_agent`            | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
+| `session_id`              | string  | Resume an existing session                                                 | Create new session                     |
+| `parent_session_id`       | string  | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
+| `persist_sessions`        | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                                |
+| `mcp`                     | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
+| `cache_mcp`               | boolean | Enable caching when MCP is configured                                      | `false`                                |
+| `restart_server_per_call` | boolean | Restart the server per call so spans correlate to each test case           | `false`                                |
 
 ## Supported Providers
 
@@ -608,7 +609,7 @@ MCP configurations containing environment variables, positional command argument
 OAuth, URL credentials, or query strings remain uncached so secrets are not included in persistent
 cache keys. Positional command arguments can contain opaque credentials such as database URLs.
 Response caching is also disabled for credential-bearing or signed `baseUrl` values, explicit
-permission rules, `session_id`, and `persist_sessions`. API credentials use a non-secret,
+permission rules, `session_id`, `persist_sessions`, and `restart_server_per_call`. API credentials use a non-secret,
 process-local cache scope so different provider instances cannot share responses. Repeated calls
 through one locally started server retain a stable scope without storing or hashing its credentials
 or environment into the persistent cache key.
@@ -627,6 +628,64 @@ tests:
     options:
       bustCache: true
 ```
+
+## Trace Correlation (`trajectory:*` assertions)
+
+OpenCode ships no built-in OpenTelemetry support. Per-tool-call spans come from a third-party
+plugin (for example `@devtheops/opencode-plugin-otel`) that you install into OpenCode and point at
+promptfoo's OTLP receiver. That plugin reads its trace-correlation context from the
+`OPENCODE_TRACEPARENT` environment variable **once, at process boot**.
+
+That boot-time read is the catch. Because promptfoo starts one `opencode serve` process and reuses
+it for the whole evaluation, every span the server emits carries whichever traceparent was current
+when the server started. Spans from test case 12 land under test case 1's trace, so `trajectory:*`
+assertions — `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:step-count` — have
+nothing they can correlate back to the case under test.
+
+Set `restart_server_per_call: true` to give each call its own server, booted with that call's
+traceparent:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-20250514
+      working_dir: ./my-project
+      restart_server_per_call: true
+
+tests:
+  - vars:
+      question: Which files define the login flow?
+    assert:
+      - type: trajectory:tool-used
+        value: grep
+```
+
+### Trade-offs
+
+Restarting the server on every call is not free, which is why it is opt-in:
+
+- **Cost:** a full OpenCode server start per test case. On a large suite this dominates runtime.
+- **Caching is disabled.** A cache hit returns without running the agent, so it emits no spans and
+  a `trajectory:*` assertion would have nothing to read. Per-call traces require per-call execution.
+- **Calls are serialized.** The server is per-call state, so promptfoo runs one call at a time on a
+  provider instance with this flag set, regardless of `--max-concurrency`. Use separate provider
+  instances if you need parallelism.
+
+### Incompatible options
+
+promptfoo rejects these combinations rather than silently emitting uncorrelated traces:
+
+| Option             | Why it conflicts                                                                 |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `baseUrl`          | The server belongs to you, not promptfoo, so it cannot be restarted or re-tagged |
+| `persist_sessions` | A restart discards the server-side session the setting exists to preserve        |
+| `session_id`       | The resumed session lives on the server the restart just stopped                 |
+
+Leave the flag off if you only need a single well-formed root trace per run rather than per-call
+correlation: promptfoo still seeds `OPENCODE_TRACEPARENT` at server boot when the ambient
+environment has not already set it.
 
 ## Managing Side Effects
 
