@@ -1305,7 +1305,7 @@ describe('EvalResult', () => {
       });
     });
 
-    it('preserves cached request counts when legacy grading results omit cache provenance', () => {
+    it('separates logical and incurred requests when legacy grading results imply a cache hit', () => {
       const result = new EvalResult({
         id: 'test-id',
         evalId: 'test-eval-id',
@@ -1327,10 +1327,9 @@ describe('EvalResult', () => {
         namedScores: {},
       });
 
-      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
-        total: 97,
-        cached: 97,
-        numRequests: 0,
+      expect(result.toEvaluateResult().tokenUsage).toMatchObject({
+        assertions: { total: 97, cached: 97, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
       });
     });
 

@@ -144,7 +144,7 @@ describe('shared redteam provider utilities', () => {
       expect(tokenUsage).not.toHaveProperty('numRequests');
     });
 
-    it('does not count disabled or cached unblocking tasks', () => {
+    it('omits disabled unblocking tasks and keeps cached tasks out of incurred usage', () => {
       const disabledUsage = {};
       accumulateUnblockingTokenUsage(disabledUsage, { attempted: false });
       expect(disabledUsage).toEqual({});
@@ -155,7 +155,10 @@ describe('shared redteam provider utilities', () => {
         cached: true,
         tokenUsage: { total: 15, cached: 15, numRequests: 0 },
       });
-      expect(cachedUsage).toMatchObject({ assertions: { total: 0, numRequests: 0 } });
+      expect(cachedUsage).toMatchObject({
+        assertions: { total: 15, cached: 15, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
     });
   });
 
