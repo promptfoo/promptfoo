@@ -2847,20 +2847,26 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('serializes concurrent calls so server swaps never interleave', async () => {
-        const spawnOrder: string[] = [];
-        const promptOrder: string[] = [];
+        const spawnedTraceparents: string[] = [];
         mockCreateOpencode.mockImplementation(async () => {
-          spawnOrder.push(`spawn:${process.env.OPENCODE_TRACEPARENT}`);
+          spawnedTraceparents.push(process.env.OPENCODE_TRACEPARENT ?? 'none');
           return {
             client: mockClient,
             server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
           };
         });
+
+        // Hold the first prompt open so the second call has every chance to race ahead and
+        // swap the server out from under it.
+        const firstPromptStarted = createDeferred<void>();
+        const releaseFirstPrompt = createDeferred<void>();
+        let promptCalls = 0;
         mockSessionPrompt.mockImplementation(async () => {
-          // Whatever server this prompt lands on must still be the one booted for it, so
-          // record the boundary and yield to give an interleaving a chance to show up.
-          promptOrder.push(`prompt:${spawnOrder.length}`);
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          promptCalls += 1;
+          if (promptCalls === 1) {
+            firstPromptStarted.resolve();
+            await releaseFirstPrompt.promise;
+          }
           return createMockPromptResponse([{ type: 'text', text: 'Test response' }]);
         });
 
@@ -2869,14 +2875,21 @@ describe('OpenCodeSDKProvider', () => {
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
 
-        await Promise.all([
+        const calls = Promise.all([
           provider.callApi('Test prompt', contextWith(TRACEPARENT_A)),
           provider.callApi('Test prompt', contextWith(TRACEPARENT_B)),
         ]);
 
-        // Each call booted its own server, and each prompt ran against the newest one.
-        expect(spawnOrder).toHaveLength(2);
-        expect(promptOrder).toEqual(['prompt:1', 'prompt:2']);
+        await firstPromptStarted.promise;
+        // The second call is still queued: it has neither booted its server nor prompted.
+        expect(spawnedTraceparents).toEqual([TRACEPARENT_A]);
+        expect(promptCalls).toBe(1);
+
+        releaseFirstPrompt.resolve();
+        await calls;
+
+        expect(spawnedTraceparents).toEqual([TRACEPARENT_A, TRACEPARENT_B]);
+        expect(mockServerClose).toHaveBeenCalledTimes(1);
       });
 
       it('bypasses the response cache so every call produces spans', async () => {
