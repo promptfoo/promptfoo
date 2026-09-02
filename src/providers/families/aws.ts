@@ -24,10 +24,13 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      if (/^[^.]+\.anthropic\.claude-mythos-5$/.test(anthropicModel ?? '')) {
+      const prefixedMythosModel = anthropicModel?.match(
+        /^[^.]+\.(anthropic\.claude-mythos-5(?:-1)?)$/,
+      );
+      if (prefixedMythosModel) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
-            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
+            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
         );
       }
       if (anthropicModel?.startsWith('anthropic.claude-')) {
@@ -56,7 +59,8 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Supported models: anthropic.claude-fable-5 and anthropic.claude-mythos-5.`,
+            `provider. Supported models: anthropic.claude-fable-5, anthropic.claude-fable-5-1, ` +
+            `anthropic.claude-mythos-5, and anthropic.claude-mythos-5-1.`,
         );
       }
 

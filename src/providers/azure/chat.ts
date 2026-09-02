@@ -15,7 +15,10 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import {
+  isForcedToolChoiceUnsupportedClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
+} from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -284,6 +287,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.stop && !grokSamplingRestricted ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (
+      isForcedToolChoiceUnsupportedClaudeModel(this.deploymentName) &&
+      body.tool_choice &&
+      body.tool_choice !== 'auto' &&
+      body.tool_choice !== 'none'
+    ) {
+      logger.warn(
+        `Forced tool choice is not supported on ${this.deploymentName} and will be omitted. Use 'auto' or 'none' instead.`,
+      );
+      delete body.tool_choice;
+    }
 
     return { body, config };
   }

@@ -859,22 +859,47 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
-    it('omits sampling params for Claude Fable 5 while keeping the standard chat body', async () => {
-      const provider = new AzureChatCompletionProvider('claude-fable-5', {
-        config: {
-          apiHost: 'test.azure.com',
-          apiKey: 'test-key',
-          max_tokens: 512,
-          temperature: 0.5,
-          top_p: 0.9,
-        },
-      });
-      const { body } = await (provider as any).getOpenAiBody('hi');
-      expect(body).toHaveProperty('max_tokens', 512);
-      expect(body).not.toHaveProperty('temperature');
-      expect(body).not.toHaveProperty('top_p');
-      expect(body).not.toHaveProperty('reasoning_effort');
-    });
+    it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+      'omits sampling params for %s while keeping the standard chat body',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+        const { body } = await (provider as any).getOpenAiBody('hi');
+        expect(body).toHaveProperty('max_tokens', 512);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+        expect(body).not.toHaveProperty('reasoning_effort');
+      },
+    );
+
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+      'omits forced tool choice for %s',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'get_weather', parameters: { type: 'object', properties: {} } },
+              },
+            ],
+            tool_choice: 'required',
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Check the weather');
+        expect(body.tools).toHaveLength(1);
+        expect(body).not.toHaveProperty('tool_choice');
+      },
+    );
 
     it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
       const provider = new AzureChatCompletionProvider('prod-claude-deployment', {

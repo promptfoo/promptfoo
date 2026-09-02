@@ -825,6 +825,19 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`
 
 #### Claude Fable and Mythos models
 
+[Claude Fable 5.1](https://aws.amazon.com/blogs/machine-learning/introducing-claude-fable-5-1-on-aws/)
+supports InvokeModel and Converse with the `global.anthropic.claude-fable-5-1` and
+`us.anthropic.claude-fable-5-1` inference profiles. For example, use
+`bedrock:global.anthropic.claude-fable-5-1` or
+`bedrock:converse:global.anthropic.claude-fable-5-1`.
+The explicit `bedrock:messages:anthropic.claude-fable-5-1` route uses the
+Anthropic-compatible Messages endpoint in `us-east-1`.
+
+Use `bedrock:anthropic.claude-mythos-5-1` for Mythos 5.1 through the Messages
+endpoint, with the API key configuration shown below. Mythos access requires
+provider approval. Both 5.1 models retain always-on thinking and use a lower
+cache-read price of $0.25 per million tokens before regional premiums.
+
 [Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
 supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
 inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID

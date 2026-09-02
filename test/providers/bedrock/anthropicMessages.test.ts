@@ -21,6 +21,8 @@ describe('Bedrock Anthropic Messages provider', () => {
   it('recognizes only the Anthropic models served by the Bedrock Messages endpoint', () => {
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5-1')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5-1')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-preview')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(false);
   });
@@ -188,47 +190,49 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['anthropic.claude-fable-5', 'anthropic.claude-mythos-5'])(
-    'sends %s while reusing Anthropic compatibility and billing logic',
-    async (bedrockModel) => {
-      disableCache();
-      const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
-        id: `bedrock:${bedrockModel}`,
-        config: {
-          region: 'us-east-1',
-          apiKey: 'bedrock-key',
-          max_tokens: 4096,
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'disabled' },
-        },
-      });
-      const response = {
-        content: [{ type: 'text', text: 'ok' }],
-        model: bedrockModel,
-        id: 'msg-1',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 5, output_tokens: 1 },
-      } as Anthropic.Messages.Message;
-      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
+  it.each([
+    'anthropic.claude-fable-5',
+    'anthropic.claude-mythos-5',
+    'anthropic.claude-fable-5-1',
+    'anthropic.claude-mythos-5-1',
+  ])('sends %s while reusing Anthropic compatibility and billing logic', async (bedrockModel) => {
+    disableCache();
+    const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
+      id: `bedrock:${bedrockModel}`,
+      config: {
+        region: 'us-east-1',
+        apiKey: 'bedrock-key',
+        max_tokens: 4096,
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+        thinking: { type: 'disabled' },
+      },
+    });
+    const response = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: bedrockModel,
+      id: 'msg-1',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 5, output_tokens: 1 },
+    } as Anthropic.Messages.Message;
+    const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
 
-      const result = await provider.callApi('hello');
+    const result = await provider.callApi('hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
-      expect(provider['getGenAISystem']()).toBe('bedrock');
-      expect(params.model).toBe(bedrockModel);
-      expect(params).not.toHaveProperty('temperature');
-      expect(params).not.toHaveProperty('top_p');
-      expect(params).not.toHaveProperty('top_k');
-      expect(params).not.toHaveProperty('thinking');
-      expect(result.output).toBe('ok');
-      expect(result.cost).toBeCloseTo(0.00011, 8);
-    },
-  );
+    const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
+    expect(provider['getGenAISystem']()).toBe('bedrock');
+    expect(params.model).toBe(bedrockModel);
+    expect(params).not.toHaveProperty('temperature');
+    expect(params).not.toHaveProperty('top_p');
+    expect(params).not.toHaveProperty('top_k');
+    expect(params).not.toHaveProperty('thinking');
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00011, 8);
+  });
 });

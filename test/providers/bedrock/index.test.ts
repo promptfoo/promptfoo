@@ -3451,6 +3451,19 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it('maps Fable 5.1 base, US, and global IDs while keeping Mythos 5.1 on Messages', () => {
+    for (const prefix of ['', 'us.', 'global.']) {
+      const model = `${prefix}anthropic.claude-fable-5-1`;
+      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5-1']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5-1']).toBeUndefined();
+    expect(() => getHandlerForModel('anthropic.claude-mythos-5-1')).toThrow(
+      /Anthropic Messages API/,
+    );
+  });
+
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
