@@ -10,8 +10,8 @@ cd provider-abliteration
 ## Prerequisites
 
 - An [Abliteration](https://abliteration.ai/) account and API key.
-- Access to the `abliterated-model` model, or another model ID available on
-  your account.
+- Access to `abliterated-model-large-v2` for the text eval, or
+  `abliterated-model` for the image eval.
 
 ## Setup
 
@@ -21,13 +21,25 @@ cd provider-abliteration
    export ABLIT_KEY=your-key-here
    ```
 
-2. The example uses Abliteration's default `abliterated-model`. Replace it in
-   `promptfooconfig.yaml` only if your account should target a different model.
+2. Choose the text or image config below. Large V2 is text-only, so it cannot
+   be used with the image prompt.
 
 ## Run
 
+To evaluate GLM-5.3-based **Large V2** on security weakness classification:
+
 ```bash
-promptfoo eval
+npx promptfoo@latest eval -c promptfooconfig.large-v2.yaml --no-cache
+```
+
+The config uses `reasoning_effort: low` and `max_tokens: 16384`. Large V2 also
+supports `high` and `max` effort. It always reasons; `none` selects low effort
+with the trace hidden. Promptfoo hides reasoning from graded output by default.
+
+To run the base model's image example:
+
+```bash
+npx promptfoo@latest eval --no-cache
 ```
 
 See [the Abliteration provider docs](https://www.promptfoo.dev/docs/providers/abliteration/)

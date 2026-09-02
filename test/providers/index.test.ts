@@ -744,23 +744,29 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
   });
 
-  it('loadApiProvider with abliteration', async () => {
-    const provider = await loadApiProvider('abliteration:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
+  it.each(['abliterated-model', 'abliterated-model-large', 'abliterated-model-large-v2'])(
+    'loadApiProvider with abliteration:%s',
+    async (modelName) => {
+      const provider = await loadApiProvider(`abliteration:${modelName}`);
+      expect(provider).toBeInstanceOf(AbliterationProvider);
+      expect(provider.id()).toBe(`abliteration:${modelName}`);
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+      expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+      expect(provider.config.showThinking).toBe(false);
+    },
+  );
 
-  it('loadApiProvider with abliteration chat format', async () => {
-    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
+  it.each(['abliterated-model', 'abliterated-model-large', 'abliterated-model-large-v2'])(
+    'loadApiProvider with abliteration:chat:%s',
+    async (modelName) => {
+      const provider = await loadApiProvider(`abliteration:chat:${modelName}`);
+      expect(provider).toBeInstanceOf(AbliterationProvider);
+      expect(provider.id()).toBe(`abliteration:${modelName}`);
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+      expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+      expect(provider.config.showThinking).toBe(false);
+    },
+  );
 
   it('loadApiProvider rejects malformed abliteration routes', async () => {
     await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
