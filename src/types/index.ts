@@ -1546,6 +1546,7 @@ export const OutputFileExtension = z.enum([
   'html',
   'json',
   'jsonl',
+  'pdf',
   'txt',
   'xml',
   'yaml',
