@@ -26,6 +26,11 @@ tests:
       - type: trajectory:tool-used
         value: compose_answer
 
+      - type: trajectory:step-status
+        value:
+          name: search_corpus
+          status: success
+
       - type: trajectory:tool-args-match
         value:
           name: search_corpus
