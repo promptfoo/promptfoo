@@ -4,6 +4,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -36,6 +37,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  maybeReadConfig,
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
@@ -58,11 +60,13 @@ import {
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
+import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
+import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
 import type {
@@ -269,6 +273,45 @@ function getSuiteVarWatchPaths(
   return [...testVarPaths, ...defaultTestVarPaths, ...scenarioVarPaths];
 }
 
+/**
+ * Keep the CLI alive for as long as watch mode is watching.
+ *
+ * `main()` resolves as soon as the eval command's action handler returns, and its
+ * `finally` then runs `shutdownGracefully()`, which closes the database and the HTTP
+ * dispatcher and calls `process.exit()` 100ms later. Returning while a watcher is still
+ * running therefore tore down everything a re-run needs and killed the process before
+ * chokidar could report a single change. Long-running commands avoid this by not
+ * resolving until they are done -- `startServer()` does exactly this -- so watch mode
+ * does the same and settles only once the watcher is closed.
+ *
+ * Signal handlers are removed as soon as one fires, so a second Ctrl-C falls back to
+ * Node's default behaviour and terminates immediately.
+ */
+function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
+  const signals = ['SIGINT', 'SIGTERM'] as const;
+  return new Promise<void>((resolve) => {
+    const onSignal = () => {
+      for (const signal of signals) {
+        process.removeListener(signal, onSignal);
+      }
+      logger.info('Stopping watch mode...');
+      // Settle regardless: a watcher that fails to close must not wedge the CLI.
+      watcher
+        .close()
+        .catch((error) =>
+          logger.warn(
+            `Error closing file watcher: ${error instanceof Error ? error.message : error}`,
+          ),
+        )
+        .finally(resolve);
+    };
+
+    for (const signal of signals) {
+      process.on(signal, onSignal);
+    }
+  });
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -318,6 +361,39 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+/**
+ * Whether a config file can be read without executing it.
+ *
+ * readConfig() only routes through importModule() for JavaScript and TypeScript. Its
+ * YAML and JSON branch reads the file, dereferences `$ref`, and renders environment
+ * templates, none of which execute user code. Restricting the re-read to those formats
+ * therefore keeps the normalisation while guaranteeing a config is never run twice.
+ */
+function isDeclarativeConfig(configPath: string): boolean {
+  return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
+}
+
+async function resolveDeclarativeConfigTestWatchPaths(configPaths: string[]): Promise<string[]> {
+  const watchPaths: string[] = [];
+  for (const configPathPattern of configPaths) {
+    const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
+      windowsPathsNoEscape: true,
+    });
+    for (const resolvedConfigPath of resolvedConfigPaths) {
+      if (!isDeclarativeConfig(resolvedConfigPath)) {
+        continue;
+      }
+      const rawConfig = await maybeReadConfig(resolvedConfigPath);
+      if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
+        watchPaths.push(
+          ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
+        );
+      }
+    }
+  }
+  return watchPaths;
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -337,7 +413,7 @@ export async function doEval(
   let watchedPaths = new Set<string>();
   const ignoredWatchAddPaths = new Set<string>();
 
-  const getCurrentWatchPaths = (): string[] => {
+  const getCurrentWatchPaths = async (): Promise<string[]> => {
     const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
     if (!config || !testSuite || configPaths.length === 0) {
       return configPaths;
@@ -366,6 +442,13 @@ export async function doEval(
           .filter(Boolean) as string[])
       : [];
     const varPaths = [config, testSuite].flatMap((suite) => getSuiteVarWatchPaths(suite, basePath));
+    const cliTests = cmdObj.tests || cmdObj.vars;
+    if (cliTests) {
+      varPaths.push(...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath));
+    } else {
+      varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
+      varPaths.push(...(await resolveDeclarativeConfigTestWatchPaths(configPaths)));
+    }
 
     return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
   };
@@ -375,7 +458,7 @@ export async function doEval(
       return;
     }
 
-    const nextPaths = new Set(getCurrentWatchPaths());
+    const nextPaths = new Set(await getCurrentWatchPaths());
     const addedPaths = [...nextPaths].filter((watchPath) => !watchedPaths.has(watchPath));
     const removedPaths = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
 
@@ -425,6 +508,10 @@ export async function doEval(
     cmdObj.config = undefined;
     defaultConfigPath = undefined;
   }
+
+  // Set once watch mode starts watching; awaited before doEval returns so the CLI does
+  // not shut down underneath the watcher.
+  let watchTermination: Promise<void> | undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -620,6 +707,9 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    const describeReplayAction = (isRetryErrors: boolean | undefined) =>
+      isRetryErrors ? 'retrying errors for' : 'resuming';
+
     const persistedProviderFilterOptions = resumeEval
       ? getPersistedProviderFilterOptions(resumeEval.runtimeOptions?.providerFilter)
       : {};
@@ -627,12 +717,12 @@ export async function doEval(
     const cliProviderFilter = cmdObj.filterProviders || cmdObj.filterTargets;
     if (resumeEval && cliProviderFilter && cliProviderFilter !== persistedProviderFilter) {
       logger.warn(
-        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
       );
     }
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
-        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
         isCliInvocation,
       );
     }
@@ -1310,7 +1400,7 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const watchPaths = getCurrentWatchPaths();
+        const watchPaths = await getCurrentWatchPaths();
         watchedPaths = new Set(watchPaths);
         watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
         let watcherReady = false;
@@ -1330,6 +1420,11 @@ export async function doEval(
             throw error;
           }
         };
+
+        // Library callers own their own process lifetime, so only the CLI blocks here.
+        if (isCliInvocation) {
+          watchTermination = watchUntilTerminated(watcher);
+        }
 
         watcher
           .on('change', handleWatchEvent)
@@ -1384,5 +1479,9 @@ export async function doEval(
     return ret;
   };
 
-  return await runEvaluation(true /* initialization */);
+  const result = await runEvaluation(true /* initialization */);
+  if (watchTermination) {
+    await watchTermination;
+  }
+  return result;
 }

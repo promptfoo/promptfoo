@@ -313,10 +313,45 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
       expect(mockRun).not.toHaveBeenCalled();
     });
+
+    it('reports multiple incompatible trusted SDK versions together', async () => {
+      const firstTrustedRoot = path.resolve(getDirectory(), '..');
+      vi.mocked(resolvePackageEntryPoint).mockImplementation((_packageName, basePath) =>
+        basePath === firstTrustedRoot
+          ? '/legacy/@openai/codex-security/dist/index.js'
+          : '/promptfoo/@openai/codex-security/dist/index.js',
+      );
+      vi.mocked(importModule).mockImplementation(async (entryPoint) =>
+        String(entryPoint).startsWith('/legacy/')
+          ? { ...mockModule, VERSION: '0.1.8' }
+          : { ...mockModule, VERSION: '0.1.10' },
+      );
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('package is incompatible (0.1.8, 0.1.10)');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it('reports malformed SDK versions as incompatible instead of import failures', async () => {
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: 'unknown' });
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toContain('package is incompatible (unknown)');
+      expect(response.error).not.toContain('Failed to load @openai/codex-security');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
   });
 
   describe('repository scanning', () => {
     it('normalizes findings, usage, reasoning tokens, estimated cost, and artifacts', async () => {
+      const result = createScanResult();
+      const toJSON = vi.fn(result.toJSON);
+      mockRun.mockResolvedValue({ ...result, toJSON });
       const provider = new OpenAICodexSecurityProvider({
         config: {
           operation: 'security-scan',
@@ -369,6 +404,7 @@ describe('OpenAICodexSecurityProvider', () => {
         },
       });
       expect(JSON.parse(response.output)).toHaveProperty('findings.findings');
+      expect(toJSON).toHaveBeenCalledOnce();
       expect(response.latencyMs).toBeUndefined();
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
@@ -593,8 +629,24 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
+      expect(response.error).toBeUndefined();
       expect(response.tokenUsage).toBeUndefined();
       expect(response.cost).toBeUndefined();
+    });
+
+    // A future SDK could drop `turnResult` entirely. Missing usage metadata must degrade
+    // to "no usage reported" -- it must not discard the findings the scan already produced.
+    it('still reports findings when the SDK omits turnResult entirely', async () => {
+      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: undefined }));
+      const provider = new OpenAICodexSecurityProvider();
+
+      const response = await provider.callApi('Scan');
+
+      expect(response.error).toBeUndefined();
+      expect(response.tokenUsage).toBeUndefined();
+      expect(response.cost).toBeUndefined();
+      expect(response.metadata).toMatchObject({ findingsCount: 1, repository: expect.any(String) });
+      expect(response.metadata?.model).toBeUndefined();
     });
 
     it('renders provider configuration variables for each eval row', async () => {
@@ -691,6 +743,98 @@ describe('OpenAICodexSecurityProvider', () => {
         error: 'Codex Security operation failed: Trusted Access is required',
       });
       expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains observed scan cost and token usage when a paid scan fails', async () => {
+      mockRun.mockImplementation(async (_repository, options) => {
+        options.onCost({
+          model: 'gpt-5.6-sol',
+          inputTokens: 500,
+          cachedInputTokens: 100,
+          cacheWriteInputTokens: 25,
+          outputTokens: 200,
+          estimatedUsd: 0.08,
+        });
+        throw new Error('Scan completed without required artifacts');
+      });
+      const provider = new OpenAICodexSecurityProvider();
+
+      expect(await provider.callApi('Scan')).toEqual({
+        error: 'Codex Security operation failed: Scan completed without required artifacts',
+        cost: 0.08,
+        tokenUsage: {
+          prompt: 500,
+          completion: 200,
+          cached: 100,
+          total: 700,
+          completionDetails: {
+            cacheReadInputTokens: 100,
+            cacheCreationInputTokens: 25,
+          },
+        },
+      });
+      expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains the latest cumulative worker cost when a deep scan fails', async () => {
+      mockRun.mockImplementation(async (_repository, options) => {
+        options.onCost({
+          model: 'gpt-5.6-terra',
+          inputTokens: 100,
+          cachedInputTokens: 20,
+          cacheWriteInputTokens: 5,
+          outputTokens: 40,
+          estimatedUsd: 0.01,
+        });
+        options.onCost({
+          model: 'gpt-5.6-terra',
+          inputTokens: 900,
+          cachedInputTokens: 200,
+          cacheWriteInputTokens: 40,
+          outputTokens: 300,
+          estimatedUsd: 0.12,
+        });
+        throw new Error('Deep scan worker was interrupted');
+      });
+      const provider = new OpenAICodexSecurityProvider({
+        config: { operation: 'deep-security-scan' },
+      });
+
+      expect(await provider.callApi('Scan')).toMatchObject({
+        error: 'Codex Security operation failed: Deep scan worker was interrupted',
+        cost: 0.12,
+        tokenUsage: {
+          prompt: 900,
+          completion: 300,
+          cached: 200,
+          total: 1200,
+        },
+      });
+    });
+
+    it('retains work already incurred when an active scan is canceled', async () => {
+      const controller = new AbortController();
+      mockRun.mockImplementation(async (_repository, options) => {
+        options.onCost({
+          model: 'gpt-5.6-sol',
+          inputTokens: 120,
+          cachedInputTokens: 0,
+          cacheWriteInputTokens: 0,
+          outputTokens: 30,
+          estimatedUsd: 0.02,
+        });
+        controller.abort();
+        throw new Error('The scan was interrupted');
+      });
+      const provider = new OpenAICodexSecurityProvider();
+
+      expect(
+        await provider.callApi('Scan', undefined, { abortSignal: controller.signal }),
+      ).toMatchObject({
+        error: 'Codex Security operation failed: The scan was interrupted',
+        cost: 0.02,
+        tokenUsage: { prompt: 120, completion: 30, total: 150 },
+      });
     });
 
     it('preserves successful scan results when closing the SDK client fails', async () => {

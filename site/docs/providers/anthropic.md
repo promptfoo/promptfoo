@@ -55,6 +55,8 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                            | Description            |
 | ------------------------------------------------------------------- | ---------------------- |
+| `anthropic:messages:claude-fable-5-1`                               | Claude Fable 5.1       |
+| `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1      |
 | `anthropic:messages:claude-fable-5`                                 | Claude Fable 5         |
 | `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5        |
 | `anthropic:messages:claude-opus-5`                                  | Claude Opus 5          |
@@ -95,6 +97,8 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                  | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | anthropic.claude-fable-5-1                        | claude-fable-5-1                               |
+| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
 | Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude Opus 5     | claude-opus-5                                  | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
@@ -557,6 +561,35 @@ tests:
   - vars:
       pdf_base64: file://document.pdf
 ```
+
+### Claude Fable 5.1 and Mythos 5.1
+
+Use the pinned model IDs below. Mythos 5.1 requires Project Glasswing access and
+provider approval.
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-fable-5-1
+    config:
+      max_tokens: 4096
+      effort: high
+  - id: anthropic:messages:claude-mythos-5-1
+    config:
+      max_tokens: 4096
+      effort: high
+```
+
+Both models have a 1M-token context window and support up to 128K output tokens.
+Input and output cost $10 and $50 per million tokens, respectively. Cache reads cost
+**$0.25 per million tokens**, down from $1 on Fable 5 and Mythos 5; promptfoo includes
+this discount in its cost estimates. See [Anthropic's pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+
+Thinking is always on, and the sampling and thinking normalization described below
+also applies to 5.1. Unlike Fable 5, 5.1 rejects forced tool use: promptfoo omits
+`tool_choice` with type `any` or `tool` and warns. Use `auto` or `none` instead.
+When replaying Fable 5.1 thinking blocks, keep earlier messages, system prompts,
+and tools unchanged; edited prefixes can cause API errors. See
+[Anthropic's migration notes](https://platform.claude.com/docs/en/models/fable-5-1/whats-new-fable-5-1).
 
 ### Claude Fable 5 and Mythos 5 notes
 

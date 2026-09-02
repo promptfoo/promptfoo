@@ -1889,6 +1889,38 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    'calculateAnthropicCost for %s',
+    (model) => {
+      it('prices cache reads at 2.5% of input and keeps the existing write and output rates', () => {
+        expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.0363, 8);
+        expect(calculateAnthropicCost(model, {}, 900_000, 10_000)).toBeCloseTo(9.5, 8);
+      });
+
+      it('composes cache pricing with regional premiums and explicit per-token rates', () => {
+        expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500, 200, 100)).toBeCloseTo(
+          0.03993,
+          8,
+        );
+        expect(
+          calculateAnthropicCost(
+            model,
+            { inputCost: 20 / 1e6, outputCost: 100 / 1e6 },
+            1000,
+            500,
+            200,
+            100,
+          ),
+        ).toBeCloseTo(0.0726, 8);
+      });
+
+      it('does not invent latest aliases or dated snapshots', () => {
+        expect(calculateAnthropicCost(`${model}-latest`, {}, 1000, 500)).toBeUndefined();
+        expect(calculateAnthropicCost(`${model}-20260901`, {}, 1000, 500)).toBeUndefined();
+      });
+    },
+  );
+
   describe.each(['claude-fable-5', 'claude-mythos-5'])('calculateAnthropicCost for %s', (model) => {
     it('uses Claude 5 input and output pricing', () => {
       expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.035, 6);
