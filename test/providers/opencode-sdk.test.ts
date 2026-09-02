@@ -2892,6 +2892,39 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockServerClose).toHaveBeenCalledTimes(1);
       });
 
+      it('warns once when the flag is set but calls carry no trace context', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+        captureSpawnEnv();
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('first', contextWith(undefined));
+        await provider.callApi('second', contextWith(TRACEPARENT_ZERO));
+
+        const warnings = warnSpy.mock.calls.filter((call) =>
+          String(call[0] ?? '').includes('carries no trace context'),
+        );
+        expect(warnings).toHaveLength(1);
+      });
+
+      it('does not warn when the call carries a usable traceparent', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+        captureSpawnEnv();
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+
+        const warnings = warnSpy.mock.calls.filter((call) =>
+          String(call[0] ?? '').includes('carries no trace context'),
+        );
+        expect(warnings).toHaveLength(0);
+      });
+
       it('bypasses the response cache so every call produces spans', async () => {
         enableCache();
         try {

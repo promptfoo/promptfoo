@@ -646,6 +646,13 @@ Set `restart_server_per_call: true` to give each call its own server, booted wit
 traceparent:
 
 ```yaml
+# Required: without tracing there is no per-call traceparent to hand the server.
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
 providers:
   - id: opencode:sdk
     config:
@@ -661,6 +668,9 @@ tests:
       - type: trajectory:tool-used
         value: grep
 ```
+
+If the flag is set while tracing is off, promptfoo warns once: the restarted server has no
+trace context to be tagged with, so you pay the cost below for no correlation.
 
 ### Trade-offs
 

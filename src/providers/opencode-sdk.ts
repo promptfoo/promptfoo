@@ -902,6 +902,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessionQueues = new Map<string, Promise<void>>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  private missingTraceparentWarningEmitted = false;
   /** Traceparent the currently-running server was booted with, if any. */
   private activeTraceparent?: string;
 
@@ -1952,6 +1953,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
         this.streamingWarningEmitted = true;
         logger.warn(
           '[OpenCode SDK] enable_streaming is currently a no-op for this provider; the prompt will run to completion before returning.',
+        );
+      }
+
+      // The flag costs serialized, uncached calls and buys nothing without trace context, so
+      // say so rather than letting the user pay for a silent no-op.
+      if (
+        this.restartsServerPerCall(config) &&
+        !isValidTraceparent(context?.traceparent) &&
+        !this.missingTraceparentWarningEmitted
+      ) {
+        this.missingTraceparentWarningEmitted = true;
+        logger.warn(
+          '[OpenCode SDK] restart_server_per_call is set but this call carries no trace context, so the restarted server cannot be tagged with one. Enable tracing (tracing.enabled: true) to correlate spans, or unset the flag to avoid paying for serialized, uncached calls.',
         );
       }
 
