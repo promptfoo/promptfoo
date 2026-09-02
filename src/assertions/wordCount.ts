@@ -12,8 +12,8 @@ function countWords(text: string): number {
     .filter((word) => word.length > 0).length;
 }
 
-function isNonNegativeFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 interface CountEvaluation {
@@ -29,9 +29,9 @@ function evaluateBounds(value: Record<string, unknown>, characterCount: number):
     '"character-count" assertion object must have "min" and/or "max" properties',
   );
   invariant(
-    (min === undefined || isNonNegativeFiniteNumber(min)) &&
-      (max === undefined || isNonNegativeFiniteNumber(max)),
-    '"character-count" assertion min/max must be non-negative finite numbers',
+    (min === undefined || isNonNegativeInteger(min)) &&
+      (max === undefined || isNonNegativeInteger(max)),
+    '"character-count" assertion min/max must be non-negative integers',
   );
 
   if (min !== undefined && max !== undefined) {
@@ -54,7 +54,7 @@ function evaluateBounds(value: Record<string, unknown>, characterCount: number):
     };
   }
 
-  invariant(isNonNegativeFiniteNumber(min), '"character-count" assertion min must be a number');
+  invariant(isNonNegativeInteger(min), '"character-count" assertion min must be an integer');
   return {
     matches: characterCount >= min,
     failureReason: `Character count ${characterCount} is less than minimum ${min}`,
@@ -74,8 +74,8 @@ function evaluateCount(value: unknown, characterCount: number): CountEvaluation 
         ? Number(value)
         : Number.NaN;
   invariant(
-    isNonNegativeFiniteNumber(expectedCount),
-    '"character-count" assertion count must be a non-negative finite number',
+    isNonNegativeInteger(expectedCount),
+    '"character-count" assertion count must be a non-negative integer',
   );
   return {
     matches: characterCount === expectedCount,

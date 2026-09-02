@@ -88,30 +88,32 @@ describe('handleCharacterCount', () => {
   });
 
   describe('invalid configuration', () => {
-    it.each([-1, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN])(
+    it.each([-1, 1.5, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN])(
       'rejects invalid exact count %s',
       (value) => {
         expect(() => handleCharacterCount(makeParams(value, 'abc'))).toThrow(
-          '"character-count" assertion count must be a non-negative finite number',
+          '"character-count" assertion count must be a non-negative integer',
         );
       },
     );
 
     it('rejects a whitespace-only exact count', () => {
       expect(() => handleCharacterCount(makeParams('   ', 'abc'))).toThrow(
-        '"character-count" assertion count must be a non-negative finite number',
+        '"character-count" assertion count must be a non-negative integer',
       );
     });
 
     it.each([
       { min: -1 },
+      { min: 1.5 },
       { max: -1 },
+      { max: 2.5 },
       { min: Number.POSITIVE_INFINITY },
       { max: Number.NEGATIVE_INFINITY },
       { min: Number.NaN },
     ])('rejects invalid bounds %j', (value) => {
       expect(() => handleCharacterCount(makeParams(value, 'abc'))).toThrow(
-        '"character-count" assertion min/max must be non-negative finite numbers',
+        '"character-count" assertion min/max must be non-negative integers',
       );
     });
 

@@ -1939,7 +1939,7 @@ assert:
 
 The `character-count` assertion checks the number of Unicode code points in the LLM output. Astral characters such as `😀` count as one character. Combining marks and characters joined by a zero-width joiner are counted as separate code points.
 
-Values and limits must be non-negative finite numbers. Ranges are inclusive.
+Values and limits must be non-negative whole numbers. Ranges are inclusive.
 
 ```yaml
 assert:

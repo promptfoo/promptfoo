@@ -109,10 +109,12 @@ describe('getRunnableAssertionValueError', () => {
   describe('character-count', () => {
     it.each([
       -1,
+      1.5,
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
       Number.NaN,
       { min: -1 },
+      { min: 1.5 },
       { max: Number.POSITIVE_INFINITY },
     ])('rejects an invalid count or limit', (value) => {
       expect(
@@ -120,6 +122,12 @@ describe('getRunnableAssertionValueError', () => {
           make({ type: 'character-count', value: value as Assertion['value'] }),
         ),
       ).toBeDefined();
+    });
+
+    it('uses character-specific guidance when the value is missing', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'character-count', value: undefined })),
+      ).toBe('Enter an exact character count or at least one limit.');
     });
 
     it('rejects min > max', () => {

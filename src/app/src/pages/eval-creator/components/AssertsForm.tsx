@@ -70,6 +70,7 @@ const assertTypes: AssertionType[] = [
 
   // Metrics
   'bleu',
+  'character-count',
   'cost',
   'finish-reason',
   'latency',
@@ -83,6 +84,7 @@ const assertTypes: AssertionType[] = [
   'not-contains-all',
   'not-contains-any',
   'not-contains-json',
+  'not-character-count',
   'not-equals',
   'not-icontains',
   'not-is-json',

@@ -332,7 +332,7 @@ function getThresholdError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
-function isUsableWordCount(value: unknown): value is number {
+function isUsableCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
@@ -345,29 +345,26 @@ function getCountError(assertion: Assertion): string | undefined {
     return undefined;
   }
 
-  if (isUsableWordCount(assertion.value)) {
+  if (isUsableCount(assertion.value)) {
     return undefined;
   }
 
   if (typeof assertion.value === 'string' && assertion.value.trim() !== '') {
     const parsedValue = Number(assertion.value);
-    return isUsableWordCount(parsedValue)
+    return isUsableCount(parsedValue)
       ? undefined
       : `Enter ${countLabel} counts as whole numbers, 0 or greater.`;
   }
 
   if (!isRecord(assertion.value)) {
-    return 'Enter an exact word count or at least one limit.';
+    return `Enter an exact ${countLabel} count or at least one limit.`;
   }
 
   const { min, max } = assertion.value;
   if (min === undefined && max === undefined) {
-    return 'Enter an exact word count or at least one limit.';
+    return `Enter an exact ${countLabel} count or at least one limit.`;
   }
-  if (
-    (min !== undefined && !isUsableWordCount(min)) ||
-    (max !== undefined && !isUsableWordCount(max))
-  ) {
+  if ((min !== undefined && !isUsableCount(min)) || (max !== undefined && !isUsableCount(max))) {
     return `Enter ${countLabel} counts as whole numbers, 0 or greater.`;
   }
   if (typeof min === 'number' && typeof max === 'number' && min > max) {
