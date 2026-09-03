@@ -84,6 +84,17 @@ describe('OpenAI billing helpers', () => {
         }),
       ).toBeUndefined();
     });
+
+    it('does not invent prices for unpublished Astra model IDs', () => {
+      expect(
+        calculateOpenAIUsageCost(
+          'gpt-6-astra-unpublished',
+          {},
+          { input_tokens: 2000, output_tokens: 1000 },
+          { apiUrl: 'https://us.api.openai.com/v1' },
+        ),
+      ).toBeUndefined();
+    });
   });
 
   it('extracts multimodal usage details from responses payloads', () => {

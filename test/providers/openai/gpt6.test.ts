@@ -139,6 +139,49 @@ describe('GPT-6 Astra requests', () => {
     ).rejects.toThrow('tool calling requires the Responses API');
   });
 
+  it.each(['', null])('omits unset reasoning effort %s without mutating config', async (effort) => {
+    const reasoning = { effort, summary: 'auto' };
+    const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6-astra', {
+      config: { passthrough: { reasoning_effort: effort } },
+    }).getOpenAiBody('Summarize the job.');
+    const { body: responses } = await new OpenAiResponsesProvider('gpt-6-astra', {
+      config: { passthrough: { reasoning } },
+    }).getOpenAiBody('Summarize the job.');
+
+    expect(chat).not.toHaveProperty('reasoning_effort');
+    expect(responses.reasoning).toEqual({ summary: 'auto' });
+    expect(reasoning.effort).toBe(effort);
+  });
+
+  it('omits an empty reasoning object after rendering an unset effort', async () => {
+    const context = {
+      vars: { effort: '' },
+      prompt: {
+        raw: 'Summarize the job.',
+        label: 'summary',
+        config: { reasoning: { effort: '{{effort}}' } },
+      },
+    };
+    const { body } = await new OpenAiResponsesProvider('gpt-6-astra').getOpenAiBody(
+      'Summarize the job.',
+      context,
+    );
+
+    expect(body).not.toHaveProperty('reasoning');
+    expect(context.prompt.config.reasoning.effort).toBe('{{effort}}');
+  });
+
+  it.each(['max', 'none'])(
+    'rejects a Chat-shaped passthrough reasoning_effort of %s on Responses',
+    async (effort) => {
+      await expect(
+        new OpenAiResponsesProvider('gpt-6-astra', {
+          config: { passthrough: { reasoning_effort: effort } },
+        }).getOpenAiBody('Summarize the job.'),
+      ).rejects.toThrow('instead of passthrough.reasoning_effort');
+    },
+  );
+
   it('preserves gateway tool routing for prefixed Astra model IDs', async () => {
     const { body } = await new OpenRouterProvider('openai/gpt-6-astra', {
       config: {
@@ -214,4 +257,68 @@ describe('GPT-6 Astra requests', () => {
       }).getAzureResponsesBody('Summarize the job.'),
     ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
   });
+
+  it('recognizes per-prompt Astra model overrides on both Azure endpoints', async () => {
+    const config = { apiKey: 'test-key', modelName: 'gpt-4.1' };
+    const context = {
+      vars: {},
+      prompt: {
+        raw: 'Summarize the job.',
+        label: 'summary',
+        config: {
+          reasoning_effort: 'max',
+          passthrough: {
+            model: 'gpt-6-astra',
+            temperature: 0.4,
+            top_p: 0.8,
+            logprobs: true,
+            top_logprobs: 5,
+            max_tokens: 100,
+          },
+        },
+      },
+    };
+    const { body: chat, config: chatConfig } = await new AzureChatCompletionProvider('production', {
+      config,
+    }).getOpenAiBody('Summarize the job.', context);
+    const responses = await new AzureResponsesProvider('production', {
+      config,
+    }).getAzureResponsesBody('Summarize the job.', context);
+
+    expect(chat.reasoning_effort).toBe('max');
+    expect(chatConfig.modelName).toBe('gpt-6-astra');
+    expect(calculateAzureCost(chatConfig.modelName, chatConfig, 2000, 1000)).toBeUndefined();
+    expect(responses.reasoning).toEqual({ effort: 'max' });
+    for (const body of [chat, responses]) {
+      expect(body.model).toBe('gpt-6-astra');
+      for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs', 'max_tokens']) {
+        expect(body).not.toHaveProperty(key);
+      }
+    }
+
+    context.prompt.config.reasoning_effort = 'none';
+    await expect(
+      new AzureChatCompletionProvider('production', { config }).getOpenAiBody('Test', context),
+    ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
+    await expect(
+      new AzureResponsesProvider('production', { config }).getAzureResponsesBody('Test', context),
+    ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
+  });
+
+  it.each(['gpt-6-astra', 'gpt-5.6-sol'])(
+    'normalizes Azure Responses function tools and tool choice for %s',
+    async (model) => {
+      const body = await new AzureResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          tools: [statusTool],
+          tool_choice: { type: 'function', function: { name: 'get_status' } },
+        },
+      }).getAzureResponsesBody('Get the job status.');
+
+      expect(body.tools).toEqual([{ type: 'function', ...statusTool.function }]);
+      expect(body.tool_choice).toEqual({ type: 'function', name: 'get_status' });
+      expect(statusTool).toHaveProperty('function');
+    },
+  );
 });

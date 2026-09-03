@@ -6,16 +6,20 @@ import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
 describe('GPT-6 Astra Responses billing', () => {
-  it.each(['gpt-6-astra', 'gpt-4.1'])(
-    'sends Fast mode and bills the effective Astra model when configured as %s',
-    async (model) => {
+  it.each([
+    { model: 'gpt-6-astra', requestModel: 'gpt-6-astra' },
+    { model: 'gpt-4.1', requestModel: 'gpt-6-astra' },
+    { model: 'gpt-4.1', requestModel: 'openai/gpt-6-astra' },
+  ])(
+    'sends Fast mode and bills $requestModel when configured as $model',
+    async ({ model, requestModel }) => {
       vi.mocked(cache.fetchWithCache).mockResolvedValue({
         cached: false,
         status: 200,
         statusText: 'OK',
         data: {
           id: 'resp_astra',
-          model: 'gpt-6-astra',
+          model: requestModel,
           status: 'completed',
           service_tier: 'fast',
           output: [
@@ -37,16 +41,17 @@ describe('GPT-6 Astra Responses billing', () => {
       const provider = new OpenAiResponsesProvider(model, {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example.test/v1',
           service_tier: 'fast',
           reasoning_effort: 'max',
-          ...(model === 'gpt-6-astra' ? {} : { passthrough: { model: 'gpt-6-astra' } }),
+          ...(model === requestModel ? {} : { passthrough: { model: requestModel } }),
         },
       });
       const result = await provider.callApi('Summarize the job.');
 
       const [, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
       expect(JSON.parse(options?.body as string)).toMatchObject({
-        model: 'gpt-6-astra',
+        model: requestModel,
         service_tier: 'fast',
         reasoning: { effort: 'max' },
       });
@@ -55,4 +60,22 @@ describe('GPT-6 Astra Responses billing', () => {
       expect(result.cost).toBeCloseTo(0.13225, 10);
     },
   );
+
+  it('omits a null service tier while preserving explicit passthrough overrides', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-6-astra', {
+      config: { service_tier: null },
+    });
+    const { body } = await provider.getOpenAiBody('Summarize the job.');
+    expect(body).not.toHaveProperty('service_tier');
+
+    const { body: overridden } = await provider.getOpenAiBody('Summarize the job.', {
+      vars: {},
+      prompt: {
+        raw: 'Summarize the job.',
+        label: 'summary',
+        config: { passthrough: { service_tier: 'flex' } },
+      },
+    });
+    expect(overridden.service_tier).toBe('flex');
+  });
 });

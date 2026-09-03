@@ -800,8 +800,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const billingModelName =
-      typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
+    const modelName =
+      typeof passthroughModel === 'string' && passthroughModel !== this.modelName
+        ? passthroughModel
+        : this.getBillingModelName(config);
+    const billingModelName = modelName.split('/').pop() ?? modelName;
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,
@@ -1020,7 +1023,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
-      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),

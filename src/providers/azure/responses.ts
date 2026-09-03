@@ -47,7 +47,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
-          modelName,
+          typeof config?.model === 'string' ? config.model : modelName,
           {
             ...config,
             passthrough: {
@@ -141,7 +141,12 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       input = prompt;
     }
 
-    const capabilityModelName = (config.modelName ?? this.deploymentName).toLowerCase();
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName = (
+      typeof passthroughModel === 'string'
+        ? passthroughModel
+        : (config.modelName ?? this.deploymentName)
+    ).toLowerCase();
     const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -208,6 +213,26 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+    const tools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
+    const toolChoice =
+      typeof config.tool_choice === 'object' &&
+      config.tool_choice?.type === 'function' &&
+      'function' in config.tool_choice &&
+      config.tool_choice.function?.name
+        ? { type: 'function', name: config.tool_choice.function.name }
+        : config.tool_choice;
+
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,
@@ -219,10 +244,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(tools ? { tools } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,

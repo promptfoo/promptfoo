@@ -518,7 +518,7 @@ const CACHE_WRITE_MODELS = new Set([
   'gpt-5.6-terra',
   'gpt-5.6-luna',
 ]);
-const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456](?:-|$)|gpt-6-astra$)/;
+const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-astra)(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
 

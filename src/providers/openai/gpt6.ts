@@ -16,6 +16,23 @@ export function applyGpt6AstraRequestRules(
   }
 
   const reasoning = body.reasoning as { effort?: unknown } | null | undefined;
+  if (body.reasoning_effort == null || body.reasoning_effort === '') {
+    delete body.reasoning_effort;
+  }
+  if (reasoning?.effort === null || reasoning?.effort === '') {
+    const normalizedReasoning = { ...reasoning };
+    delete normalizedReasoning.effort;
+    if (Object.keys(normalizedReasoning).length > 0) {
+      body.reasoning = normalizedReasoning;
+    } else {
+      delete body.reasoning;
+    }
+  }
+  if (api === 'responses' && body.reasoning_effort !== undefined) {
+    throw new Error(
+      'GPT-6 Astra Responses requests use reasoning.effort. Configure reasoning or reasoning_effort instead of passthrough.reasoning_effort.',
+    );
+  }
   const effort = api === 'chat' ? (body.reasoning_effort ?? reasoning?.effort) : reasoning?.effort;
   if (
     effort != null &&

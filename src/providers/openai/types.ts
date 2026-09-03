@@ -83,8 +83,8 @@ export interface Reasoning {
 }
 
 /**
- * Reasoning effort values accepted by GPT-5 family models. Support varies by model;
- * GPT-5.6 and GPT-6 Astra support `max` reasoning. Astra does not support `none` or `minimal`.
+ * Shared reasoning effort options for GPT models. Accepted values vary by model;
+ * Astra's runtime validation rejects `none` and `minimal` from this shared union.
  */
 export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
 

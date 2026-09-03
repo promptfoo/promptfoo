@@ -198,7 +198,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : {};
 
     // Check if this is configured as a reasoning model
-    const capabilityModelName = (config.modelName ?? this.deploymentName).toLowerCase();
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName = (
+      typeof passthroughModel === 'string'
+        ? passthroughModel
+        : (config.modelName ?? this.deploymentName)
+    ).toLowerCase();
     const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
@@ -305,7 +310,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');
 
-    return { body, config };
+    return {
+      body,
+      config: isGpt6AstraModel(capabilityModelName)
+        ? { ...config, modelName: capabilityModelName }
+        : config,
+    };
   }
 
   async callApi(
