@@ -514,9 +514,14 @@ export async function createDummyFiles(
         ],
       },
       {
-        name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+        name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          ...['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'].map((id) => ({
+          ...[
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+          ].map((id) => ({
             id: `vertex:${id}`,
             config: { region: 'global' },
           })),

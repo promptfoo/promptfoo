@@ -254,6 +254,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it.each([
+    ['gemini-3.8-flash', 0.002625],
     ['gemini-3.7-flash', 0.002625],
     ['gemini-3.6-flash', 0.002625],
     ['gemini-3.5-flash-lite', 0.00155],
