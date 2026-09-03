@@ -312,70 +312,67 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
-    it.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
-      'should handle meta providers correctly: %s',
-      async (modelName) => {
-        const factory = providerMap.find((f) => f.test(`meta:${modelName}`));
-        expect(factory).toBeDefined();
+    describe.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
+      'Meta model %s',
+      (modelName) => {
+        it('defaults to Responses and preserves provider options', async () => {
+          const factory = providerMap.find((f) => f.test(`meta:${modelName}`));
+          expect(factory).toBeDefined();
 
-        const metaOptions: ProviderOptions = {
-          ...mockProviderOptions,
-          id: undefined,
-          config: { temperature: 0.42, apiKey: 'meta-test-key' },
-        };
-        // Bare meta:<model> defaults to the Responses API surface.
-        const provider = await factory!.create(`meta:${modelName}`, metaOptions, mockContext);
-        expect(provider).toBeDefined();
-        expect(provider.id()).toBe(`meta:responses:${modelName}`);
-        const config = (provider as any).config;
-        expect(config.temperature).toBe(0.42);
-        expect(config.apiKey).toBe('meta-test-key');
-        expect(config.apiBaseUrl).toBe('https://api.meta.ai/v1');
-        expect(config.apiKeyEnvar).toBe('MODEL_API_KEY');
-      },
-    );
+          const metaOptions: ProviderOptions = {
+            ...mockProviderOptions,
+            id: undefined,
+            config: { temperature: 0.42, apiKey: 'meta-test-key' },
+          };
+          const provider = await factory!.create(`meta:${modelName}`, metaOptions, mockContext);
+          expect(provider.id()).toBe(`meta:responses:${modelName}`);
+          expect((provider as any).config).toMatchObject({
+            temperature: 0.42,
+            apiKey: 'meta-test-key',
+            apiBaseUrl: 'https://api.meta.ai/v1',
+            apiKeyEnvar: 'MODEL_API_KEY',
+          });
+        });
 
-    it.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
-      'should route meta sub-types correctly: %s',
-      async (modelName) => {
-        const factory = providerMap.find((f) => f.test(`meta:chat:${modelName}`));
-        expect(factory).toBeDefined();
+        it.each(['chat', 'responses', 'messages'])('routes %s requests', async (surface) => {
+          const id = `meta:${surface}:${modelName}`;
+          const factory = providerMap.find((f) => f.test(id));
+          expect(factory).toBeDefined();
 
-        const chatProvider = await factory!.create(
-          `meta:chat:${modelName}`,
-          { ...mockProviderOptions, id: undefined },
-          mockContext,
-        );
-        const defaultProvider = await factory!.create(
-          'meta:',
-          { ...mockProviderOptions, id: undefined },
-          mockContext,
-        );
-        const responsesProvider = await factory!.create(
-          `meta:responses:${modelName}`,
-          { ...mockProviderOptions, id: undefined },
-          mockContext,
-        );
-        const messagesProvider = await factory!.create(
-          `meta:messages:${modelName}`,
-          { ...mockProviderOptions, id: undefined },
-          mockContext,
-        );
-
-        expect(chatProvider.id()).toBe(`meta:chat:${modelName}`);
-        expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
-        expect(responsesProvider.id()).toBe(`meta:responses:${modelName}`);
-        expect(messagesProvider.id()).toBe(`meta:messages:${modelName}`);
-
-        await expect(
-          factory!.create(
-            'meta:embedding:foo',
+          const provider = await factory!.create(
+            id,
             { ...mockProviderOptions, id: undefined },
             mockContext,
-          ),
-        ).rejects.toThrow(/does not expose/);
+          );
+          expect(provider.id()).toBe(id);
+        });
       },
     );
+
+    it('keeps the default Meta model at muse-spark-1.1', async () => {
+      const factory = providerMap.find((f) => f.test('meta:'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'meta:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
+    });
+
+    it('rejects unsupported Meta API sub-types', async () => {
+      const factory = providerMap.find((f) => f.test('meta:embedding:foo'));
+      expect(factory).toBeDefined();
+
+      await expect(
+        factory!.create(
+          'meta:embedding:foo',
+          { ...mockProviderOptions, id: undefined },
+          mockContext,
+        ),
+      ).rejects.toThrow(/does not expose/);
+    });
 
     it('should handle moonshot providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
