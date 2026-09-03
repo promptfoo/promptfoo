@@ -269,6 +269,20 @@ describe('writeOutput', () => {
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
+  it('preserves environment templates and credential-file paths in exported configs', async () => {
+    const env = {
+      META_API_KEY: '{{ env.META_API_KEY }}',
+      GITHUB_PAT: '{{ token }}',
+      PGPASSWORD: '{{ password }}',
+      GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+      AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+    };
+    const eval_ = new Eval({ providers: [{ id: 'muse-code', config: { env } }] });
+    await writeOutput('output.json', eval_, null);
+    const parsed = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+    expect(parsed.config.providers[0].config.env).toEqual(env);
+  });
+
   it.each([
     {
       extension: 'json',

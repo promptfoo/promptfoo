@@ -238,6 +238,38 @@ describe('sanitizeObject', () => {
     expect(env.GITHUB_PAT).toBe('abc123');
   });
 
+  it('preserves pure environment templates while redacting literal credentials', () => {
+    const env = {
+      META_API_KEY: '{{ env.META_API_KEY }}',
+      GITHUB_PAT: '{{ token }}',
+      PGPASSWORD: '{{ password | trim }}',
+      AUTHORIZATION: '{{ authorization }}',
+      DEPLOY_KEY: 'prefix-{{ token }}',
+      DATABASE_PASSWORD: 'literal-pass',
+    };
+    expect(sanitizeObject({ env })).toEqual({
+      env: { ...env, DEPLOY_KEY: '[REDACTED]', DATABASE_PASSWORD: '[REDACTED]' },
+    });
+    expect(sanitizeObject({ env }, { maxDepth: 0 })).toEqual({ env: '[...]' });
+  });
+
+  it.each([
+    ['MUSE_AUTH_PATH', '/home/user/muse-auth.json'],
+    ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
+    ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
+    ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
+  ])('preserves the credential locator %s without exempting literal secrets', (name, file) => {
+    expect(sanitizeObject({ env: { [name]: file } })).toEqual({ env: { [name]: file } });
+    expect(sanitizeObject({ env: { [name]: 'ghp_shortsecret' } })).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
+    expect(
+      sanitizeObject({ env: { [name]: 'https://user:password@example.test/key.json' } }),
+    ).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
+  });
+
   it.each(['META_API_KEY', 'metaApiKey', 'meta-api-key'])(
     'redacts the Meta API key field %s without relying on its value format',
     (key) => {

@@ -450,6 +450,24 @@ describe('EvalResult', () => {
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
+      it('preserves environment templates and credential-file paths in persisted provider records', async () => {
+        const env = {
+          META_API_KEY: '{{ env.META_API_KEY }}',
+          GITHUB_PAT: '{{ token }}',
+          PGPASSWORD: '{{ password }}',
+          GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+          AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+        };
+        const museProvider: ProviderOptions = { id: 'muse-code', config: { env } };
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-muse-provider-references',
+          { ...mockEvaluateResult, provider: museProvider },
+          { persist: true },
+        );
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved?.provider.config?.env).toEqual(env);
+      });
+
       it('redacts child environment credentials from persisted provider records', async () => {
         const museProvider: ProviderOptions = {
           id: 'muse-code',

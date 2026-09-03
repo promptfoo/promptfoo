@@ -306,6 +306,14 @@ function isCredentialValue(value: string): boolean {
   );
 }
 
+// These variables locate credentials on disk; the paths are needed to reuse the config.
+const ENV_CREDENTIAL_PATH_NAMES = new Set([
+  'muse_auth_path',
+  'google_application_credentials',
+  'aws_shared_credentials_file',
+  'aws_web_identity_token_file',
+]);
+
 function collectAuthorizationCredentials(value: string, credentials: Set<string>): void {
   const match = value.match(/^\s*(bearer|basic|token|api[-_]?key)\s+(\S+)\s*$/i);
   if (!match) {
@@ -433,7 +441,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
   for (const [key, value] of Object.entries(env)) {
     if (typeof value === 'string' && value) {
       // An authentication-file path is an operational setting, not the credential it names.
-      const operational = key.toLowerCase() === 'muse_auth_path';
+      const operational = ENV_CREDENTIAL_PATH_NAMES.has(key.toLowerCase());
       if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
         credentials.add(value);
         collectAuthorizationCredentials(value, credentials);
@@ -1095,6 +1103,26 @@ export function sanitizeUrlEncodedString(value: string): string {
   return changed ? result : value;
 }
 
+function sanitizeEnvMap(env: Record<string, unknown>, depth: number, maxDepth: number): unknown {
+  const sanitized = recursiveSanitize(env, depth, maxDepth);
+  if (!sanitized || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+  const credentials = new Set(collectEnvCredentials(env));
+  for (const [name, item] of Object.entries(env)) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    // A pure reference contains no credential and must remain reusable in exported configs.
+    if (isPureTemplateValue(item)) {
+      sanitized[name] = item;
+    } else if (credentials.has(item)) {
+      sanitized[name] = REDACTED;
+    }
+  }
+  return sanitized;
+}
+
 /**
  * Sanitize plain object fields
  */
@@ -1102,14 +1130,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) {
-      const credentials = new Set(collectEnvCredentials(value as Record<string, unknown>));
-      const env = Object.fromEntries(
-        Object.entries(value).map(([name, item]) => [
-          name,
-          typeof item === 'string' && credentials.has(item) ? REDACTED : item,
-        ]),
-      );
-      sanitized[key] = recursiveSanitize(env, depth + 1, maxDepth);
+      sanitized[key] = sanitizeEnvMap(value as Record<string, unknown>, depth + 1, maxDepth);
     } else if (normalizeFieldName(key) === 'baseurl' && typeof value === 'string') {
       // Placeholders are not literal credentials. Keep the URL sanitizer's
       // template preservation while still detecting mixed literal/template values.

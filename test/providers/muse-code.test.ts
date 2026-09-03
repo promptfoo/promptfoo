@@ -834,6 +834,24 @@ describe('MuseCodeProvider', () => {
     expect(response.raw).toEqual(events);
   });
 
+  it.each([
+    ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
+    ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
+    ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
+  ])('preserves the %s credential-file path in responses', async (name, file) => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = file;
+    onSpawn = (child) => {
+      expect(vi.mocked(spawn).mock.calls[0][2]!.env![name]).toBe(file);
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({ config: { env: { [name]: file } } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe(file);
+    expect(response.raw).toEqual(events);
+  });
+
   it('preserves a nonsecret checksum supplied through the environment', async () => {
     const checksum = 'a'.repeat(64);
     const events = structuredClone(fixtureEvents);

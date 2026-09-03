@@ -104,6 +104,8 @@ The response contains:
 
 Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT`, `DATABASE_PASSWORD`, or `PGPASSWORD`, authorization token components, and authentication in proxy or service URLs. Original URL encodings are included in that matching. These credentials are also redacted in config exports, persisted provider records, and shared eval configs.
 
+Pure environment templates and credential-file paths, such as `GOOGLE_APPLICATION_CREDENTIALS` and `AWS_SHARED_CREDENTIALS_FILE`, remain in saved configs so they can be reused.
+
 `base_url` must not contain credentials because Muse receives that option through process arguments. Supply authentication through `apiKey`, `META_API_KEY`, or an existing Muse Code login.
 
 Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.

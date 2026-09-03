@@ -847,6 +847,23 @@ describe('createShareableUrl', () => {
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
 
+    it('preserves environment templates and credential-file paths in the shared config', async () => {
+      const env = {
+        META_API_KEY: '{{ env.META_API_KEY }}',
+        GITHUB_PAT: '{{ token }}',
+        PGPASSWORD: '{{ password }}',
+        GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+        AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+      };
+      mockEval.config = { providers: [{ id: 'muse-code', config: { env } }] };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      expect(await createShareableUrl(mockEval as Eval)).toBeTruthy();
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.config.providers[0].config.env).toEqual(env);
+    });
+
     it.each([false, true])(
       'redacts Muse credentials from the initial share POST with cloud enabled: %s',
       async (cloudEnabled) => {
