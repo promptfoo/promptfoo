@@ -59,10 +59,10 @@ This example includes:
 - `promptfooconfig.search.yaml`: Search grounding for real-time information
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
 
-Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash use Vertex AI's `global` endpoint. Gemini 3.5
-Flash-Lite supports `global`, `us`, and `eu`; the `us` and `eu` multi-regions
-cost 10% more. The examples use `thinkingLevel` because these models no longer
-support manual sampling parameters such as `temperature`, `topP`, and `topK`.
+The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
+premium. The examples use `thinkingLevel` because these models no longer support
+manual sampling parameters such as `temperature`, `topP`, and `topK`.
 
 ## Running Examples
 

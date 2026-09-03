@@ -6,7 +6,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
-import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
+import {
+  DEFAULT_GOOGLE_TARGET_ID,
+  DEFAULT_OPENAI_TARGET_ID,
+  DEFAULT_VERTEX_TARGET_ID,
+} from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -604,7 +608,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-3.8-flash',
+          id: DEFAULT_GOOGLE_TARGET_ID,
           config: {},
           label: currentLabel,
         },
@@ -613,7 +617,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-3.8-flash',
+          id: DEFAULT_VERTEX_TARGET_ID,
           config: { region: 'global' },
           label: currentLabel,
         },
