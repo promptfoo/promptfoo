@@ -38,11 +38,8 @@ on:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
       - 'src/envars.ts'
-      - 'src/globalConfig/runtimeNoticeState.ts'
-      - 'src/runtimeCompatibility*.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
-      - 'src/types/runtimeCompatibility.ts'
       - 'src/updates.ts'
       - 'src/updates/**'
   push:
@@ -52,11 +49,8 @@ on:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
       - 'src/envars.ts'
-      - 'src/globalConfig/runtimeNoticeState.ts'
-      - 'src/runtimeCompatibility*.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
-      - 'src/types/runtimeCompatibility.ts'
       - 'src/updates.ts'
       - 'src/updates/**'
 
@@ -436,7 +430,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
           subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'

@@ -1,6 +1,6 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
-import { isBedrockMantleResponsesModel } from '../bedrock/mantle';
+import { isBedrockMantleResponsesModel, isRejectedPrefixedGrokId } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -12,9 +12,8 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
-      // Mythos is only available through Bedrock's Anthropic-compatible
-      // Messages endpoint. Fable also supports that endpoint when explicitly
-      // selected, while its bare form continues through Bedrock Runtime below.
+      // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
+      // Runtime, including an explicit Messages route with US/global profiles.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const anthropicModel =
         modelType === 'messages'
@@ -24,13 +23,14 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      if (/^[^.]+\.anthropic\.claude-mythos-5$/.test(anthropicModel ?? '')) {
+      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
+      if (prefixedMythosModel) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
-            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
+            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (anthropicModel?.startsWith('anthropic.claude-')) {
+      if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
         const {
           createBedrockAnthropicMessagesProvider,
           isBedrockAnthropicMessagesModel,
@@ -56,7 +56,9 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Supported models: anthropic.claude-fable-5 and anthropic.claude-mythos-5.`,
+            `provider. Use a us. or global. inference profile for Fable/Mythos 5.1. ` +
+            `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
+            `anthropic.claude-fable-5-1 (GovCloud West).`,
         );
       }
 
@@ -64,11 +66,11 @@ export const awsProviderFactories: ProviderFactory[] = [
       // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
       // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
       // aliases before the per-type handlers so
-      // `bedrock:openai.gpt-5.5`, `bedrock:xai.grok-4.3`, and the explicit
+      // `bedrock:openai.gpt-5.6-sol`, `bedrock:xai.grok-4.3`, and the explicit
       // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
       // gpt-oss models fall through to InvokeModel/Converse below.
       //
-      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.5`, exactly two
+      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.6-sol`, exactly two
       // segments) and the explicit `converse:`/`completion:` aliases. Responses ids contain no
       // colon, so the bare form is always two segments. This prevents sub-typed forms whose id
       // merely contains the prefix
@@ -80,11 +82,16 @@ export const awsProviderFactories: ProviderFactory[] = [
           : splits.length === 2
             ? splits[1]
             : undefined;
+      // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
+      // simply invalid, but Grok 4.6 publishes real inference profiles that the native
+      // InvokeModel/Converse APIs serve with ordinary AWS credentials, so those fall through to
+      // the handlers below. An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
-      if (routedGrokModel?.includes('.xai.')) {
+      if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(
-          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. ` +
-            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
+            `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
+            `such as "bedrock:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so

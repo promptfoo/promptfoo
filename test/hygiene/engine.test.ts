@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import os from 'node:os';
 import path from 'node:path';
 
-import ts from 'typescript';
+import { parseSync } from 'oxc-parser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDiagnostic,
@@ -56,6 +56,34 @@ describe('hygiene engine', () => {
       path.join(rootDir, 'nested', 'z.test.ts'),
       path.join(rootDir, 'root.test.ts'),
     ]);
+  });
+
+  it('includes symlinked test files without following directory symlinks', () => {
+    const rootDir = makeTempDirectory();
+    const readDirectory = vi.fn(() => [
+      { name: 'linked.test.ts', isDirectory: () => false, isFile: () => false },
+      { name: 'linked-directory', isDirectory: () => false, isFile: () => false },
+    ]);
+
+    expect(discoverTestFiles(rootDir, { readDirectory })).toEqual([
+      path.join(rootDir, 'linked.test.ts'),
+    ]);
+    expect(readDirectory).toHaveBeenCalledExactlyOnceWith(rootDir);
+  });
+
+  it.each([
+    ['// 😀 café\r\n  badCall();', 14, 2, 3, 'badCall();'],
+    ['\nbadCall();', 0, 1, 1, ''],
+    ['badCall();', -1, 1, 1, 'badCall();'],
+    ['badCall();', 100, 1, 11, 'badCall();'],
+  ])('preserves source positions in %j', (source, start, line, column, snippet) => {
+    const file = createHygieneFile({ file: 'fixture.test.ts', source });
+
+    expect(createDiagnostic(file, { ruleId: 'example', start, message: 'message' })).toMatchObject({
+      line,
+      column,
+      snippet,
+    });
   });
 
   it('normalizes Windows-relative paths to POSIX separators', () => {
@@ -152,9 +180,7 @@ describe('hygiene engine', () => {
     writeFileSync(path.join(rootDir, 'helper.ts'), 'export {};');
 
     const readFile = vi.fn((file: string) => readFileSync(file, 'utf8'));
-    const parseSource = vi.fn((file: string, source: string) =>
-      ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true),
-    );
+    const parseSource = vi.fn((file: string, source: string) => parseSync(file, source).program);
     const scannedFiles: string[] = [];
 
     const summary = scanHygieneFiles({
@@ -191,9 +217,7 @@ describe('hygiene engine', () => {
       }
       return readFileSync(file, 'utf8');
     });
-    const parseSource = vi.fn((file: string, source: string) =>
-      ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true),
-    );
+    const parseSource = vi.fn((file: string, source: string) => parseSync(file, source).program);
     const scannedFiles: string[] = [];
 
     const summary = scanHygieneFiles({

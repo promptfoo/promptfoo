@@ -269,6 +269,15 @@ describe('NovaSonic Provider', () => {
   });
 
   describe('API Interactions', () => {
+    it('counts the request when a successful stream does not report token usage', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
+    });
+
     it('should successfully call API and handle text response', async () => {
       const result = await provider.callApi('Test prompt');
 

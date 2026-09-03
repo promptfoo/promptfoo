@@ -202,6 +202,52 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBe(0.05);
     });
 
+    it('prices grok-imagine-image-2.0 by quality and resolution tier', async () => {
+      // Tiers from xAI /v1/models/grok-imagine-image-2.0 `pricing`, verified live
+      // 2026-08-31: low/1k $0.04, low/2k $0.06, medium/1k $0.06, medium/2k $0.08.
+      const cases: {
+        quality?: 'low' | 'medium' | 'auto';
+        resolution?: '1k' | '2k';
+        expected: number;
+      }[] = [
+        { expected: 0.04 },
+        { quality: 'auto', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '2k', expected: 0.06 },
+        { quality: 'medium', resolution: '1k', expected: 0.06 },
+        { quality: 'medium', resolution: '2k', expected: 0.08 },
+      ];
+
+      for (const { quality, resolution, expected } of cases) {
+        const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+          config: { apiKey: mockApiKey, quality, resolution },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(callOpenAiImageApi).toHaveBeenCalledWith(
+          'https://api.x.ai/v1/images/generations',
+          expect.objectContaining({ model: 'grok-imagine-image-2.0' }),
+          expect.any(Object),
+          getRequestTimeoutMs(),
+        );
+        expect(result.cost).toBeCloseTo(expected, 10);
+      }
+    });
+
+    it('does not price grok-imagine-image-2.0 at the quality-model fallback rate', async () => {
+      // Regression guard: before grok-imagine-image-2.0 was indexed it fell through
+      // the "unknown grok-imagine-* slug" branch and was billed at $0.05/$0.07.
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: { apiKey: mockApiKey, quality: 'low', resolution: '1k' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.cost).not.toBeCloseTo(0.05, 10);
+      expect(result.cost).toBeCloseTo(0.04, 10);
+    });
+
     it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-quality-latest', {
         config: { apiKey: mockApiKey },

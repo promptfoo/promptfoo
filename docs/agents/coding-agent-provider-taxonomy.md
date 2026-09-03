@@ -18,12 +18,14 @@ single-turn model APIs. A coding-agent provider usually has some combination of:
 
 The main providers in this family today are:
 
-| Provider family         | Provider IDs                                          | Runtime boundary                           |
-| ----------------------- | ----------------------------------------------------- | ------------------------------------------ |
-| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                |
-| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process  |
-| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library   |
-| OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server |
+| Provider family         | Provider IDs                                          | Runtime boundary                                |
+| ----------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                     |
+| OpenAI Codex Security   | `openai:codex-security`                               | Native `@openai/codex-security` SDK             |
+| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process       |
+| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
+| Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
+| OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -170,6 +172,7 @@ Useful files:
 - `src/providers/claude-agent-sdk.ts`
 - `src/providers/opencode-sdk.ts`
 - `src/providers/openai/codex-sdk.ts`
+- `src/providers/openai/codex-security.ts`
 - `src/providers/openai/codex-app-server.ts`
 - `src/providers/registry.ts`
 
@@ -211,6 +214,27 @@ Docs and examples:
 
 - `site/docs/providers/openai-codex-sdk.md`
 - `examples/openai-codex-sdk/`
+
+### OpenAI Codex Security
+
+Status: implemented and documented.
+
+Provider IDs:
+
+- `openai:codex-security`
+- `openai:codex-security:<model>`
+
+The provider runs `@openai/codex-security` directly for standard, deep, and diff
+scans and finding validation. All supported operations use the native SDK, which
+bootstraps its bundled security plugin automatically.
+
+Scan responses expose structured findings, repository coverage, artifact paths,
+model and reasoning metadata, SDK-reported token usage, and estimated scan cost.
+
+Docs and examples:
+
+- `site/docs/providers/openai-codex-security.md`
+- `examples/openai-codex-security/`
 
 ### OpenAI Codex App Server
 

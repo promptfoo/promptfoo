@@ -9,6 +9,14 @@ vi.mock('node:crypto', () => ({
   randomUUID: mockRandomUUID,
 }));
 
+const nodeAdapterMocks = vi.hoisted(() => ({
+  getRequestListener: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
+}));
+
+vi.mock('@hono/node-server', () => ({
+  getRequestListener: nodeAdapterMocks.getRequestListener,
+}));
+
 const expressMocks = vi.hoisted(() => {
   const close = vi.fn((callback: (error?: Error) => void) => callback());
   const listen = vi.fn((_port: number, callback: () => void) => {
@@ -137,16 +145,20 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 }));
 
 const streamableHttpMocks = vi.hoisted(() => ({
-  constructor: vi.fn().mockImplementation(function MockStreamableHTTPServerTransport() {
+  constructor: vi.fn().mockImplementation(function MockWebStandardStreamableHTTPServerTransport() {
     return {
       handleRequest: vi.fn(),
     };
   }),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: streamableHttpMocks.constructor,
+vi.mock('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js', () => ({
+  WebStandardStreamableHTTPServerTransport: streamableHttpMocks.constructor,
 }));
+
+vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => {
+  throw new Error('The SDK Node transport must not load its nested Hono adapter');
+});
 
 const { mcpServerCalls } = mcpServerMocks;
 
@@ -160,8 +172,15 @@ describe('MCP Server', () => {
     mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
       mcpServerMocks.mockMcpServerImplementation,
     );
-    streamableHttpMocks.constructor.mockClear();
+    streamableHttpMocks.constructor
+      .mockReset()
+      .mockImplementation(function MockWebStandardStreamableHTTPServerTransport() {
+        return {
+          handleRequest: vi.fn(),
+        };
+      });
     mockRandomUUID.mockClear();
+    nodeAdapterMocks.getRequestListener.mockClear();
     mcpServerCalls.length = 0;
   });
 
@@ -309,6 +328,9 @@ describe('MCP Server', () => {
         };
         expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
         expect(mockRandomUUID).toHaveBeenCalledOnce();
+        expect(nodeAdapterMocks.getRequestListener).toHaveBeenCalledWith(expect.any(Function), {
+          overrideGlobalObjects: false,
+        });
       } finally {
         if (shutdown) {
           shutdown();
