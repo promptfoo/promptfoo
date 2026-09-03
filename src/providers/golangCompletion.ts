@@ -39,10 +39,10 @@ export class GolangProvider implements ApiProvider {
     private options?: ProviderOptions,
   ) {
     const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
+      options?.config?.basePath || '',
       runPath,
     );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
+    this.scriptPath = path.relative(options?.config?.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
@@ -69,7 +69,7 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -129,22 +129,39 @@ export class GolangProvider implements ApiProvider {
 
         const relativeScriptPath = path.relative(moduleRoot, absPath);
         const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
-
-        // Copy wrapper.go to the same directory as the script
-        const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         await fs.mkdir(scriptDir, { recursive: true });
-        await fs.copyFile(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
-
-        // Build from the script directory using execFile (no shell injection)
         const goExecutable = this.config.goExecutable || 'go';
-        await execFileAsync(
-          goExecutable,
-          ['build', '-o', executablePath, 'wrapper.go', path.basename(relativeScriptPath)],
-          { cwd: scriptDir },
+        const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
+          cwd: scriptDir,
+        });
+        const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
+        let buildDir = scriptDir;
+        let buildFiles = ['wrapper.go', path.basename(relativeScriptPath)];
+
+        if (packageInfo.Name && packageInfo.Name !== 'main') {
+          if (!packageInfo.ImportPath) {
+            throw new Error('Could not determine Go provider import path');
+          }
+
+          buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
+          await fs.writeFile(
+            path.join(buildDir, 'provider.go'),
+            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
+          );
+          buildFiles = ['wrapper.go', 'provider.go'];
+        }
+
+        await fs.copyFile(
+          path.join(getWrapperDir('golang'), 'wrapper.go'),
+          path.join(buildDir, 'wrapper.go'),
         );
+
+        await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
+          cwd: buildDir,
+        });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
@@ -168,7 +185,7 @@ export class GolangProvider implements ApiProvider {
         return result;
       } catch (error) {
         logger.error(`Error running Golang script: ${(error as Error).message}`);
-        logger.error(`Full error object: ${JSON.stringify(error)}`);
+        logger.error('Full error object', { error });
         throw new Error(`Error running Golang script: ${(error as Error).message}`);
       } finally {
         // Clean up temporary directory

@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -44,9 +43,14 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
+import { preserveTracingCredentialReferences } from '../sanitizer';
 import { readTest, readTests } from '../testCaseReader';
-import { validateTestPromptReferences } from '../validateTestPromptReferences';
+import {
+  type PromptReferenceSource,
+  validateTestPromptReferences,
+} from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
@@ -297,7 +301,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * @param config - The config object to render
  * @returns The config with env templates rendered
  */
-function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
+export function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
   // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
   const processEnvDisabled = getEnvBool(
     'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
@@ -319,7 +323,12 @@ function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(co
     : undefined;
 
   // Second pass: render full config using pre-rendered config.env as overrides
-  return renderEnvOnlyInObject(config, filteredConfigEnv);
+  const renderedConfig = renderEnvOnlyInObject(config, filteredConfigEnv);
+  preserveTracingCredentialReferences(
+    config as Partial<UnifiedConfig>,
+    renderedConfig as Partial<UnifiedConfig>,
+  );
+  return renderedConfig;
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
@@ -330,7 +339,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
+    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
@@ -450,6 +459,30 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
     }
     throw error;
   }
+}
+
+async function readPromptReferenceSources(configPaths: string[]): Promise<PromptReferenceSource[]> {
+  const sources: PromptReferenceSource[] = [];
+  for (const configPath of configPaths) {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths =
+      globSync(resolvedPath, {
+        windowsPathsNoEscape: true,
+      }) ?? [];
+
+    for (const globPath of globPaths) {
+      const ext = path.parse(globPath).ext;
+      if (ext !== '.yaml' && ext !== '.yml') {
+        continue;
+      }
+      sources.push({
+        path: globPath,
+        content: await fsPromises.readFile(globPath, 'utf-8'),
+      });
+    }
+  }
+
+  return sources;
 }
 
 /**
@@ -746,8 +779,10 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
+  let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     fileConfig = await combineConfigs(configPaths);
+    promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
@@ -1043,6 +1078,7 @@ export async function resolveConfigs(
     testSuite.tests || [],
     testSuite.prompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    { promptReferenceSources },
   );
 
   cliState.config = config;

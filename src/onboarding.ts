@@ -505,16 +505,29 @@ export async function createDummyFiles(
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-fable-5',
+          'anthropic:messages:claude-opus-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
-          'anthropic:messages:claude-opus-4-1-20250805',
-          'anthropic:messages:claude-3-7-sonnet-20250219',
+          'anthropic:messages:claude-opus-4-6',
+          'anthropic:messages:claude-haiku-4-5',
         ],
       },
       {
-        name: '[Google] Gemini 3.1 Pro, ...',
-        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+        name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+        value: [
+          ...[
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+          ].map((id) => ({
+            id: `vertex:${id}`,
+            config: { region: 'global' },
+          })),
+          'vertex:gemini-3.1-pro-preview',
+          'vertex:gemini-2.5-pro',
+        ],
       },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',

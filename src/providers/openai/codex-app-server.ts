@@ -11,7 +11,9 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
@@ -24,6 +26,12 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  getCodexTraceShutdownGraceMs,
+  withCodexTraceExporter,
+} from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
@@ -68,6 +76,29 @@ export type CodexAppServerReasoningEffort =
 export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type CodexAppServerServiceTier = 'fast' | 'flex';
 export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
+
+function redactAppServerText(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
+    .replace(
+      /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
+      REDACTED,
+    )
+    .replace(
+      /(\\["'](?:authorization|auth)\\["']\s*[:=]\s*\\["'])(?:bearer|basic)\s+[^\\\s"'`]+(\\["'])/gi,
+      (_match, prefix, suffix) => `${prefix}${REDACTED}${suffix}`,
+    )
+    .replace(
+      /\b(authorization|auth)(["']?)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)(["']?)\s*([=:])(\s*)(["']?)[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    );
+}
 
 export interface CodexAppServerCollaborationMode {
   mode: 'plan' | 'default';
@@ -114,6 +145,7 @@ type CodexAppServerMcpElicitationPolicy =
 type JsonRpcId = string | number;
 
 const MAX_BUFFERED_JSON_RPC_CHARS = 5_000_000;
+const MAX_BUFFERED_TURN_EVENT_CHARS = 10_000_000;
 
 type CodexAppServerPromptInputItem =
   | {
@@ -273,6 +305,13 @@ interface AppServerConnectionOptions {
   onClose: (error: Error) => void;
 }
 
+interface CodexTraceExporterSettings {
+  endpoint: string;
+  protocol?: string;
+  endpointConfigKey: string;
+  protocolConfigKey: string;
+}
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
@@ -288,6 +327,7 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
   threadId: string;
@@ -299,6 +339,7 @@ interface CodexAppServerTurnState {
   itemStarts: any[];
   notifications: JsonRpcMessage[];
   notificationCount: number;
+  bufferedEventChars: number;
   serverRequests: ServerRequestRecord[];
   agentMessageDeltas: string[];
   agentMessageDeltasByItemId: Map<string, string>;
@@ -536,7 +577,7 @@ const CodexAppServerConfigShape = {
   server_request_policy: ServerRequestPolicySchema.optional(),
 } as const;
 
-const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
+export const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
 const CodexAppServerMergedPromptConfigSchema = z.object(CodexAppServerConfigShape).strip();
 
 function createDeferred<T>(): Deferred<T> {
@@ -669,6 +710,72 @@ function flattenConfig(
   return entries;
 }
 
+function getCodexTraceExporterSettings(config: unknown): CodexTraceExporterSettings | undefined {
+  if (!isPlainObject(config)) {
+    return undefined;
+  }
+
+  const entries = new Map(flattenConfig(config).map(({ key, value }) => [key, value]));
+  for (const exporter of ['otlp-http', 'otlp-grpc']) {
+    const prefix = `otel.trace_exporter.${exporter}`;
+    const endpoint = entries.get(`${prefix}.endpoint`);
+    if (typeof endpoint !== 'string' || endpoint.length === 0) {
+      continue;
+    }
+
+    const protocol = entries.get(`${prefix}.protocol`);
+    return {
+      endpoint,
+      ...(typeof protocol === 'string' && { protocol }),
+      endpointConfigKey: `${prefix}.endpoint`,
+      protocolConfigKey: `${prefix}.protocol`,
+    };
+  }
+
+  return undefined;
+}
+
+function getCodexTraceExporterValue(config: unknown): unknown {
+  if (!isPlainObject(config)) {
+    return undefined;
+  }
+  if ('otel.trace_exporter' in config) {
+    return config['otel.trace_exporter'];
+  }
+
+  const otel = config.otel;
+  return isPlainObject(otel) ? otel.trace_exporter : undefined;
+}
+
+function getCodexConfigOriginType(origins: unknown, key: string): string | undefined {
+  if (!isPlainObject(origins)) {
+    return undefined;
+  }
+
+  const origin = origins[key];
+  if (!isPlainObject(origin)) {
+    return undefined;
+  }
+
+  const name = origin.name;
+  if (typeof name === 'string') {
+    return name;
+  }
+  if (isPlainObject(name) && typeof name.type === 'string') {
+    return name.type;
+  }
+
+  return typeof origin.source === 'string' ? origin.source : undefined;
+}
+
+function getSafeTraceExporterOrigin(endpoint: string): string {
+  try {
+    return new URL(endpoint).origin;
+  } catch {
+    return '[invalid exporter endpoint]';
+  }
+}
+
 function toTomlLiteral(value: unknown): string {
   if (typeof value === 'string') {
     return JSON.stringify(value);
@@ -699,6 +806,13 @@ class JsonRpcError extends Error {
     super(message);
     this.name = 'JsonRpcError';
     this.code = code;
+  }
+}
+
+class StaleExplicitThreadConnectionClosedError extends Error {
+  constructor() {
+    super('stale explicit-thread cleanup closed the current app-server connection');
+    this.name = 'StaleExplicitThreadConnectionClosedError';
   }
 }
 
@@ -750,6 +864,10 @@ class CodexAppServerConnection {
         );
       }
     });
+  }
+
+  isClosed(): boolean {
+    return this.closed;
   }
 
   async initialize(config: CodexAppServerConfig): Promise<void> {
@@ -845,7 +963,7 @@ class CodexAppServerConnection {
     return this.stderrChunks.join('').slice(-10_000);
   }
 
-  async close(): Promise<void> {
+  async close(options: { graceful?: boolean } = {}): Promise<void> {
     if (this.closePromise !== null) {
       return this.closePromise;
     }
@@ -853,37 +971,55 @@ class CodexAppServerConnection {
     this.closePromise = new Promise<void>((resolve) => {
       this.closed = true;
       this.rejectPending(new Error('codex app-server connection closed'));
-      this.lineInterface.close();
 
-      const finish = () => resolve();
-      const killTimer = setTimeout(() => {
-        try {
-          if (!this.process.killed) {
-            this.process.kill('SIGKILL');
-          }
-        } catch {
-          // Process may have already exited (ESRCH)
+      let terminateTimer: ReturnType<typeof setTimeout> | undefined;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (terminateTimer) {
+          clearTimeout(terminateTimer);
         }
-        finish();
-      }, 1_000);
+        if (killTimer) {
+          clearTimeout(killTimer);
+        }
+        this.lineInterface.close();
+        resolve();
+      };
+      const terminate = () => {
+        killTimer = setTimeout(() => {
+          try {
+            if (this.process.exitCode === null) {
+              this.process.kill('SIGKILL');
+            }
+          } catch {
+            // Process may have already exited (ESRCH).
+          }
+          finish();
+        }, 1_000);
+        try {
+          this.process.kill('SIGTERM');
+        } catch {
+          // Process may have already exited (ESRCH).
+          finish();
+        }
+      };
 
-      this.process.once('exit', () => {
-        clearTimeout(killTimer);
-        finish();
-      });
+      this.process.once('exit', finish);
 
       if (this.process.killed || this.process.exitCode !== null) {
-        clearTimeout(killTimer);
         finish();
         return;
       }
 
       try {
         this.process.stdin.end();
-        this.process.kill('SIGTERM');
+        if (options.graceful) {
+          // Stdio EOF makes Codex shut down normally and force-flush its batch span processor.
+          terminateTimer = setTimeout(terminate, getCodexTraceShutdownGraceMs(this.options.env));
+        } else {
+          terminate();
+        }
       } catch {
         // Process may have already exited (ESRCH)
-        clearTimeout(killTimer);
         finish();
       }
     });
@@ -900,19 +1036,22 @@ class CodexAppServerConnection {
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
     const candidate = candidateLines.join('\\n');
+    if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
+      this.bufferedJsonRpcLines = [];
+      this.handleProcessFailure(
+        new Error(
+          `codex app-server JSON-RPC message exceeded ${MAX_BUFFERED_JSON_RPC_CHARS} characters`,
+        ),
+      );
+      void this.close();
+      return;
+    }
     let message: JsonRpcMessage;
     try {
       message = JSON.parse(candidate) as JsonRpcMessage;
     } catch (error) {
       if (this.shouldBufferJsonRpcLine(error, trimmed)) {
         this.bufferedJsonRpcLines = candidateLines;
-        if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
-          logger.warn('[CodexAppServer] Dropping oversized partial JSON-RPC message', {
-            error,
-            bufferedChars: candidate.length,
-          });
-          this.bufferedJsonRpcLines = [];
-        }
         return;
       }
 
@@ -1017,7 +1156,9 @@ class CodexAppServerConnection {
       this.stderrChunks = [truncated];
       this.stderrTotalLength = truncated.length;
     }
-    logger.debug('[CodexAppServer] stderr', { text });
+    logger.debug('[CodexAppServer] stderr', {
+      text: redactAppServerText(sanitizeObject(text, { context: 'Codex app-server stderr' })),
+    });
   }
 
   private handleProcessFailure(error: Error): void {
@@ -1025,12 +1166,20 @@ class CodexAppServerConnection {
       return;
     }
     this.closed = true;
-    this.rejectPending(error);
+    const stderr = this.getStderr().trim();
+    const sanitizedStderr = stderr
+      ? redactAppServerText(sanitizeObject(stderr, { context: 'Codex app-server stderr' }))
+      : undefined;
+    const failure =
+      typeof sanitizedStderr === 'string' && sanitizedStderr
+        ? new Error(`${error.message}: ${sanitizedStderr}`)
+        : error;
+    this.rejectPending(failure);
     logger.error('[CodexAppServer] Process failure', {
-      error: error.message,
-      stderr: this.getStderr(),
+      error: failure.message,
+      stderr: sanitizedStderr,
     });
-    this.options.onClose(error);
+    this.options.onClose(failure);
   }
 
   private closeAfterRequestTimeout(method: string, error: Error): void {
@@ -1083,6 +1232,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private threads = new Map<string, ThreadHandle>();
   private threadPromises = new Map<string, Promise<ThreadHandle>>();
   private threadPromiseConnectionInstances = new Map<string, string>();
+  private explicitThreadAbortCleanups = new Map<string, Promise<void>>();
   private protectedThreadCounts = new Map<string, number>();
   private threadRunQueues = new Map<string, Promise<void>>();
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
@@ -1091,6 +1241,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
   private deepTracingWarningShown = false;
+  private traceExporterOverrideWarningShown = false;
 
   constructor(
     options: {
@@ -1133,6 +1284,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.threads.clear();
     this.threadPromises.clear();
     this.threadPromiseConnectionInstances.clear();
+    this.explicitThreadAbortCleanups.clear();
     this.threadRunQueues.clear();
     this.activeTurnsByThread.clear();
     this.activeTurnsByTurn.clear();
@@ -1172,6 +1324,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -1190,8 +1346,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex-app-server',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex App Server',
+      agentName: 'Codex App Server',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1284,7 +1441,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       );
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
 
-      const connection = useReusableConnection
+      let connection = useReusableConnection
         ? await this.getOrCreateConnection(connectionKey, env, resolvedConfig)
         : await this.createConnection(connectionKey, env, resolvedConfig);
       if (!useReusableConnection) {
@@ -1292,66 +1449,105 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
 
       const promptCacheBasis = context?.prompt?.raw ?? prompt;
-      const threadHandle = await this.getOrCreateThread(
-        connection,
-        connectionKey,
-        promptCacheBasis,
-        resolvedConfig,
-        useReusableConnection,
-        callOptions,
-      );
-      this.protectThread(threadHandle.threadId);
-      let turnStarted = false;
-      try {
-        const queueKey = this.getThreadRunQueueKey(resolvedConfig, threadHandle);
-
-        return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
-          turnStarted = true;
-          const state = this.createTurnState(
-            connectionKey,
-            connection.instanceId,
-            threadHandle.threadId,
-            promptInput,
-            resolvedConfig,
-            env,
-          );
-          this.registerTurnState(state);
-          try {
-            const turnResponse = await connection.request(
-              'turn/start',
-              this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
-              {
-                abortSignal: callOptions?.abortSignal,
-                timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
-                onResponse: (response) => {
-                  const turnId = (response as any)?.turn?.id;
-                  if (typeof turnId === 'string') {
-                    this.updateTurnStateId(state, turnId);
-                  }
-                },
-              },
-            );
-
-            if (typeof turnResponse?.turn?.id === 'string') {
-              this.updateTurnStateId(state, turnResponse.turn.id);
-            }
-
-            await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
-            return this.buildProviderResponse(state, threadHandle, resolvedConfig);
-          } finally {
-            this.unregisterTurnState(state);
-            await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
-          }
-        });
-      } finally {
-        this.unprotectThread(threadHandle.threadId);
-        if (!turnStarted) {
-          await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig, {
-            skipIfActiveTurn: true,
-          });
+      const explicitThreadQueueKey = resolvedConfig.thread_id
+        ? `thread_id:${resolvedConfig.thread_id}`
+        : undefined;
+      const runThreadTurn = async (): Promise<ProviderResponse> => {
+        if (useReusableConnection && connection.isClosed()) {
+          connection = await this.getOrCreateConnection(connectionKey, env, resolvedConfig);
         }
-        this.scheduleThreadPoolEnforcement(connection, connectionKey, resolvedConfig);
-      }
+        let threadHandle: ThreadHandle;
+        try {
+          threadHandle = await this.getOrCreateThread(
+            connection,
+            connectionKey,
+            promptCacheBasis,
+            resolvedConfig,
+            useReusableConnection,
+            callOptions,
+          );
+        } catch (error) {
+          if (!(error instanceof StaleExplicitThreadConnectionClosedError)) {
+            throw error;
+          }
+          connection = await this.getOrCreateConnection(connectionKey, env, resolvedConfig);
+          threadHandle = await this.getOrCreateThread(
+            connection,
+            connectionKey,
+            promptCacheBasis,
+            resolvedConfig,
+            useReusableConnection,
+            callOptions,
+          );
+        }
+        this.protectThread(threadHandle.threadId);
+        let turnStarted = false;
+        try {
+          const queueKey = explicitThreadQueueKey
+            ? undefined
+            : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
+
+          return await this.runSerializedThreadTurn(
+            queueKey,
+            callOptions?.abortSignal,
+            async () => {
+              turnStarted = true;
+              const state = this.createTurnState(
+                connection,
+                connectionKey,
+                connection.instanceId,
+                threadHandle.threadId,
+                promptInput,
+                resolvedConfig,
+                env,
+              );
+              this.registerTurnState(state);
+              try {
+                const turnResponse = await connection.request(
+                  'turn/start',
+                  this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
+                  {
+                    abortSignal: callOptions?.abortSignal,
+                    timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
+                    onResponse: (response) => {
+                      const turnId = (response as any)?.turn?.id;
+                      if (typeof turnId === 'string') {
+                        this.updateTurnStateId(state, turnId);
+                      }
+                    },
+                  },
+                );
+
+                if (typeof turnResponse?.turn?.id === 'string') {
+                  this.updateTurnStateId(state, turnResponse.turn.id);
+                }
+
+                await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
+                return this.buildProviderResponse(state, threadHandle, resolvedConfig);
+              } finally {
+                this.unregisterTurnState(state);
+                await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
+              }
+            },
+          );
+        } finally {
+          this.unprotectThread(threadHandle.threadId);
+          if (!turnStarted) {
+            await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig, {
+              skipIfActiveTurn: true,
+            });
+          }
+          this.scheduleThreadPoolEnforcement(connection, connectionKey, resolvedConfig);
+        }
+      };
+
+      return explicitThreadQueueKey
+        ? await this.runSerializedThreadTurn(
+            explicitThreadQueueKey,
+            callOptions?.abortSignal,
+            runThreadTurn,
+          )
+        : await runThreadTurn();
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1367,9 +1563,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return { error: `Error calling OpenAI Codex app-server: ${errorMessage}` };
     } finally {
       if (localConnection) {
-        await localConnection.close().catch((error) => {
-          logger.debug('[CodexAppServer] Error closing local connection', { error });
-        });
+        await localConnection
+          .close({ graceful: resolvedConfig.deep_tracing === true })
+          .catch((error) => {
+            logger.debug('[CodexAppServer] Error closing local connection', { error });
+          });
       }
     }
   }
@@ -1448,10 +1646,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     if (config.deep_tracing) {
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-app-server';
@@ -1482,19 +1680,24 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
   }
 
-  private buildAppServerArgs(config: CodexAppServerConfig): string[] {
+  private buildAppServerArgs(config: CodexAppServerConfig, env: Record<string, string>): string[] {
     const args = ['app-server', '--listen', 'stdio://'];
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
     for (const { key, value } of flattenConfig(cliConfig)) {
       args.push('-c', `${key}=${toTomlLiteral(value)}`);
     }
     return args;
   }
 
-  private getResolvedCliConfig(config: CodexAppServerConfig): Record<string, unknown> {
-    return {
-      ...(config.cli_config ?? {}),
-    };
+  private getResolvedCliConfig(
+    config: CodexAppServerConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> {
+    return withCodexTraceExporter(
+      { ...(config.cli_config ?? {}) },
+      env,
+      config.deep_tracing === true,
+    );
   }
 
   private getRequestTimeoutMs(config: CodexAppServerConfig): number {
@@ -1544,7 +1747,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
       command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config),
+      args: this.buildAppServerArgs(config, env),
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -1578,6 +1781,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           );
         }
       }
+      await this.warnForTraceExporterOverride(connection, config, env);
       return connection;
     } catch (error) {
       await connection.close().catch((closeError) => {
@@ -1589,6 +1793,77 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     } finally {
       this.initializingConnections.delete(connection);
     }
+  }
+
+  private async warnForTraceExporterOverride(
+    connection: CodexAppServerConnection,
+    config: CodexAppServerConfig,
+    env: Record<string, string>,
+  ): Promise<void> {
+    if (!config.deep_tracing || this.traceExporterOverrideWarningShown) {
+      return;
+    }
+
+    const requestedExporter = getCodexTraceExporterSettings(this.getResolvedCliConfig(config, env));
+    if (!requestedExporter) {
+      return;
+    }
+
+    let effectiveConfig: unknown;
+    try {
+      effectiveConfig = await connection.request(
+        'config/read',
+        { includeLayers: false },
+        { timeoutMs: this.getRequestTimeoutMs(config) },
+      );
+    } catch (error) {
+      logger.debug('[CodexAppServer] Unable to inspect the effective Codex trace exporter', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    if (!isPlainObject(effectiveConfig)) {
+      return;
+    }
+
+    const effectiveExporter = getCodexTraceExporterSettings(effectiveConfig.config);
+    const effectiveExporterValue = getCodexTraceExporterValue(effectiveConfig.config);
+    if (
+      (!effectiveExporter && effectiveExporterValue === undefined) ||
+      (effectiveExporter &&
+        effectiveExporter.endpoint === requestedExporter.endpoint &&
+        (!effectiveExporter.protocol ||
+          !requestedExporter.protocol ||
+          effectiveExporter.protocol === requestedExporter.protocol))
+    ) {
+      return;
+    }
+
+    const configOrigin =
+      (effectiveExporter &&
+        (getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.endpointConfigKey) ??
+          getCodexConfigOriginType(
+            effectiveConfig.origins,
+            effectiveExporter.protocolConfigKey,
+          ))) ??
+      getCodexConfigOriginType(effectiveConfig.origins, 'otel.trace_exporter');
+    const managedOverride = configOrigin !== undefined && /managed|mdm/i.test(configOrigin);
+    const exporterState =
+      typeof effectiveExporterValue === 'string' ? effectiveExporterValue : 'unsupported';
+    this.traceExporterOverrideWarningShown = true;
+    logger.warn(
+      `[CodexAppServer] ${managedOverride ? 'Enterprise-managed' : 'Effective'} Codex configuration overrides the requested trace exporter. Native spans will not reach the configured trace receiver.`,
+      {
+        requestedOrigin: getSafeTraceExporterOrigin(requestedExporter.endpoint),
+        ...(effectiveExporter
+          ? { effectiveOrigin: getSafeTraceExporterOrigin(effectiveExporter.endpoint) }
+          : { effectiveExporter: exporterState }),
+        requestedProtocol: requestedExporter.protocol,
+        effectiveProtocol: effectiveExporter?.protocol,
+        ...(configOrigin && { configOrigin }),
+      },
+    );
   }
 
   private handleConnectionClose(
@@ -1636,7 +1911,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const keyData = {
       env: stableEnv,
       codex_path_override: config.codex_path_override,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       experimental_api: config.experimental_api,
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
@@ -1677,6 +1952,87 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return `openai:codex-app-server:thread:${hash}`;
   }
 
+  private generateExplicitThreadCachePrefix(threadId: string): string {
+    const threadHash = crypto.createHash('sha256').update(threadId).digest('hex');
+    return `openai:codex-app-server:thread_id:${threadHash}:`;
+  }
+
+  private generateExplicitThreadCacheKey(
+    connectionKey: string,
+    threadId: string,
+    config: CodexAppServerConfig,
+  ): string {
+    const resumeHash = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          connectionKey,
+          resume: this.buildThreadResumeParams(threadId, config),
+        }),
+      )
+      .digest('hex');
+    return `${this.generateExplicitThreadCachePrefix(threadId)}${resumeHash}`;
+  }
+
+  private async discardOtherExplicitThreadVariants(
+    prefix: string,
+    keepKey: string,
+    connection: CodexAppServerConnection,
+    connectionKey: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    const staleKeys = Array.from(this.threads.keys()).filter(
+      (key) => key.startsWith(prefix) && key !== keepKey,
+    );
+    for (const key of staleKeys) {
+      const stale = this.threads.get(key);
+      this.threads.delete(key);
+      if (!stale) {
+        continue;
+      }
+      const staleConnection =
+        this.connections.get(stale.connectionKey) ??
+        (stale.connectionKey === connectionKey ? connection : undefined);
+      if (staleConnection) {
+        try {
+          await staleConnection.request(
+            'thread/unsubscribe',
+            { threadId: stale.threadId },
+            { timeoutMs },
+          );
+        } catch (error) {
+          logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
+            error,
+            threadId: stale.threadId,
+          });
+          if (staleConnection === connection && connection.isClosed()) {
+            throw new StaleExplicitThreadConnectionClosedError();
+          }
+        }
+      }
+    }
+  }
+
+  private async settleOtherExplicitThreadVariants(
+    prefix: string,
+    keepKey: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const pending: Promise<unknown>[] = Array.from(this.threadPromises.entries())
+      .filter(([key]) => key.startsWith(prefix) && key !== keepKey)
+      .map(([, promise]) => promise);
+    const abortCleanups = Array.from(this.explicitThreadAbortCleanups.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, promise]) => promise);
+    pending.push(...abortCleanups);
+    if (pending.length > 0) {
+      await this.waitForPreviousThreadRun(
+        Promise.allSettled(pending).then(() => undefined),
+        abortSignal,
+      );
+    }
+  }
+
   private async getOrCreateThread(
     connection: CodexAppServerConnection,
     connectionKey: string,
@@ -1688,22 +2044,38 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const canPersistThread = allowThreadPersistence && config.persist_threads === true;
 
     if (config.thread_id) {
-      const cacheKey = canPersistThread
-        ? `${connectionKey}:thread_id:${config.thread_id}`
-        : undefined;
-      const cachedOrPending = this.getCachedOrPendingThread(cacheKey);
+      const variantKey = this.generateExplicitThreadCacheKey(
+        connectionKey,
+        config.thread_id,
+        config,
+      );
+      const cacheKey = canPersistThread ? variantKey : undefined;
+      await this.settleOtherExplicitThreadVariants(
+        this.generateExplicitThreadCachePrefix(config.thread_id),
+        variantKey,
+        callOptions?.abortSignal,
+      );
+      if (cacheKey) {
+        await this.discardOtherExplicitThreadVariants(
+          this.generateExplicitThreadCachePrefix(config.thread_id),
+          cacheKey,
+          connection,
+          connectionKey,
+          this.getRequestTimeoutMs(config),
+        );
+      }
+      const cachedOrPending =
+        (cacheKey ? this.threads.get(cacheKey) : undefined) ?? this.threadPromises.get(variantKey);
       if (cachedOrPending !== undefined) {
         return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }
 
       this.throwIfThreadWaitAborted(callOptions?.abortSignal);
-      const threadPromise = this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
+      const threadPromise = this.cacheThreadPromise(variantKey, connection.instanceId, async () => {
         const response = await connection.request(
           'thread/resume',
           this.buildThreadResumeParams(config.thread_id as string, config),
-          {
-            timeoutMs: this.getRequestTimeoutMs(config),
-          },
+          { timeoutMs: this.getRequestTimeoutMs(config) },
         );
         const handle = {
           connectionKey,
@@ -1724,6 +2096,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               this.cleanupThreadAfterTurn(connection, threadHandle, config, {
                 skipIfProtected: true,
               }),
+            onAbortCleanupScheduled: (cleanup) =>
+              this.trackExplicitThreadAbortCleanup(variantKey, cleanup),
           });
     }
 
@@ -1822,6 +2196,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     options: {
       abortMessage?: string;
       onAbortResolvedThread?: (threadHandle: ThreadHandle) => Promise<void>;
+      onAbortCleanupScheduled?: (cleanup: Promise<void>) => void;
     } = {},
   ): Promise<ThreadHandle> {
     const threadPromise = Promise.resolve(thread);
@@ -1835,7 +2210,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return;
       }
       abortCleanupScheduled = true;
-      void threadPromise
+      const cleanup = threadPromise
         .then(async (threadHandle) => {
           if (options.onAbortResolvedThread) {
             await options.onAbortResolvedThread(threadHandle);
@@ -1846,6 +2221,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             error,
           });
         });
+      options.onAbortCleanupScheduled?.(cleanup);
+      void cleanup;
     };
 
     const createThreadAbortError = () =>
@@ -1872,6 +2249,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         abortSignal.removeEventListener('abort', abortListener);
       }
     }
+  }
+
+  private trackExplicitThreadAbortCleanup(cacheKey: string, cleanup: Promise<void>): void {
+    this.explicitThreadAbortCleanups.set(cacheKey, cleanup);
+    void cleanup.finally(() => {
+      if (this.explicitThreadAbortCleanups.get(cacheKey) === cleanup) {
+        this.explicitThreadAbortCleanups.delete(cacheKey);
+      }
+    });
   }
 
   private scheduleThreadPoolEnforcement(
@@ -2144,6 +2530,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private createTurnState(
+    connection: CodexAppServerConnection,
     connectionKey: string,
     connectionInstanceId: string,
     threadId: string,
@@ -2152,6 +2539,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      connection,
       connectionKey,
       connectionInstanceId,
       threadId,
@@ -2162,6 +2550,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       itemStarts: [],
       notifications: [],
       notificationCount: 0,
+      bufferedEventChars: 0,
       serverRequests: [],
       agentMessageDeltas: [],
       agentMessageDeltasByItemId: new Map(),
@@ -2236,6 +2625,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const state = this.getTurnState(params.threadId, params.turnId);
     if (!state) {
       logger.debug('[CodexAppServer] Notification without active turn', { method: message.method });
+      return;
+    }
+
+    if (!this.reserveTurnEvent(state, message)) {
       return;
     }
 
@@ -2433,6 +2826,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): Promise<unknown> {
     const params = message.params ?? {};
     const state = this.getTurnState(params.threadId ?? params.conversationId, params.turnId);
+    if (state && !this.reserveTurnEvent(state, message)) {
+      throw new Error(state.error ?? 'Codex app-server turn event limit exceeded');
+    }
     const record: ServerRequestRecord = {
       id: message.id as JsonRpcId,
       method: message.method ?? 'unknown',
@@ -2450,6 +2846,22 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state?.serverRequests.push(record);
       throw error;
     }
+  }
+
+  private reserveTurnEvent(state: CodexAppServerTurnState, message: JsonRpcMessage): boolean {
+    state.bufferedEventChars += JSON.stringify(message).length;
+    if (state.bufferedEventChars <= MAX_BUFFERED_TURN_EVENT_CHARS) {
+      return true;
+    }
+
+    state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
+    this.handleConnectionClose(
+      state.connectionKey,
+      state.connectionInstanceId,
+      new Error(state.error),
+    );
+    void state.connection.close();
+    return false;
   }
 
   private buildServerRequestResponse(
@@ -2529,7 +2941,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     params: any,
     policy: CodexAppServerUserInputPolicy,
   ): { answers: Record<string, { answers: string[] }> } {
-    const answers: Record<string, { answers: string[] }> = {};
+    const answers = Object.create(null) as Record<string, { answers: string[] }>;
     const questions = Array.isArray(params?.questions) ? params.questions : [];
 
     for (const question of questions) {
@@ -2551,7 +2963,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         continue;
       }
 
-      const configuredAnswer = policy[question.id];
+      const configuredAnswer = Object.prototype.hasOwnProperty.call(policy, question.id)
+        ? policy[question.id]
+        : undefined;
       answers[question.id] = {
         answers: Array.isArray(configuredAnswer)
           ? configuredAnswer
@@ -2573,7 +2987,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     >;
     success: boolean;
   } {
-    const configured = typeof params?.tool === 'string' ? tools?.[params.tool] : undefined;
+    const configured =
+      typeof params?.tool === 'string' &&
+      tools &&
+      Object.prototype.hasOwnProperty.call(tools, params.tool)
+        ? tools[params.tool]
+        : undefined;
     if (!configured) {
       return {
         contentItems: [{ type: 'inputText', text: 'No dynamic tool response configured.' }],
@@ -3151,12 +3570,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.app_server.item.id': itemId,
         'codex.app_server.item.type': item?.type ?? 'unknown',
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -3198,10 +3617,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.input_tokens'] = usage.input;
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
-        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
       }
       if (usage.reasoning) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
@@ -3276,10 +3695,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         attrs['codex.mcp.server'] = item.server;
       }
       if (typeof item.tool === 'string') {
+        attrs['gen_ai.operation.name'] = 'execute_tool';
+        attrs['gen_ai.tool.name'] = item.tool;
         attrs['codex.mcp.tool'] = item.tool;
       }
     }
     if (item?.type === 'dynamicToolCall' && typeof item.tool === 'string') {
+      attrs['gen_ai.operation.name'] = 'execute_tool';
+      attrs['gen_ai.tool.name'] = item.tool;
       attrs['codex.tool.name'] = item.tool;
     }
     if (item?.type === 'webSearch' && typeof item.query === 'string') {
@@ -3397,17 +3820,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private redactTracePii(value: unknown): unknown {
     if (typeof value === 'string') {
-      return value
-        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
-        .replace(
-          /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
-          REDACTED,
-        )
-        .replace(
-          /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-          (_match, key, separator, spacing, quote) =>
-            `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
-        );
+      return redactAppServerText(value);
     }
 
     if (Array.isArray(value)) {

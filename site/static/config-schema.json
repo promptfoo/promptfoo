@@ -59,13 +59,13 @@
           "$ref": "#/definitions/__schema40"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema41"
+          "$ref": "#/definitions/__schema45"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema47"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema48"
         }
       },
       "required": ["prompts"],
@@ -188,6 +188,9 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ANTHROPIC_CUSTOM_HEADERS": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -249,6 +252,9 @@
           "type": "string"
         },
         "CLAUDE_CODE_USE_VERTEX": {
+          "type": "string"
+        },
+        "CLAUDE_CONFIG_DIR": {
           "type": "string"
         },
         "CLOUDFLARE_ACCOUNT_ID": {
@@ -378,6 +384,9 @@
           "type": "string"
         },
         "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "MODEL_API_KEY": {
           "type": "string"
         },
         "MODELSLAB_API_KEY": {
@@ -1656,6 +1665,9 @@
                     "ANTHROPIC_BASE_URL": {
                       "type": "string"
                     },
+                    "ANTHROPIC_CUSTOM_HEADERS": {
+                      "type": "string"
+                    },
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
@@ -1717,6 +1729,9 @@
                       "type": "string"
                     },
                     "CLAUDE_CODE_USE_VERTEX": {
+                      "type": "string"
+                    },
+                    "CLAUDE_CONFIG_DIR": {
                       "type": "string"
                     },
                     "CLOUDFLARE_ACCOUNT_ID": {
@@ -1846,6 +1861,9 @@
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "MODEL_API_KEY": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {
@@ -2855,6 +2873,7 @@
                       "jailbreak",
                       "jailbreak-templates",
                       "jailbreak:composite",
+                      "jailbreak:goblin",
                       "jailbreak:hydra",
                       "jailbreak:likert",
                       "jailbreak:meta",
@@ -2909,6 +2928,7 @@
                           "jailbreak",
                           "jailbreak-templates",
                           "jailbreak:composite",
+                          "jailbreak:goblin",
                           "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
@@ -2949,7 +2969,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -3171,12 +3191,170 @@
           },
           "required": ["enabled", "endpoint"],
           "additionalProperties": false
+        },
+        "provider": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "tempo"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "$ref": "#/definitions/__schema42"
+                    },
+                    "username": {
+                      "$ref": "#/definitions/__schema43"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema44"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "braintrust"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["token"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "projectId", "auth"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "langfuse"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "password": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "token": {
+                      "not": {}
+                    }
+                  },
+                  "required": ["username", "password"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "auth"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "queryDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300000
         }
       },
       "required": ["enabled"],
       "additionalProperties": false
     },
     "__schema41": {
+      "type": "string",
+      "format": "uri"
+    },
+    "__schema42": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema43": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema44": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema45": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3219,15 +3397,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema46"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema46": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema47": {
       "type": "object",
       "properties": {
         "description": {
@@ -3355,7 +3533,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema46"
             }
           ]
         },
@@ -3429,7 +3607,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema48": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

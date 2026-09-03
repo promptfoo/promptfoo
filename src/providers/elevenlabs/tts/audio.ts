@@ -121,13 +121,3 @@ function estimateDuration(sizeBytes: number, format: OutputFormat): number {
   const bytesPerSecond = bitrate / 8;
   return (sizeBytes / bytesPerSecond) * 1000; // Convert to milliseconds
 }
-
-/**
- * Resolve voice ID from name (for future voice library support)
- * Currently just returns the input as-is
- */
-export function resolveVoiceId(voiceIdOrName: string): string {
-  // TODO: Implement voice library lookup
-  // For now, assume input is already a voice ID
-  return voiceIdOrName;
-}

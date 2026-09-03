@@ -1,12 +1,12 @@
 import { type Dirent, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import ts from 'typescript';
+import { type Program, parseSync } from 'oxc-parser';
 
 const DEFAULT_TEST_FILE_PATTERN = /\.(?:test|spec)\.(?:ts|tsx)$/;
 const DEFAULT_SNIPPET_LENGTH = 120;
 
-type DirectoryEntry = Pick<Dirent, 'isDirectory' | 'isFile' | 'name'>;
+type DirectoryEntry = Pick<Dirent, 'isDirectory' | 'name'>;
 
 export type HygieneDiagnostic = {
   ruleId: string;
@@ -18,19 +18,17 @@ export type HygieneDiagnostic = {
 };
 
 export type HygieneFile = {
-  absolutePath: string;
   file: string;
   source: string;
-  sourceFile: ts.SourceFile;
+  sourceFile: Program;
 };
 
 export type ReadDirectory = (directory: string) => readonly DirectoryEntry[];
 export type ReadSource = (file: string) => string;
-export type ParseSource = (file: string, source: string) => ts.SourceFile;
+export type ParseSource = (file: string, source: string) => Program;
 
 export type DiscoverTestFilesOptions = {
   readDirectory?: ReadDirectory;
-  testFilePattern?: RegExp;
 };
 
 export type HygieneScanSummary = {
@@ -58,8 +56,7 @@ type DiagnosticInput = {
 const defaultReadDirectory: ReadDirectory = (directory) =>
   readdirSync(directory, { withFileTypes: true });
 const defaultReadSource: ReadSource = (file) => readFileSync(file, 'utf8');
-const defaultParseSource: ParseSource = (file, source) =>
-  ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+const defaultParseSource: ParseSource = (file, source) => parseSync(file, source).program;
 
 function isMissingPathError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -68,11 +65,6 @@ function isMissingPathError(error: unknown): boolean {
 
   const code = (error as { code?: unknown }).code;
   return code === 'ENOENT' || code === 'ENOTDIR';
-}
-
-function matches(pattern: RegExp, value: string): boolean {
-  pattern.lastIndex = 0;
-  return pattern.test(value);
 }
 
 function compareStrings(left: string, right: string): number {
@@ -98,7 +90,6 @@ export function discoverTestFiles(
   options: DiscoverTestFilesOptions = {},
 ): string[] {
   const readDirectory = options.readDirectory ?? defaultReadDirectory;
-  const testFilePattern = options.testFilePattern ?? DEFAULT_TEST_FILE_PATTERN;
   const files: string[] = [];
 
   function walk(directory: string) {
@@ -120,7 +111,7 @@ export function discoverTestFiles(
 
       if (entry.isDirectory()) {
         walk(fullPath);
-      } else if (entry.isFile() && matches(testFilePattern, entry.name)) {
+      } else if (DEFAULT_TEST_FILE_PATTERN.test(fullPath)) {
         files.push(fullPath);
       }
     }
@@ -131,18 +122,15 @@ export function discoverTestFiles(
 }
 
 export function createHygieneFile({
-  absolutePath,
   file,
   parseSource = defaultParseSource,
   source,
 }: {
-  absolutePath?: string;
   file: string;
   parseSource?: ParseSource;
   source: string;
 }): HygieneFile {
   return {
-    absolutePath: absolutePath ?? file,
     file: file.replace(/\\/g, '/'),
     source,
     sourceFile: parseSource(file, source),
@@ -151,7 +139,9 @@ export function createHygieneFile({
 
 export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanSummary {
   const rootDir = path.resolve(options.rootDir);
-  const excludeFiles = new Set((options.excludeFiles ?? []).map((file) => path.resolve(file)));
+  const excludeFiles = new Set(
+    (options.excludeFiles ?? []).map((file) => path.resolve(rootDir, file)),
+  );
   const readFile = options.readFile ?? defaultReadSource;
   const parseSource = options.parseSource ?? defaultParseSource;
   let excludedFiles = 0;
@@ -160,11 +150,10 @@ export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanS
 
   const discoveredFiles = discoverTestFiles(rootDir, {
     readDirectory: options.readDirectory,
-    testFilePattern: options.testFilePattern,
   });
 
   for (const absolutePath of discoveredFiles) {
-    if (excludeFiles.has(path.resolve(absolutePath))) {
+    if (excludeFiles.has(absolutePath)) {
       excludedFiles += 1;
       continue;
     }
@@ -182,9 +171,9 @@ export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanS
 
     const file = toPosixRelativePath(rootDir, absolutePath);
     // Keep the parsed file scoped to this callback. Callers should retain only
-    // primitive diagnostics or counters so the source and parent-linked AST
+    // primitive diagnostics or counters so the source and AST
     // become collectible before the next file is processed.
-    options.scanFile(createHygieneFile({ absolutePath, file, parseSource, source }));
+    options.scanFile(createHygieneFile({ file, parseSource, source }));
     scannedFiles += 1;
   }
 
@@ -212,17 +201,17 @@ export function normalizeSnippet(
 
 export function createDiagnostic(file: HygieneFile, input: DiagnosticInput): HygieneDiagnostic {
   const start = Math.max(0, Math.min(input.start, file.source.length));
-  const position = file.sourceFile.getLineAndCharacterOfPosition(start);
-  const lineStarts = file.sourceFile.getLineStarts();
-  const lineStart = lineStarts[position.line] ?? 0;
-  const lineEnd = lineStarts[position.line + 1] ?? file.source.length;
-  const sourceLine = file.source.slice(lineStart, lineEnd).replace(/[\r\n]+$/, '');
+  const prefix = file.source.slice(0, start);
+  const lineStart = prefix.lastIndexOf('\n') + 1;
+  const nextNewline = file.source.indexOf('\n', start);
+  const lineEnd = nextNewline === -1 ? file.source.length : nextNewline;
+  const sourceLine = file.source.slice(lineStart, lineEnd).replace(/\r$/, '');
 
   return {
     ruleId: input.ruleId,
     file: file.file,
-    line: position.line + 1,
-    column: position.character + 1,
+    line: prefix.split('\n').length,
+    column: start - lineStart + 1,
     message: input.message,
     snippet: normalizeSnippet(input.snippet ?? sourceLine),
   };

@@ -3,7 +3,12 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
+import {
+  DEFAULT_GOOGLE_TARGET_ID,
+  DEFAULT_OPENAI_TARGET_ID,
+  DEFAULT_VERTEX_TARGET_ID,
+  OPENAI_TARGET_PLACEHOLDER,
+} from '../constants';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
@@ -151,15 +156,15 @@ const FoundationModelConfiguration = ({
       },
       google: {
         name: 'Google AI Studio',
-        defaultModel: 'google:gemini-2.5-pro',
-        placeholder: 'google:gemini-2.5-pro, google:gemini-2.5-flash',
+        defaultModel: DEFAULT_GOOGLE_TARGET_ID,
+        placeholder: `${DEFAULT_GOOGLE_TARGET_ID}, google:gemini-3.5-flash-lite`,
         docUrl: 'https://www.promptfoo.dev/docs/providers/google',
         envVar: 'GOOGLE_API_KEY | GEMINI_API_KEY | PALM_API_KEY',
       },
       vertex: {
         name: 'Google Vertex AI',
-        defaultModel: 'vertex:gemini-2.5-pro',
-        placeholder: 'vertex:gemini-2.5-pro, vertex:gemini-2.5-flash',
+        defaultModel: DEFAULT_VERTEX_TARGET_ID,
+        placeholder: `${DEFAULT_VERTEX_TARGET_ID}, vertex:gemini-3.5-flash-lite`,
         docUrl: 'https://www.promptfoo.dev/docs/providers/vertex',
         envVar: 'GOOGLE_APPLICATION_CREDENTIALS',
       },
@@ -200,8 +205,8 @@ const FoundationModelConfiguration = ({
       },
       bedrock: {
         name: 'AWS Bedrock',
-        defaultModel: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-        placeholder: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        defaultModel: 'bedrock:global.anthropic.claude-sonnet-5',
+        placeholder: 'global.anthropic.claude-sonnet-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
         envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
       },

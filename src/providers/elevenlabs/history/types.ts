@@ -42,15 +42,3 @@ export interface ConversationHistoryResponse {
     };
   };
 }
-
-/**
- * Query parameters for listing conversations
- */
-export interface ListConversationsParams {
-  agent_id?: string; // Filter by agent ID
-  status?: 'completed' | 'failed' | 'timeout' | 'in_progress'; // Filter by status
-  start_date?: string; // ISO 8601 date - conversations after this date
-  end_date?: string; // ISO 8601 date - conversations before this date
-  limit?: number; // Maximum conversations to return (default: 100)
-  offset?: number; // Pagination offset
-}

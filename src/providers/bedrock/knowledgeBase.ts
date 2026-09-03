@@ -263,7 +263,7 @@ export class AwsBedrockKnowledgeBaseProvider
       return {
         output,
         metadata: { citations },
-        tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 }, // TODO: Add token usage once Bedrock Knowledge Base API supports it
       };
     } catch (err) {
       return {

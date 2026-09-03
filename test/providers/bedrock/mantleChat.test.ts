@@ -152,6 +152,14 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/v1');
     });
 
+    it('identifies the actual Bedrock provider in telemetry', () => {
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect((provider as any).getGenAISystem()).toBe('bedrock');
+    });
+
     it('sends the real model id and posts to <base>/chat/completions', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockMantleChatProvider('deepseek.v3.1', {

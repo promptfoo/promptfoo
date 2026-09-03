@@ -54,7 +54,7 @@ tests:
   # Test 6: contains with numeric return
   - description: 'contains should handle numeric script output'
     vars:
-      prompt: 'The answer is 42'
+      prompt: 'The answer is 0'
     assert:
       - type: contains
         value: file://rubric-generator.cjs:numericValue
