@@ -112,6 +112,22 @@ describe('AbliterationProvider', () => {
     },
   );
 
+  it.each<Record<string, string>>([{}, { effort: '' }])(
+    'omits empty rendered reasoning effort for vars %j',
+    async (vars) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: '{{effort}}' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: { raw: 'Test prompt', label: 'test' },
+        vars,
+      });
+
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
+
   it.each(['low', null])('preserves passthrough reasoning effort %s', async (reasoningEffort) => {
     const provider = new AbliterationProvider('abliterated-model-large-v2', {
       config: {
