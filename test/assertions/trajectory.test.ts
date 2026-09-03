@@ -689,6 +689,18 @@ describe('trajectory:step-status', () => {
     expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false });
   });
 
+  it('handles a long non-matching remote status message', () => {
+    const params = statusParams(2, 'error'.repeat(20_000));
+    params.assertion.value = {
+      name: 'search_orders',
+      status: 'error',
+      message: '*error*error*error*error*timeout',
+    };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
+    params.inverse = true;
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true, score: 1 });
+  });
+
   it('matches any qualifying step and uses the rendered value', () => {
     const params = statusParams(1);
     params.renderedValue = { name: 'search_orders', status: 'success' };

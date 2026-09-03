@@ -5,9 +5,9 @@ import {
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
-import { TRAJECTORY_STEP_TYPES } from '../types/tracing';
 import { matchesPattern } from './traceUtils';
 
+import type { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
