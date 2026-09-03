@@ -66,15 +66,24 @@ type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaMessagesConfig;
 };
 
-// Published Meta Model API pricing in USD per token (the pricing page lists
-// $1.25 / $0.15 (cached) / $4.25 per 1M tokens for muse-spark-1.1; reasoning
-// tokens bill at the output rate). Models missing from this table fall back to
-// user-supplied `cost` / `inputCost` / `outputCost` overrides.
-// https://dev.meta.ai/docs/getting-started/pricing-rate-limits
+// Published Meta Model API pricing in USD per token. Reasoning tokens bill at
+// the output rate. Contributor models permit training on prompts and completions
+// and must be selected explicitly. Unknown models use caller pricing overrides.
+// https://dev.meta.ai/docs/pricing-rate-limits
 export const META_MODEL_PRICES: Record<
   string,
   { input: number; cachedInput: number; output: number }
 > = {
+  'muse-spark-1.3': {
+    input: 1.25 / 1e6,
+    cachedInput: 0.15 / 1e6,
+    output: 4.25 / 1e6,
+  },
+  'muse-spark-1.3-contributor': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.002 / 1e6,
+    output: 0.2 / 1e6,
+  },
   'muse-spark-1.1': {
     input: 1.25 / 1e6,
     cachedInput: 0.15 / 1e6,

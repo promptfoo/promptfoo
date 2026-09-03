@@ -10,12 +10,12 @@ prompts:
 # before answering, and reasoning tokens bill at the output rate. Comparing
 # minimal vs high shows the latency/quality trade-off on the same model.
 providers:
-  - id: meta:muse-spark-1.1
-    label: 'Muse Spark 1.1 (minimal reasoning)'
+  - id: meta:muse-spark-1.3
+    label: 'Muse Spark 1.3 (minimal reasoning)'
     config:
       reasoning_effort: minimal
-  - id: meta:muse-spark-1.1
-    label: 'Muse Spark 1.1 (high reasoning)'
+  - id: meta:muse-spark-1.3
+    label: 'Muse Spark 1.3 (high reasoning)'
     config:
       reasoning_effort: high
 

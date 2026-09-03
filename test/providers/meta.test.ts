@@ -420,22 +420,28 @@ describe('MetaProvider request body shaping', () => {
   });
 });
 
+// Cost for 1,000 input tokens (400 cached) and 500 output tokens.
+const museSparkPricingCases = [
+  { modelName: 'muse-spark-1.1', expectedCost: 0.002935 },
+  { modelName: 'muse-spark-1.3', expectedCost: 0.002935 },
+  { modelName: 'muse-spark-1.3-contributor', expectedCost: 0.0001608 },
+];
+
 describe('calculateMetaCost', () => {
-  it('uses the built-in muse-spark-1.1 price table', () => {
+  it.each(['muse-spark-1.1', 'muse-spark-1.3'])('uses standard pricing for %s', (modelName) => {
     // 1000 input at $1.25/M + 500 output at $4.25/M
-    expect(calculateMetaCost('muse-spark-1.1', {}, 1000, 500)).toBeCloseTo(
+    expect(calculateMetaCost(modelName, {}, 1000, 500)).toBeCloseTo(
       (1000 * 1.25 + 500 * 4.25) / 1e6,
       12,
     );
   });
 
-  it('bills cached prompt tokens at the cached-input rate', () => {
-    // 600 uncached at $1.25/M, 400 cached at $0.15/M, 500 output at $4.25/M
-    expect(calculateMetaCost('muse-spark-1.1', {}, 1000, 500, 400)).toBeCloseTo(
-      (600 * 1.25 + 400 * 0.15 + 500 * 4.25) / 1e6,
-      12,
-    );
-  });
+  it.each(museSparkPricingCases)(
+    'bills cached prompt tokens at the correct rate for $modelName',
+    ({ modelName, expectedCost }) => {
+      expect(calculateMetaCost(modelName, {}, 1000, 500, 400)).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   it('returns undefined for unknown models without user pricing', () => {
     expect(calculateMetaCost('muse-unknown', {}, 1000, 500)).toBeUndefined();
@@ -496,14 +502,17 @@ describe('MetaProvider callApi cost', () => {
     statusText: 'OK',
   };
 
-  it('fills in cost from the built-in price table (incl. cached tokens)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
-      config: { apiKey: 'LLM|1|k' },
-    });
-    const result = await provider.callApi('Say hi');
-    expect(result.cost).toBeCloseTo((6 * 1.25 + 4 * 0.15 + 5 * 4.25) / 1e6, 12);
-  });
+  it.each(museSparkPricingCases)(
+    'calculates Chat Completions cost including cached tokens for $modelName',
+    async ({ modelName, expectedCost }) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
+      const provider = createMetaProvider(`meta:chat:${modelName}`, {
+        config: { apiKey: 'LLM|1|k' },
+      });
+      const result = await provider.callApi('Say hi');
+      expect(result.cost).toBeCloseTo(expectedCost / 100, 12);
+    },
+  );
 
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
@@ -582,22 +591,25 @@ describe('MetaResponsesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it('fills in cost from Responses API usage', () => {
-    const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
-    const billed = (provider as any).applyBilling(
-      { output: 'hi' },
-      {
-        usage: {
-          input_tokens: 1000,
-          output_tokens: 500,
-          input_tokens_details: { cached_tokens: 400 },
+  it.each(museSparkPricingCases)(
+    'calculates Responses API cost including cached tokens for $modelName',
+    ({ modelName, expectedCost }) => {
+      const provider = createMetaProvider(`meta:responses:${modelName}`) as MetaResponsesProvider;
+      const billed = (provider as any).applyBilling(
+        { output: 'hi' },
+        {
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 400 },
+          },
         },
-      },
-      provider.config,
-      false,
-    );
-    expect(billed.cost).toBeCloseTo((600 * 1.25 + 400 * 0.15 + 500 * 4.25) / 1e6, 12);
-  });
+        provider.config,
+        false,
+      );
+      expect(billed.cost).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   it('reports zero-cost for cached responses via the base billing path', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
@@ -1049,27 +1061,30 @@ describe('MetaMessagesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it('fills in cost from Anthropic-format usage (cache reads billed at the cached rate)', async () => {
-    const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'hi',
-      tokenUsage: {
-        // Anthropic-format: prompt is total input incl. cache reads.
-        total: 1500,
-        prompt: 1000,
-        completion: 500,
-        completionDetails: { cacheReadInputTokens: 400, cacheCreationInputTokens: 0 },
-      },
-    });
-    try {
-      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
-        config: { apiKey: 'LLM|1|k' },
+  it.each(museSparkPricingCases)(
+    'calculates Messages API cost including cached tokens for $modelName',
+    async ({ modelName, expectedCost }) => {
+      const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'hi',
+        tokenUsage: {
+          // Anthropic-format: prompt is total input incl. cache reads.
+          total: 1500,
+          prompt: 1000,
+          completion: 500,
+          completionDetails: { cacheReadInputTokens: 400, cacheCreationInputTokens: 0 },
+        },
       });
-      const result = await provider.callApi('Say hi');
-      expect(result.cost).toBeCloseTo((600 * 1.25 + 400 * 0.15 + 500 * 4.25) / 1e6, 12);
-    } finally {
-      spy.mockRestore();
-    }
-  });
+      try {
+        const provider = createMetaProvider(`meta:messages:${modelName}`, {
+          config: { apiKey: 'LLM|1|k' },
+        });
+        const result = await provider.callApi('Say hi');
+        expect(result.cost).toBeCloseTo(expectedCost, 12);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   it('does not attach cost to usage-less error responses or cached responses', async () => {
     const spy = vi
