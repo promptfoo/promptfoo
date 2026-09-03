@@ -99,13 +99,18 @@ describe('AbliterationProvider', () => {
     expect(provider.config.reasoning_effort).toBe('max');
   });
 
-  it('leaves the server reasoning default when effort is unset', async () => {
-    const provider = new AbliterationProvider('abliterated-model-large-v2');
+  it.each([undefined, null])(
+    'leaves the server reasoning default when effort is %s',
+    async (effort) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: effort },
+      });
 
-    const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
 
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
 
   it.each(['low', null])('preserves passthrough reasoning effort %s', async (reasoningEffort) => {
     const provider = new AbliterationProvider('abliterated-model-large-v2', {

@@ -60,7 +60,7 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
     // The shared provider only forwards reasoning_effort for recognized OpenAI
     // model names. All Abliteration models support it while retaining max_tokens.
     if (
-      config.reasoning_effort !== undefined &&
+      config.reasoning_effort &&
       !Object.prototype.hasOwnProperty.call(config.passthrough ?? {}, 'reasoning_effort')
     ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
