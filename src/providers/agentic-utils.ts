@@ -20,6 +20,7 @@ import type { ApiProvider, ProviderResponse } from '../types/index';
 const AGENTIC_PROVIDER_IDS = [
   'anthropic:claude-agent-sdk',
   'anthropic:claude-code',
+  'muse-code',
   'openai:codex',
   'openai:codex-app-server',
   'openai:codex-desktop',

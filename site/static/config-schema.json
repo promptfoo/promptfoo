@@ -365,6 +365,12 @@
         "LOCALAI_BASE_URL": {
           "type": "string"
         },
+        "META_API_KEY": {
+          "type": "string"
+        },
+        "MUSE_CLI_PATH": {
+          "type": "string"
+        },
         "MISTRAL_API_BASE_URL": {
           "type": "string"
         },
@@ -1840,6 +1846,12 @@
                       "type": "string"
                     },
                     "LOCALAI_BASE_URL": {
+                      "type": "string"
+                    },
+                    "META_API_KEY": {
+                      "type": "string"
+                    },
+                    "MUSE_CLI_PATH": {
                       "type": "string"
                     },
                     "MISTRAL_API_BASE_URL": {

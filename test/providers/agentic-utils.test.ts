@@ -49,6 +49,8 @@ describe('agentic-utils', () => {
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
       'anthropic:claude-code:sonnet',
+      'muse-code',
+      'muse-code:muse-spark-1.2',
       'openinterpreter',
       'openinterpreter:gpt-5.4',
       'opencode',

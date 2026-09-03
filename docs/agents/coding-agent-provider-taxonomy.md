@@ -26,6 +26,7 @@ The main providers in this family today are:
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
 | Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
+| Muse Code               | `muse-code`, `muse-code:<model>`                      | Local `muse exec --json` process                |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -37,13 +38,14 @@ stateful coding-agent runtime.
 
 The first question is where promptfoo stops and the agent runtime starts.
 
-| Boundary                 | Meaning                                                       | Current examples                         |
-| ------------------------ | ------------------------------------------------------------- | ---------------------------------------- |
-| In-process SDK           | promptfoo calls a package API directly.                       | Codex SDK, Claude Agent SDK              |
-| Managed local server     | promptfoo starts a server, then talks to it through a client. | OpenCode when `baseUrl` is unset         |
-| Existing server          | promptfoo connects to a runtime it does not configure.        | OpenCode with `baseUrl`                  |
-| Local app-server process | promptfoo starts a rich-client protocol server over stdio.    | Codex app-server                         |
-| Desktop UI process       | Human-facing native app process.                              | Codex Desktop app, not directly attached |
+| Boundary                 | Meaning                                                         | Current examples                         |
+| ------------------------ | --------------------------------------------------------------- | ---------------------------------------- |
+| In-process SDK           | promptfoo calls a package API directly.                         | Codex SDK, Claude Agent SDK              |
+| Local CLI process        | promptfoo starts a headless command and reads its event stream. | Muse Code                                |
+| Managed local server     | promptfoo starts a server, then talks to it through a client.   | OpenCode when `baseUrl` is unset         |
+| Existing server          | promptfoo connects to a runtime it does not configure.          | OpenCode with `baseUrl`                  |
+| Local app-server process | promptfoo starts a rich-client protocol server over stdio.      | Codex app-server                         |
+| Desktop UI process       | Human-facing native app process.                                | Codex Desktop app, not directly attached |
 
 This distinction matters because it controls what promptfoo can guarantee. If
 promptfoo starts the runtime, it can set env vars, working directories, sandbox
@@ -170,6 +172,7 @@ Useful files:
 
 - `src/providers/agentic-utils.ts`
 - `src/providers/claude-agent-sdk.ts`
+- `src/providers/muse-code.ts`
 - `src/providers/opencode-sdk.ts`
 - `src/providers/openai/codex-sdk.ts`
 - `src/providers/openai/codex-security.ts`
@@ -316,6 +319,24 @@ Docs and examples:
 
 - `site/docs/providers/claude-agent-sdk.md`
 - `examples/claude-agent-sdk/`
+
+### Muse Code
+
+Status: implemented through the installed Muse Code CLI (1.0.2 or later).
+
+Provider IDs: `muse-code`, `muse-code:<model>`.
+
+The provider launches `muse exec --json` with a private prompt file, an explicit
+workspace, and native model, approval, sandbox, and tool controls. New calls use
+fresh sessions without retained logs by default. Explicit session reuse requires
+a stable workspace and serial calls. Cancellation, timeouts, and output limits
+stop the process and clean up temporary files.
+
+Results include final root-run text, session/run IDs, and the raw versioned journal.
+Missing completion events and runtime failures are errors. Response caching is
+disabled. Tracing covers the provider call; token usage, costs, and individual tool
+spans are not yet normalized. See `site/docs/providers/muse-code.md` and
+`examples/muse-code/`.
 
 ### OpenCode SDK
 
