@@ -967,9 +967,11 @@ tests:
 The assertion passes when at least one step matches; prefix the type with `not-`
 to require that no step matches. Add `message` to match the recorded status message
 with a glob pattern (`message: ''` matches only an empty or absent message), or add
-`type: tool`, `command`, or another trajectory step type to narrow the match. This
-assertion is useful for distinguishing a correctly selected tool that failed from a
-tool that completed successfully, including retry and forbidden-error evaluations.
+`type` to narrow the match to `command`, `message`, `reasoning`, `search`, `span`, or
+`tool` (or a nonempty array of these types). Matcher fields support test-variable
+templates such as `name: '{{ expected_tool }}'` or `status: '{{ expected_status }}'`.
+This assertion distinguishes a correctly selected tool that failed from a tool
+that completed successfully, including retry and forbidden-error evaluations.
 
 ### Javascript
 
