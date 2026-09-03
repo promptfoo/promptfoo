@@ -105,6 +105,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'password',
   'passwd',
   'pwd',
+  'pgpassword', // PostgreSQL's standard unseparated environment variable
 
   // Secret variants
   'secret',
@@ -305,6 +306,35 @@ function isCredentialValue(value: string): boolean {
   );
 }
 
+function collectAuthorizationCredentials(value: string, credentials: Set<string>): void {
+  const match = value.match(/^\s*(bearer|basic|token|api[-_]?key)\s+(\S+)\s*$/i);
+  if (!match) {
+    return;
+  }
+  credentials.add(match[2]);
+  if (match[1].toLowerCase() !== 'basic') {
+    return;
+  }
+  try {
+    const binary = atob(match[2]);
+    const utf8 = new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+    for (const decoded of new Set([binary, utf8])) {
+      const separator = decoded.indexOf(':');
+      const parts =
+        separator === -1
+          ? [decoded]
+          : [decoded, decoded.slice(0, separator), decoded.slice(separator + 1)];
+      for (const part of parts) {
+        if (part) {
+          credentials.add(part);
+        }
+      }
+    }
+  } catch {
+    // Malformed Basic values are still protected by their original credential component.
+  }
+}
+
 function collectRawUrlCredentials(
   value: string,
   addCredential: (raw: string, formEncoded?: boolean) => void,
@@ -406,6 +436,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
       const operational = key.toLowerCase() === 'muse_auth_path';
       if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
         credentials.add(value);
+        collectAuthorizationCredentials(value, credentials);
       }
       addUrlCredentials(value);
     }
@@ -1080,7 +1111,10 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
       );
       sanitized[key] = recursiveSanitize(env, depth + 1, maxDepth);
     } else if (normalizeFieldName(key) === 'baseurl' && typeof value === 'string') {
-      sanitized[key] = collectEnvCredentials({}, value).length ? REDACTED : sanitizeUrl(value);
+      // Placeholders are not literal credentials. Keep the URL sanitizer's
+      // template preservation while still detecting mixed literal/template values.
+      const literalUrl = value.replace(NUNJUCKS_PLACEHOLDER, '');
+      sanitized[key] = collectEnvCredentials({}, literalUrl).length ? REDACTED : sanitizeUrl(value);
     } else if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretField(key)) {

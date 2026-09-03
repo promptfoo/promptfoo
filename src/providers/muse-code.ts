@@ -33,7 +33,12 @@ const MuseCodeConfigSchema = z.object({
   muse_path: z.string().min(1).optional(),
   working_dir: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
-  base_url: z.url().optional(),
+  base_url: z
+    .url()
+    .refine((value) => collectEnvCredentials({}, value).length === 0, {
+      message: 'base_url must not contain credentials; use apiKey or META_API_KEY instead',
+    })
+    .optional(),
   reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra']).optional(),
   approval_mode: z.enum(['untrusted', 'on-request', 'never']).optional(),
   approval_judge: z.boolean().optional(),

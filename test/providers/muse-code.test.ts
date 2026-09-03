@@ -536,6 +536,26 @@ describe('MuseCodeProvider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'https://user:short-secret@meta.example/v1',
+    'https://short-secret@meta.example/v1',
+    'https://meta.example/v1?api_key=short-secret',
+    'https://meta.example/v1?github_pat=short-secret',
+    'https://meta.example/v1#token=short-secret',
+  ])('rejects credentials in base_url before spawning: %s', async (baseUrl) => {
+    expect(() => provider({ config: { base_url: baseUrl } })).toThrow(
+      'base_url must not contain credentials',
+    );
+    const instance = provider({ config: { base_url: '{{endpoint}}' } });
+    const response = await instance.callApi(prompt, {
+      vars: { endpoint: baseUrl },
+      prompt: { raw: prompt, label: 'test' },
+    });
+    expect(response.error).toContain('base_url must not contain credentials');
+    expect(JSON.stringify(response)).not.toContain('short-secret');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('validates prompt-level overrides before starting a process', async () => {
     const result = await provider().callApi(prompt, {
       vars: {},
@@ -658,12 +678,12 @@ describe('MuseCodeProvider', () => {
       };
       const response = await provider({
         config: {
-          base_url: 'https://endpoint-user:endpoint-password@meta.example',
           env: {
             GITHUB_TOKEN: sensitive[0],
             DATABASE_PASSWORD: sensitive[1],
             DEPLOY_KEY: sensitive[2],
             SERVICE_URL: 'https://service.example?api_key=query-credential',
+            ENDPOINT_URL: 'https://endpoint-user:endpoint-password@meta.example',
             PUBLIC_SETTING: 'keep-me',
           },
         },
@@ -713,7 +733,7 @@ describe('MuseCodeProvider', () => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
       child.close();
     };
-    const response = await provider({ config: { base_url: baseUrl } }).callApi(prompt);
+    const response = await provider({ config: { env: { SERVICE_URL: baseUrl } } }).callApi(prompt);
     expect(response.error).toBeUndefined();
     expect(response.output).toBe('[REDACTED]');
     expect(JSON.stringify(response)).not.toContain(raw);
@@ -724,6 +744,7 @@ describe('MuseCodeProvider', () => {
     ['GITHUB_TOKEN_VALUE', 'synthetic-token-value'],
     ['servicePasswordValue', 'synthetic-password'],
     ['DEPLOY_CREDENTIAL', 'synthetic-credential'],
+    ['PGPASSWORD', 'short-pg-pass'],
     ['CUSTOM_SETTING', `sk-${'a'.repeat(24)}`],
     ['GIT_ACCESS', `ghp_${'a'.repeat(36)}`],
     ['USER', `ghp_${'b'.repeat(36)}`],
@@ -739,6 +760,48 @@ describe('MuseCodeProvider', () => {
     const response = await provider({ config: { env: { [name]: value } } }).callApi(prompt);
     expect(response.output).toBe('[REDACTED]');
     expect(JSON.stringify(response)).not.toContain(value);
+  });
+
+  it.each([
+    ['Bearer short-secret', ['short-secret']],
+    ['token short-secret', ['short-secret']],
+    ['ApiKey short-secret', ['short-secret']],
+    [
+      `Basic ${Buffer.from('basic-user:short-pass').toString('base64')}`,
+      [
+        Buffer.from('basic-user:short-pass').toString('base64'),
+        'basic-user:short-pass',
+        'short-pass',
+      ],
+    ],
+    [
+      `Basic ${Buffer.from('unicode-user:café-pass').toString('base64')}`,
+      [Buffer.from('unicode-user:café-pass').toString('base64'), 'café-pass'],
+    ],
+    ['Basic malformed***', ['malformed***']],
+  ] as const)('redacts authorization components from %s', async (authorization, components) => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = components.join(' | ');
+    events.at(-1)!.payload.details = Object.fromEntries(components.map((value) => [value, value]));
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    let tracedResponse: unknown;
+    vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => {
+      const response = await fn({} as Span);
+      tracedResponse = response;
+      return response;
+    });
+    const response = await provider({
+      config: { env: { AUTHORIZATION: authorization } },
+    }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe(components.map(() => '[REDACTED]').join(' | '));
+    expect(tracedResponse).toEqual(response);
+    for (const component of components) {
+      expect(JSON.stringify(tracedResponse)).not.toContain(component);
+    }
   });
 
   it.each(['HOTKEY', 'MONKEY', 'TOKENIZER_SETTING'])(

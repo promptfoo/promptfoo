@@ -177,6 +177,9 @@ describe('sanitizeObject', () => {
     ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
     ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
     ['base_url', 'https://example.test/v1#api_key=short-secret'],
+    ['base_url', 'https://example.test/v1?api_key=short-{{ env.SUFFIX }}'],
+    ['baseUrl', 'https://example.test/v1?github_pat={{ env.PREFIX }}-secret'],
+    ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}&token=literal-secret'],
   ])('redacts credentials in endpoint field %s: %s', (key, value) => {
     expect(sanitizeObject({ [key]: value })).toEqual({ [key]: '[REDACTED]' });
   });
@@ -186,10 +189,22 @@ describe('sanitizeObject', () => {
     expect(sanitizeObject({ base_url: baseUrl })).toEqual({ base_url: baseUrl });
   });
 
+  it.each([
+    ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}'],
+    ['baseUrl', 'https://example.test/v1?github_pat={{ env.GITHUB_PAT }}'],
+    ['base_url', 'https://{{ env.HOST }}/v1?api_key={{ env.META_API_KEY | urlencode }}'],
+    ['base_url', 'https://example.test/v1#token={{ env.TOKEN }}'],
+    ['base_url', '{{ env.ENDPOINT }}'],
+  ])('preserves unresolved credential templates in %s: %s', (key, value) => {
+    expect(sanitizeObject({ [key]: value })).toEqual({ [key]: value });
+  });
+
   it('redacts credential-bearing environment entries while preserving ordinary settings', () => {
     const env = {
       GITHUB_PAT: 'abc123',
       DATABASE_PASSWORD: 'short-pass',
+      PGPASSWORD: 'short-pg-pass',
+      AUTHORIZATION: 'Bearer short-secret',
       servicePasswordValue: 'service-pass',
       DEPLOY_CREDENTIAL: 'deploy-credential',
       CI_PW: 'ci-password',
@@ -205,6 +220,8 @@ describe('sanitizeObject', () => {
       env: {
         GITHUB_PAT: '[REDACTED]',
         DATABASE_PASSWORD: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        AUTHORIZATION: '[REDACTED]',
         servicePasswordValue: '[REDACTED]',
         DEPLOY_CREDENTIAL: '[REDACTED]',
         CI_PW: '[REDACTED]',

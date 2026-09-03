@@ -200,6 +200,8 @@ describe('writeOutput', () => {
               META_API_KEY: 'meta-child-dev-key',
               GITHUB_PAT: 'github-child-dev-pat',
               DATABASE_PASSWORD: 'database-child-pass',
+              PGPASSWORD: 'postgres-child-pass',
+              AUTHORIZATION: 'Bearer authorization-child-token',
               HTTPS_PROXY: 'http://user:proxy-child-pass@proxy.example:8080',
               HOTKEY: 'ctrl+s',
               PUBLIC_SETTING: 'keep-me',
@@ -238,6 +240,8 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[1].config.env.META_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.GITHUB_PAT).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.DATABASE_PASSWORD).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.PGPASSWORD).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.AUTHORIZATION).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.HTTPS_PROXY).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.HOTKEY).toBe('ctrl+s');
     expect(parsed.config.providers[1].config.env.PUBLIC_SETTING).toBe('keep-me');
@@ -247,6 +251,8 @@ describe('writeOutput', () => {
       'endpoint-config-secret',
       'github-child-dev-pat',
       'database-child-pass',
+      'postgres-child-pass',
+      'authorization-child-token',
       'proxy-child-pass',
     ]) {
       expect(outputJson).not.toContain(credential);
