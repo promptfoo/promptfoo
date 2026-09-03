@@ -121,6 +121,19 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains-all', value: '["foo", "bar"]' }]);
   });
 
+  it.each(['trajectory:step-status', 'not-trajectory:step-status'] as const)(
+    'offers %s in the assertion selector',
+    async (type) => {
+      const user = userEvent.setup();
+      renderComponent(
+        <AssertsForm onAdd={onAdd} initialValues={[{ type: 'equals', value: '' }]} />,
+      );
+      await user.click(screen.getByRole('combobox', { name: 'Type' }));
+      await user.click(await screen.findByRole('option', { name: type }));
+      expect(onAdd).toHaveBeenCalledWith([{ type, value: '' }]);
+    },
+  );
+
   it('should handle undefined initialValues gracefully by defaulting to an empty array', () => {
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={[]} />);
 

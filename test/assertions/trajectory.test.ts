@@ -627,6 +627,107 @@ describe('trajectory:step-status', () => {
     params.inverse = true;
     expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
   });
+
+  it.each([
+    [1, 'success'],
+    [200, 'success'],
+    [399, 'success'],
+    [2, 'error'],
+    [400, 'error'],
+    [599, 'error'],
+  ] as const)('matches status code %s as %s', (code, status) => {
+    const params = statusParams(code);
+    params.assertion.value = { name: 'search_orders', status };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([undefined, 0, 199, 600])('does not infer a semantic status from %s', (code) => {
+    const params = statusParams(code);
+    for (const status of ['success', 'error']) {
+      params.assertion.value = { name: 'search_orders', status };
+      expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
+    }
+  });
+
+  it('can explicitly match the numeric unset code', () => {
+    const params = statusParams(0);
+    params.assertion.value = { name: 'search_orders', status: 0 };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([true, false])('describes inverse matches accurately when matched=%s', (matched) => {
+    const params = statusParams(matched ? 2 : 1, undefined, true);
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({
+      pass: !matched,
+      score: matched ? 0 : 1,
+      reason: `${matched ? 'Trajectory step' : 'No trajectory step'} "search_orders" matched forbidden status error`,
+    });
+  });
+
+  it('applies an explicitly empty message pattern', () => {
+    const params = statusParams(2, 'timeout');
+    params.assertion.value = { name: 'search_orders', status: 'error', message: '' };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
+
+    params.assertionValueContext.trace!.spans[1].statusMessage = '';
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('matches the name, type, status, and message on the same step', () => {
+    const params = statusParams(2, 'request timeout');
+    params.assertion.value = {
+      pattern: 'search_*',
+      type: 'tool',
+      status: 'error',
+      message: '*timeout',
+    };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true });
+
+    params.assertion.value = { name: 'compose_reply', status: 'error', message: '*timeout' };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false });
+    params.assertion.value = { name: 'search_orders', type: 'command', status: 'error' };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false });
+  });
+
+  it('matches any qualifying step and uses the rendered value', () => {
+    const params = statusParams(1);
+    params.renderedValue = { name: 'search_orders', status: 'success' };
+    params.assertionValueContext.trace!.spans.push({
+      ...mockTraceData.spans[1],
+      spanId: 'failed-retry',
+      statusCode: 2,
+    });
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true });
+    params.renderedValue = { name: 'search_orders', status: 'error' };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true });
+  });
+
+  it.each(['name', 'pattern', 'message'])('rejects non-string %s fields', (field) => {
+    const params = statusParams(2);
+    params.assertion.value = { name: 'search_orders', status: 'error', [field]: 123 };
+    expect(() => handleTrajectoryStepStatus(params)).toThrow(`${field} must be a string`);
+  });
+
+  it.each([NaN, Infinity, -Infinity])('rejects non-finite status %s', (status) => {
+    const params = statusParams(2);
+    params.assertion.value = { name: 'search_orders', status };
+    expect(() => handleTrajectoryStepStatus(params)).toThrow(/finite number/);
+  });
+
+  it.each([undefined, 'error', [], {}, { name: 'search_orders', status: 'failed' }])(
+    'rejects an invalid matcher %j',
+    (value) => {
+      const params = statusParams(2);
+      params.assertion.value = value;
+      expect(() => handleTrajectoryStepStatus(params)).toThrow(/trajectory:step-status assertion/);
+    },
+  );
+
+  it('reports missing trace data', () => {
+    const params = statusParams(2);
+    params.assertionValueContext.trace = undefined;
+    expect(() => handleTrajectoryStepStatus(params)).toThrow(/No trace data available/);
+  });
 });
 
 describe('trajectory assertions', () => {

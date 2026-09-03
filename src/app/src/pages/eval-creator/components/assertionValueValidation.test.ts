@@ -424,6 +424,51 @@ describe('named matcher assertions', () => {
   });
 });
 
+describe('trajectory:step-status', () => {
+  it.each(['trajectory:step-status', 'not-trajectory:step-status'] as const)(
+    'accepts valid %s matchers',
+    (type) => {
+      for (const status of ['success', 'error', 0, 429]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: { name: 'search', status } })),
+        ).toBeUndefined();
+      }
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, value: { pattern: 'search_*', status: 'error', message: '' } }),
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it.each(['name', 'pattern', 'message'])('rejects a non-string %s', (field) => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:step-status',
+          value: { name: 'search', pattern: '*', status: 'error', [field]: 123 },
+        }),
+      ),
+    ).toMatch(/strings/);
+  });
+
+  it.each([undefined, 'failed', NaN, Infinity])('rejects invalid status %s', (status) => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-status', value: { name: 'search', status } }),
+      ),
+    ).toMatch(/status/);
+  });
+
+  it('requires a name or pattern', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-status', value: { status: 'success' } }),
+      ),
+    ).toMatch(/name or pattern/);
+  });
+});
+
 describe('perplexity-score threshold', () => {
   it('rejects thresholds outside [0,1]', () => {
     expect(

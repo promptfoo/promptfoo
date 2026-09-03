@@ -423,6 +423,13 @@ function getTrajectoryStepStatusValueError(value: unknown): string | undefined {
     return 'Enter JSON with a trajectory step name or pattern and status.';
   }
   if (
+    ['name', 'pattern', 'message'].some(
+      (field) => value[field] !== undefined && typeof value[field] !== 'string',
+    )
+  ) {
+    return 'Set trajectory step name, pattern, and message to strings.';
+  }
+  if (
     value.status !== 'success' &&
     value.status !== 'error' &&
     (typeof value.status !== 'number' || !Number.isFinite(value.status))

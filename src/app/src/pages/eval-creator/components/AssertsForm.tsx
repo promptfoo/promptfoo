@@ -67,6 +67,7 @@ const assertTypes: AssertionType[] = [
   'trajectory:tool-used',
   'trajectory:tool-sequence',
   'trajectory:step-count',
+  'trajectory:step-status',
 
   // Metrics
   'bleu',
@@ -90,6 +91,7 @@ const assertTypes: AssertionType[] = [
   'not-rouge-n',
   'not-similar',
   'not-starts-with',
+  'not-trajectory:step-status',
   'not-webhook',
 ];
 

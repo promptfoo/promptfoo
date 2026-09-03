@@ -40,8 +40,6 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   ignore?: string | string[];
 }
 
-interface TrajectoryStepStatusValue extends TrajectoryStepStatusMatcher {}
-
 function getTraceOrThrow(params: AssertionParams) {
   const trace = params.assertionValueContext.trace;
   if (!trace || !trace.spans) {
@@ -222,37 +220,40 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   };
 };
 
-function resolveStepStatusValue(value: unknown): TrajectoryStepStatusValue {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+function resolveStepStatusValue(value: unknown): TrajectoryStepStatusMatcher {
+  if (!isRecord(value)) {
     throw new Error('trajectory:step-status assertion must have an object value');
   }
-  const candidate = value as Partial<TrajectoryStepStatusValue>;
+  const candidate = value as Partial<TrajectoryStepStatusMatcher>;
+  for (const field of ['name', 'pattern', 'message'] as const) {
+    if (candidate[field] !== undefined && typeof candidate[field] !== 'string') {
+      throw new Error(`trajectory:step-status assertion ${field} must be a string`);
+    }
+  }
   if (
     !(
       candidate.status === 'success' ||
       candidate.status === 'error' ||
-      typeof candidate.status === 'number'
+      (typeof candidate.status === 'number' && Number.isFinite(candidate.status))
     )
   ) {
     throw new Error(
-      'trajectory:step-status assertion status must be "success", "error", or a number',
+      'trajectory:step-status assertion status must be "success", "error", or a finite number',
     );
   }
   requireNamedTrajectoryMatcher(candidate, 'trajectory:step-status');
-  return candidate as TrajectoryStepStatusValue;
+  return candidate as TrajectoryStepStatusMatcher;
 }
 
 export const handleTrajectoryStepStatus = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const matcher = resolveStepStatusValue(params.renderedValue ?? params.assertion.value);
-  const matchingSteps = extractTrajectorySteps(trace).filter((step) =>
+  const matched = extractTrajectorySteps(trace).some((step) =>
     matchesTrajectoryStepStatus(step, matcher),
   );
-  const pass = params.inverse ? matchingSteps.length === 0 : matchingSteps.length > 0;
-  const label = matcher.pattern || matcher.name || '*';
-  const reason = pass
-    ? `Trajectory step "${label}" matched status ${String(matcher.status)}`
-    : `No trajectory step "${label}" matched status ${String(matcher.status)}`;
+  const pass = applyInverse(matched, params.inverse);
+  const label = matcher.pattern || matcher.name;
+  const reason = `${matched ? 'Trajectory step' : 'No trajectory step'} "${label}" matched ${params.inverse ? 'forbidden ' : ''}status ${String(matcher.status)}`;
   return { pass, score: pass ? 1 : 0, reason, assertion: params.assertion };
 };
 
