@@ -202,6 +202,7 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -1786,6 +1787,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
+        ['gpt-6-astra', 'max'],
+        ['gpt-6-astra', 'ultra'],
         ['gpt-5.6-sol', 'max'],
         ['gpt-5.6-sol', 'ultra'],
         ['gpt-5.6-terra', 'max'],
@@ -3095,6 +3098,7 @@ describe('OpenAICodexSDKProvider', () => {
       );
 
       it.each([
+        ['gpt-6-astra', 10, 1, 50],
         ['gpt-5.6-sol', 5, 0.5, 30],
         ['gpt-5.6-terra', 2, 0.2, 12],
         ['gpt-5.6-luna', 0.2, 0.02, 1.2],

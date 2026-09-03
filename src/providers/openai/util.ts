@@ -9,7 +9,7 @@ import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
-const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 
@@ -325,6 +325,18 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 14 / 1e6,
     },
   })),
+  {
+    id: 'gpt-6-astra',
+    cost: {
+      input: 10 / 1e6,
+      output: 50 / 1e6,
+      longContext: {
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
+        input: 20 / 1e6,
+        output: 75 / 1e6,
+      },
+    },
+  },
   // GPT-5.6 models
   ...['gpt-5.6', 'gpt-5.6-sol'].map((model) => ({
     id: model,
@@ -332,7 +344,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       input: 5 / 1e6,
       output: 30 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 10 / 1e6,
         output: 45 / 1e6,
       },
@@ -344,7 +356,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       input: 2 / 1e6,
       output: 12 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 4 / 1e6,
         output: 18 / 1e6,
       },
@@ -356,7 +368,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       input: 0.2 / 1e6,
       output: 1.2 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 0.4 / 1e6,
         output: 1.8 / 1e6,
       },
@@ -369,7 +381,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       input: 5 / 1e6,
       output: 30 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 10 / 1e6,
         output: 45 / 1e6,
       },
@@ -382,7 +394,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       input: 2.5 / 1e6,
       output: 15 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 5 / 1e6,
         output: 22.5 / 1e6,
       },
@@ -525,7 +537,7 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
       input: 30 / 1e6,
       output: 180 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1e6,
         output: 270 / 1e6,
       },
@@ -538,7 +550,7 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
       input: 30 / 1e6,
       output: 180 / 1e6,
       longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1e6,
         output: 270 / 1e6,
       },

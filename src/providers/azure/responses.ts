@@ -8,6 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -102,6 +103,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      isGpt6AstraModel((this.config.modelName ?? lowerName).toLowerCase()) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -139,7 +141,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
+    const capabilityModelName = (config.modelName ?? this.deploymentName).toLowerCase();
+    const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -232,6 +235,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.passthrough || {}),
     };
+
+    applyGpt6AstraRequestRules(body, capabilityModelName, 'responses');
 
     logger.debug('Azure Responses API request body', { body });
     return body;

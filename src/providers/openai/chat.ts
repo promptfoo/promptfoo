@@ -29,6 +29,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
+import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -188,9 +189,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o1') ||
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
+    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
     const isPassthroughReasoningModel =
-      passthroughModel !== undefined && (isGPT5Model || isOSeriesModel);
-    const isReasoningModel = this.isReasoningModel() || isGPT5Model || isOSeriesModel;
+      passthroughModel !== undefined && (isGPT5Model || isOSeriesModel || isGpt6Astra);
+    const isReasoningModel =
+      this.isReasoningModel() || isGPT5Model || isOSeriesModel || isGpt6Astra;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -284,8 +287,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             audio: config.audio || { voice: 'alloy', format: 'wav' },
           }
         : {}),
-      // GPT-5 only: attach verbosity if provided
-      ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
+      ...((isGPT5Model || isGpt6Astra) && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
@@ -318,6 +320,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
       delete body.max_tokens;
     }
+
+    // Gateways such as OpenRouter can translate Chat tools to the upstream Responses API.
+    applyGpt6AstraRequestRules(
+      body,
+      capabilityModelName,
+      'chat',
+      this.getGenAISystem() !== 'openai',
+    );
 
     return { body, config };
   }

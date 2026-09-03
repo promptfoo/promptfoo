@@ -7,6 +7,85 @@ import {
 } from '../../../src/providers/openai/billing';
 
 describe('OpenAI billing helpers', () => {
+  describe('GPT-6 Astra', () => {
+    it.each([
+      { inputTokens: 272_000, input: 10, cached: 1, write: 12.5, output: 50 },
+      { inputTokens: 272_001, input: 20, cached: 2, write: 25, output: 75 },
+    ])(
+      'prices all tiers at $inputTokens input tokens',
+      ({ inputTokens, input, cached, write, output }) => {
+        const usage = {
+          input_tokens: inputTokens,
+          output_tokens: 1000,
+          input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+        };
+        const standardCost =
+          ((inputTokens - 750) * input + 500 * cached + 250 * write + 1000 * output) / 1e6;
+
+        for (const [serviceTier, multiplier] of [
+          ['default', 1],
+          ['batch', 0.5],
+          ['flex', 0.5],
+          ['fast', 2],
+          ['priority', 2],
+        ] as const) {
+          expect(calculateOpenAIUsageCost('gpt-6-astra', {}, usage, { serviceTier })).toBeCloseTo(
+            standardCost * multiplier,
+            10,
+          );
+        }
+      },
+    );
+
+    it.each(['https://us.api.openai.com/v1', 'https://eu.api.openai.com/v1'])(
+      'applies regional pricing at %s to text, image, and cache usage',
+      (apiUrl) => {
+        const usage = {
+          input_tokens: 2000,
+          output_tokens: 1000,
+          input_tokens_details: {
+            text_tokens: 1500,
+            image_tokens: 500,
+            cached_tokens: 500,
+            cached_tokens_details: { image_tokens: 500 },
+            cache_write_tokens: 250,
+          },
+        };
+        expect(calculateOpenAIUsageCost('gpt-6-astra', {}, usage, { apiUrl })).toBeCloseTo(
+          ((1250 * 10 + 500 * 1 + 250 * 12.5 + 1000 * 50) / 1e6) * 1.1,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost('gpt-6-astra', {}, usage, { apiUrl, cachedResponse: true }),
+        ).toBe(0);
+      },
+    );
+
+    it('preserves explicit cost overrides', () => {
+      expect(
+        calculateOpenAIUsageCost(
+          'gpt-6-astra',
+          { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+          {
+            input_tokens: 2000,
+            output_tokens: 1000,
+            input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+          },
+        ),
+      ).toBeCloseTo(0.007, 10);
+    });
+
+    it('does not infer unannounced Bedrock Astra prices from OpenAI prices', () => {
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage('openai.gpt-6-astra', {
+          prompt: 2000,
+          completion: 1000,
+          cached: 500,
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   it('extracts multimodal usage details from responses payloads', () => {
     expect(
       extractOpenAIBillingUsage({

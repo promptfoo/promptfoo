@@ -22,6 +22,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -96,6 +97,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      isGpt6AstraModel((this.config.modelName ?? lowerName).toLowerCase()) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -196,7 +198,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : {};
 
     // Check if this is configured as a reasoning model
-    const isReasoningModel = this.isReasoningModel();
+    const capabilityModelName = (config.modelName ?? this.deploymentName).toLowerCase();
+    const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
@@ -299,6 +302,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
       delete body.tool_choice;
     }
+
+    applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');
 
     return { body, config };
   }

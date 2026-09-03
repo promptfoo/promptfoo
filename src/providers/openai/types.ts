@@ -84,7 +84,7 @@ export interface Reasoning {
 
 /**
  * Reasoning effort values accepted by GPT-5 family models. Support varies by model;
- * GPT-5.6 models add `max` reasoning.
+ * GPT-5.6 and GPT-6 Astra support `max` reasoning. Astra does not support `none` or `minimal`.
  */
 export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
 
@@ -206,7 +206,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   mcp?: MCPConfig;
 
   /**
-   * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
+   * Controls response verbosity for GPT-5 models and GPT-6 Astra.
    */
   verbosity?: GPT5Verbosity;
 

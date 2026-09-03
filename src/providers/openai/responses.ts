@@ -29,6 +29,7 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -710,6 +711,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.3 models
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
+    // GPT-6 Astra
+    'gpt-6-astra',
     // GPT-5.6 models
     'gpt-5.6',
     'gpt-5.6-sol',
@@ -796,7 +799,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   ): ProviderResponse {
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
-    const billingModelName = this.getBillingModelName(config);
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const billingModelName =
+      typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,
@@ -833,6 +838,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const isGpt6Astra = isGpt6AstraModel(
+      (config.passthrough as { model?: unknown } | undefined)?.model ??
+        this.getCapabilityModelName(),
+    );
     const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
       (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
     );
@@ -841,17 +850,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
     const isAzureResponsesDeploymentWithVerbosityConfig =
       hasAzureCustomDeploymentHost && config.verbosity !== undefined;
-    // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
+    // Verbosity is separate from reasoning; only reasoning config
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
-    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+      this.isReasoningModel() || isGpt6Astra || isAzureResponsesDeploymentWithReasoningConfig;
+    const supportsVerbosity =
+      this.isGPT5Model() || isGpt6Astra || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
-      isGPT5Model,
+      supportsVerbosity,
     };
   }
 
@@ -880,7 +890,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
+    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, supportsVerbosity } =
       this.getDeploymentCapabilities(config);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -956,8 +966,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
-    // Add verbosity for GPT-5 models if configured
-    if (isGPT5Model && config.verbosity) {
+    // Add verbosity for supported models if configured
+    if (supportsVerbosity && config.verbosity) {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
@@ -1010,6 +1020,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.prompt_cache_key === undefined
         ? {}
         : { prompt_cache_key: config.prompt_cache_key }),
@@ -1023,7 +1034,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
-    // Handle reasoning parameters for o-series and gpt-5 models
+    // Handle reasoning parameters for reasoning models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
     // Merge with existing body.reasoning (from reasoning_effort) so that
     // config.reasoning extra fields (e.g. summary) don't silently drop effort.
@@ -1036,6 +1047,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if ('max_tokens' in body) {
       delete body.max_tokens;
     }
+
+    applyGpt6AstraRequestRules(
+      body,
+      config.passthrough?.model ?? this.getCapabilityModelName(),
+      'responses',
+    );
 
     return {
       body,

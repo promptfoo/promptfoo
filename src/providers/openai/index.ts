@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { isGpt6AstraModel } from './gpt6';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -163,7 +164,8 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o1') ||
       model.includes('/o3') ||
       model.includes('/o4') ||
-      this.isGPT5Model()
+      this.isGPT5Model() ||
+      isGpt6AstraModel(model)
     );
   }
 
