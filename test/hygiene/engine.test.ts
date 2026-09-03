@@ -167,7 +167,7 @@ describe('hygiene engine', () => {
     expect(diagnostics[0].ruleId).toBe('z-rule');
   });
 
-  it('streams included test files in deterministic order with one read and parse each', () => {
+  it.each([false, true])('streams each file once with root-relative exclusions=%s', (relative) => {
     const rootDir = makeTempDirectory();
     const nestedDir = path.join(rootDir, 'nested');
     mkdirSync(nestedDir);
@@ -185,7 +185,7 @@ describe('hygiene engine', () => {
 
     const summary = scanHygieneFiles({
       rootDir,
-      excludeFiles: [excludedFile],
+      excludeFiles: [relative ? 'excluded.test.ts' : excludedFile],
       readFile,
       parseSource,
       scanFile(file) {

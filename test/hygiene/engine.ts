@@ -29,7 +29,6 @@ export type ParseSource = (file: string, source: string) => Program;
 
 export type DiscoverTestFilesOptions = {
   readDirectory?: ReadDirectory;
-  testFilePattern?: RegExp;
 };
 
 export type HygieneScanSummary = {
@@ -68,11 +67,6 @@ function isMissingPathError(error: unknown): boolean {
   return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
-function matches(pattern: RegExp, value: string): boolean {
-  pattern.lastIndex = 0;
-  return pattern.test(value);
-}
-
 function compareStrings(left: string, right: string): number {
   if (left < right) {
     return -1;
@@ -96,7 +90,6 @@ export function discoverTestFiles(
   options: DiscoverTestFilesOptions = {},
 ): string[] {
   const readDirectory = options.readDirectory ?? defaultReadDirectory;
-  const testFilePattern = options.testFilePattern ?? DEFAULT_TEST_FILE_PATTERN;
   const files: string[] = [];
 
   function walk(directory: string) {
@@ -118,7 +111,7 @@ export function discoverTestFiles(
 
       if (entry.isDirectory()) {
         walk(fullPath);
-      } else if (matches(testFilePattern, entry.name)) {
+      } else if (DEFAULT_TEST_FILE_PATTERN.test(fullPath)) {
         files.push(fullPath);
       }
     }
@@ -146,7 +139,9 @@ export function createHygieneFile({
 
 export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanSummary {
   const rootDir = path.resolve(options.rootDir);
-  const excludeFiles = new Set((options.excludeFiles ?? []).map((file) => path.resolve(file)));
+  const excludeFiles = new Set(
+    (options.excludeFiles ?? []).map((file) => path.resolve(rootDir, file)),
+  );
   const readFile = options.readFile ?? defaultReadSource;
   const parseSource = options.parseSource ?? defaultParseSource;
   let excludedFiles = 0;
@@ -155,11 +150,10 @@ export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanS
 
   const discoveredFiles = discoverTestFiles(rootDir, {
     readDirectory: options.readDirectory,
-    testFilePattern: options.testFilePattern,
   });
 
   for (const absolutePath of discoveredFiles) {
-    if (excludeFiles.has(path.resolve(absolutePath))) {
+    if (excludeFiles.has(absolutePath)) {
       excludedFiles += 1;
       continue;
     }
