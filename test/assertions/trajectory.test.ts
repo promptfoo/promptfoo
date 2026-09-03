@@ -708,6 +708,64 @@ describe('trajectory:step-status', () => {
     expect(() => handleTrajectoryStepStatus(params)).toThrow(`${field} must be a string`);
   });
 
+  it.each(['toool', 123, null, [], ['tool', 123], ['tool', 'toool']].map((type) => ({ type })))(
+    'rejects invalid step type $type before applying negation',
+    ({ type }) => {
+      for (const inverse of [false, true]) {
+        const params = statusParams(2, undefined, inverse);
+        params.assertion.value = { name: 'search_orders', status: 'error', type };
+        expect(() => handleTrajectoryStepStatus(params)).toThrow(/step type/);
+      }
+    },
+  );
+
+  it('accepts a list of supported step types', () => {
+    const params = statusParams(2);
+    params.assertion.value = { name: 'search_orders', status: 'error', type: ['command', 'tool'] };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true });
+  });
+
+  it('includes type and message constraints in non-match reasons', () => {
+    const params = statusParams(2, 'timeout');
+    params.assertion.value = {
+      name: 'search_orders',
+      status: 'error',
+      type: 'tool',
+      message: 'permission denied',
+    };
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({
+      pass: false,
+      reason:
+        'No trajectory step "search_orders" matched status error, type "tool", message "permission denied"',
+    });
+  });
+
+  it.each(['error', 2])('renders nested matcher templates for status %j', (status) => {
+    const params = statusParams(2, 'request timeout');
+    params.assertionValueContext.vars = {
+      expected_tool: 'search_orders',
+      expected_type: 'tool',
+      expected_status: status,
+      expected_message: '*timeout',
+    };
+    const value = {
+      name: '{{ expected_tool }}',
+      type: ['{{ expected_type }}'],
+      status: '{{ expected_status }}',
+      message: '{{ expected_message }}',
+    };
+    params.assertion.value = value;
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: true });
+    params.inverse = true;
+    expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false });
+    expect(value).toEqual({
+      name: '{{ expected_tool }}',
+      type: ['{{ expected_type }}'],
+      status: '{{ expected_status }}',
+      message: '{{ expected_message }}',
+    });
+  });
+
   it.each([NaN, Infinity, -Infinity])('rejects non-finite status %s', (status) => {
     const params = statusParams(2);
     params.assertion.value = { name: 'search_orders', status };

@@ -5,11 +5,12 @@ import {
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
+import { TRAJECTORY_STEP_TYPES } from '../types/tracing';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
 
-export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
 type TrajectoryAttributes = Record<string, unknown>;
 
 export interface TrajectoryStepMatcher {

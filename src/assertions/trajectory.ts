@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { TRAJECTORY_STEP_TYPES } from '../types/tracing';
+import { renderVarsInObject } from '../util/render';
 import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
@@ -14,7 +16,7 @@ import {
   type TrajectoryStepStatusMatcher,
 } from './trajectoryUtils';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { AssertionParams, GradingResult, VarValue } from '../types/index';
 
 interface TrajectoryCountValue extends TrajectoryStepMatcher {
   max?: number;
@@ -220,15 +222,43 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   };
 };
 
-function resolveStepStatusValue(value: unknown): TrajectoryStepStatusMatcher {
+function resolveStepStatusValue(
+  value: unknown,
+  vars: Record<string, VarValue>,
+): TrajectoryStepStatusMatcher {
   if (!isRecord(value)) {
     throw new Error('trajectory:step-status assertion must have an object value');
   }
-  const candidate = value as Partial<TrajectoryStepStatusMatcher>;
+  const render = (field: unknown) =>
+    typeof field === 'string' ? renderVarsInObject(field, vars) : field;
+  const candidate = {
+    name: render(value.name),
+    pattern: render(value.pattern),
+    message: render(value.message),
+    status: render(value.status),
+    type: Array.isArray(value.type) ? value.type.map(render) : render(value.type),
+  } as Partial<TrajectoryStepStatusMatcher>;
   for (const field of ['name', 'pattern', 'message'] as const) {
     if (candidate[field] !== undefined && typeof candidate[field] !== 'string') {
       throw new Error(`trajectory:step-status assertion ${field} must be a string`);
     }
+  }
+  if (candidate.type !== undefined) {
+    const types = Array.isArray(candidate.type) ? candidate.type : [candidate.type];
+    if (types.length === 0 || types.some((type) => !TRAJECTORY_STEP_TYPES.includes(type))) {
+      throw new Error(
+        `trajectory:step-status assertion step type must be one of ${TRAJECTORY_STEP_TYPES.join(', ')} or a nonempty array of those types`,
+      );
+    }
+  }
+  // Nunjucks renders numeric variables as strings; preserve numeric status matching.
+  if (
+    candidate.status !== value.status &&
+    typeof candidate.status === 'string' &&
+    candidate.status.trim() !== '' &&
+    Number.isFinite(Number(candidate.status))
+  ) {
+    candidate.status = Number(candidate.status);
   }
   if (
     !(
@@ -247,13 +277,22 @@ function resolveStepStatusValue(value: unknown): TrajectoryStepStatusMatcher {
 
 export const handleTrajectoryStepStatus = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
-  const matcher = resolveStepStatusValue(params.renderedValue ?? params.assertion.value);
+  const matcher = resolveStepStatusValue(
+    params.renderedValue ?? params.assertion.value,
+    params.assertionValueContext.vars,
+  );
   const matched = extractTrajectorySteps(trace).some((step) =>
     matchesTrajectoryStepStatus(step, matcher),
   );
   const pass = applyInverse(matched, params.inverse);
   const label = matcher.pattern || matcher.name;
-  const reason = `${matched ? 'Trajectory step' : 'No trajectory step'} "${label}" matched ${params.inverse ? 'forbidden ' : ''}status ${String(matcher.status)}`;
+  let reason = `${matched ? 'Trajectory step' : 'No trajectory step'} "${label}" matched ${params.inverse ? 'forbidden ' : ''}status ${String(matcher.status)}`;
+  if (matcher.type !== undefined) {
+    reason += `, type ${JSON.stringify(matcher.type)}`;
+  }
+  if (matcher.message !== undefined) {
+    reason += `, message ${JSON.stringify(matcher.message)}`;
+  }
   return { pass, score: pass ? 1 : 0, reason, assertion: params.assertion };
 };
 

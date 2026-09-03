@@ -425,6 +425,54 @@ describe('named matcher assertions', () => {
 });
 
 describe('trajectory:step-status', () => {
+  it.each(['toool', 123, null, [], ['tool', 123], ['tool', 'toool']].map((type) => ({ type })))(
+    'rejects invalid step type $type for positive and inverse assertions',
+    ({ type }) => {
+      for (const assertionType of [
+        'trajectory:step-status',
+        'not-trajectory:step-status',
+      ] as const) {
+        expect(
+          getRunnableAssertionValueError(
+            make({ type: assertionType, value: { name: 'search', status: 'error', type } }),
+          ),
+        ).toMatch(/step type/);
+      }
+    },
+  );
+
+  it('accepts supported step types and nonempty type lists', () => {
+    for (const type of [
+      'command',
+      'message',
+      'reasoning',
+      'search',
+      'span',
+      'tool',
+      ['tool', 'span'],
+    ]) {
+      expect(
+        getRunnableAssertionValueError(
+          make({
+            type: 'trajectory:step-status',
+            value: { name: 'search', status: 'success', type },
+          }),
+        ),
+      ).toBeUndefined();
+    }
+  });
+
+  it('defers templated status and type validation until test variables are resolved', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:step-status',
+          value: { name: '{{ tool }}', type: ['{{ step_type }}'], status: '{{ expected_status }}' },
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
   it.each(['trajectory:step-status', 'not-trajectory:step-status'] as const)(
     'accepts valid %s matchers',
     (type) => {

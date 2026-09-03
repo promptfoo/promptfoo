@@ -25,11 +25,16 @@ module.exports = {
     },
     {
       description: 'failed tool',
-      vars: { code: 2, message: 'request timeout' },
+      vars: { code: 2, message: 'request timeout', expected_status: 'error' },
       assert: [
         {
           type: 'trajectory:step-status',
-          value: { pattern: 'search_*', type: 'tool', status: 'error', message: '*timeout' },
+          value: {
+            pattern: 'search_*',
+            type: 'tool',
+            status: '{{ expected_status }}',
+            message: '{{ message }}',
+          },
         },
         { type: 'not-trajectory:step-status', value: { name: 'search_orders', status: 'success' } },
       ],

@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
+import TestCaseForm from './TestCaseDialog';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 // Mock APIs needed for Radix Select
@@ -122,17 +123,46 @@ describe('AssertsForm', () => {
   });
 
   it.each(['trajectory:step-status', 'not-trajectory:step-status'] as const)(
-    'offers %s in the assertion selector',
+    'selects and saves a structured %s matcher',
     async (type) => {
       const user = userEvent.setup();
-      renderComponent(
-        <AssertsForm onAdd={onAdd} initialValues={[{ type: 'equals', value: '' }]} />,
-      );
+      const saveTestCase = vi.fn();
+      renderComponent(<TestCaseForm open onAdd={saveTestCase} varsList={[]} onCancel={vi.fn()} />);
+      await user.click(screen.getByRole('button', { name: 'Add Assertion' }));
       await user.click(screen.getByRole('combobox', { name: 'Type' }));
       await user.click(await screen.findByRole('option', { name: type }));
-      expect(onAdd).toHaveBeenCalledWith([{ type, value: '' }]);
+      const matcher = { name: 'search_orders', status: 'success' };
+      await user.click(screen.getByRole('textbox', { name: 'Value' }));
+      await user.paste(JSON.stringify(matcher));
+      await user.click(screen.getByRole('button', { name: 'Add Test Case' }));
+      expect(saveTestCase).toHaveBeenCalledWith(
+        { description: '', vars: {}, assert: [{ type, value: matcher }] },
+        true,
+      );
     },
   );
+
+  it('shows an existing status object and preserves incomplete JSON edits', async () => {
+    const user = userEvent.setup();
+    const type = 'trajectory:step-status';
+    const matcher = { name: 'search_orders', status: 'success' };
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={[{ type, value: matcher }]} />);
+    const input = screen.getByRole('textbox', { name: 'Value' });
+    expect(input).toHaveValue(JSON.stringify(matcher, null, 2));
+
+    await user.clear(input);
+    await user.paste('{"name":');
+    expect(input).toHaveValue('{"name":');
+    expect(screen.getByRole('alert')).toHaveTextContent(/JSON/);
+    expect(onAdd).toHaveBeenLastCalledWith([{ type, value: '{"name":' }]);
+
+    await user.clear(input);
+    const text = ' { "name": "search_orders", "status": "error" } ';
+    await user.paste(text);
+    expect(input).toHaveValue(text);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onAdd).toHaveBeenLastCalledWith([{ type, value: { ...matcher, status: 'error' } }]);
+  });
 
   it('should handle undefined initialValues gracefully by defaulting to an empty array', () => {
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={[]} />);

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,11 +8,15 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const rootDir = path.resolve(__dirname, '../..');
+const cliPath = path.join(rootDir, 'dist/src/main.js');
 const configPath = path.join(__dirname, 'fixtures/configs/trajectory-step-status.cjs');
 let outputDir: string;
 let port: number;
 
 beforeAll(async () => {
+  if (!existsSync(cliPath)) {
+    throw new Error('Build the CLI with npm run build before running the smoke tests.');
+  }
   outputDir = mkdtempSync(path.join(tmpdir(), 'promptfoo-step-status-'));
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -26,7 +30,9 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  rmSync(outputDir, { recursive: true, force: true });
+  if (outputDir) {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
 });
 
 describe('trajectory step status CLI', () => {
@@ -34,17 +40,7 @@ describe('trajectory step status CLI', () => {
     const outputPath = path.join(outputDir, 'results.json');
     const result = spawnSync(
       process.execPath,
-      [
-        path.join(rootDir, 'dist/src/main.js'),
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--max-concurrency',
-        '1',
-      ],
+      [cliPath, 'eval', '-c', configPath, '-o', outputPath, '--no-cache', '--max-concurrency', '1'],
       {
         cwd: rootDir,
         encoding: 'utf8',
