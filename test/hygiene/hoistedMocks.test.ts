@@ -13,6 +13,56 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 }
 
 describe('hoisted mock provenance', () => {
+  it.each(['mock.mockReset()', 'vi.resetAllMocks()'])(
+    'checks %s under the suite activation guards',
+    (reset) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+        if (enabled) describe('conditional', () => {
+          beforeEach(() => ${reset}); it('uses mock', () => mock());
+        });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+      expect(
+        hasHoistedPersistentMockWithoutReset(
+          `${source} describe('sibling', () => { it('uses mock', () => mock()); });`,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('still rejects a hook that is conditional inside an unconditional suite', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      describe('suite', () => {
+        if (enabled) beforeEach(() => mock.mockReset());
+        it('uses mock', () => mock());
+      });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    ['mock', false],
+    ['{}', false],
+    ['[]', false],
+    ['() => {}', false],
+    ['undefined', true],
+    ['null', true],
+    ['unknown', true],
+  ])('uses known truthiness for if (%s)', (condition, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { if (${condition}) mock.mockReset(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it.each([
+    'mock ? mock.mockReset() : undefined;',
+    'if (!mock) return; mock.mockReset();',
+    'while (mock) { mock.mockReset(); break; }',
+    'for (; mock;) { mock.mockReset(); break; }',
+  ])('shares known truthiness across %s', (body) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
   it('merges conditional continue paths before evaluating for updates', () => {
     const source = `const mock = vi.hoisted(() => {
       let request;
@@ -1061,8 +1111,14 @@ describe('hoisted mock provenance', () => {
   );
 
   it.each([
-    ['fresh object arguments', (callee: string) => `flag ? ${callee}({}) : ${callee}({})`],
-    ['fresh array arguments', (callee: string) => `flag ? ${callee}([]) : ${callee}([])`],
+    [
+      'fresh object arguments',
+      (callee: string) => `unknownCondition ? ${callee}({}) : ${callee}({})`,
+    ],
+    [
+      'fresh array arguments',
+      (callee: string) => `unknownCondition ? ${callee}([]) : ${callee}([])`,
+    ],
     [
       'object-wrapped results',
       (callee: string) => `({ value: flag ? ${callee}(flag) : ${callee}(flag) })`,
