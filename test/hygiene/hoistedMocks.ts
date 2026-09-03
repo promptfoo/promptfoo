@@ -6,7 +6,7 @@ import type { HygieneDiagnostic, HygieneFile } from './engine';
 
 type FunctionNode = ArrowFunctionExpression | OxcFunction;
 type Value =
-  | { kind: 'unknown' | 'missing' }
+  | { kind: 'unknown' | 'missing' | 'shortCircuit' }
   | { kind: 'literal'; value: unknown }
   | { kind: 'mock'; key: string }
   | {
@@ -57,16 +57,22 @@ type CachedCall = {
 
 const UNKNOWN: Value = { kind: 'unknown' };
 const MISSING: Value = { kind: 'missing' };
+const SHORT_CIRCUIT: Value = { kind: 'shortCircuit' };
 export const persistentMockMethodNames = new Set([
   'mockImplementation',
+  'mockImplementationOnce',
   'mockReturnValue',
+  'mockReturnValueOnce',
   'mockResolvedValue',
+  'mockResolvedValueOnce',
   'mockRejectedValue',
+  'mockRejectedValueOnce',
 ]);
 const COLLECTION_APIS = new Set(['describe', 'suite']);
 const TEST_APIS = new Set(['it', 'test']);
 const HOOK_PHASES = new Map<string, 'setup' | 'reset'>([
   ['beforeAll', 'setup'],
+  ['afterAll', 'setup'],
   ['afterEach', 'setup'],
   ['beforeEach', 'reset'],
 ]);
@@ -102,8 +108,7 @@ function unwrap(node: Node): Node {
     node.type === 'TSSatisfiesExpression' ||
     node.type === 'TSNonNullExpression' ||
     node.type === 'TSTypeAssertion' ||
-    node.type === 'ParenthesizedExpression' ||
-    node.type === 'ChainExpression'
+    node.type === 'ParenthesizedExpression'
   ) {
     node = node.expression;
   }
@@ -166,6 +171,7 @@ export function findHoistedPersistentMockWithoutReset(
   const literals = new Map<unknown, Value>();
   let remainingSteps = MAX_ANALYSIS_STEPS;
   let traversalDepth = 0;
+  let mutationVersion = 0;
 
   function checkSyntaxDepth() {
     // This preflight is linear in source size, including deferred bodies that
@@ -456,6 +462,13 @@ export function findHoistedPersistentMockWithoutReset(
     return union(
       members(value).map((part) => {
         if (part.kind === 'object') {
+          if (
+            key === 'length' &&
+            part.elements &&
+            part.elements.every((element) => !element.optional)
+          ) {
+            return literal(part.elements.length);
+          }
           return resolveSlot(
             part.properties.get(key) ?? (part.unknownProperties ? UNKNOWN : MISSING),
             context.guards,
@@ -469,21 +482,54 @@ export function findHoistedPersistentMockWithoutReset(
     );
   }
 
+  function evaluateProperty(node: Node, computed: boolean, context: Context): string | undefined {
+    if (!computed) {
+      return propertyName(node, false);
+    }
+    const value = evaluate(node, context);
+    return value.kind === 'literal' &&
+      (typeof value.value === 'string' || typeof value.value === 'number')
+      ? String(value.value)
+      : propertyName(node, true);
+  }
+
+  function bindIdentifier(
+    name: string,
+    value: Value,
+    context: Context,
+    target: Scope | 'assignment',
+    directFunction: boolean,
+  ) {
+    const binding =
+      target === 'assignment' ? lookup(name, context.scope) : target.bindings.get(name);
+    const previous = binding?.value ?? UNKNOWN;
+    const next = writeSlot(previous, value, context);
+    if (next !== previous) {
+      callCache.clear();
+    }
+    if (target !== 'assignment') {
+      target.bindings.set(name, { value: next, directFunction });
+      return;
+    }
+    mutationVersion += 1;
+    if (binding) {
+      binding.value = next;
+      binding.directFunction = false;
+    } else {
+      exposeArguments([value], context);
+    }
+  }
+
   function bind(
     pattern: Node,
     value: Value,
     context: Context,
-    target = context.scope,
+    target: Scope | 'assignment' = context.scope,
     directFunction = false,
   ) {
     spendStep(pattern);
     if (pattern.type === 'Identifier') {
-      const previous = target.bindings.get(pattern.name)?.value ?? UNKNOWN;
-      const next = writeSlot(previous, value, context);
-      if (next !== previous) {
-        callCache.clear();
-      }
-      target.bindings.set(pattern.name, { value: next, directFunction });
+      bindIdentifier(pattern.name, value, context, target, directFunction);
     } else if (pattern.type === 'AssignmentPattern') {
       const effective = members(value).map((part) =>
         part.kind === 'missing'
@@ -498,12 +544,9 @@ export function findHoistedPersistentMockWithoutReset(
         if (property.type === 'RestElement') {
           bind(property.argument, UNKNOWN, context, target);
         } else {
-          if (property.computed) {
-            evaluate(property.key, context);
-          }
           bind(
             property.value,
-            get(value, propertyName(property.key, property.computed), context),
+            get(value, evaluateProperty(property.key, property.computed, context), context),
             context,
             target,
           );
@@ -517,6 +560,12 @@ export function findHoistedPersistentMockWithoutReset(
       }
     } else if (pattern.type === 'RestElement') {
       bind(pattern.argument, value, context, target);
+    } else if (pattern.type === 'MemberExpression' && target === 'assignment') {
+      const receiver = evaluate(pattern.object, context);
+      const key = evaluateProperty(pattern.property, pattern.computed, context);
+      mutationVersion += 1;
+      callCache.clear();
+      writeProperty(receiver, key, value, context);
     }
   }
 
@@ -563,6 +612,40 @@ export function findHoistedPersistentMockWithoutReset(
     return flow ? (flow.fallsThrough ? union([flow.value, MISSING]) : flow.value) : MISSING;
   }
 
+  function callableAlternatives(
+    values: Value[],
+    context: Context,
+    call: Node,
+    invokeAlternative: (value: Value, context: Context) => Value,
+  ): Value {
+    let remaining = context;
+    return union(
+      values.map((part, index) => {
+        const selected =
+          index === values.length - 1
+            ? remaining
+            : guarded(remaining, call, true, `alternative:${index}`);
+        remaining = guarded(remaining, call, false, `alternative:${index}`);
+        return invokeAlternative(part, selected);
+      }),
+    );
+  }
+
+  function invocationContext(
+    value: Extract<Value, { kind: 'function' }>,
+    context: Context,
+    allocationPath: string,
+  ): Context {
+    const owner = scope(value.scope, true);
+    for (const parameter of value.node.params) {
+      declare(parameter, owner);
+    }
+    if (value.node.body) {
+      collectVars(value.node.body, owner);
+    }
+    return { ...context, scope: owner, allocationPath, allocations: new Set() };
+  }
+
   function invoke(
     value: Value,
     args: Value[],
@@ -581,12 +664,22 @@ export function findHoistedPersistentMockWithoutReset(
     } = {},
   ): Value {
     spendStep(call);
+    if (value.kind === 'union') {
+      return callableAlternatives(value.values, context, call, (part, selected) =>
+        invoke(part, args, selected, call, { tail, root, unknownArity, spreads }),
+      );
+    }
     if (
       value.kind !== 'function' ||
       (value.node.generator && context.phase !== 'ownership') ||
-      (context.phase === 'hoisted' && value.moduleVariable && !root) ||
-      activeFunctions.has(value.node)
+      (context.phase === 'hoisted' && value.moduleVariable && !root)
     ) {
+      return UNKNOWN;
+    }
+    if (activeFunctions.has(value.node)) {
+      if (context.phase !== 'ownership') {
+        throw new AnalysisLimitError(call);
+      }
       return UNKNOWN;
     }
     // Tail calls forward the caller's result slot. Reusing that slot for
@@ -595,8 +688,8 @@ export function findHoistedPersistentMockWithoutReset(
     const allocationPath = tail
       ? context.allocationPath
       : `${context.allocationPath}/${call.start}`;
-    // Factory result sharing bounds helper DAGs. Collection and hook calls
-    // must perform their registration/reset effects on every guarded path.
+    // Share non-mutating factory results to bound helper DAGs. Captured writes,
+    // collection registration and hook effects must run on every path.
     const key =
       context.phase === 'hoisted'
         ? `${allocationPath}:${value.node.start}:${value.scope.id}:${unknownArity}:${[...(spreads ?? [])].join(',')}:${args.map(valueId).join(',')}`
@@ -608,20 +701,14 @@ export function findHoistedPersistentMockWithoutReset(
     if (activeFunctions.size >= MAX_HELPER_DEPTH) {
       throw new AnalysisLimitError(call);
     }
-    const owner = scope(value.scope, true);
-    const nested = { ...context, scope: owner, allocationPath, allocations: new Set<string>() };
-    for (const parameter of value.node.params) {
-      declare(parameter, owner);
-    }
-    if (value.node.body) {
-      collectVars(value.node.body, owner);
-    }
+    const nested = invocationContext(value, context, allocationPath);
     activeFunctions.add(value.node);
+    const beforeMutation = mutationVersion;
     let result: Value;
     try {
       bindParameters(value.node, args, nested, unknownArity, spreads);
       result = functionResult(value.node, nested);
-      if (key) {
+      if (key && mutationVersion === beforeMutation) {
         callCache.set(key, {
           value: result,
           guards: copyGuards(context.guards),
@@ -955,13 +1042,14 @@ export function findHoistedPersistentMockWithoutReset(
     if (method === 'mockReset' && context.phase === 'reset') {
       markReset(receiver, context);
     }
+    const setter = method.endsWith('Once') ? method.slice(0, -4) : method;
     if (
-      method === 'mockResolvedValue' ||
-      method === 'mockReturnValue' ||
-      method === 'mockRejectedValue'
+      setter === 'mockResolvedValue' ||
+      setter === 'mockReturnValue' ||
+      setter === 'mockRejectedValue'
     ) {
       recordImplementation(receiver, mockKeys(args[0] ?? UNKNOWN, undefined, context), context);
-    } else if (method === 'mockImplementation') {
+    } else if (setter === 'mockImplementation') {
       recordImplementation(
         receiver,
         callbackReferences(args[0] ?? UNKNOWN, context, node),
@@ -999,22 +1087,23 @@ export function findHoistedPersistentMockWithoutReset(
   }
 
   function callExpression(
-    node: Extract<Node, { type: 'CallExpression' }>,
+    node: Extract<Node, { type: 'CallExpression' | 'NewExpression' }>,
     context: Context,
     tail: boolean,
   ): Value {
     const callee = unwrap(node.callee);
-    // Evaluate receiver and argument effects before considering the outer reset.
-    const receiver =
-      callee.type === 'MemberExpression' ? evaluate(callee.object, context) : undefined;
-    if (callee.type === 'MemberExpression' && callee.computed) {
-      evaluate(callee.property, context);
+    if (callee.type === 'MemberExpression') {
+      return optionalTarget(
+        evaluate(callee.object, context),
+        callee,
+        context,
+        (receiver, nested) => {
+          const method = evaluateProperty(callee.property, callee.computed, nested);
+          return invokeCall(node, get(receiver, method, nested), nested, tail, receiver, method);
+        },
+      );
     }
-    const method =
-      callee.type === 'MemberExpression'
-        ? propertyName(callee.property, callee.computed)
-        : undefined;
-    let callable = receiver ? get(receiver, method, context) : evaluate(callee, context);
+    let callable = evaluate(callee, context);
     if (
       context.phase === 'hoisted' &&
       callee.type === 'Identifier' &&
@@ -1023,7 +1112,76 @@ export function findHoistedPersistentMockWithoutReset(
     ) {
       callable = UNKNOWN;
     }
-    const { args, spreads } = callArguments(node, context);
+    return invokeCall(node, callable, context, tail);
+  }
+
+  function optionalTarget(
+    value: Value,
+    node: Extract<Node, { type: 'CallExpression' | 'MemberExpression' | 'NewExpression' }>,
+    context: Context,
+    visit: (value: Value, context: Context) => Value,
+  ): Value {
+    const optional = node.type !== 'NewExpression' && node.optional;
+    let maySkip = false;
+    const targets = members(value).filter((part) => {
+      if (part.kind === 'shortCircuit' || (optional && knownCondition(part, 'nullish') === true)) {
+        maySkip = true;
+        return false;
+      }
+      maySkip ||= optional && knownCondition(part, 'nullish') === undefined;
+      return true;
+    });
+    if (!targets.length) {
+      return SHORT_CIRCUIT;
+    }
+    const result = visit(union(targets), maySkip ? guarded(context, node, true) : context);
+    return maySkip ? union([result, SHORT_CIRCUIT]) : result;
+  }
+
+  function invokeCall(
+    node: Extract<Node, { type: 'CallExpression' | 'NewExpression' }>,
+    callable: Value,
+    context: Context,
+    tail: boolean,
+    receiver?: Value,
+    method?: string,
+  ): Value {
+    // Mock methods exist even though get() does not model function properties.
+    const knownMockMethod =
+      receiver &&
+      method &&
+      (persistentMockMethodNames.has(method) || method === 'mockReset') &&
+      members(receiver).every((part) => part.kind === 'mock');
+    return optionalTarget(
+      knownMockMethod ? literal(true) : callable,
+      node,
+      context,
+      (target, nested) => {
+        const { args, spreads } = callArguments(node, nested);
+        return dispatchCall(
+          knownMockMethod ? callable : target,
+          args,
+          spreads,
+          node,
+          nested,
+          tail,
+          receiver,
+          method,
+        );
+      },
+    );
+  }
+
+  function dispatchCall(
+    callable: Value,
+    args: Value[],
+    spreads: ReadonlySet<number>,
+    node: Node,
+    context: Context,
+    tail: boolean,
+    receiver?: Value,
+    method?: string,
+  ): Value {
     if (callable.kind === 'api') {
       return callApi(callable.name, args, context, node);
     }
@@ -1040,7 +1198,7 @@ export function findHoistedPersistentMockWithoutReset(
       }
       return callMockMethod(receiver, method, args, node, context);
     }
-    if (callable.kind !== 'function') {
+    if (!members(callable).every((part) => part.kind === 'function')) {
       forgetArrays(...args);
       exposeArguments(args, context);
     }
@@ -1052,7 +1210,7 @@ export function findHoistedPersistentMockWithoutReset(
   }
 
   function callArguments(
-    node: Extract<Node, { type: 'CallExpression' }>,
+    node: Extract<Node, { type: 'CallExpression' | 'NewExpression' }>,
     context: Context,
   ): { args: Value[]; spreads: Set<number> } {
     const args: Value[] = [];
@@ -1081,6 +1239,7 @@ export function findHoistedPersistentMockWithoutReset(
     // They are no longer statically known reset targets after that call.
     for (const next of reachableValues(...values)) {
       if (next.kind === 'object' && next.array) {
+        mutationVersion += 1;
         callCache.clear();
         next.properties.clear();
         next.unknownProperties = true;
@@ -1113,10 +1272,7 @@ export function findHoistedPersistentMockWithoutReset(
         }
         continue;
       }
-      if (property.computed) {
-        evaluate(property.key, context);
-      }
-      const key = propertyName(property.key, property.computed);
+      const key = evaluateProperty(property.key, property.computed, context);
       const value =
         property.method || property.kind !== 'init' ? UNKNOWN : evaluate(property.value, context);
       if (key === undefined) {
@@ -1207,9 +1363,15 @@ export function findHoistedPersistentMockWithoutReset(
           return undefined;
         }
         if (condition === 'nullish') {
-          return part.kind === 'missing' || (part.kind === 'literal' && part.value == null);
+          return (
+            part.kind === 'missing' ||
+            part.kind === 'shortCircuit' ||
+            (part.kind === 'literal' && part.value == null)
+          );
         }
-        return part.kind === 'literal' ? Boolean(part.value) : part.kind !== 'missing';
+        return part.kind === 'literal'
+          ? Boolean(part.value)
+          : part.kind !== 'missing' && part.kind !== 'shortCircuit';
       }),
     );
     return outcomes.size === 1 ? [...outcomes][0] : undefined;
@@ -1284,11 +1446,10 @@ export function findHoistedPersistentMockWithoutReset(
   ): Value {
     const left = unwrap(node.left);
     const receiver = left.type === 'MemberExpression' ? evaluate(left.object, context) : UNKNOWN;
-    if (left.type === 'MemberExpression' && left.computed) {
-      evaluate(left.property, context);
-    }
     const key =
-      left.type === 'MemberExpression' ? propertyName(left.property, left.computed) : undefined;
+      left.type === 'MemberExpression'
+        ? evaluateProperty(left.property, left.computed, context)
+        : undefined;
     const binding = left.type === 'Identifier' ? lookup(left.name, context.scope) : undefined;
     const previous = binding
       ? resolveSlot(binding.value, context.guards)
@@ -1300,11 +1461,14 @@ export function findHoistedPersistentMockWithoutReset(
     const { value, writeContext } = effect;
     // Mutating a captured value also invalidates helper results that read it.
     callCache.clear();
+    mutationVersion += 1;
     if (binding) {
       binding.value = writeSlot(binding.value, value, writeContext);
       binding.directFunction = false;
     } else if (left.type === 'MemberExpression') {
       writeProperty(receiver, key, value, writeContext);
+    } else {
+      bind(left, value, writeContext, 'assignment');
     }
     return writeContext === context ? value : union([previous, value]);
   }
@@ -1322,28 +1486,46 @@ export function findHoistedPersistentMockWithoutReset(
       return undefined;
     }
     const right = evaluate(node.right, writeContext);
-    return { value: node.operator === '=' || logical ? right : UNKNOWN, writeContext };
+    return {
+      value:
+        node.operator === '=' || logical
+          ? right
+          : binaryValue(node.operator.slice(0, -1), previous, right),
+      writeContext,
+    };
   }
 
-  function evaluateMutation(target: Node, context: Context): Value {
+  function evaluateMutation(
+    target: Node,
+    context: Context,
+    operator?: '++' | '--',
+    prefix = false,
+  ): Value {
     target = unwrap(target);
     callCache.clear();
+    mutationVersion += 1;
+    let previous = UNKNOWN;
+    let next = UNKNOWN;
     if (target.type === 'Identifier') {
       const binding = lookup(target.name, context.scope);
       if (binding) {
-        binding.value = writeSlot(binding.value, UNKNOWN, context);
+        previous = resolveSlot(binding.value, context.guards);
+        next = operator
+          ? binaryValue(operator === '++' ? '+' : '-', previous, literal(1))
+          : UNKNOWN;
+        binding.value = writeSlot(binding.value, next, context);
         binding.directFunction = false;
       }
     } else if (target.type === 'MemberExpression') {
       const receiver = evaluate(target.object, context);
-      if (target.computed) {
-        evaluate(target.property, context);
-      }
-      writeProperty(receiver, propertyName(target.property, target.computed), UNKNOWN, context);
+      const key = evaluateProperty(target.property, target.computed, context);
+      previous = get(receiver, key, context);
+      next = operator ? binaryValue(operator === '++' ? '+' : '-', previous, literal(1)) : UNKNOWN;
+      writeProperty(receiver, key, next, context);
     } else {
       evaluate(target, context);
     }
-    return UNKNOWN;
+    return operator ? (prefix ? next : previous) : UNKNOWN;
   }
 
   function evaluate(input: Node, context: Context, tail = false): Value {
@@ -1388,12 +1570,27 @@ export function findHoistedPersistentMockWithoutReset(
         return captureReferences(functionValue(node, context.scope), context, node);
       case 'CallExpression':
         return callExpression(node, context, tail);
+      case 'NewExpression': {
+        const result = callExpression(node, context, false);
+        return union(
+          members(result).map((part) =>
+            part.kind === 'object' || part.kind === 'mock' || part.kind === 'function'
+              ? part
+              : UNKNOWN,
+          ),
+        );
+      }
+      case 'ChainExpression':
+        return union(
+          members(evaluate(node.expression, context, tail)).map((part) =>
+            part.kind === 'shortCircuit' ? MISSING : part,
+          ),
+        );
       case 'MemberExpression': {
         const object = evaluate(node.object, context);
-        if (node.computed) {
-          evaluate(node.property, context);
-        }
-        return get(object, propertyName(node.property, node.computed), context);
+        return optionalTarget(object, node, context, (target, nested) =>
+          get(target, evaluateProperty(node.property, node.computed, nested), nested),
+        );
       }
       case 'ObjectExpression':
         return evaluateObject(node, context);
@@ -1425,7 +1622,7 @@ export function findHoistedPersistentMockWithoutReset(
       case 'AssignmentExpression':
         return evaluateAssignment(node, context);
       case 'UpdateExpression':
-        return evaluateMutation(node.argument, context);
+        return evaluateMutation(node.argument, context, node.operator, node.prefix);
       case 'ClassExpression':
         executeClass(node, context);
         return UNKNOWN;
@@ -1447,6 +1644,20 @@ export function findHoistedPersistentMockWithoutReset(
   ): Value {
     const left = evaluate(node.left, context);
     const right = evaluate(node.right, context);
+    return binaryValue(node.operator, left, right);
+  }
+
+  function binaryValue(operator: string, left: Value, right: Value): Value {
+    if (
+      (operator === '===' || operator === '!==') &&
+      (left.kind === 'literal' || left.kind === 'missing') &&
+      (right.kind === 'literal' || right.kind === 'missing')
+    ) {
+      const equal =
+        (left.kind === 'literal' ? left.value : undefined) ===
+        (right.kind === 'literal' ? right.value : undefined);
+      return literal(operator === '===' ? equal : !equal);
+    }
     if (
       left.kind !== 'literal' ||
       right.kind !== 'literal' ||
@@ -1456,7 +1667,11 @@ export function findHoistedPersistentMockWithoutReset(
       return UNKNOWN;
     }
     // Resolve simple counted-loop entry tests without attempting general JS coercion.
-    switch (node.operator) {
+    switch (operator) {
+      case '+':
+        return literal(left.value + right.value);
+      case '-':
+        return literal(left.value - right.value);
       case '<':
         return literal(left.value < right.value);
       case '<=':
@@ -1465,10 +1680,6 @@ export function findHoistedPersistentMockWithoutReset(
         return literal(left.value > right.value);
       case '>=':
         return literal(left.value >= right.value);
-      case '===':
-        return literal(left.value === right.value);
-      case '!==':
-        return literal(left.value !== right.value);
       default:
         return UNKNOWN;
     }
@@ -1731,26 +1942,17 @@ export function findHoistedPersistentMockWithoutReset(
     } else if (node.init) {
       evaluate(node.init, nested);
     }
-    const test = node.test ? knownCondition(evaluate(node.test, nested)) : true;
-    if (test === false) {
-      return undefined;
-    }
-    const bodyContext = test === undefined ? guarded(nested, node, true) : nested;
-    const result = execute(node.body, bodyContext);
-    const updates = iterationPaths(result, bodyContext, node);
-    if (node.update && updates.length) {
-      evaluate(node.update, {
-        ...bodyContext,
-        guards: mergeContinuations(updates, bodyContext, node.update),
-      });
-    }
-    return finishLoop(result, node, nested, bodyContext, test !== undefined);
+    return executeLoop(node, nested);
   }
 
   function executeForEach(
     node: Extract<Node, { type: 'ForInStatement' | 'ForOfStatement' }>,
     context: Context,
   ): ReturnFlow | undefined {
+    if (context.phase === 'ownership') {
+      evaluateChildren(node, context);
+      return undefined;
+    }
     const iterable = evaluate(node.right, context);
     if (
       node.type === 'ForOfStatement' &&
@@ -1789,13 +1991,7 @@ export function findHoistedPersistentMockWithoutReset(
         continue;
       }
       returns.push(result.value);
-      for (const control of collectControls([result])) {
-        if (!targetsControl(control, node)) {
-          controls.push(control);
-        } else if (control.kind === 'break') {
-          exits.push(control.guards);
-        }
-      }
+      collectLoopControls(result, node, exits, controls);
       const next = iterationPaths(result, nested, node);
       if (element.optional) {
         next.push(guarded(iteration, node, false).guards);
@@ -1831,37 +2027,89 @@ export function findHoistedPersistentMockWithoutReset(
         declare(declaration.id, target);
         bind(declaration.id, value, nested, target);
       }
+    } else {
+      bind(node.left, value, nested, 'assignment');
     }
     return nested;
   }
 
-  function executeWhile(
-    node: Extract<Node, { type: 'WhileStatement' | 'DoWhileStatement' }>,
+  function collectLoopControls(
+    result: ReturnFlow | undefined,
+    node: Node,
+    exits: GuardPath[],
+    controls: ControlPath[],
+  ) {
+    for (const control of collectControls([result])) {
+      if (!targetsControl(control, node)) {
+        controls.push(control);
+      } else if (control.kind === 'break') {
+        exits.push(control.guards);
+      }
+    }
+  }
+
+  function loopCondition(
+    node: Extract<Node, { type: 'ForStatement' | 'WhileStatement' | 'DoWhileStatement' }>,
+    context: Context,
+    first: boolean,
+  ): boolean | undefined {
+    return (first && node.type === 'DoWhileStatement') || !node.test
+      ? true
+      : knownCondition(evaluate(node.test, context));
+  }
+
+  function executeLoop(
+    node: Extract<Node, { type: 'ForStatement' | 'WhileStatement' | 'DoWhileStatement' }>,
     context: Context,
   ): ReturnFlow | undefined {
-    let bodyContext = context;
-    let guaranteedIteration = true;
-    if (node.type === 'WhileStatement') {
-      const test = knownCondition(evaluate(node.test, context));
+    if (context.phase === 'ownership') {
+      // Capture discovery is read-only, so loop updates never advance counters.
+      // Inspect the syntax once rather than trying to execute that loop.
+      evaluateChildren(node, context);
+      return undefined;
+    }
+    const allocationPath = context.allocationPath;
+    const returns: Value[] = [];
+    const exits: GuardPath[] = [];
+    const controls: ControlPath[] = [];
+    // Revisit conditions after updates. Statically terminating loops retain
+    // their values; unknown or expanding loops exhaust the shared budget.
+    for (let index = 0; ; index += 1) {
+      spendStep(node);
+      let iteration = {
+        ...context,
+        allocationPath: `${allocationPath}/loop:${node.start}:${index}`,
+      };
+      const test = loopCondition(node, iteration, index === 0);
+      if (test !== true) {
+        exits.push(test === false ? iteration.guards : guarded(iteration, node, false).guards);
+      }
       if (test === false) {
-        return undefined;
+        break;
       }
       if (test === undefined) {
-        guaranteedIteration = false;
-        bodyContext = guarded(context, node, true);
+        iteration = guarded(iteration, node, true);
+      }
+      const result = execute(node.body, iteration);
+      if (result) {
+        returns.push(result.value);
+      }
+      collectLoopControls(result, node, exits, controls);
+      const next = iterationPaths(result, iteration, node);
+      if (!next.length) {
+        break;
+      }
+      context = { ...iteration, guards: mergeContinuations(next, iteration, node) };
+      if (node.type === 'ForStatement' && node.update) {
+        evaluate(node.update, context);
       }
     }
-    const result = execute(node.body, bodyContext);
-    if (node.type === 'DoWhileStatement') {
-      const conditions = iterationPaths(result, bodyContext, node);
-      if (conditions.length) {
-        evaluate(node.test, {
-          ...bodyContext,
-          guards: mergeContinuations(conditions, bodyContext, node.test),
-        });
-      }
-    }
-    return finishLoop(result, node, context, bodyContext, guaranteedIteration);
+    return {
+      value: union(returns),
+      fallsThrough: exits.length > 0,
+      continuationGuards: mergeContinuations(exits, context, node),
+      controls,
+    };
   }
 
   function finishLoop(
@@ -2012,7 +2260,7 @@ export function findHoistedPersistentMockWithoutReset(
         return executeForEach(node, context);
       case 'WhileStatement':
       case 'DoWhileStatement':
-        return executeWhile(node, context);
+        return executeLoop(node, context);
       case 'TryStatement':
         return executeTry(node, context);
       case 'LabeledStatement':
@@ -2069,17 +2317,17 @@ export function findHoistedPersistentMockWithoutReset(
       : undefined;
   }
 
-  function guarded(context: Context, condition: Node, outcome: boolean): Context {
-    const key = `${context.allocationPath}:${condition.start}`;
+  function guarded(context: Context, condition: Node, outcome: boolean, suffix = ''): Context {
+    const key = `${context.allocationPath}:${condition.start}:${suffix}`;
     const guards = copyGuards(context.guards);
     guards.set(key, outcome);
     return { ...context, guards };
   }
 
   function hookArguments(api: string): Value[] {
-    // Vitest supplies [suite] to beforeAll and [test.context, suite] to per-test hooks.
+    // Vitest supplies [suite] to suite hooks and [test.context, suite] to per-test hooks.
     return Array.from(
-      { length: api === 'beforeAll' ? 1 : 2 },
+      { length: api.endsWith('All') ? 1 : 2 },
       (): Value => ({
         kind: 'object',
         properties: new Map(),
