@@ -828,9 +828,10 @@ function deriveVerdictFromGrader(
     pass = /^(true|yes|pass|y)$/i.test(String(parsed.pass));
   }
 
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  let score: number = typeof parsed.score === 'number' ? parsed.score : 0;
+  if (typeof parsed.score !== 'number') {
+    const asNum = Number(parsed.score);
+    score = Number.isFinite(asNum) ? asNum : Number(pass);
   }
 
   if (hasThreshold) {
