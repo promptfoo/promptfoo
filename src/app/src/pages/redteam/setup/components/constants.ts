@@ -20,6 +20,8 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
   { value: 'openai:gpt-4.1', label: 'OpenAI GPT-4.1' },
   { value: 'openai:gpt-4.1-mini', label: 'OpenAI GPT-4.1 Mini' },
+  { value: 'claude-fable-5-1', label: 'Anthropic Claude Fable 5.1' },
+  { value: 'claude-mythos-5-1', label: 'Anthropic Claude Mythos 5.1 (limited access)' },
   { value: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
   { value: 'claude-opus-5', label: 'Anthropic Claude Opus 5' },
   { value: 'claude-opus-4-8', label: 'Anthropic Claude 4.8 Opus' },

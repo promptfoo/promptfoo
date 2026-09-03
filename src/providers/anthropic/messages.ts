@@ -39,6 +39,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -629,7 +630,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            ? `${modelWarningName} always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.`
             : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
         );
         this.manualThinkingConversionWarned = true;
@@ -637,7 +638,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+          `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
         );
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
@@ -780,15 +781,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Resolve tool_choice, suppressing forced tool use only for legacy budget-based thinking.
-    //
-    // The incompatibility is specific to `thinking: { type: 'enabled' }` — the API rejects
-    // that pairing with "Thinking may not be enabled when tool_choice forces tool use."
-    // Adaptive thinking is compatible: verified live that `adaptive` + a forced `any` or
-    // named tool_choice returns 200 on Opus 5, Opus 4.8, Opus 4.6, Sonnet 4.6, Sonnet 5, and
-    // Fable 5. Keying this off "is thinking on at all" silently dropped the user's
-    // tool_choice on every adaptive config, quietly changing tool-routing evals.
-    const forcedToolChoiceRejected = resolvedThinking?.type === 'enabled';
+    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
+    // this on thinkingEnabled: doing so would silently change their tool-routing evals.
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
+    const forcedToolChoiceRejected =
+      resolvedThinking?.type === 'enabled' || modelRejectsForcedToolChoice;
     let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
     if (config.tool_choice) {
       const transformed = transformToolChoice(
@@ -797,7 +795,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ) as Anthropic.Messages.ToolChoice;
       if (forcedToolChoiceRejected && (transformed.type === 'any' || transformed.type === 'tool')) {
         logger.warn(
-          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+          modelRejectsForcedToolChoice
+            ? `tool_choice type '${transformed.type}' (forced tool use) is not supported on ${modelWarningName} and will be omitted. Use 'auto' or 'none' instead.`
+            : `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
         );
       } else {
         resolvedToolChoice = transformed;
@@ -848,7 +848,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     ) {
       logger.warn(
         alwaysOnAdaptiveThinking
-          ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
+          ? `temperature, top_p, and top_k are not supported on ${modelWarningName} and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`
           : `temperature is deprecated on ${modelWarningName} and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`,
       );
       this.samplingParamsDeprecationWarned = true;

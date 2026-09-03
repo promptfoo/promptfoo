@@ -220,6 +220,17 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(15, 6);
   });
 
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('prices 5.1 cache reads for %s', (model) => {
+    const expected = 0.0363 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
   it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
     // The global endpoint bills at the base rate; regional profiles add a premium (below).
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(

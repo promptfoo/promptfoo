@@ -3,6 +3,7 @@ import * as videoUtils from '../../../src/providers/video/utils';
 import {
   calculateVideoCost,
   createXAIVideoProvider,
+  resolveVideoModel,
   validateAspectRatio,
   validateDuration,
   validateResolution,
@@ -130,6 +131,37 @@ describe('XAI Video Provider', () => {
 
       it('returns 0 for cached videos', () => {
         expect(calculateVideoCost(10, true)).toBe(0);
+      });
+
+      it('bills grok-imagine-video-1.5 at its higher per-second rate', () => {
+        // xAI pricing checked 2026-08-31: $0.080/sec vs $0.050/sec for the base model.
+        expect(calculateVideoCost(10, false, 'grok-imagine-video-1.5')).toBeCloseTo(0.8, 10);
+        expect(calculateVideoCost(10, false, 'grok-imagine-video')).toBeCloseTo(0.5, 10);
+      });
+
+      it('bills grok-imagine-video-1.5 aliases at the 1.5 rate', () => {
+        for (const alias of [
+          'grok-imagine-video-1.5-preview',
+          'grok-imagine-video-1.5-2026-05-30',
+        ]) {
+          expect(calculateVideoCost(5, false, alias)).toBeCloseTo(0.4, 10);
+        }
+      });
+
+      it('falls back to the base rate for unknown slugs and returns 0 when cached', () => {
+        expect(calculateVideoCost(4, false, 'grok-imagine-video-9.9-preview')).toBeCloseTo(0.2, 10);
+        expect(calculateVideoCost(10, true, 'grok-imagine-video-1.5')).toBe(0);
+      });
+    });
+
+    describe('resolveVideoModel', () => {
+      it('canonicalizes 1.5 aliases and preserves unknown slugs', () => {
+        expect(resolveVideoModel('grok-imagine-video-1.5-preview')).toBe('grok-imagine-video-1.5');
+        expect(resolveVideoModel('grok-imagine-video-1.5-2026-05-30')).toBe(
+          'grok-imagine-video-1.5',
+        );
+        expect(resolveVideoModel('grok-imagine-video')).toBe('grok-imagine-video');
+        expect(resolveVideoModel('grok-imagine-video-future')).toBe('grok-imagine-video-future');
       });
     });
   });

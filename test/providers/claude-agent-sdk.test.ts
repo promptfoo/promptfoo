@@ -407,6 +407,8 @@ describe('ClaudeCodeSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-1' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-1' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
