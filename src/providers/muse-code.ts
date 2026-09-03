@@ -10,7 +10,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
 import { renderVarsInObject } from '../util/render';
-import { isSecretField, looksLikeSecret, REDACTED } from '../util/sanitizer';
+import { collectEnvCredentials, REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { providerRegistry } from './providerRegistry';
@@ -119,7 +119,6 @@ const PROCESS_ENV_KEYS = [
   'MUSE_AUTH_PATH',
 ] as const;
 
-const OPERATIONAL_ENV_KEYS = new Set(PROCESS_ENV_KEYS.map((key) => key.toLowerCase()));
 const CLI_NOT_FOUND_MESSAGE =
   'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.';
 
@@ -240,72 +239,6 @@ function parseResponse(result: ProcessResult): ProviderResponse {
     return { ...response, error: 'Muse Code completed without final response text' };
   }
   return { ...response, output: terminal.payload.text };
-}
-
-function isCredentialName(name: string): boolean {
-  const words = name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .split(/[^a-zA-Z0-9]+/);
-  return (
-    isSecretField(name) ||
-    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/i.test(word))
-  );
-}
-
-function isCredentialValue(value: string): boolean {
-  return (
-    /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
-    (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
-  );
-}
-
-function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] {
-  const credentials = new Set<string>();
-  const addUrlCredentials = (value: string) => {
-    let url: URL;
-    try {
-      url = new URL(value);
-    } catch {
-      return;
-    }
-    let hasCredentials = false;
-    for (const encoded of [url.username, url.password]) {
-      if (encoded) {
-        hasCredentials = true;
-        credentials.add(encoded);
-        try {
-          credentials.add(decodeURIComponent(encoded));
-        } catch {
-          // Keep the original value when URL userinfo has malformed percent encoding.
-        }
-      }
-    }
-    for (const [key, secret] of url.searchParams) {
-      if (secret && isCredentialName(key)) {
-        hasCredentials = true;
-        credentials.add(secret);
-        credentials.add(encodeURIComponent(secret));
-      }
-    }
-    if (hasCredentials) {
-      credentials.add(value);
-    }
-  };
-  for (const [key, value] of Object.entries(env)) {
-    if (value) {
-      // An authentication-file path is an operational setting, not the credential it names.
-      const operational = OPERATIONAL_ENV_KEYS.has(key.toLowerCase());
-      if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
-        credentials.add(value);
-      }
-      addUrlCredentials(value);
-    }
-  }
-  if (baseUrl) {
-    addUrlCredentials(baseUrl);
-  }
-  return [...credentials];
 }
 
 function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
@@ -507,7 +440,7 @@ export class MuseCodeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
-    const credentials = collectCredentials(env, config.base_url);
+    const credentials = collectEnvCredentials(env, config.base_url);
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;

@@ -287,6 +287,73 @@ export function looksLikeSecret(value: string): boolean {
   return false;
 }
 
+function isCredentialName(name: string): boolean {
+  const words = name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[^a-zA-Z0-9]+/);
+  return (
+    isSecretField(name) ||
+    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/i.test(word))
+  );
+}
+
+function isCredentialValue(value: string): boolean {
+  return (
+    /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
+    (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
+  );
+}
+
+// Use the same credential detection for child responses, config exports, and provider records.
+export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: string): string[] {
+  const credentials = new Set<string>();
+  const addUrlCredentials = (value: string) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return;
+    }
+    let hasCredentials = false;
+    for (const encoded of [url.username, url.password]) {
+      if (encoded) {
+        hasCredentials = true;
+        credentials.add(encoded);
+        try {
+          credentials.add(decodeURIComponent(encoded));
+        } catch {
+          // Keep the original value when URL userinfo has malformed percent encoding.
+        }
+      }
+    }
+    for (const [key, secret] of url.searchParams) {
+      if (secret && isCredentialName(key)) {
+        hasCredentials = true;
+        credentials.add(secret);
+        credentials.add(encodeURIComponent(secret));
+      }
+    }
+    if (hasCredentials) {
+      credentials.add(value);
+    }
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string' && value) {
+      // An authentication-file path is an operational setting, not the credential it names.
+      const operational = key.toLowerCase() === 'muse_auth_path';
+      if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
+        credentials.add(value);
+      }
+      addUrlCredentials(value);
+    }
+  }
+  if (baseUrl) {
+    addUrlCredentials(baseUrl);
+  }
+  return [...credentials];
+}
+
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
   /^(?:(?:bearer|basic|token|api[-_]?key)\s+)?\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])+\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}$/i;
 
@@ -941,7 +1008,16 @@ export function sanitizeUrlEncodedString(value: string): string {
 function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
+    if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const credentials = new Set(collectEnvCredentials(value as Record<string, unknown>));
+      const env = Object.fromEntries(
+        Object.entries(value).map(([name, item]) => [
+          name,
+          typeof item === 'string' && credentials.has(item) ? REDACTED : item,
+        ]),
+      );
+      sanitized[key] = recursiveSanitize(env, depth + 1, maxDepth);
+    } else if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretField(key)) {
       sanitized[key] = REDACTED;

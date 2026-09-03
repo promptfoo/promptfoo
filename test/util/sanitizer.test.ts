@@ -171,6 +171,41 @@ describe('sanitizeTracingConfigForPersistence', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('redacts credential-bearing environment entries while preserving ordinary settings', () => {
+    const env = {
+      GITHUB_PAT: 'abc123',
+      DATABASE_PASSWORD: 'short-pass',
+      servicePasswordValue: 'service-pass',
+      DEPLOY_CREDENTIAL: 'deploy-credential',
+      CI_PW: 'ci-password',
+      HTTPS_PROXY: 'http://proxy-user:proxy-password@proxy.example:8080',
+      SERVICE_URL: 'https://service.example?github_pat=service-pat',
+      CUSTOM_SETTING: 'ghp_abcdefghijklmnopqrstuvwxyz1234567890',
+      PUBLIC_SETTING: 'keep-me',
+      HOTKEY: 'ctrl+s',
+      TOKENIZER_SETTING: 'default',
+      MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+    };
+    expect(sanitizeObject({ env, ordinary: { GITHUB_PAT: 'public-id' } })).toEqual({
+      env: {
+        GITHUB_PAT: '[REDACTED]',
+        DATABASE_PASSWORD: '[REDACTED]',
+        servicePasswordValue: '[REDACTED]',
+        DEPLOY_CREDENTIAL: '[REDACTED]',
+        CI_PW: '[REDACTED]',
+        HTTPS_PROXY: '[REDACTED]',
+        SERVICE_URL: '[REDACTED]',
+        CUSTOM_SETTING: '[REDACTED]',
+        PUBLIC_SETTING: 'keep-me',
+        HOTKEY: 'ctrl+s',
+        TOKENIZER_SETTING: 'default',
+        MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+      },
+      ordinary: { GITHUB_PAT: 'public-id' },
+    });
+    expect(env.GITHUB_PAT).toBe('abc123');
+  });
+
   it.each(['META_API_KEY', 'metaApiKey', 'meta-api-key'])(
     'redacts the Meta API key field %s without relying on its value format',
     (key) => {
