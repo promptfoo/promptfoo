@@ -34,6 +34,7 @@ let fixture: string;
 let fixtureEvents: Array<Record<string, any>>;
 const prompt = 'Reply with exactly MUSE_CODE_SMOKE_OK.';
 const sessionId = '11111111-1111-4111-8111-111111111111';
+const executableName = (name: string) => `${name}${process.platform === 'win32' ? '.exe' : ''}`;
 
 function createChild(pid: number) {
   let closed = false;
@@ -60,6 +61,7 @@ function createChild(pid: number) {
 
 describe('MuseCodeProvider', () => {
   let testDir: string;
+  let binDir: string;
   let providers: MuseCodeProvider[];
   let children: ReturnType<typeof createChild>[];
   let started: ReturnType<typeof createDeferred<void>>;
@@ -85,9 +87,20 @@ describe('MuseCodeProvider', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    restoreEnv = mockProcessEnv({ META_API_KEY: undefined, MUSE_CLI_PATH: undefined });
     vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => fn({} as Span));
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'muse-provider-test-'));
+    binDir = path.join(testDir, 'bin');
+    await fs.mkdir(binDir);
+    await Promise.all(
+      ['muse', 'custom-muse'].map((name) =>
+        fs.writeFile(path.join(binDir, executableName(name)), '', { mode: 0o700 }),
+      ),
+    );
+    restoreEnv = mockProcessEnv({
+      META_API_KEY: undefined,
+      MUSE_CLI_PATH: undefined,
+      PATH: binDir,
+    });
     providers = [];
     children = [];
     started = createDeferred<void>();
@@ -139,7 +152,7 @@ describe('MuseCodeProvider', () => {
     expect(providerRegistry.register).toHaveBeenCalledWith(instance);
 
     const [command, args, options] = vi.mocked(spawn).mock.calls[0];
-    expect(command).toBe('muse');
+    expect(command).toBe(path.join(binDir, executableName('muse')));
     expect(options).toMatchObject({ shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     expect(args).toEqual([
       'exec',
@@ -290,7 +303,7 @@ describe('MuseCodeProvider', () => {
     const result = await instance.callApi(prompt);
     expect(result.error).toBeUndefined();
     expect(spawn).toHaveBeenCalledWith(
-      'custom-muse',
+      path.join(binDir, executableName('custom-muse')),
       expect.any(Array),
       expect.objectContaining({
         env: expect.objectContaining({ CUSTOM_SETTING: 'configured' }),
@@ -303,6 +316,36 @@ describe('MuseCodeProvider', () => {
       META_API_KEY: 'key',
       MUSE_CLI_PATH: 'muse',
     });
+  });
+
+  it.each(['.', '', 'tools'])(
+    'does not resolve the Muse executable from relative PATH entry %j in the workspace',
+    async (entry) => {
+      const workspace = path.join(testDir, 'target');
+      await fs.mkdir(path.join(workspace, 'tools'), { recursive: true });
+      await fs.writeFile(path.join(workspace, executableName('muse')), '', { mode: 0o700 });
+      await fs.writeFile(path.join(workspace, 'tools', executableName('muse')), '', {
+        mode: 0o700,
+      });
+      const response = await provider({
+        config: {
+          working_dir: workspace,
+          env: { PATH: `${entry}${path.delimiter}${binDir}` },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(spawn).toHaveBeenCalledWith(
+        path.join(binDir, executableName('muse')),
+        expect.any(Array),
+        expect.objectContaining({ cwd: workspace }),
+      );
+    },
+  );
+
+  it('fails without spawning when PATH has no absolute directories', async () => {
+    const response = await provider({ config: { env: { PATH: '.' } } }).callApi(prompt);
+    expect(response.error).toContain('Muse Code CLI was not found');
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -501,6 +544,58 @@ describe('MuseCodeProvider', () => {
       },
     }).callApi(prompt);
     expect(response.error).toBe('Muse Code exited with code 1: [REDACTED] [REDACTED] [REDACTED]');
+  });
+
+  it.each([
+    ['GITHUB_PAT', 'synthetic-personal-token'],
+    ['GITHUB_TOKEN_VALUE', 'synthetic-token-value'],
+    ['servicePasswordValue', 'synthetic-password'],
+    ['DEPLOY_CREDENTIAL', 'synthetic-credential'],
+    ['CUSTOM_SETTING', `sk-${'a'.repeat(24)}`],
+    ['GIT_ACCESS', `ghp_${'a'.repeat(36)}`],
+    ['USER', `ghp_${'b'.repeat(36)}`],
+  ])('redacts credential %s by name or value', async (name, value) => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = value;
+    events.at(-1)!.payload.details = { [value]: value };
+    onSpawn = (child) => {
+      expect(vi.mocked(spawn).mock.calls[0][2]!.env![name]).toBe(value);
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({ config: { env: { [name]: value } } }).callApi(prompt);
+    expect(response.output).toBe('[REDACTED]');
+    expect(JSON.stringify(response)).not.toContain(value);
+  });
+
+  it.each(['HOTKEY', 'MONKEY', 'TOKENIZER_SETTING'])(
+    'preserves ordinary output when nonsecret setting %s contains it',
+    async (name) => {
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload.text = 'save changes to save.txt';
+      onSpawn = (child) => {
+        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+        child.close();
+      };
+      const response = await provider({ config: { env: { [name]: 'save' } } }).callApi(prompt);
+      expect(response.output).toBe('save changes to save.txt');
+      expect(response.raw).toEqual(events);
+    },
+  );
+
+  it('preserves operational paths that resemble long opaque credentials', async () => {
+    const directory = path.join(testDir, 'x'.repeat(80));
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = directory;
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({
+      config: { env: { MUSE_AUTH_PATH: directory, XDG_CACHE_HOME: directory } },
+    }).callApi(prompt);
+    expect(response.output).toBe(directory);
+    expect(response.raw).toEqual(events);
   });
 
   it.each(['failed', 'cancelled'])(

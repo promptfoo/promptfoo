@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
 import { renderVarsInObject } from '../util/render';
-import { normalizeFieldName, REDACTED, SECRET_FIELD_NAMES } from '../util/sanitizer';
+import { isSecretField, looksLikeSecret, REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { providerRegistry } from './providerRegistry';
@@ -118,6 +119,43 @@ const PROCESS_ENV_KEYS = [
   'MUSE_AUTH_PATH',
 ] as const;
 
+const OPERATIONAL_ENV_KEYS = new Set(PROCESS_ENV_KEYS.map((key) => key.toLowerCase()));
+const CLI_NOT_FOUND_MESSAGE =
+  'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.';
+
+async function resolveMuseExecutable(
+  configuredPath: string,
+  env: NodeJS.ProcessEnv,
+  basePath?: string,
+): Promise<string> {
+  if (configuredPath.includes('/') || configuredPath.includes('\\')) {
+    return resolveAgenticWorkingDir(configuredPath, basePath)!;
+  }
+
+  const names =
+    process.platform === 'win32' && !path.extname(configuredPath)
+      ? [`${configuredPath}.exe`, configuredPath]
+      : [configuredPath];
+  for (const directory of (env.PATH ?? env.Path ?? '').split(path.delimiter)) {
+    // Never let changing the child cwd redirect PATH lookup into the target repository.
+    if (!path.isAbsolute(directory)) {
+      continue;
+    }
+    for (const name of names) {
+      const candidate = path.join(directory, name);
+      try {
+        await fs.access(candidate, fsConstants.X_OK);
+        if ((await fs.stat(candidate)).isFile()) {
+          return candidate;
+        }
+      } catch {
+        // Continue searching when a PATH entry is missing or not executable.
+      }
+    }
+  }
+  throw new Error(CLI_NOT_FOUND_MESSAGE);
+}
+
 function getRunId(event: MuseEvent): string | undefined {
   const stream = event.payload.run_stream;
   if (stream && typeof stream === 'object' && 'id' in stream && typeof stream.id === 'string') {
@@ -182,11 +220,19 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
-const CREDENTIAL_SUFFIXES = [...SECRET_FIELD_NAMES, 'key'];
-
 function isCredentialName(name: string): boolean {
-  const normalized = normalizeFieldName(name);
-  return CREDENTIAL_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+  const words = name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[^a-zA-Z0-9]+/);
+  return (
+    isSecretField(name) ||
+    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/i.test(word))
+  );
+}
+
+function isCredentialValue(value: string): boolean {
+  return looksLikeSecret(value) || /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value);
 }
 
 function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] {
@@ -223,7 +269,12 @@ function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] 
   };
   for (const [key, value] of Object.entries(env)) {
     if (value) {
-      if (isCredentialName(key)) {
+      // Paths and other inherited settings can resemble opaque keys without being credentials.
+      const operational = OPERATIONAL_ENV_KEYS.has(key.toLowerCase());
+      if (
+        (!operational && isCredentialName(key)) ||
+        ((!operational || !path.isAbsolute(value)) && isCredentialValue(value))
+      ) {
         credentials.add(value);
       }
       addUrlCredentials(value);
@@ -452,10 +503,8 @@ export class MuseCodeProvider implements ApiProvider {
       signal.throwIfAborted();
       const configuredPath =
         config.muse_path ?? this.env?.MUSE_CLI_PATH ?? getEnvString('MUSE_CLI_PATH') ?? 'muse';
-      const command =
-        configuredPath.includes('/') || configuredPath.includes('\\')
-          ? resolveAgenticWorkingDir(configuredPath, basePath)!
-          : configuredPath;
+      const command = await resolveMuseExecutable(configuredPath, env, basePath);
+      signal.throwIfAborted();
       const result = await this.execute(
         command,
         this.buildArgs(config, workspace, promptFile),
@@ -580,7 +629,7 @@ export class MuseCodeProvider implements ApiProvider {
       child.on('error', (spawnError: NodeJS.ErrnoException) => {
         stop(
           spawnError.code === 'ENOENT'
-            ? 'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.'
+            ? CLI_NOT_FOUND_MESSAGE
             : `Muse Code process error: ${spawnError.message}`,
         );
       });
