@@ -10,13 +10,7 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
 // Hoisted mock for applyRuntimeTransforms
-const mockApplyRuntimeTransforms = vi.hoisted(() =>
-  vi.fn().mockImplementation(async ({ prompt }) => ({
-    transformedPrompt: prompt,
-    audio: undefined,
-    image: undefined,
-  })),
-);
+const mockApplyRuntimeTransforms = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -121,6 +115,11 @@ describe('CustomProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
+      transformedPrompt: prompt,
+      audio: undefined,
+      image: undefined,
+    }));
 
     // Create fresh mocks for each test
     mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
