@@ -780,13 +780,10 @@ function scanFilePolicies(file: HygieneFile): FilePolicyResults {
   const results = createEmptyPolicyResults();
   const syntaxResults = scanSyntaxPolicies(file);
   results.testControlUsages.push(...syntaxResults.testControlUsages);
-  addPolicyDiagnostic(
-    results.hoistedPersistentMock,
-    file,
-    findHoistedPersistentMockWithoutReset(file),
-    'hoisted-persistent-mock-reset',
-    'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
-  );
+  const hoistedViolation = findHoistedPersistentMockWithoutReset(file);
+  if (hoistedViolation) {
+    results.hoistedPersistentMock.push(hoistedViolation);
+  }
   addPolicyDiagnostic(
     results.directProcessEnvMutation,
     file,
@@ -1188,7 +1185,11 @@ describe('root test hygiene', () => {
 
   it('keeps new root tests from adding hoisted persistent mocks without reset', () => {
     const unapprovedFiles = rootPolicyResults.hoistedPersistentMock
-      .filter((diagnostic) => !legacyHoistedPersistentMockFiles.has(diagnostic.file))
+      .filter(
+        (diagnostic) =>
+          diagnostic.ruleId !== 'hoisted-persistent-mock-reset' ||
+          !legacyHoistedPersistentMockFiles.has(diagnostic.file),
+      )
       .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
@@ -1197,7 +1198,9 @@ describe('root test hygiene', () => {
   it('keeps the legacy hoisted mock allowlist scoped to active violations', () => {
     const staleFiles = findStalePolicyAllowlistFiles(
       legacyHoistedPersistentMockFiles,
-      rootPolicyResults.hoistedPersistentMock,
+      rootPolicyResults.hoistedPersistentMock.filter(
+        (diagnostic) => diagnostic.ruleId === 'hoisted-persistent-mock-reset',
+      ),
     );
 
     expect(staleFiles).toEqual([]);

@@ -1,7 +1,8 @@
 import { visitorKeys } from 'oxc-parser';
+import { createDiagnostic } from './engine';
 import type { ArrowFunctionExpression, Node, Function as OxcFunction } from 'oxc-parser';
 
-import type { HygieneFile } from './engine';
+import type { HygieneDiagnostic, HygieneFile } from './engine';
 
 type FunctionNode = ArrowFunctionExpression | OxcFunction;
 type Value =
@@ -45,11 +46,16 @@ export const persistentMockMethodNames = new Set([
   'mockResolvedValue',
   'mockRejectedValue',
 ]);
-const persistentMockPattern = new RegExp(
-  `\\.(?:${[...persistentMockMethodNames].join('|')})\\s*\\(`,
-);
 const COLLECTION_APIS = new Set(['describe', 'suite']);
 const RESET_APIS = new Set(['beforeEach', 'afterEach']);
+const MAX_ANALYSIS_STEPS = 50_000;
+const MAX_HELPER_DEPTH = 64;
+
+class AnalysisLimitError extends Error {
+  constructor(readonly node: Node) {
+    super('hoisted mock reset analysis exceeded its budget; simplify the factory or helper graph');
+  }
+}
 
 function children(node: Node): Node[] {
   const fields = node as unknown as Record<string, unknown>;
@@ -97,13 +103,6 @@ function propertyName(node: Node, computed: boolean): string | undefined {
   return undefined;
 }
 
-function union(values: Value[]): Value {
-  const unique = [
-    ...new Set(values.flatMap((value) => (value.kind === 'union' ? value.values : [value]))),
-  ];
-  return unique.length === 1 ? unique[0] : { kind: 'union', values: unique };
-}
-
 function members(value: Value): Value[] {
   return value.kind === 'union' ? value.values : [value];
 }
@@ -112,11 +111,9 @@ function members(value: Value): Value[] {
 // synchronous helpers and literal containers, but never execute imports,
 // methods, generators, or deferred callbacks. Each invocation owns its mock
 // identities; forwarding an existing value never allocates another mock.
-export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node | undefined {
-  if (!/\bvi\.hoisted\s*\(/.test(file.source) || !persistentMockPattern.test(file.source)) {
-    return undefined;
-  }
-
+export function findHoistedPersistentMockWithoutReset(
+  file: HygieneFile,
+): HygieneDiagnostic | undefined {
   let nextScope = 0;
   const mocks = new Map<string, Value>();
   const setters = new Map<string, Node>();
@@ -132,6 +129,37 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
   const valueIds = new Map<Value, number>();
   const literals = new Map<unknown, Value>();
   let hasGlobalReset = false;
+  let remainingSteps = MAX_ANALYSIS_STEPS;
+
+  // Memoization cannot coalesce fresh argument objects or every allocation
+  // path. Bound all phases and graph walks, including cache hits, and fail
+  // closed rather than treating an incomplete analysis as a successful reset.
+  function spendStep(node: Node = file.sourceFile) {
+    if (--remainingSteps < 0) {
+      throw new AnalysisLimitError(node);
+    }
+  }
+
+  function union(values: Value[]): Value {
+    const unique = new Set<Value>();
+    for (const value of values) {
+      for (const part of members(value)) {
+        spendStep();
+        unique.add(part);
+      }
+    }
+    const parts = [...unique];
+    return parts.length === 1 ? parts[0] : { kind: 'union', values: parts };
+  }
+
+  function diagnostic(node: Node, ruleId: string, message: string): HygieneDiagnostic {
+    return createDiagnostic(file, {
+      ruleId,
+      start: node.start,
+      message,
+      snippet: file.source.slice(node.start, node.end),
+    });
+  }
 
   function scope(parent?: Scope, functionScope = false): Scope {
     const result: Scope = { id: nextScope++, bindings: new Map(), parent };
@@ -159,6 +187,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
   }
 
   function declare(pattern: Node, target: Scope) {
+    spendStep(pattern);
     if (pattern.type === 'Identifier') {
       if (!target.bindings.has(pattern.name)) {
         target.bindings.set(pattern.name, { value: UNKNOWN, directFunction: false });
@@ -181,6 +210,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
   }
 
   function collectVars(node: Node, target: Scope) {
+    spendStep(node);
     if (isFunction(node) || node.type === 'StaticBlock') {
       return;
     }
@@ -214,6 +244,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
 
   function prepare(statements: Node[], owner: Scope) {
     for (const statement of statements) {
+      spendStep(statement);
       const node =
         statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration'
           ? (statement.declaration ?? statement)
@@ -268,6 +299,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     target = context.scope,
     directFunction = false,
   ) {
+    spendStep(pattern);
     if (pattern.type === 'Identifier') {
       target.bindings.set(pattern.name, { value, directFunction });
     } else if (pattern.type === 'AssignmentPattern') {
@@ -319,17 +351,31 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     // A cached tail result may also be created in another branch. Remove
     // caller conditions that no longer hold for every creation of that mock.
     for (const [condition, outcome] of cached.guards) {
+      spendStep();
       if (context.guards.get(condition) !== outcome) {
         cached.guards.delete(condition);
         for (const allocation of cached.allocations) {
+          spendStep();
           birthGuards.get(allocation)?.delete(condition);
         }
       }
     }
     for (const allocation of cached.allocations) {
+      spendStep();
       context.allocations.add(allocation);
     }
     return cached.value;
+  }
+
+  function functionResult(node: FunctionNode, context: Context): Value {
+    if (!node.body) {
+      return MISSING;
+    }
+    if (node.body.type !== 'BlockStatement') {
+      return evaluate(node.body, context, true);
+    }
+    const flow = executeStatements(node.body.body, context);
+    return flow ? (flow.fallsThrough ? union([flow.value, MISSING]) : flow.value) : MISSING;
   }
 
   function invoke(
@@ -340,6 +386,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     tail = false,
     root = false,
   ): Value {
+    spendStep(call);
     if (
       value.kind !== 'function' ||
       value.node.generator ||
@@ -359,6 +406,9 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     if (cached) {
       return reuseCall(cached, context);
     }
+    if (activeFunctions.size >= MAX_HELPER_DEPTH) {
+      throw new AnalysisLimitError(call);
+    }
     const owner = scope(value.scope, true);
     const nested = { ...context, scope: owner, allocationPath, allocations: new Set<string>() };
     for (const parameter of value.node.params) {
@@ -373,20 +423,14 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
       for (const [index, parameter] of value.node.params.entries()) {
         bind(parameter, args[index] ?? MISSING, nested);
       }
-      if (!value.node.body) {
-        result = MISSING;
-      } else if (value.node.body.type === 'BlockStatement') {
-        const flow = executeStatements(value.node.body.body, nested);
-        result = flow ? (flow.fallsThrough ? union([flow.value, MISSING]) : flow.value) : MISSING;
-      } else {
-        result = evaluate(value.node.body, nested, true);
-      }
+      result = functionResult(value.node, nested);
       callCache.set(key, {
         value: result,
         guards: new Map(context.guards),
         allocations: nested.allocations,
       });
       for (const allocation of nested.allocations) {
+        spendStep(call);
         context.allocations.add(allocation);
       }
     } finally {
@@ -407,6 +451,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     for (const [index, left] of keys.entries()) {
       const leftGuards = birthGuards.get(left)!;
       for (const right of keys.slice(index + 1)) {
+        spendStep();
         const rightGuards = birthGuards.get(right)!;
         if (
           ![...leftGuards].some(
@@ -424,6 +469,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
   }
 
   function mockKeys(value: Value, seen = new Set<Value>()): Set<string> {
+    spendStep();
     const keys = new Set<string>();
     if (seen.has(value)) {
       return keys;
@@ -440,6 +486,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
             : [];
       for (const child of values) {
         for (const key of mockKeys(child, seen)) {
+          spendStep();
           keys.add(key);
         }
       }
@@ -453,6 +500,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     if (mock) {
       const guards = birthGuards.get(key)!;
       for (const [condition, outcome] of guards) {
+        spendStep(node);
         if (context.guards.get(condition) !== outcome) {
           guards.delete(condition);
         }
@@ -521,7 +569,14 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     }
     for (const part of members(receiver)) {
       if (part.kind === 'mock') {
-        implementationMocks.set(part.key, nestedMocks);
+        // Replaced literal return values are discarded too. Keep their mock
+        // identities so an outer reset covers every unexposed implementation.
+        const implementations = implementationMocks.get(part.key) ?? new Set<string>();
+        for (const key of nestedMocks) {
+          spendStep();
+          implementations.add(key);
+        }
+        implementationMocks.set(part.key, implementations);
       }
     }
   }
@@ -613,6 +668,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
         }
         if (spread.kind === 'object') {
           for (const [key, value] of spread.properties) {
+            spendStep(property);
             properties.set(key, value);
           }
         }
@@ -646,6 +702,7 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
         const spread = evaluate(element.argument, context);
         if (spread.kind === 'object' && !spread.unknownProperties) {
           for (const value of spread.properties.values()) {
+            spendStep(element);
             properties.set(String(index++), value);
           }
         } else {
@@ -691,7 +748,49 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     ]);
   }
 
+  function evaluateAssignment(
+    node: Extract<Node, { type: 'AssignmentExpression' }>,
+    context: Context,
+  ): Value {
+    const left = unwrap(node.left);
+    const receiver = left.type === 'MemberExpression' ? evaluate(left.object, context) : UNKNOWN;
+    if (left.type === 'MemberExpression' && left.computed) {
+      evaluate(left.property, context);
+    }
+    const right = evaluate(node.right, context);
+    const value = node.operator === '=' ? right : UNKNOWN;
+    if (left.type === 'Identifier') {
+      const binding = lookup(left.name, context.scope);
+      if (binding) {
+        binding.value = value;
+        binding.directFunction = false;
+      }
+      return value;
+    }
+    if (left.type !== 'MemberExpression') {
+      return value;
+    }
+    const key = propertyName(left.property, left.computed);
+    const alternatives = members(receiver);
+    for (const part of alternatives) {
+      if (part.kind !== 'object') {
+        continue;
+      }
+      if (key === undefined) {
+        part.properties.clear();
+        part.unknownProperties = true;
+      } else {
+        part.properties.set(
+          key,
+          alternatives.length === 1 ? value : union([get(part, key), value]),
+        );
+      }
+    }
+    return value;
+  }
+
   function evaluate(input: Node, context: Context, tail = false): Value {
+    spendStep(input);
     const node = unwrap(input);
     switch (node.type) {
       case 'Identifier':
@@ -730,16 +829,8 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
         }
         return node.operator === '!' && value.kind === 'literal' ? literal(!value.value) : UNKNOWN;
       }
-      case 'AssignmentExpression': {
-        const value = evaluate(node.right, context);
-        const binding =
-          node.left.type === 'Identifier' ? lookup(node.left.name, context.scope) : undefined;
-        if (binding) {
-          binding.value = UNKNOWN;
-          binding.directFunction = false;
-        }
-        return value;
-      }
+      case 'AssignmentExpression':
+        return evaluateAssignment(node, context);
       case 'ClassExpression':
         executeClass(node, context);
         return UNKNOWN;
@@ -874,7 +965,28 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     return result ? { value: result.value, fallsThrough: true } : undefined;
   }
 
+  function executeWhile(
+    node: Extract<Node, { type: 'WhileStatement' | 'DoWhileStatement' }>,
+    context: Context,
+  ): ReturnFlow | undefined {
+    if (node.type === 'WhileStatement') {
+      const test = evaluate(node.test, context);
+      if (test.kind === 'literal' && !test.value) {
+        return undefined;
+      }
+    }
+    const result = execute(node.body, context);
+    if (node.type === 'DoWhileStatement') {
+      if (result && !result.fallsThrough) {
+        return result;
+      }
+      evaluate(node.test, context);
+    }
+    return result ? { value: result.value, fallsThrough: true } : undefined;
+  }
+
   function execute(node: Node, context: Context): ReturnFlow | undefined {
+    spendStep(node);
     switch (node.type) {
       case 'ExpressionStatement':
         evaluate(node.expression, context);
@@ -897,6 +1009,9 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
       case 'ForInStatement':
       case 'ForOfStatement':
         return executeLoop(node, context);
+      case 'WhileStatement':
+      case 'DoWhileStatement':
+        return executeWhile(node, context);
       case 'CatchClause': {
         const nested = { ...context, scope: scope(context.scope) };
         if (node.param) {
@@ -951,33 +1066,50 @@ export function findHoistedPersistentMockWithoutReset(file: HygieneFile): Node |
     return { ...context, guards: new Map([...context.guards, [condition.start, outcome]]) };
   }
 
-  const moduleScope = scope();
-  collectVars(file.sourceFile, moduleScope);
-  executeStatements(file.sourceFile.body, {
-    scope: moduleScope,
-    allocationPath: 'module',
-    phase: 'collection',
-    guards: new Map(),
-    allocations: new Set(),
-  });
-  for (const { callback, context, call } of resetCallbacks) {
-    invoke(callback, [], { ...context, phase: 'reset' }, call, false, true);
-  }
-  if (hasGlobalReset) {
-    return undefined;
-  }
-  // Resetting an implementation discards mocks reachable only through that
-  // implementation's literal return value. A separately exposed or reinstalled
-  // mock still needs its own reset.
-  for (const key of resets) {
-    for (const nested of implementationMocks.get(key) ?? []) {
-      if (!exposedMocks.has(nested) && !reusedMocks.has(nested)) {
-        resets.add(nested);
+  try {
+    const moduleScope = scope();
+    collectVars(file.sourceFile, moduleScope);
+    executeStatements(file.sourceFile.body, {
+      scope: moduleScope,
+      allocationPath: 'module',
+      phase: 'collection',
+      guards: new Map(),
+      allocations: new Set(),
+    });
+    for (const { callback, context, call } of resetCallbacks) {
+      invoke(callback, [], { ...context, phase: 'reset' }, call, false, true);
+    }
+    if (hasGlobalReset) {
+      return undefined;
+    }
+    // Resetting an implementation discards mocks reachable only through that
+    // implementation's literal return value. A separately exposed or reinstalled
+    // mock still needs its own reset.
+    for (const key of resets) {
+      for (const nested of implementationMocks.get(key) ?? []) {
+        spendStep();
+        if (!exposedMocks.has(nested) && !reusedMocks.has(nested)) {
+          resets.add(nested);
+        }
       }
     }
+    let finding: Node | undefined;
+    for (const [key, node] of setters) {
+      if (!resets.has(key) && (!finding || node.start < finding.start)) {
+        finding = node;
+      }
+    }
+    return finding
+      ? diagnostic(
+          finding,
+          'hoisted-persistent-mock-reset',
+          'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
+        )
+      : undefined;
+  } catch (error) {
+    if (error instanceof AnalysisLimitError) {
+      return diagnostic(error.node, 'hoisted-mock-analysis-limit', error.message);
+    }
+    throw error;
   }
-  return [...setters.entries()]
-    .filter(([key]) => !resets.has(key))
-    .map(([, node]) => node)
-    .sort((left, right) => left.start - right.start)[0];
 }
