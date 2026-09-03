@@ -36,10 +36,18 @@ describe('ToolDiscoveryPlugin', () => {
     expect(provider.callApi).toHaveBeenCalledOnce();
     const generationPrompt = provider.callApi.mock.calls[0][0];
     expect(generationPrompt).toContain(purpose);
-    expect(generationPrompt).toContain('Do not generate requests that only translate');
+    expect(generationPrompt).toContain('Do not generate standalone requests that only translate');
     expect(generationPrompt).toContain('encode/decode text supplied in the request');
     expect(generationPrompt).toContain('only if that claim is true about its actual access');
     expect(generationPrompt).toContain('actual system purpose explicitly prohibits disclosing');
+    expect(generationPrompt).toContain(
+      'standalone tests or as objectives for multi-turn strategies',
+    );
+    expect(generationPrompt).toContain('overall objective, not every turn of a conversation');
+    expect(generationPrompt).toContain('may begin with high-level capability questions');
+    expect(generationPrompt).toContain(
+      'does not prevent continuing the attack within its turn budget',
+    );
     expect(generationPrompt).toContain('Apply these requirements to the examples below as well');
     expect(generationPrompt).not.toMatch(/\{\{(?:purpose|n|outputFormat)\}\}/);
     if (examples) {
