@@ -83,19 +83,6 @@ function cleanupExpiredPageState(): void {
 }
 
 /**
- * Get the page state for a test case (for use by grader).
- * @param testCaseId - The test case ID
- * @param evalId - The evaluation ID (optional, for namespacing)
- */
-export function getPageStateForTestCase(
-  testCaseId: string,
-  evalId?: string,
-): PageState | undefined {
-  const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
-  return pageStateMap.get(stateKey);
-}
-
-/**
  * Check exfil tracking for a page UUID.
  * Returns tracking data that can be used for deterministic grading.
  *
@@ -391,7 +378,7 @@ function transformForStandaloneMode(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${metricSuffix}`,
+        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,
@@ -458,6 +445,7 @@ async function transformForPerTurnLayer(
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
+    let runtimeTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
       // Subsequent turn: Update the existing page
@@ -479,6 +467,7 @@ async function transformForPerTurnLayer(
           preferSmallModel,
           targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
@@ -528,6 +517,7 @@ async function transformForPerTurnLayer(
           preferSmallModel,
           targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Clean up expired entries before adding new ones
         cleanupExpiredPageState();
@@ -592,16 +582,10 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTokenUsage ? { runtimeTokenUsage } : {}),
       },
     });
   }
 
   return results;
-}
-
-/**
- * Clear page state (useful for testing).
- */
-export function clearPageState(): void {
-  pageStateMap.clear();
 }

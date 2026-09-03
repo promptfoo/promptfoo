@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions } from '../types';
+import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -15,6 +15,8 @@ export const REDACTED = '[REDACTED]';
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =
   /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+const OPAQUE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 /**
  * Whether a `scheme://user:pass@host` userinfo password is present. Implemented
@@ -123,6 +125,19 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+
+  // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
+  // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to
+  // 'awssecretaccesskey' while the documented provider config field
+  // `secretAccessKey` collapses to 'secretaccesskey'. These are first-class,
+  // documented Bedrock config fields (see site/docs/providers/aws-bedrock.md),
+  // so an inline credential otherwise reaches logs and shared configs in clear text.
+  'secretaccesskey',
+  'awssecretaccesskey',
+  'sessiontoken',
+  'awssessiontoken',
+  'accesskeyid',
+  'awsaccesskeyid',
   'authorization',
   'auth',
   'bearer',
@@ -135,6 +150,15 @@ export const SECRET_FIELD_NAMES = new Set([
   'xauth', // x-auth
   'xsecret', // x-secret
   'xcsrftoken', // x-csrf-token
+  // Portkey gateway credential headers. The provider derives these from `portkey*` config
+  // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
+  'portkeyapikey', // portkeyApiKey config field
+  'portkeyvirtualkey', // portkeyVirtualKey config field
+  'xportkeyapikey', // x-portkey-api-key
+  'xportkeyvirtualkey', // x-portkey-virtual-key
+  'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id
+  'xportkeyawssecretaccesskey', // x-portkey-aws-secret-access-key
+  'xportkeyawssessiontoken', // x-portkey-aws-session-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
   'sessionid', // session-id
@@ -260,6 +284,269 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   return false;
+}
+
+const SAFE_TRACING_CREDENTIAL_TEMPLATE =
+  /^(?:(?:bearer|basic|token|api[-_]?key)\s+)?\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])+\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}$/i;
+
+interface TracingCredentialReference {
+  template: string;
+  renderedValue: string;
+}
+
+interface TracingCredentialReferences {
+  auth: Map<string, TracingCredentialReference>;
+  headers: Map<string, TracingCredentialReference>;
+  env: Map<string, TracingCredentialReference>;
+}
+
+const tracingCredentialReferences = new WeakMap<object, TracingCredentialReferences>();
+const SAFE_TRACING_PROVIDER_HEADERS = new Set([
+  'accept',
+  'content-type',
+  'x-org-id',
+  'x-organization-id',
+  'x-scope-orgid',
+  'x-tenant-id',
+]);
+
+function isSafeTracingCredentialTemplate(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
+}
+
+function isTracingCredentialHeader(name: string, value: string): boolean {
+  const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  return (
+    isSecretField(name) ||
+    /(?:^|[-_\s])(?:api[-_\s]?key|access[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+      normalizedName,
+    ) ||
+    normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
+    /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
+    looksLikeSecret(value.trim())
+  );
+}
+
+function isNonSensitiveTracingHeader(name: string, value: string): boolean {
+  return (
+    SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isTracingCredentialHeader(name, value)
+  );
+}
+
+function getTracingTemplateEnvironmentVariable(template: string): string | undefined {
+  if (!isSafeTracingCredentialTemplate(template)) {
+    return undefined;
+  }
+  const match = template.match(
+    /\benv(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[['"]([A-Za-z_][A-Za-z0-9_]*)['"]\])/,
+  );
+  return match?.[1] ?? match?.[2];
+}
+
+/**
+ * Retains safe credential references alongside their rendered provider without exposing
+ * internal bookkeeping through config serialization or provider-visible properties.
+ */
+export function preserveTracingCredentialReferences(
+  sourceConfig: Partial<UnifiedConfig>,
+  renderedConfig: Partial<UnifiedConfig>,
+): void {
+  const sourceProvider = sourceConfig.tracing?.provider;
+  const renderedProvider = renderedConfig.tracing?.provider;
+  if (!sourceProvider || !renderedProvider) {
+    return;
+  }
+
+  const references: TracingCredentialReferences = {
+    auth: new Map(),
+    headers: new Map(),
+    env: new Map(),
+  };
+
+  for (const [key, template] of Object.entries(sourceProvider.auth ?? {})) {
+    if (key !== 'token' && key !== 'password') {
+      continue;
+    }
+    const renderedValue = Object.entries(renderedProvider.auth ?? {}).find(
+      ([renderedKey]) => renderedKey === key,
+    )?.[1];
+    if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
+      references.auth.set(key, { template, renderedValue });
+    }
+  }
+
+  for (const [name, template] of Object.entries(sourceProvider.headers ?? {})) {
+    const renderedValue = renderedProvider.headers?.[name];
+    if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
+      references.headers.set(name, { template, renderedValue });
+    }
+  }
+
+  const credentialTemplates = [
+    ...references.auth.values(),
+    ...Array.from(references.headers.entries())
+      .filter(([name, reference]) => !isNonSensitiveTracingHeader(name, reference.renderedValue))
+      .map(([, reference]) => reference),
+  ];
+  const sourceEnv = sourceConfig.env as Record<string, unknown> | undefined;
+  const renderedEnv = renderedConfig.env as Record<string, unknown> | undefined;
+  const visitedEnvironmentVariables = new Set<string>();
+  for (const { template } of credentialTemplates) {
+    let name = getTracingTemplateEnvironmentVariable(template);
+    while (name && !visitedEnvironmentVariables.has(name)) {
+      visitedEnvironmentVariables.add(name);
+      const sourceValue = sourceEnv?.[name];
+      const renderedValue = renderedEnv?.[name];
+      if (!isSafeTracingCredentialTemplate(sourceValue) || typeof renderedValue !== 'string') {
+        break;
+      }
+      references.env.set(name, { template: sourceValue, renderedValue });
+      name = getTracingTemplateEnvironmentVariable(sourceValue);
+    }
+  }
+
+  if (references.auth.size > 0 || references.headers.size > 0) {
+    tracingCredentialReferences.set(renderedProvider, references);
+  }
+}
+
+function getReferencedTracingCredentialEnvironmentVariables(
+  auth: Record<string, unknown> | undefined,
+  headers: Record<string, string> | undefined,
+  env: Record<string, unknown> | undefined,
+  references: TracingCredentialReferences | undefined,
+): Set<string> {
+  const variables = new Set<string>();
+  for (const [name, value] of Object.entries(auth ?? {})) {
+    if ((name === 'token' || name === 'password') && typeof value === 'string') {
+      const variable = getTracingTemplateEnvironmentVariable(value);
+      if (variable) {
+        variables.add(variable);
+      }
+    }
+  }
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (!isNonSensitiveTracingHeader(name, value)) {
+      const variable = getTracingTemplateEnvironmentVariable(value);
+      if (variable) {
+        variables.add(variable);
+      }
+    }
+  }
+
+  for (const name of variables) {
+    const value = env?.[name];
+    const reference = references?.env.get(name);
+    const template = isSafeTracingCredentialTemplate(value)
+      ? value
+      : reference && reference.renderedValue === value
+        ? reference.template
+        : undefined;
+    const variable = template ? getTracingTemplateEnvironmentVariable(template) : undefined;
+    if (variable) {
+      variables.add(variable);
+    }
+  }
+
+  return variables;
+}
+
+/**
+ * Keeps runtime trace-provider credentials out of persisted and exported eval configs.
+ * Safe environment references remain intact so resumed evaluations can resolve them again.
+ */
+export function sanitizeTracingConfigForPersistence(
+  config: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  const provider = config.tracing?.provider;
+  if (!provider) {
+    return config;
+  }
+
+  let sanitizedEndpoint = provider.endpoint;
+  try {
+    const endpoint = new URL(provider.endpoint);
+    if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+      endpoint.username = '';
+      endpoint.password = '';
+      endpoint.search = '';
+      endpoint.hash = '';
+      sanitizedEndpoint = endpoint.toString();
+    }
+    const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+    if (safeEndpoint !== endpoint.toString()) {
+      sanitizedEndpoint = safeEndpoint;
+    }
+  } catch {
+    sanitizedEndpoint = sanitizeUrl(provider.endpoint);
+  }
+
+  const references = tracingCredentialReferences.get(provider);
+  const sanitizedAuth = provider.auth
+    ? Object.fromEntries(
+        Object.entries(provider.auth).flatMap(([key, value]) => {
+          if ((key !== 'token' && key !== 'password') || isSafeTracingCredentialTemplate(value)) {
+            return [[key, value]];
+          }
+          const reference = references?.auth.get(key);
+          return reference && reference.renderedValue === value ? [[key, reference.template]] : [];
+        }),
+      )
+    : undefined;
+  const sanitizedHeaders = provider.headers
+    ? Object.fromEntries(
+        Object.entries(provider.headers).flatMap(([name, value]) => {
+          if (typeof value !== 'string') {
+            return [];
+          }
+          const reference = references?.headers.get(name);
+          if (reference?.renderedValue === value) {
+            return [[name, reference.template]];
+          }
+          if (isSafeTracingCredentialTemplate(value) || isNonSensitiveTracingHeader(name, value)) {
+            return [[name, value]];
+          }
+          return [];
+        }),
+      )
+    : undefined;
+  const referencedCredentialEnvironmentVariables =
+    getReferencedTracingCredentialEnvironmentVariables(
+      sanitizedAuth,
+      sanitizedHeaders,
+      config.env as Record<string, unknown> | undefined,
+      references,
+    );
+  const sanitizedEnv = config.env
+    ? Object.fromEntries(
+        Object.entries(config.env).flatMap(([name, value]) => {
+          if (!referencedCredentialEnvironmentVariables.has(name)) {
+            return [[name, value]];
+          }
+          if (isSafeTracingCredentialTemplate(value)) {
+            return [[name, value]];
+          }
+          const reference = references?.env.get(name);
+          return reference?.renderedValue === value ? [[name, reference.template]] : [];
+        }),
+      )
+    : undefined;
+
+  const sanitizedProvider = {
+    ...provider,
+    endpoint: sanitizedEndpoint,
+    ...(provider.auth && { auth: sanitizedAuth }),
+    ...(provider.headers && { headers: sanitizedHeaders }),
+  } as typeof provider;
+
+  return {
+    ...config,
+    ...(config.env && { env: sanitizedEnv }),
+    tracing: {
+      ...config.tracing!,
+      provider: sanitizedProvider,
+    },
+  };
 }
 
 /**
@@ -803,6 +1090,27 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
+function sanitizeTemplatedUrl(url: string): string {
+  // A template may coexist with an already-rendered env credential. Avoid URL
+  // parsing here because it encodes the remaining Nunjucks syntax, but still
+  // scrub literal query and fragment credentials before the value is logged or
+  // persisted.
+  if (hasUrlUserinfoPassword(url)) {
+    return REDACTED;
+  }
+
+  const hashIndex = url.indexOf('#');
+  const beforeHash = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? '' : url.slice(hashIndex + 1);
+  const queryIndex = beforeHash.indexOf('?');
+  const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
+  const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
+  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+
+  return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
+}
+
 export function sanitizeUrl(url: string): string {
   try {
     // Ensure url is a string and handle edge cases
@@ -810,21 +1118,10 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
-    // Check if URL contains template variables (e.g., {{ variable }})
-    // These are configuration templates, not runtime secrets, so skip sanitization entirely.
-    //
-    // Important trade-off: URLs with both templates AND real sensitive params
-    // (e.g., "https://example.com/{{ path }}?api_key=secret") will NOT be sanitized.
-    // This is acceptable because:
-    // 1. Template URLs come from config files (version-controlled, not runtime)
-    // 2. Secrets should be in environment variables, not hardcoded in config
-    // 3. Attempting to parse/sanitize would URL-encode template syntax ({{ → %7B%7B),
-    //    breaking Nunjucks rendering
-    // 4. When templates render to real URLs at runtime, those URLs get sanitized normally
-    //
-    // Use simple string check instead of regex to avoid ReDoS vulnerability
+    // Preserve unresolved template syntax while redacting any literal credentials
+    // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return url;
+      return sanitizeTemplatedUrl(url);
     }
 
     // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
@@ -886,5 +1183,34 @@ export function sanitizeUrl(url: string): string {
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
     return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+  }
+}
+
+/**
+ * Sanitize a URL specifically for diagnostic output. Opaque path segments can be
+ * legitimate resource IDs in persisted provider results, so only logging paths
+ * use this stricter redaction.
+ */
+export function sanitizeUrlForLogging(url: string): string {
+  const sanitized = sanitizeUrl(url);
+  try {
+    const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
+    const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
+    parsed.pathname = parsed.pathname
+      .split('/')
+      .map((segment) => {
+        try {
+          const decoded = decodeURIComponent(segment);
+          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+            ? '%5BREDACTED%5D'
+            : segment;
+        } catch {
+          return segment;
+        }
+      })
+      .join('/');
+    return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
+  } catch {
+    return sanitized;
   }
 }

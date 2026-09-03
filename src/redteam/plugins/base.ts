@@ -474,9 +474,11 @@ export abstract class RedteamGraderBase {
       // Image payloads/provider internals are intentionally excluded above.
       ...templateGradingContext,
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
-      // This is done after gradingContext so renderedValue properties take precedence
+      // This is done after gradingContext so renderedValue properties take precedence,
+      // except for the canonical evaluated output and extracted trace properties below.
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       value: renderedValue,
+      output: llmOutput,
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,

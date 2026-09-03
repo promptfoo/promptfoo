@@ -15,7 +15,10 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import {
+  isForcedToolChoiceUnsupportedClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
+} from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -111,16 +114,38 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   /**
+   * Grok 4 and newer reject `presence_penalty`, `frequency_penalty`, and `stop` — the
+   * deployment returns HTTP 400 for any request that sets them. promptfoo sends the two
+   * penalties by default (they fall back to `0`, not `undefined`), so without this guard every
+   * Grok 4+ deployment on Azure AI Foundry fails out of the box even with no user config.
+   *
+   * Verified live 2026-09-01 against an Azure AI Foundry `grok-4.6` GlobalStandard deployment:
+   * `max_tokens`, `max_completion_tokens`, `temperature`, and `reasoning_effort: low` are all
+   * accepted; `presence_penalty`, `stop`, and `reasoning_effort: none` are rejected. The direct
+   * xAI provider strips the same three parameters for its GROK_4_MODELS list.
+   *
+   * Matched on the deployment name, like the other Azure model heuristics. Grok 3 and
+   * grok-code-fast accept these parameters, so only Grok 4 and newer are matched — the
+   * two-or-more-digit alternative keeps a future `grok-10` on the restricted path rather
+   * than silently regressing it to the failing default.
+   */
+  protected isGrok4OrNewerModel(): boolean {
+    return /grok-(?:[4-9]|\d{2,})/.test(this.deploymentName.toLowerCase());
+  }
+
+  /**
    * Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
    * level — the deployment returns 400 for any request that pins `temperature`
    * or `top_p`. These models keep the standard `max_tokens` field (not
    * `max_completion_tokens`) and do not accept `reasoning_effort`, so we only
    * strip the sampling params here and leave the rest of the chat body intact.
    */
-  protected isSamplingParamsDeprecatedClaudeModel(): boolean {
+  protected isSamplingParamsDeprecatedClaudeModel(config = this.config): boolean {
     return (
-      Boolean(this.config.isClaudeOpus47OrLater) ||
-      isSamplingParamsDeprecatedClaudeModel(this.deploymentName)
+      Boolean(config.isClaudeOpus47OrLater) ||
+      isSamplingParamsDeprecatedClaudeModel(config.modelName ?? this.deploymentName, {
+        allowGenerationFallback: false,
+      })
     );
   }
 
@@ -172,7 +197,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
-    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel();
+    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
+    const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
     const maxTokensDefault = config.omitDefaults
@@ -231,9 +257,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
             ...(temperature === undefined || samplingParamsDeprecated ? {} : { temperature }),
           }),
+      // Grok accepts reasoning_effort (low/medium/high) but is not classified as a reasoning
+      // model here — it keeps max_tokens and temperature, unlike o-series/GPT-5. Forward an
+      // explicitly configured value so it is not silently dropped; the default is left alone.
+      ...(grokSamplingRestricted && !isReasoningModel && config.reasoning_effort !== undefined
+        ? { reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars) }
+        : {}),
       ...(topP === undefined || samplingParamsDeprecated ? {} : { top_p: topP }),
-      ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
-      ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
+      ...(presencePenalty === undefined || grokSamplingRestricted
+        ? {}
+        : { presence_penalty: presencePenalty }),
+      ...(frequencyPenalty === undefined || grokSamplingRestricted
+        ? {}
+        : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
@@ -248,9 +284,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.stop && !grokSamplingRestricted ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (
+      isForcedToolChoiceUnsupportedClaudeModel(config.modelName ?? this.deploymentName) &&
+      body.tool_choice &&
+      body.tool_choice !== 'auto' &&
+      body.tool_choice !== 'none'
+    ) {
+      logger.warn(
+        `Forced tool choice is not supported on ${this.deploymentName} and will be omitted. Use 'auto' or 'none' instead.`,
+      );
+      delete body.tool_choice;
+    }
 
     return { body, config };
   }
@@ -284,7 +332,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       frequencyPenalty: this.config.frequency_penalty,
       presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -426,12 +474,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       } else {
         const hasDataSources = !!config.dataSources || !!config.data_sources;
+        // Optional-chain `data.choices` too: a degenerate 200 response with no
+        // `choices` field must take the same graceful no-output path as an
+        // empty array instead of throwing on `.find`/`[0]`.
         const choice = hasDataSources
-          ? data.choices.find(
+          ? data.choices?.find(
               (choice: { message: { role: string; content: string } }) =>
                 choice.message.role === 'assistant',
             )
-          : data.choices[0];
+          : data.choices?.[0];
 
         const message = choice?.message;
 
@@ -493,7 +544,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         }
 
-        logProbs = data.choices[0].logprobs?.content?.map(
+        logProbs = choice?.logprobs?.content?.map(
           (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }
@@ -506,6 +557,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               total: data.usage?.total_tokens,
               prompt: data.usage?.prompt_tokens,
               completion: data.usage?.completion_tokens,
+              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
               ...(data.usage?.completion_tokens_details
                 ? {
                     completionDetails: {
@@ -523,10 +577,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         logProbs,
         finishReason,
         cost: calculateAzureCost(
-          this.deploymentName,
+          config.modelName ?? this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
         ),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,

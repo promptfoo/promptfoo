@@ -230,9 +230,9 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       vars: {
+        ...(vars || {}),
         output: tryParse(gradingOutput),
         rubric,
-        ...(vars || {}),
       },
     });
   } catch (error) {
@@ -317,7 +317,7 @@ export async function matchesFactuality(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -376,7 +376,7 @@ export async function matchesClosedQa(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);

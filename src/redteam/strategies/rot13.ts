@@ -15,7 +15,7 @@ export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Rot13`,
+        metric: assertion.metric ? `${assertion.metric}/Rot13` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

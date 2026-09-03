@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema } from '../contracts/shared';
+import {
+  BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
+  type NunjucksFilterMap,
+  type TokenUsage,
+  type VarValue,
+} from '../contracts/shared';
+import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -21,7 +28,6 @@ export {
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -336,6 +342,7 @@ const PromptMetricsSchema = z.object({
     })
     .optional(),
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -401,8 +408,9 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
   /**
    * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
    * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
@@ -478,7 +486,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
@@ -563,6 +571,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // True when the complete grading response was reused without running a new task.
+    cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -850,6 +860,9 @@ export type ScoringFunction = (
       total: number;
       prompt: number;
       completion: number;
+      cached?: number;
+      numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;
@@ -1031,6 +1044,70 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
+  const url = new URL(endpoint);
+  const hasCredentialPath = url.pathname.split('/').some((segment) => {
+    try {
+      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+    } catch {
+      return true;
+    }
+  });
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    !hasCredentialPath
+  );
+}, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments');
+
+const TraceProviderAuthSchema = z
+  .object({
+    token: z.string().min(1).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+  })
+  .refine(
+    ({ token, username, password }) =>
+      !(token && (username || password)) && Boolean(username) === Boolean(password),
+    'Configure either a bearer token or both basic-auth credentials',
+  );
+
+const TraceProviderConfigSchema = z.discriminatedUnion('id', [
+  z.object({
+    id: z.literal('tempo'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: TraceProviderAuthSchema.optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('braintrust'),
+    endpoint: TraceProviderEndpointSchema,
+    projectId: z.uuid(),
+    auth: z.object({ token: z.string().min(1) }),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('langfuse'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: z
+      .object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+        token: z.never().optional(),
+      })
+      .strict(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+]);
+
+const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1152,6 +1229,8 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1309,6 +1388,9 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });

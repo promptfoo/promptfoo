@@ -56,7 +56,7 @@ providers:
       auth_token: your-token-here
       # Use auth_password instead when gateway.auth.mode=password
       # Optional backend model override, sent as x-openclaw-model:
-      backend_model: openai/gpt-5.4
+      backend_model: openai/gpt-5.6-terra
 ```
 
 Or use environment variables:
