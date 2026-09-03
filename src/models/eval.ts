@@ -43,7 +43,11 @@ import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/f
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -1413,6 +1417,11 @@ export default class Eval {
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
+
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
 
     return stats;
   }

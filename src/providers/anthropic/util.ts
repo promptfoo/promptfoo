@@ -14,13 +14,15 @@ import type {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  ...['claude-fable-5', 'claude-mythos-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1e6, // $10 / MTok
-      output: 50 / 1e6, // $50 / MTok
-    },
-  })),
+  ...['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 10 / 1e6, // $10 / MTok
+        output: 50 / 1e6, // $50 / MTok
+      },
+    }),
+  ),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
@@ -186,15 +188,26 @@ export const ANTHROPIC_MODELS = [
 
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
 // `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
-// names. The leading `(^|[^a-z0-9])` boundary and a trailing lookahead guard (`(?![0-9])`,
-// or `(?![a-z0-9])` for the dateless Fable/Mythos IDs) keep a family from matching a longer
-// neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
-// while still matching dated snapshots like `claude-opus-4-8-20260528`.
+// names. The leading `(^|[^a-z0-9])` boundary and trailing lookahead guards keep a family
+// from matching a longer neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and
+// `claude-sonnet-5x` is not Sonnet 5) while still matching dated snapshots like
+// `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
-const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![0-9])/i;
-const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
+const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
+const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
+// Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
+// forward-compatible fallback for Claude 5+ family names so providers do not send rejected
+// parameters while waiting for a model-specific capability row. Generation numbers are capped at
+// two digits so year/date suffixes on custom deployments are not mistaken for model generations.
+// The family-name segment count is bounded: an unbounded `(?:-[a-z][a-z0-9]*)*` makes every
+// `claude-` occurrence scan to end of input, which is quadratic on adversarial model IDs
+// (`'-claude-a'.repeat(50000)` took ~28s). Real families use at most two segments
+// (`claude-research-preview-5`), so five is generous headroom at O(1) work per candidate.
+const CLAUDE_5_OR_LATER_PATTERN =
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,4}-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
@@ -208,6 +221,8 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  forcedToolChoiceUnsupported?: boolean;
   /**
    * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
    * that never set `thinking` still spend thinking tokens against `max_tokens`.
@@ -231,6 +246,14 @@ interface ClaudeModelFamily {
  * every later model); Opus 4.1 and earlier retain base pricing on all endpoints.
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
+  {
+    match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
+    warningName: 'Claude Fable 5.1 and Claude Mythos 5.1',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+  },
   {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
@@ -295,6 +318,10 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
 /** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, not `claude-sonnet-50`). */
 export function isClaudeSonnet5Model(modelId: string): boolean {
   return CLAUDE_SONNET_5_PATTERN.test(modelId);
+}
+
+export function isForcedToolChoiceUnsupportedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'forcedToolChoiceUnsupported');
 }
 
 /**
@@ -367,19 +394,70 @@ export function isDisabledThinkingRejectedAtEffort(
   );
 }
 
+/**
+ * Whether a bare Anthropic model id has the shape of a Claude model.
+ *
+ * Used by the `anthropic:<model>` shorthand so a model released after this build still
+ * resolves instead of being rejected at config load. Anthropic is the authority on which
+ * ids exist and returns a clear `not_found_error` for one that does not, so gating the
+ * shorthand on a local catalog only delays that answer to the next promptfoo release.
+ *
+ * The shape check is what keeps a genuine typo (`anthropic:sonnet-5`) failing at config
+ * load with the usage message, rather than surfacing as a request-time 404.
+ */
+export function looksLikeClaudeModelId(modelId: string): boolean {
+  return /^claude-[a-z0-9]/i.test(modelId);
+}
+
+/**
+ * Raise `max_tokens` above a manual thinking budget.
+ *
+ * Anthropic rejects any request where `max_tokens <= thinking.budget_tokens` with
+ * "`max_tokens` must be greater than `thinking.budget_tokens`" — thinking draws from the
+ * same output budget as the answer, so a budget at or above the cap leaves no room to reply.
+ * The rule is the API's, not a platform's, so every Claude route needs it: a user who sets
+ * `thinking: { type: 'enabled', budget_tokens: 8000 }` and leaves `max_tokens` at the
+ * provider default otherwise gets a 400 rather than a longer think.
+ *
+ * Headroom of 1024 above the budget matches what the Vertex path has always used. Callers
+ * keep their own `max_tokens` defaults, which legitimately differ per platform; this only
+ * enforces the floor.
+ */
+export function clampMaxTokensForThinkingBudget(
+  maxTokens: number,
+  thinking: { type?: string; budget_tokens?: number } | undefined,
+): number {
+  if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
+    return maxTokens;
+  }
+  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+}
+
 export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
 
 /**
- * Claude Opus 4.7/4.8, Claude Opus 5, Claude Sonnet 5, and Claude 5 Fable/Mythos deprecate manual sampling
- * controls at the model level — `temperature`, `top_p`, and `top_k` return 400
- * `invalid_request_error` (including promptfoo's built-in `temperature` default of 0). Shared
- * by the Anthropic, Bedrock, Vertex, and Azure providers; support for a new model lands as a
- * row in CLAUDE_MODEL_FAMILIES above.
+ * Claude Opus 4.7/4.8 and Claude 5+ models deprecate manual sampling controls at the model
+ * level — `temperature`, `top_p`, and `top_k` return 400 `invalid_request_error` (including
+ * promptfoo's built-in `temperature` default of 0). Shared by the Anthropic, Bedrock, Vertex,
+ * and Azure providers. Known families use the capability table above; the generation fallback
+ * keeps newly released Claude 5+ family names safe before their model-specific rows land.
+ * Arbitrary deployment and inference-profile aliases cannot safely use the fallback.
  */
-export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
-  return hasClaudeCapability(modelId, 'samplingParamsDeprecated');
+export function isSamplingParamsDeprecatedClaudeModel(
+  modelId: string,
+  options: { allowGenerationFallback?: boolean } = {},
+): boolean {
+  const isApplicationInferenceProfileArn =
+    modelId.startsWith('arn:') && modelId.includes(':application-inference-profile/');
+
+  return (
+    hasClaudeCapability(modelId, 'samplingParamsDeprecated') ||
+    (options.allowGenerationFallback !== false &&
+      !isApplicationInferenceProfileArn &&
+      CLAUDE_5_OR_LATER_PATTERN.test(modelId))
+  );
 }
 
 /**
@@ -398,8 +476,9 @@ export function normalizeClaudeThinkingConfig<
   modelId: string,
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
+  options: { allowGenerationFallback?: boolean } = {},
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId, options)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (
@@ -577,17 +656,20 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1 and 10% on other models.
+ * Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
   cacheCreation: number,
+  modelId = '',
 ): number {
+  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId) ? 0.025 : 0.1;
   return (
     uncachedInputTokens * baseInputRate +
-    cacheRead * baseInputRate * 0.1 +
+    cacheRead * baseInputRate * cacheReadMultiplier +
     cacheCreation * baseInputRate * 1.25
   );
 }
@@ -641,7 +723,7 @@ export function calculateAnthropicCost(
     const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
     const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
     return withRegionalPremium(
-      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation, pricingModelName) +
         completionTokens * outputCost,
     );
   }
@@ -676,13 +758,24 @@ export function getRefusalDetails(data: Anthropic.Messages.Message): string | un
   return parts.join(' — ');
 }
 
+/**
+ * Coerce a token count that may arrive as a numeric string.
+ *
+ * Bedrock's InvokeModel responses have been observed serializing counts as strings, and
+ * plain `?? 0` would make the sums below concatenate rather than add ("15" + 0 -> "150").
+ */
+function toTokenCount(value: unknown): number {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     // Anthropic: total input = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
-    const cacheRead = data.usage.cache_read_input_tokens ?? 0;
-    const cacheCreation = data.usage.cache_creation_input_tokens ?? 0;
-    const allInputTokens = (data.usage.input_tokens ?? 0) + cacheRead + cacheCreation;
-    const total_tokens = allInputTokens + (data.usage.output_tokens ?? 0);
+    const cacheRead = toTokenCount(data.usage.cache_read_input_tokens);
+    const cacheCreation = toTokenCount(data.usage.cache_creation_input_tokens);
+    const allInputTokens = toTokenCount(data.usage.input_tokens) + cacheRead + cacheCreation;
+    const total_tokens = allInputTokens + toTokenCount(data.usage.output_tokens);
 
     if (cached) {
       return { cached: total_tokens, total: total_tokens };
@@ -690,7 +783,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const usage: Partial<TokenUsage> = {
         total: total_tokens,
         prompt: allInputTokens,
-        completion: data.usage.output_tokens ?? 0,
+        completion: toTokenCount(data.usage.output_tokens),
       };
 
       const thinkingTokens = data.usage.output_tokens_details?.thinking_tokens;
@@ -700,7 +793,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 
       if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          ...(thinkingTokens != null && { reasoning: thinkingTokens }),
+          ...(thinkingTokens != null && { reasoning: toTokenCount(thinkingTokens) }),
           // Cache *input* token counts go under completionDetails because Promptfoo's
           // TokenUsage contract has no input-details field.
           ...(hasCacheDetails && {

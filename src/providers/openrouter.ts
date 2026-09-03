@@ -3,7 +3,12 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  appendOpenAiApiPath,
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+} from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -146,7 +151,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     try {
       ({ data, cached, status, statusText } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
           {
             method: 'POST',
             headers: {
@@ -177,6 +182,17 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (data.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+      };
+    }
+
+    // Guard against a 200 response with an empty or missing `choices` array
+    // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
+    // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
+    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 

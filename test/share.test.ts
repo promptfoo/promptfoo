@@ -70,6 +70,10 @@ vi.mock('../src/globalConfig/cloud', () => {
     getCurrentTeamId: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getAppUrl: vi.fn(),
+    getAuthHeaders: vi.fn(() => {
+      const apiKey = cloudConfig.getApiKey();
+      return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+    }),
   };
 
   return { cloudConfig };

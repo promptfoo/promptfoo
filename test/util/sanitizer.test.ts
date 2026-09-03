@@ -571,6 +571,52 @@ describe('sanitizeObject', () => {
         });
       });
 
+      // AWS SigV4 credentials are documented Bedrock provider config fields and env
+      // vars. Before this coverage they reached logs and shared configs in clear text,
+      // even though bedrock/knowledgeBase.ts already treated them as sensitive locally.
+      it.each([
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_SESSION_TOKEN',
+        'AWS_ACCESS_KEY_ID',
+        'secretAccessKey',
+        'sessionToken',
+        'accessKeyId',
+      ])('should redact %s', (field) => {
+        expect(sanitizeObject({ [field]: 'aws-credential-value' })).toEqual({
+          [field]: '[REDACTED]',
+        });
+      });
+
+      it('should redact AWS credentials nested in a Bedrock provider config', () => {
+        expect(
+          sanitizeObject({
+            providers: [
+              {
+                id: 'bedrock:anthropic.claude-sonnet-5',
+                config: {
+                  region: 'us-east-1',
+                  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+                  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                  sessionToken: 'FwoGZXIvYXdzEExampleSessionToken',
+                },
+              },
+            ],
+          }),
+        ).toEqual({
+          providers: [
+            {
+              id: 'bedrock:anthropic.claude-sonnet-5',
+              config: {
+                region: 'us-east-1',
+                accessKeyId: '[REDACTED]',
+                secretAccessKey: '[REDACTED]',
+                sessionToken: '[REDACTED]',
+              },
+            },
+          ],
+        });
+      });
+
       it('should redact ANTHROPIC_API_KEY', () => {
         expect(sanitizeObject({ ANTHROPIC_API_KEY: 'anthropic-key' })).toEqual({
           ANTHROPIC_API_KEY: '[REDACTED]',
@@ -1236,8 +1282,10 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      // Previously asserted to pass through in clear text, which contradicted this
+      // test's own name: secretAccessKey and sessionToken are the actual secrets.
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {

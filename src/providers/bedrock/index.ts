@@ -6,6 +6,8 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
+  clampMaxTokensForThinkingBudget,
+  getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
@@ -1656,6 +1658,11 @@ export const BEDROCK_MODEL = {
           normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
+      // max_tokens was resolved above, before the thinking config was known. Anthropic
+      // rejects a budget at or above the cap, so raise the floor now that both are settled.
+      if (typeof params.max_tokens === 'number') {
+        params.max_tokens = clampMaxTokensForThinkingBudget(params.max_tokens, thinking);
+      }
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
@@ -1675,30 +1682,24 @@ export const BEDROCK_MODEL = {
         };
       }
 
+      // Bedrock relays the Anthropic Messages `usage` object, so read it with the shared
+      // reader instead of maintaining a second interpretation. The hand-rolled version
+      // counted only `input_tokens`, so a cached prompt was under-reported — 100 rather
+      // than 1200 for a prompt with 900 cache-read and 200 cache-creation tokens — and it
+      // dropped the cache and thinking breakdowns entirely, even though
+      // calculateBedrockInvokeModelCost in this same file bills from those very fields.
+      //
+      // The alternate field names this handler has long accepted are normalized first.
+      // `??` rather than `||` so a genuine zero count is not treated as missing.
       const usage = responseJson.usage;
-
-      // Get input tokens
-      const inputTokens = usage.input_tokens || usage.prompt_tokens;
-      const inputTokensNum = coerceStrToNum(inputTokens);
-
-      // Get output tokens
-      const outputTokens = usage.output_tokens || usage.completion_tokens;
-      const outputTokensNum = coerceStrToNum(outputTokens);
-
-      // Get or calculate total tokens
-      let totalTokens = usage.totalTokens || usage.total_tokens;
-      if (
-        (totalTokens === null || totalTokens === undefined) &&
-        inputTokensNum !== undefined &&
-        outputTokensNum !== undefined
-      ) {
-        totalTokens = inputTokensNum + outputTokensNum;
-      }
+      const normalizedUsage = {
+        ...usage,
+        input_tokens: usage.input_tokens ?? usage.prompt_tokens,
+        output_tokens: usage.output_tokens ?? usage.completion_tokens,
+      };
 
       return {
-        prompt: inputTokensNum,
-        completion: outputTokensNum,
-        total: coerceStrToNum(totalTokens),
+        ...getTokenUsage({ usage: normalizedUsage }, false),
         numRequests: 1,
       };
     },
@@ -2344,6 +2345,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2446,6 +2449,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2478,6 +2483,14 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-20b': BEDROCK_MODEL.OPENAI,
+
+  // xAI Grok 4.6 is served natively by InvokeModel/Converse, unlike grok-4.3 (mantle only).
+  // AWS reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]` for it, so only the profile
+  // ids are invocable — the bare `xai.grok-4.6` id is deliberately absent here and instead
+  // reaches the mantle Responses path, which does serve it. Both paths verified live
+  // 2026-08-31 (us-west-2); the native responses use the OpenAI chat-completions shape.
+  'us.xai.grok-4.6': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.xai.grok-4.6': BEDROCK_MODEL.OPENAI_COMPAT,
 
   // Qwen Models via Bedrock
   'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,
@@ -2549,6 +2562,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Claude Fable 5 base, global, and geo inference profiles.
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2559,13 +2574,14 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
-  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
+  const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
+  if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, so always point at the bare
     // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
     // bounce the user into the factory's prefixed-Mythos rejection.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:anthropic.claude-mythos-5" instead.`,
+        `InvokeModel. Load it as "bedrock:${messagesOnlyModel[1]}" instead.`,
     );
   }
 
@@ -2737,9 +2753,12 @@ export function getHandlerForModel(
     // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
     // direct or prefixed ids that bypass the factory's supported bare-id route.
     throw new Error(
-      `xAI model "${modelName}" is not served by Bedrock's InvokeModel API. Grok runs on the ` +
-        `OpenAI-compatible Responses API (mantle endpoint) — use "bedrock:xai.grok-4.3" and set ` +
-        `AWS_BEARER_TOKEN_BEDROCK. See https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
+      `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
+        `Grok 4.6 is invocable through an inference profile — use "bedrock:us.xai.grok-4.6" or ` +
+        `"bedrock:global.xai.grok-4.6" with ordinary AWS credentials. Other Grok models run on ` +
+        `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
+        `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
     );
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
@@ -2896,9 +2915,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Claude's displayed prompt count includes cache reads and writes. Billing
+      // needs the API's uncached input count because cache tokens are priced separately.
+      const billablePromptTokens =
+        model === BEDROCK_MODEL.CLAUDE_MESSAGES
+          ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
+          : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
-        tokenUsage.prompt,
+        billablePromptTokens,
         tokenUsage.completion,
         tokenUsage.completionDetails?.cacheReadInputTokens ??
           coerceStrToNum(output.usage?.cache_read_input_tokens),

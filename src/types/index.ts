@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
 import {
   BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
   type NunjucksFilterMap,
   type TokenUsage,
   type VarValue,
@@ -341,6 +342,7 @@ const PromptMetricsSchema = z.object({
     })
     .optional(),
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -406,8 +408,9 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
   /**
    * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
    * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
@@ -483,7 +486,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
@@ -568,6 +571,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // True when the complete grading response was reused without running a new task.
+    cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -857,6 +862,7 @@ export type ScoringFunction = (
       completion: number;
       cached?: number;
       numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;

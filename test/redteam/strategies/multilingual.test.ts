@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import { addMultilingual } from '../../../src/redteam/strategies/multilingual';
@@ -150,8 +151,10 @@ describe('multilingual', () => {
   });
 
   it('sends only the remote multilingual contract for the default path', async () => {
+    const generationTokenUsage = {};
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
     vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
       data: {
         result: [
           {
@@ -159,6 +162,7 @@ describe('multilingual', () => {
             metadata: { originalText: 'test', language: 'es' },
           },
         ],
+        tokenUsage: { total: 21, prompt: 14, completion: 7, numRequests: 2 },
       },
       status: 200,
       statusText: 'OK',
@@ -179,7 +183,10 @@ describe('multilingual', () => {
       },
       {
         generationProviderSelection: {
-          provider: createMockProvider({ id: 'default-regular' }),
+          provider: trackGenerationTokenUsage(
+            createMockProvider({ id: 'default-regular' }),
+            generationTokenUsage,
+          ),
           source: 'default',
         },
       },
@@ -201,6 +208,12 @@ describe('multilingual', () => {
     expect(body).not.toContain('env-secret');
     expect(body).not.toContain('config-secret');
     expect(body).not.toContain('header-secret');
+    expect(generationTokenUsage).toMatchObject({
+      total: 21,
+      prompt: 14,
+      completion: 7,
+      numRequests: 2,
+    });
   });
 
   it('stays local when a runtime provider has no serializable spec', async () => {

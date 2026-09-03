@@ -17,6 +17,7 @@ import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
   isSamplingParamsDeprecatedClaudeModel,
@@ -26,6 +27,7 @@ import {
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -39,6 +41,7 @@ import {
   normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -136,7 +139,7 @@ function getVertexApiHost(
     configApiHost ||
     envOverrides?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+    getVertexApiHostForRegion(region)
   );
 }
 
@@ -174,7 +177,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.config.apiHost ||
       this.env?.VERTEX_API_HOST ||
       getEnvString('VERTEX_API_HOST') ||
-      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+      getVertexApiHostForRegion(region)
     );
   }
 
@@ -336,7 +339,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const apiHost = this.getApiHost();
+    const apiHostUrl = `https://${apiHost}`;
+    const normalizedApiHostname = URL.canParse(apiHostUrl) ? new URL(apiHostUrl).hostname : '';
+    const allowGenerationFallback =
+      /^(?:[a-z0-9-]+-)?aiplatform(?:\.mtls)?\.googleapis\.com$/i.test(normalizedApiHostname);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback,
+    });
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
     const effort = this.config.effort;
@@ -344,6 +354,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.modelName,
       requestedThinkingConfig,
       effort,
+      { allowGenerationFallback },
     );
     // Thinking shares the max_tokens budget with the answer, and Opus 5 thinks even with no
     // `thinking` field — so the 512 default would truncate ordinary replies.
@@ -353,14 +364,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     if (!maxTokens) {
       maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
-    // Claude requires max_tokens >= budget_tokens when thinking is enabled
-    if (
-      thinkingConfig?.type === 'enabled' &&
-      thinkingConfig.budget_tokens &&
-      maxTokens < thinkingConfig.budget_tokens
-    ) {
-      maxTokens = thinkingConfig.budget_tokens + 1024;
-    }
+    maxTokens = clampMaxTokensForThinkingBudget(maxTokens, thinkingConfig);
 
     // Newer Claude models deprecate manual sampling controls at the model
     // level — the underlying Anthropic API returns 400 for any request that
@@ -399,7 +403,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
 
     const cache = await getCache();
-    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,
@@ -632,6 +635,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -887,7 +894,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             : completionTokenCount + (thoughtsTokenCount ?? 0);
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
-          config,
+          { ...config, region: this.getRegion() },
           promptTokenCount,
           completionForCost,
           true,

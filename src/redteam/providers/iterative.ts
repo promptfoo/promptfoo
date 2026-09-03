@@ -14,7 +14,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -41,6 +46,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   checkPenalizedPhrases,
@@ -278,7 +284,8 @@ export async function runRedteamConversation({
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -362,6 +369,9 @@ export async function runRedteamConversation({
           goal: test?.metadata?.goal as string | undefined,
         },
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
@@ -622,10 +632,10 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = {
+        storedGraderResult = accumulateGraderResult(storedGraderResult, {
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        };
+        });
       }
     }
     // Calculate the score
@@ -659,7 +669,8 @@ export async function runRedteamConversation({
       options,
     );
 
-    TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
+    accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
