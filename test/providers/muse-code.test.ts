@@ -381,26 +381,23 @@ describe('MuseCodeProvider', () => {
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'excludes an executable symlink into the workspace',
-    async () => {
-      const workspace = path.join(testDir, 'target');
-      const firstBin = path.join(testDir, 'first-bin');
-      await fs.mkdir(workspace);
-      await fs.mkdir(firstBin);
-      const malicious = path.join(workspace, 'muse');
-      await fs.writeFile(malicious, '', { mode: 0o700 });
-      await fs.symlink(malicious, path.join(firstBin, 'muse'));
-      const response = await provider({
-        config: {
-          working_dir: workspace,
-          env: { PATH: `${firstBin}${path.delimiter}${binDir}` },
-        },
-      }).callApi(prompt);
-      expect(response.error).toBeUndefined();
-      expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, 'muse'));
-    },
-  );
+  it.skipIf(process.platform === 'win32')('excludes workspace executable symlinks', async () => {
+    const workspace = path.join(testDir, 'target');
+    const firstBin = path.join(testDir, 'first-bin');
+    await fs.mkdir(workspace);
+    await fs.mkdir(firstBin);
+    const malicious = path.join(workspace, 'muse');
+    await fs.writeFile(malicious, '', { mode: 0o700 });
+    await fs.symlink(malicious, path.join(firstBin, 'muse'));
+    const response = await provider({
+      config: {
+        working_dir: workspace,
+        env: { PATH: `${firstBin}${path.delimiter}${binDir}` },
+      },
+    }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, 'muse'));
+  });
 
   it('fails without spawning when Muse is only available inside the workspace', async () => {
     await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
