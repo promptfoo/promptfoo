@@ -235,6 +235,42 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
+    it('should stop immediately and surface the error when the target errors mid-run', async () => {
+      mockGetTargetResponse
+        .mockResolvedValueOnce({ output: 'Valid response' })
+        .mockResolvedValueOnce({ output: '', error: 'Target error: 502 Bad Gateway' })
+        .mockResolvedValueOnce({ output: 'This should never be sent' });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 5,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      // Only the first (successful) and second (errored) iterations should call the target.
+      expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
+      expect(result.error).toBe('Target error: 502 Bad Gateway');
+      expect(result.metadata.stopReason).toBe('Target error');
+      expect(result.metadata.finalIteration).toBe(2);
+      // The successful first iteration is recorded; the errored second iteration is not.
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+    });
+
     it('passes target provider raw response into the grader', async () => {
       const mockGrader = {
         getResult: vi.fn<any>().mockResolvedValue({

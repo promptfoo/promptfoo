@@ -1111,7 +1111,7 @@ describe('RedteamIterativeProvider', () => {
       expect(result.tokenUsage.numRequests).toBe(3); // All calls counted
     });
 
-    it('should handle error responses without affecting token counts', async () => {
+    it('should stop the conversation and count only the calls made before a target error', async () => {
       // Clear the mock to use the target provider directly for this test
       mockGetTargetResponse.mockReset();
       mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
@@ -1148,11 +1148,17 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Only successful calls should contribute to token usage
-      expect(result.tokenUsage.total).toBe(250); // 100 + 150
-      expect(result.tokenUsage.prompt).toBe(150); // 60 + 90
-      expect(result.tokenUsage.completion).toBe(100); // 40 + 60
-      expect(result.tokenUsage.numRequests).toBe(3); // All calls are counted, including errors
+      // The attack stops at the second (errored) iteration; the third mocked
+      // response is never consumed.
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.error).toBe('Target provider failed');
+      expect(result.metadata.stopReason).toBe('Target error');
+
+      // Only the first (successful) and second (errored) calls contribute to token usage.
+      expect(result.tokenUsage.total).toBe(100);
+      expect(result.tokenUsage.prompt).toBe(60);
+      expect(result.tokenUsage.completion).toBe(40);
+      expect(result.tokenUsage.numRequests).toBe(2); // Both calls are counted, including the error
     });
 
     it('should handle zero token counts correctly', async () => {
