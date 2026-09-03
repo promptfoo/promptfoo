@@ -17,10 +17,9 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ProviderOptions,
   ProviderResponse,
-} from '../types/index';
+} from '../types/providers';
 
 const MuseCodeConfigSchema = z.object({
   basePath: z.string().optional(),
@@ -174,7 +173,7 @@ function parseResponse(result: ProcessResult): ProviderResponse {
 export class MuseCodeProvider implements ApiProvider {
   config: MuseCodeConfig;
   private readonly providerId: string;
-  private readonly env?: EnvOverrides;
+  private readonly env: ProviderOptions['env'];
   private readonly calls = new Map<AbortController, Promise<ProviderResponse>>();
   private readonly activeSessions = new Set<string>();
 
