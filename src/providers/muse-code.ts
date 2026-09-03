@@ -169,6 +169,25 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
+function redactApiKey(response: ProviderResponse, apiKey: string | undefined): ProviderResponse {
+  if (!apiKey) {
+    return response;
+  }
+  const redact = (value: string) => value.split(apiKey).join(REDACTED);
+  return JSON.parse(
+    JSON.stringify(response, (_key, value) => {
+      if (typeof value === 'string') {
+        return redact(value);
+      }
+      // Keep the provider's response field names even for an invalid, short credential.
+      if (value !== response && value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), item]));
+      }
+      return value;
+    }),
+  );
+}
+
 /** Runs Meta's installed Muse Code CLI. Each call starts a new session unless explicitly resumed. */
 export class MuseCodeProvider implements ApiProvider {
   config: MuseCodeConfig;
@@ -340,6 +359,7 @@ export class MuseCodeProvider implements ApiProvider {
     signal: AbortSignal,
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
+    const env = this.buildEnv(config);
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
@@ -367,19 +387,19 @@ export class MuseCodeProvider implements ApiProvider {
         workspace,
         config,
         signal,
+        env,
       );
-      const response = parseResponse(result);
-      const apiKey = this.getApiKey(config);
-      if (response.error && apiKey) {
-        response.error = response.error.split(apiKey).join(REDACTED);
-      }
-      return response;
+      // Redact the actual injected key before tracing or persisting any response fields.
+      return redactApiKey(parseResponse(result), env.META_API_KEY);
     } catch (error) {
-      return {
-        error: signal.aborted
-          ? 'Muse Code call aborted'
-          : `Muse Code: ${error instanceof Error ? error.message : String(error)}`,
-      };
+      return redactApiKey(
+        {
+          error: signal.aborted
+            ? 'Muse Code call aborted'
+            : `Muse Code: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        env.META_API_KEY,
+      );
     } finally {
       if (tempDir) {
         await fs.rm(tempDir, { recursive: true, force: true }).catch((error) => {
@@ -395,12 +415,13 @@ export class MuseCodeProvider implements ApiProvider {
     workspace: string,
     config: MuseCodeConfig,
     signal: AbortSignal,
+    env: NodeJS.ProcessEnv,
   ): Promise<ProcessResult> {
     return new Promise((resolve) => {
       const detached = process.platform !== 'win32';
       const child = spawn(command, args, {
         cwd: workspace,
-        env: this.buildEnv(config),
+        env,
         detached,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,
@@ -409,6 +430,10 @@ export class MuseCodeProvider implements ApiProvider {
       let stderr = '';
       let bytes = 0;
       let error: string | undefined;
+      let settled = false;
+      let exited = false;
+      let exitCode: number | null = null;
+      let exitSignal: NodeJS.Signals | null = null;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const kill = (killSignal: NodeJS.Signals) => {
         if (!child.pid) {
@@ -426,23 +451,44 @@ export class MuseCodeProvider implements ApiProvider {
           }
         }
       };
+      const finish = (code: number | null, processSignal: NodeJS.Signals | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        clearTimeout(killTimer);
+        signal.removeEventListener('abort', onAbort);
+        resolve({ stdout, stderr, exitCode: code, signal: processSignal, error });
+      };
+      const boundCleanup = () => {
+        if (killTimer) {
+          return;
+        }
+        killTimer = setTimeout(() => {
+          if (!exited) {
+            kill('SIGKILL');
+          }
+          error ??= 'Muse Code output pipes did not close after termination';
+          // A descendant can escape the process group while retaining these pipes.
+          child.stdout!.destroy();
+          child.stderr!.destroy();
+          finish(exitCode, exitSignal);
+        }, 1000);
+      };
       const stop = (message: string) => {
-        if (error) {
+        if (error || settled) {
           return;
         }
         error = message;
         kill('SIGTERM');
-        killTimer = setTimeout(() => kill('SIGKILL'), 1000);
+        boundCleanup();
       };
       const onAbort = () => stop('Muse Code call aborted');
       const timeoutMs = config.timeout_ms ?? 300_000;
       const timer = setTimeout(() => stop(`Muse Code timed out after ${timeoutMs}ms`), timeoutMs);
-      signal.addEventListener('abort', onAbort, { once: true });
-      if (signal.aborted) {
-        onAbort();
-      }
       const collect = (chunk: string, stream: 'stdout' | 'stderr') => {
-        if (error) {
+        if (error || settled) {
           return;
         }
         bytes += Buffer.byteLength(chunk);
@@ -457,24 +503,31 @@ export class MuseCodeProvider implements ApiProvider {
       child.stdout!.setEncoding('utf8').on('data', (chunk: string) => collect(chunk, 'stdout'));
       child.stderr!.setEncoding('utf8').on('data', (chunk: string) => collect(chunk, 'stderr'));
       child.on('error', (spawnError: NodeJS.ErrnoException) => {
-        error =
+        stop(
           spawnError.code === 'ENOENT'
             ? 'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.'
-            : `Muse Code process error: ${spawnError.message}`;
+            : `Muse Code process error: ${spawnError.message}`,
+        );
       });
-      child.once('exit', () => {
+      child.once('exit', (code, processSignal) => {
+        if (settled) {
+          return;
+        }
+        exited = true;
+        exitCode = code;
+        exitSignal = processSignal;
         // Background tools can keep inherited pipes open after the CLI exits.
         // Stop them before waiting for `close`, which requires those pipes to close.
         if (detached) {
           kill('SIGKILL');
         }
+        boundCleanup();
       });
-      child.once('close', (exitCode, exitSignal) => {
-        clearTimeout(timer);
-        clearTimeout(killTimer);
-        signal.removeEventListener('abort', onAbort);
-        resolve({ stdout, stderr, exitCode, signal: exitSignal, error });
-      });
+      child.once('close', finish);
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) {
+        onAbort();
+      }
     });
   }
 

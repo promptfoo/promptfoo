@@ -358,6 +358,62 @@ describe('MuseCodeProvider', () => {
     expect(result.output).toBeUndefined();
   });
 
+  it.each([0, 1])(
+    'redacts credentials throughout the response before tracing (exit %i)',
+    async (exitCode) => {
+      const apiKey = 'fixture-"secret\\\n🎵';
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload.text = `META_API_KEY=${apiKey}`;
+      events.at(-1)!.payload.details = { values: [apiKey, { echoed: apiKey }], [apiKey]: apiKey };
+      onSpawn = (child) => {
+        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+        child.stderr.write(`backend rejected ${apiKey}`);
+        child.close(exitCode);
+      };
+      let tracedResponse: unknown;
+      vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => {
+        const response = await fn({} as Span);
+        tracedResponse = response;
+        return response;
+      });
+
+      const response = await provider({ config: { apiKey } }).callApi('Print META_API_KEY');
+      if (exitCode === 0) {
+        expect(response.output).toBe('META_API_KEY=[REDACTED]');
+      } else {
+        expect(response.error).toBe('Muse Code exited with code 1: backend rejected [REDACTED]');
+      }
+      expect(response.raw.at(-1).payload.details).toEqual({
+        values: ['[REDACTED]', { echoed: '[REDACTED]' }],
+        '[REDACTED]': '[REDACTED]',
+      });
+      expect(tracedResponse).toEqual(response);
+      expect(JSON.stringify(tracedResponse)).not.toContain(JSON.stringify(apiKey).slice(1, -1));
+    },
+  );
+
+  it.each([
+    ['output', 0],
+    ['error', 1],
+  ] as const)(
+    'preserves the %s response field when redacting a short key',
+    async (apiKey, exitCode) => {
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload.text = apiKey;
+      onSpawn = (child) => {
+        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+        child.stderr.write(apiKey);
+        child.close(exitCode);
+      };
+      const response = await provider({ config: { apiKey } }).callApi(prompt);
+      if (exitCode === 0) {
+        expect(response.output).toBe('[REDACTED]');
+      } else {
+        expect(response.error).toBe('Muse Code exited with code 1: [REDACTED]');
+      }
+    },
+  );
+
   it.each(['failed', 'cancelled'])(
     'fails a %s terminal event even when the process exits zero',
     async (terminal) => {
@@ -457,6 +513,43 @@ describe('MuseCodeProvider', () => {
     children[0].close();
     expect((await call).output).toBe(`echo: ${prompt}`);
   });
+
+  it('bounds cleanup when an escaped descendant keeps output pipes open after exit', async () => {
+    vi.useFakeTimers();
+    onSpawn = (child) => {
+      child.kill.mockReturnValue(true);
+      child.stdout.write(fixture);
+      child.emit('exit', 0, null);
+    };
+    const call = provider().callApi(prompt);
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(children[0].stdout.destroyed).toBe(true);
+    expect(children[0].stderr.destroyed).toBe(true);
+    expect((await call).error).toContain('output pipes did not close');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['timeout', 'shutdown'])(
+    'bounds %s when killed processes never close their pipes',
+    async (trigger) => {
+      vi.useFakeTimers();
+      onSpawn = (child) => child.kill.mockReturnValue(true);
+      const instance = provider({ config: { timeout_ms: 100 } });
+      const call = instance.callApi(prompt);
+      await started.promise;
+      await Promise.resolve();
+      const cleanup = trigger === 'shutdown' ? instance.shutdown() : undefined;
+      await vi.advanceTimersByTimeAsync(trigger === 'timeout' ? 1100 : 1000);
+      expect(children[0].stdout.destroyed).toBe(true);
+      expect(children[0].stderr.destroyed).toBe(true);
+      expect((await call).error).toBe(
+        trigger === 'timeout' ? 'Muse Code timed out after 100ms' : 'Muse Code call aborted',
+      );
+      await cleanup;
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('honors cancellation before allocating a workspace', async () => {
     const controller = new AbortController();

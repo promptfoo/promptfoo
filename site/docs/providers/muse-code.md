@@ -92,13 +92,17 @@ The child receives a small environment containing OS paths, locale, XDG director
 
 Every call starts a fresh Muse Code process and session by default. Promptfoo does not cache responses because agent tools, local settings, and workspace state can change between calls.
 
-To continue an existing session, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Concurrent calls to the same explicit session on one provider instance are rejected to prevent overlapping turns. Use an explicit `working_dir` and `no_session_log: false` on an initial run if you want to retain its session for later use. Promptfoo removes its temporary prompt files and stops its child processes; it leaves Muse Code's retained sessions and user workspaces intact.
+To continue an existing session, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Concurrent calls to the same explicit session on one provider instance are rejected to prevent overlapping turns. Use an explicit `working_dir` and `no_session_log: false` on an initial run if you want to retain its session for later use. Promptfoo removes its temporary prompt files and terminates the CLI, including its process group on POSIX systems. It leaves Muse Code's retained sessions and user workspaces intact.
+
+If output pipes remain open after termination, Promptfoo closes them after a one-second cleanup grace period and returns an error.
 
 The response contains:
 
 - `output`: the current run's final assistant text.
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
 - `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
+
+Promptfoo redacts literal occurrences of the supplied Meta API key from response fields and journal data before tracing or export.
 
 Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.
 
