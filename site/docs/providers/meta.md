@@ -20,22 +20,26 @@ This provider is for the Meta **Model** API at `api.meta.ai` (Muse models), whic
 
 ```yaml
 providers:
-  - id: meta:muse-spark-1.1
+  - id: meta:muse-spark-1.3
 ```
 
-`meta:<model>` defaults to the [Responses API](#responses-api) — Meta's full-feature surface and the one its docs recommend. Use `meta:chat:<model>` for the OpenAI-compatible chat completions endpoint, or `meta:messages:<model>` for the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`.
+`meta:<model>` defaults to the [Responses API](#responses-api) — Meta's full-feature surface and the one its docs recommend. Use `meta:chat:<model>` for the OpenAI-compatible chat completions endpoint, or `meta:messages:<model>` for the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`; select `muse-spark-1.3` explicitly to use the latest model.
 
 ## Available Models
 
-Check the [models page](https://dev.meta.ai/docs/getting-started/models) for the live list. As of writing:
+Check the [models page](https://dev.meta.ai/docs/models) for the live list. As of writing:
 
-- `muse-spark-1.1` — multimodal reasoning model: 1,048,576-token context window, 131,072 max output tokens, text/image/video/PDF input, tool calling, structured output, and search grounding (Responses and Messages APIs).
+- `muse-spark-1.3` — latest model for coding and agentic workflows, with a 1,048,576-token context window, text/image/video/PDF input, tool calling, structured output, and search grounding.
+- `muse-spark-1.3-contributor` — the same model with discounted pricing. Selecting this ID permits Meta to use your prompts and completions to train future models.
+- `muse-spark-1.1` — original Muse Spark model, still supported.
+
+Both 1.3 IDs work with the Responses, Chat Completions, and Messages APIs. Meta notes that audio understanding in 1.3 is not fully supported and may produce degraded responses.
 
 ## Configuration
 
 ```yaml
 providers:
-  - id: meta:muse-spark-1.1
+  - id: meta:muse-spark-1.3
     config:
       reasoning_effort: high
       max_completion_tokens: 8192
@@ -54,11 +58,18 @@ The provider accepts compatible [OpenAI provider](/docs/providers/openai/) optio
 - `prompt_cache_retention` — `in_memory` or `24h` for prompt caching; cached prompt tokens bill at the cached-input rate.
 - `seed` — best-effort determinism.
 
-Muse Spark does not support `logprobs`, `n > 1`, `stop`, or audio input/output. The provider fails fast for unsupported options instead of surfacing an HTTP 400 per request. OpenAI-compatible `stream` is also rejected because promptfoo expects a complete JSON response on the chat and Responses surfaces. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
+On Chat Completions and Responses, promptfoo rejects `logprobs`, `n > 1`, `stop`, and `logit_bias` before sending a request. It also rejects `stream` because these integrations expect a complete JSON response. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
 
 ### Cost Tracking
 
-Promptfoo computes cost from the [published pricing](https://dev.meta.ai/docs/getting-started/pricing-rate-limits) ($1.25 input / $0.15 cached input / $4.25 output per 1M tokens for `muse-spark-1.1`), including the cached-input rate for prompt-cache hits. Override with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (all in USD per token) if pricing changes or you have custom rates.
+Promptfoo computes token cost from Meta's [published pricing](https://dev.meta.ai/docs/pricing-rate-limits), including the discounted rate for cached input:
+
+| Model                              | Input / 1M | Cached input / 1M | Output / 1M |
+| ---------------------------------- | ---------- | ----------------- | ----------- |
+| `muse-spark-1.3`, `muse-spark-1.1` | $1.25      | $0.15             | $4.25       |
+| `muse-spark-1.3-contributor`       | $0.10      | $0.002            | $0.20       |
+
+Contributor pricing requires opting into Meta's training data terms by selecting the Contributor model ID. Override token prices with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (USD per token) for custom rates. Token cost excludes web-search charges.
 
 ## Responses API
 
@@ -66,7 +77,7 @@ Promptfoo computes cost from the [published pricing](https://dev.meta.ai/docs/ge
 
 ```yaml
 providers:
-  - id: meta:responses:muse-spark-1.1
+  - id: meta:responses:muse-spark-1.3
     config:
       reasoning_effort: medium
       tools:
@@ -81,12 +92,12 @@ With `web_search`, the model grounds answers in real-time web results with inlin
 
 ```yaml
 providers:
-  - id: meta:messages:muse-spark-1.1
+  - id: meta:messages:muse-spark-1.3
     config:
       max_tokens: 8192
 ```
 
-The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. It defaults `max_tokens` to Muse Spark's 131,072-token output budget and enables streaming so the Anthropic SDK can safely handle long generations; streamed output is aggregated before grading. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TEMPERATURE`, custom headers, and Claude Code OAuth credentials are deliberately ignored on this surface.
+The provider extends the [Anthropic provider](/docs/providers/anthropic/), so its options (`max_tokens`, `tools`, image and document content blocks, etc.) apply. It defaults `max_tokens` to 131,072 and enables streaming so the Anthropic SDK can safely handle long generations; streamed output is aggregated before grading. Authentication uses your Meta key as a bearer token (`Authorization: Bearer`), matching Meta's docs — Anthropic-scoped settings like `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TEMPERATURE`, custom headers, and Claude Code OAuth credentials are deliberately ignored on this surface.
 
 Muse Spark's reasoning arrives on this surface as encrypted `redacted_thinking` blocks, so the provider defaults `showThinking` to `false` to keep the ciphertext out of graded output.
 
@@ -103,7 +114,7 @@ providers:
   - id: openai:codex-sdk
     config:
       base_url: https://api.meta.ai/v1
-      model: muse-spark-1.1
+      model: muse-spark-1.3
       apiKey: '{{env.MODEL_API_KEY}}'
 ```
 
@@ -128,11 +139,11 @@ providers:
         ANTHROPIC_BASE_URL: https://api.meta.ai
         ANTHROPIC_AUTH_TOKEN: '{{env.MODEL_API_KEY}}'
         ANTHROPIC_CUSTOM_HEADERS: ''
-        ANTHROPIC_MODEL: muse-spark-1.1
-        ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.1
-        ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.1
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.1
-        CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.1
+        ANTHROPIC_MODEL: muse-spark-1.3
+        ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.3
+        ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.3
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.3
+        CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.3
         ENABLE_TOOL_SEARCH: 'true' # Claude Code disables MCP tool search for non-first-party hosts
 ```
 
@@ -142,13 +153,13 @@ Do not omit `apiKey`, the empty `ANTHROPIC_CUSTOM_HEADERS` override, or the prov
 
 :::
 
-Pin every model alias as shown — Meta serves only `muse-spark-1.1`, and Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. See Meta's [coding agents guide](https://dev.meta.ai/docs/guides/coding-agents) for the full setup pattern.
+Pin every model alias as shown — Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. See Meta's [coding agents guide](https://dev.meta.ai/docs/coding-agents) for the full setup pattern.
 
 ## Example Usage
 
 ```yaml
 providers:
-  - id: meta:muse-spark-1.1
+  - id: meta:muse-spark-1.3
   - id: openai:gpt-5.5
 
 prompts:
@@ -169,11 +180,11 @@ npx promptfoo@latest init --example provider-meta
 
 - Base URL: `https://api.meta.ai/v1` (override with `apiBaseUrl`; the Messages surface uses the bare host `https://api.meta.ai`).
 - OpenAI-compatible chat completions (`/chat/completions`) and Responses (`/responses`) endpoints, plus the Anthropic-compatible Messages (`/messages`) endpoint.
-- Rate limits apply per team, not per key: 60 RPM / 2M TPM on the free tier, 3,000 RPM / 4M TPM paid.
-- Full [API documentation](https://dev.meta.ai/docs/getting-started/overview).
+- Rate limits apply per team, not per key: 3,000 RPM / 4M TPM for Standard models and 100 RPM / 3M TPM for Contributor models.
+- Full [API documentation](https://dev.meta.ai/docs/overview).
 
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) — compatible configuration options
 - [Llama API Provider](/docs/providers/llamaApi.md) — Meta's hosted Llama models
-- [Meta Model API docs](https://dev.meta.ai/docs/getting-started/overview) and [pricing](https://dev.meta.ai/docs/getting-started/pricing-rate-limits)
+- [Meta Model API docs](https://dev.meta.ai/docs/overview) and [pricing](https://dev.meta.ai/docs/pricing-rate-limits)
