@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -1081,21 +1081,19 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
-  const filteredProviderOptions = allProviderOptions.filter((option) => {
-    // Filter by availableProviderIds if provided
-    const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+  const filteredProviderOptions = useMemo(() => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    return allProviderOptions.filter((option) => {
+      const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+      const matchesSearch =
+        !normalizedSearch ||
+        option.label.toLowerCase().includes(normalizedSearch) ||
+        option.description.toLowerCase().includes(normalizedSearch);
+      const matchesTag = !selectedTag || option.tag === selectedTag;
 
-    // Filter by search term if provided
-    const matchesSearch =
-      !searchTerm ||
-      option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      option.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Filter by selected tag if provided
-    const matchesTag = !selectedTag || option.tag === selectedTag;
-
-    return isAvailable && matchesSearch && matchesTag;
-  });
+      return isAvailable && matchesSearch && matchesTag;
+    });
+  }, [searchTerm, selectedTag, availableProviderIds]);
 
   // Get the selected provider option for collapsed view
   const selectedOption = selectedProviderType
