@@ -180,6 +180,10 @@ describe('sanitizeObject', () => {
     ['base_url', 'https://example.test/v1?api_key=short-{{ env.SUFFIX }}'],
     ['baseUrl', 'https://example.test/v1?github_pat={{ env.PREFIX }}-secret'],
     ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}&token=literal-secret'],
+    ['base_url', 'https://example.test/v1?api_key={{ "literal-secret" }}'],
+    ['base_url', '{{ endpoint }}?github_pat=literal-secret'],
+    ['base_url', '{{ endpoint }}?github_pat={{ "literal-secret" }}'],
+    ['base_url', '{{ origin }}:literal-secret@example.test'],
   ])('redacts credentials in endpoint field %s: %s', (key, value) => {
     expect(sanitizeObject({ [key]: value })).toEqual({ [key]: '[REDACTED]' });
   });
@@ -244,6 +248,7 @@ describe('sanitizeObject', () => {
       GITHUB_PAT: '{{ token }}',
       PGPASSWORD: '{{ password | trim }}',
       AUTHORIZATION: '{{ authorization }}',
+      GITHUB_TOKEN: '{{ credentials.github | trim }}',
       DEPLOY_KEY: 'prefix-{{ token }}',
       DATABASE_PASSWORD: 'literal-pass',
     };
@@ -252,6 +257,15 @@ describe('sanitizeObject', () => {
     });
     expect(sanitizeObject({ env }, { maxDepth: 0 })).toEqual({ env: '[...]' });
   });
+
+  it.each(['{{ "template-literal-secret" }}', '{{ token | default("template-literal-secret") }}'])(
+    'redacts literal credentials embedded in an environment template: %s',
+    (value) => {
+      expect(sanitizeObject({ env: { GITHUB_PAT: value } })).toEqual({
+        env: { GITHUB_PAT: '[REDACTED]' },
+      });
+    },
+  );
 
   it.each([
     ['MUSE_AUTH_PATH', '/home/user/muse-auth.json'],

@@ -457,6 +457,7 @@ describe('EvalResult', () => {
           PGPASSWORD: '{{ password }}',
           GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
           AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+          DEPLOY_KEY: '{{ "template-literal-secret" }}',
         };
         const museProvider: ProviderOptions = { id: 'muse-code', config: { env } };
         const result = await EvalResult.createFromEvaluateResult(
@@ -465,7 +466,8 @@ describe('EvalResult', () => {
           { persist: true },
         );
         const retrieved = await EvalResult.findById(result.id);
-        expect(retrieved?.provider.config?.env).toEqual(env);
+        expect(retrieved?.provider.config?.env).toEqual({ ...env, DEPLOY_KEY: '[REDACTED]' });
+        expect(JSON.stringify(retrieved?.provider)).not.toContain('template-literal-secret');
       });
 
       it('redacts child environment credentials from persisted provider records', async () => {

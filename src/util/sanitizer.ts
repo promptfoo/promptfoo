@@ -1025,6 +1025,15 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
 const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
 
+// Only references and the standard credential-formatting filters are safe to
+// preserve. Other expressions can contain literal credentials or fallback values.
+const CREDENTIAL_REFERENCE_TEMPLATE =
+  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])*\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}/g;
+
+function isPureCredentialReference(value: string): boolean {
+  return value.includes('{{') && value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '').trim() === '';
+}
+
 // A value that is entirely Nunjucks placeholders (e.g. `{{password}}`) with no
 // literal content is a config template, not a runtime secret. A value that merely
 // CONTAINS a placeholder alongside literal text (e.g. `abc{{x}}def`) is not, so a
@@ -1114,13 +1123,30 @@ function sanitizeEnvMap(env: Record<string, unknown>, depth: number, maxDepth: n
       continue;
     }
     // A pure reference contains no credential and must remain reusable in exported configs.
-    if (isPureTemplateValue(item)) {
+    if (isPureCredentialReference(item)) {
       sanitized[name] = item;
     } else if (credentials.has(item)) {
       sanitized[name] = REDACTED;
     }
   }
   return sanitized;
+}
+
+function sanitizeBaseUrl(value: string): string {
+  const literalUrl = value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '');
+  let hasLiteralCredentials = false;
+  const collect = (raw: string) => {
+    hasLiteralCredentials ||= raw.length > 0;
+  };
+  collectRawUrlCredentials(literalUrl, collect);
+  if (value.includes('{{') && !literalUrl.includes('://')) {
+    // A leading origin reference can supply the scheme at runtime. Still inspect
+    // the literal userinfo/query fragments that follow it before saving the config.
+    collectRawUrlCredentials(`https://placeholder${literalUrl}`, collect);
+  }
+  return hasLiteralCredentials || collectEnvCredentials({}, literalUrl).length
+    ? REDACTED
+    : sanitizeUrl(value);
 }
 
 /**
@@ -1132,10 +1158,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
     if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) {
       sanitized[key] = sanitizeEnvMap(value as Record<string, unknown>, depth + 1, maxDepth);
     } else if (normalizeFieldName(key) === 'baseurl' && typeof value === 'string') {
-      // Placeholders are not literal credentials. Keep the URL sanitizer's
-      // template preservation while still detecting mixed literal/template values.
-      const literalUrl = value.replace(NUNJUCKS_PLACEHOLDER, '');
-      sanitized[key] = collectEnvCredentials({}, literalUrl).length ? REDACTED : sanitizeUrl(value);
+      sanitized[key] = sanitizeBaseUrl(value);
     } else if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretField(key)) {

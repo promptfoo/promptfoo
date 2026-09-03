@@ -276,11 +276,13 @@ describe('writeOutput', () => {
       PGPASSWORD: '{{ password }}',
       GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
       AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+      DEPLOY_KEY: '{{ "template-literal-secret" }}',
     };
     const eval_ = new Eval({ providers: [{ id: 'muse-code', config: { env } }] });
     await writeOutput('output.json', eval_, null);
     const parsed = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
-    expect(parsed.config.providers[0].config.env).toEqual(env);
+    expect(parsed.config.providers[0].config.env).toEqual({ ...env, DEPLOY_KEY: '[REDACTED]' });
+    expect(JSON.stringify(parsed)).not.toContain('template-literal-secret');
   });
 
   it.each([

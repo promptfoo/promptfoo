@@ -854,6 +854,7 @@ describe('createShareableUrl', () => {
         PGPASSWORD: '{{ password }}',
         GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
         AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+        DEPLOY_KEY: '{{ "template-literal-secret" }}',
       };
       mockEval.config = { providers: [{ id: 'muse-code', config: { env } }] };
       mockFetch
@@ -861,7 +862,11 @@ describe('createShareableUrl', () => {
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
       expect(await createShareableUrl(mockEval as Eval)).toBeTruthy();
       const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(requestBody.config.providers[0].config.env).toEqual(env);
+      expect(requestBody.config.providers[0].config.env).toEqual({
+        ...env,
+        DEPLOY_KEY: '[REDACTED]',
+      });
+      expect(JSON.stringify(requestBody)).not.toContain('template-literal-secret');
     });
 
     it.each([false, true])(
