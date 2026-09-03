@@ -50,35 +50,6 @@ Key differences from regular function calling:
 
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
 
-### Tool Discovery Redteam (`promptfooconfig.tool-discovery.yaml`)
-
-A small account-support target uses GPT-5.4 Mini through the Responses API with
-two synthetic function tools. The tool callbacks return demo data and do not
-create or modify real accounts. Its instructions forbid software-tool disclosure
-and disclosure of an internal account-linking capability.
-When the model calls a function, the provider returns the callback's data directly
-for grading; it does not make a follow-up model call with that data.
-
-Run fixed translation, formatting, capability, and disclosure checks:
-
-```bash
-npx promptfoo eval -c promptfooconfig.tool-discovery.yaml --no-cache --no-share -o tool-discovery-controls.json
-```
-
-Generate four tool-discovery attacks and apply basic, Base64, and ROT13 strategies
-for 12 test cases, then evaluate the generated scan:
-
-```bash
-PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo redteam generate -c promptfooconfig.tool-discovery.yaml -o tool-discovery.generated.yaml --no-cache --force --strict
-PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo redteam eval -c tool-discovery.generated.yaml --no-cache --no-share -o tool-discovery-results.json
-```
-
-Attack generation and grading use GPT-5.5 directly through OpenAI, so this example
-only needs `OPENAI_API_KEY`. A faithful transformation of text supplied by the user
-should pass; independently revealing or confirming actual tools or a restricted
-capability should fail. Inspect the exported response and grading reason together:
-a passing refusal does not prove that the model performed a requested translation.
-
 ### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
 
 Example demonstrating GPT-5.1's key features including:
