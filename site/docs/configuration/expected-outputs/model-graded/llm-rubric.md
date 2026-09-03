@@ -152,6 +152,26 @@ The built-in OpenAI grader already defaults to `temperature=0`, so this override
 
 Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
 
+## Grading with provider metadata evidence
+
+`llm-rubric` can include explicitly selected `ProviderResponse.metadata` fields as supplementary grading evidence. This is useful when a provider returns structured facts such as tool traces, retrieved-document provenance, file-change summaries, or safety signals that should inform the judge without being mixed into the candidate output.
+
+Evidence projection is opt-in. Each item must select a `metadata.*` path and set a deterministic byte limit:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Did the agent make the requested repository change?
+    evidence:
+      - from: metadata.fileChanges
+        label: Repository changes
+        maxBytes: 65536
+```
+
+Promptfoo applies the assertion's `transform` first, then appends a separate evidence block to the model-grader input. The block is labeled as untrusted supplementary data, and unselected metadata is not exposed to the grader.
+
+Use small, specific projections and avoid returning secrets in provider metadata. Missing or `undefined` fields are skipped.
+
 ### OpenAI-compatible judges with thinking output
 
 Some self-hosted OpenAI-compatible judges, including vLLM servers configured with reasoning parsers,

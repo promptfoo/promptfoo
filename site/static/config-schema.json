@@ -1076,6 +1076,28 @@
         "transform": {
           "type": "string"
         },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "pattern": "^metadata(?:\\.[A-Za-z0-9_$-]+|\\.\\d+)*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "maxBytes": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["from", "maxBytes"],
+            "additionalProperties": false
+          }
+        },
         "contextTransform": {
           "type": "string"
         }
