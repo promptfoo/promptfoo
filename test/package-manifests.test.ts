@@ -499,25 +499,40 @@ describe('package manifests', () => {
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
     const agentVersion = packageJson.devDependencies?.[agentName];
+    const sdkPackage = packageLock.packages[`node_modules/${sdkName}`];
     const agentPackage = packageLock.packages[`node_modules/${agentName}`];
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(sdkPackage, 'the Anthropic SDK must have a lockfile entry').toBeDefined();
+    expect(agentPackage, 'the Anthropic agent SDK must have a lockfile entry').toBeDefined();
     expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
-    expect(resolvedSdkVersion).toBeDefined();
-    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
-    expect(agentPackage.version).toBe(agentVersion);
+    expect(sdkPackage.version, 'the Anthropic SDK must have a resolved version').toBeDefined();
+    expect(
+      satisfies(sdkPackage.version as string, sdkVersion as string),
+      'the resolved Anthropic SDK must satisfy its declared dependency range',
+    ).toBe(true);
+    expect(
+      agentPackage.version,
+      'the Anthropic agent SDK must have a resolved version',
+    ).toBeDefined();
+    expect(
+      satisfies(agentPackage.version as string, agentVersion as string),
+      'the resolved Anthropic agent SDK must satisfy its declared dependency range',
+    ).toBe(true);
 
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
-      expect(binaryVersion).toBe(agentVersion);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+      const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+      expect(binaryVersion).toBe(agentPackage.version);
+      expect(binaryPackage, `${binaryName} must have a lockfile entry`).toBeDefined();
+      expect(binaryPackage.version).toBe(agentPackage.version);
     }
   });
 
@@ -1073,6 +1088,10 @@ describe('package manifests', () => {
     expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
     expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(
+      validRange(parserTransportRange as string),
+      'the parser transport dependency must declare a valid semver range',
+    ).not.toBeNull();
     expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
@@ -1086,7 +1105,10 @@ describe('package manifests', () => {
     expect(
       subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
     ).toBe(true);
-    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+    expect(
+      subset(parserTransportRange as string, PATCHED_UNDICI_RANGE),
+      `the parser transport dependency must not allow vulnerable undici ${parserTransportRange}`,
+    ).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
