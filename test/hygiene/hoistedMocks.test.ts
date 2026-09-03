@@ -34,6 +34,65 @@ describe('hoisted mock provenance', () => {
     ).toBe(false);
   });
 
+  it.each([
+    "let request; if (flag) request = vi.fn().mockReturnValue('a'); else request = vi.fn().mockReturnValue('b'); return request;",
+    "const client = {}; if (flag) client.request = vi.fn().mockReturnValue('a'); else client.request = vi.fn().mockReturnValue('b'); return client.request;",
+    "if (flag) { var request = vi.fn().mockReturnValue('a'); } else { var request = vi.fn().mockReturnValue('b'); } return request;",
+    "let request; flag ? request = vi.fn().mockReturnValue('a') : request = vi.fn().mockReturnValue('b'); return request;",
+    "let request; if (first) { if (second) request = vi.fn().mockReturnValue('a'); else request = vi.fn().mockReturnValue('b'); } else request = vi.fn().mockReturnValue('c'); return request;",
+  ])('merges mutually exclusive assignment paths in %s', (body) => {
+    const source = `const mock = vi.hoisted(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source}\nbeforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
+  it.each([
+    "try { return vi.fn().mockReturnValue('x'); } finally {}",
+    "try { return vi.fn().mockReturnValue('a'); } catch { return vi.fn().mockReturnValue('b'); }",
+    "try { throw new Error('expected'); } catch { return vi.fn().mockReturnValue('x'); }",
+    "const mock = vi.fn().mockReturnValue('x'); try { return unrelated; } finally { return mock; }",
+  ])('preserves factory return flow through %s', (body) => {
+    const source = `const mock = vi.hoisted(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source}\nbeforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
+  it.each([
+    "class Factory { [String(request.mockReturnValue('x'))]() {} }",
+    "class Factory { [String(request.mockReturnValue('x'))] = undefined; }",
+    "@decorate(request.mockReturnValue('x')) class Factory {}",
+    "class Factory { @decorate(request.mockReturnValue('x')) method() {} }",
+    "class Factory extends extend(request.mockReturnValue('x')) {}",
+    "String.raw`${request.mockReturnValue('x')}`;",
+  ])('evaluates definition-time effects in %s', (definition) => {
+    const source = `const mock = vi.hoisted(() => {
+      const request = vi.fn();
+      ${definition}
+      return request;
+    });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source}\nbeforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
+  it('does not execute deferred class methods or instance initializers', () => {
+    expect(
+      hasHoistedPersistentMockWithoutReset(`const mock = vi.hoisted(() => {
+        const request = vi.fn();
+        class Factory {
+          field = request.mockReturnValue('instance');
+          method() { request.mockReturnValue('method'); }
+        }
+        return request;
+      });`),
+    ).toBe(false);
+  });
+
   it('invalidates a member alias overwritten by an unknown computed assignment', () => {
     const source = `
       const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
@@ -43,6 +102,80 @@ describe('hoisted mock provenance', () => {
     `;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
+
+  it.each([
+    'let alias = unrelated; if (flag) alias = mock; beforeEach(() => alias.mockReset());',
+    'const client = { request: unrelated }; if (flag) client.request = mock; beforeEach(() => client.request.mockReset());',
+    'beforeEach(() => { if (flag) mock.mockReset(); });',
+    'beforeEach(() => { if (flag) vi.resetAllMocks(); });',
+    'beforeEach(() => { while (flag) { mock.mockReset(); break; } });',
+    'beforeEach(() => { for (const item of items) mock.mockReset(); });',
+    'beforeEach(() => { for (let index = 0; flag; index++) mock.mockReset(); });',
+    'beforeEach(() => { switch (flag) { case 1: mock.mockReset(); } });',
+    'beforeEach(() => { try { work(); } catch { mock.mockReset(); } });',
+    'beforeEach(() => { flag && mock.mockReset(); });',
+    'beforeEach(() => { flag || vi.resetAllMocks(); });',
+    'beforeEach(() => { flag ?? mock.mockReset(); });',
+    'let flag; beforeEach(() => { flag = unknown; flag &&= mock.mockReset(); });',
+    'let flag; beforeEach(() => { flag = unknown; flag ||= mock.mockReset(); });',
+    'let flag; beforeEach(() => { flag = unknown; flag ??= mock.mockReset(); });',
+    'function cleanup(value = mock.mockReset()) {} beforeEach(() => cleanup(unknown));',
+    'vi.resetAllMocks();',
+  ])('does not mistake a possible or collection-only reset for a guaranteed hook: %s', (body) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x')); ${body}`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each(['mock.mockReset()', 'vi.resetAllMocks()'])(
+    'accepts %s when every hook branch performs it',
+    (reset) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+        beforeEach(() => { if (flag) ${reset}; else ${reset}; });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it.each(['true &&', 'false ||', 'null ??', 'undefined ??'])(
+    'recognizes a guaranteed short-circuit reset with %s',
+    (prefix) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+        beforeEach(() => { ${prefix} mock.mockReset(); });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it('keeps conditional resets in separate helper calls independent', () => {
+    const source = `
+      const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      function maybeReset(flag, whenTrue) {
+        if (flag) { if (whenTrue) mock.mockReset(); }
+        else { if (!whenTrue) mock.mockReset(); }
+      }
+      beforeEach(() => {
+        maybeReset(first, true);
+        maybeReset(second, false);
+      });
+    `;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each(['null', 'false', '0', "'provided'", '{}', '[]'])(
+    'does not evaluate a default initializer for a known defined value: %s',
+    (argument) => {
+      const source = `function build(value = vi.fn().mockReturnValue('default')) { return value; }
+        const mock = vi.hoisted(() => build(${argument}));`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it.each(['undefined', 'unknownArgument'])(
+    'checks a default initializer when the argument could be undefined: %s',
+    (argument) => {
+      const source = `function build(value = vi.fn().mockReturnValue('default')) { return value; }
+        const mock = vi.hoisted(() => build(${argument}));`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    },
+  );
 
   it.each([
     "while (request.mockReturnValue('x')) { break; }",
@@ -156,14 +289,51 @@ describe('hoisted mock provenance', () => {
     ]);
   });
 
-  it('allows a nested response mock discarded and rebuilt by the outer reset', () => {
+  it.each(['mockReturnValue', 'mockResolvedValue', 'mockRejectedValue'])(
+    'allows a nested %s mock discarded and rebuilt by the outer reset',
+    (method) => {
+      const source = `
+        const fetch = vi.hoisted(() => vi.fn().${method}({
+          json: vi.fn().mockResolvedValue('original'),
+        }));
+        beforeEach(() => fetch.mockReset().${method}({
+          json: vi.fn().mockResolvedValue('fresh'),
+        }));
+      `;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it.each([
+    '...optional',
+    '[propertyName]: inner',
+    'opaque: unknownFunction(inner)',
+    'getInner: () => inner',
+  ])('does not discard a nested mock that could be exposed through %s', (exposure) => {
     const source = `
-      const fetch = vi.hoisted(() => vi.fn().mockResolvedValue({
+      const mocks = vi.hoisted(() => {
+        const inner = vi.fn().mockReturnValue('x');
+        const outer = vi.fn().mockReturnValue({ inner });
+        const optional = flag ? { inner } : {};
+        return { ${exposure}, outer };
+      });
+      beforeEach(() => mocks.outer.mockReset());
+    `;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(
+        source.replace('mocks.outer.mockReset()', 'vi.resetAllMocks()'),
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps uncertain exposure local to its hoisted factory', () => {
+    const source = `
+      const fetch = vi.hoisted(() => vi.fn().mockReturnValue({
         json: vi.fn().mockResolvedValue('original'),
       }));
-      beforeEach(() => fetch.mockReset().mockResolvedValue({
-        json: vi.fn().mockResolvedValue('fresh'),
-      }));
+      const unrelated = vi.hoisted(() => ({ ...unknownObject }));
+      beforeEach(() => fetch.mockReset());
     `;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
