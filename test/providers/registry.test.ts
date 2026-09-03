@@ -1,9 +1,11 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isAgenticGradingProvider, isAgenticProvider } from '../../src/providers/agentic-utils';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
+import type { MuseCodeProvider } from '../../src/providers/muse-code';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -82,6 +84,43 @@ describe('Provider Registry', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    describe('Muse Code', () => {
+      it.each(['muse-code', 'muse-code:muse-spark-1.2'])(
+        'routes %s to the native coding-agent provider',
+        async (id) => {
+          const { MuseCodeProvider } = await import('../../src/providers/muse-code');
+          const provider = await registry.create(id);
+          try {
+            expect(provider).toBeInstanceOf(MuseCodeProvider);
+            expect(provider.id()).toBe(id);
+            expect(provider.config.model).toBe(id === 'muse-code' ? undefined : 'muse-spark-1.2');
+          } finally {
+            await (provider as MuseCodeProvider).shutdown();
+          }
+        },
+      );
+
+      it('keeps the model API and similarly named prefixes separate', () => {
+        const factory = providerMap.find((candidate) => candidate.test('muse-code'))!;
+        expect(factory.test('meta:muse-spark-1.2')).toBe(false);
+        expect(factory.test('muse-code-other')).toBe(false);
+      });
+
+      it('preserves explicit provider IDs and model suffixes', async () => {
+        const provider = await registry.create('muse-code:muse-spark-1.2', {
+          options: { id: 'muse-comparison', config: { model: 'overridden' } },
+        });
+        try {
+          expect(provider.id()).toBe('muse-comparison');
+          expect(provider.config.model).toBe('muse-spark-1.2');
+          expect(isAgenticProvider(provider)).toBe(true);
+          expect(isAgenticGradingProvider(provider)).toBe(true);
+        } finally {
+          await (provider as MuseCodeProvider).shutdown();
+        }
+      });
     });
 
     describe('getProviderFactories boundary contract', () => {

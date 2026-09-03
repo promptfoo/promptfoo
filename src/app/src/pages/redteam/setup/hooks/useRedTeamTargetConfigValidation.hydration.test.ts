@@ -1233,6 +1233,8 @@ it.each([
     'openai:codex-app-server',
     { sandbox_mode: 'danger-full-access', approval_policy: 'never' },
   ],
+  ['Muse Code coding agent', 'muse-code', {}],
+  ['Muse Code model selection', 'muse-code:muse-spark-1.2', {}],
   [
     'OpenAI sandbox agent',
     'openai:agents:demo',

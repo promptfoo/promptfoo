@@ -847,6 +847,122 @@ describe('createShareableUrl', () => {
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
 
+    it('preserves environment templates and credential-file paths in the shared config', async () => {
+      const env = {
+        META_API_KEY: '{{ env.META_API_KEY }}',
+        GITHUB_PAT: '{{ token }}',
+        PGPASSWORD: '{{ password }}',
+        GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+        AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
+        DEPLOY_KEY: '{{ "template-literal-secret" }}',
+      };
+      mockEval.config = { providers: [{ id: 'muse-code', config: { env } }] };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      expect(await createShareableUrl(mockEval as Eval)).toBeTruthy();
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.config.providers[0].config.env).toEqual({
+        ...env,
+        DEPLOY_KEY: '[REDACTED]',
+      });
+      expect(JSON.stringify(requestBody)).not.toContain('template-literal-secret');
+    });
+
+    it.each([false, true])(
+      'redacts Muse credentials from the initial share POST with cloud enabled: %s',
+      async (cloudEnabled) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+        mockEval.config = {
+          description: 'Muse eval',
+          env: { META_API_KEY: 'global-meta-secret', REGION: 'us-west-2' },
+          providers: [
+            {
+              id: 'muse-code',
+              env: { META_API_KEY: 'provider-meta-secret' },
+              config: {
+                apiKey: 'literal-meta-secret',
+                base_url: 'https://meta.example/v1?api_key=endpoint-secret',
+                max_model_steps: 3,
+                env: {
+                  META_API_KEY: 'child-meta-secret',
+                  GITHUB_PAT: 'short-git-secret',
+                  PGPASSWORD: 'short-pg-secret',
+                  AUTHORIZATION: 'Bearer short-auth-secret',
+                  SLACK_WEBHOOK_URL:
+                    'https://hooks.slack.com/services/T000/B000/share-webhook-token',
+                  SERVICE_URL: 'https://service-user:service-password@service.example',
+                  HOTKEY: 'ctrl+s',
+                  MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+                },
+              },
+            },
+          ],
+          defaultTest: {
+            options: { provider: { id: 'muse-code', config: { apiKey: 'grader-meta-secret' } } },
+          },
+        };
+        const originalConfig = structuredClone(mockEval.config);
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ id: mockEval.id }),
+          })
+          .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+        expect(await createShareableUrl(mockEval as Eval)).toBeTruthy();
+
+        const request = mockFetch.mock.calls[0][1];
+        expect(request.method).toBe('POST');
+        const sharedConfig = JSON.parse(request.body).config;
+        expect(sharedConfig.env).toEqual({ META_API_KEY: '[REDACTED]', REGION: 'us-west-2' });
+        expect(sharedConfig.providers[0]).toEqual({
+          id: 'muse-code',
+          env: { META_API_KEY: '[REDACTED]' },
+          config: {
+            apiKey: '[REDACTED]',
+            base_url: '[REDACTED]',
+            max_model_steps: 3,
+            env: {
+              META_API_KEY: '[REDACTED]',
+              GITHUB_PAT: '[REDACTED]',
+              PGPASSWORD: '[REDACTED]',
+              AUTHORIZATION: '[REDACTED]',
+              SLACK_WEBHOOK_URL: '[REDACTED]',
+              SERVICE_URL: '[REDACTED]',
+              HOTKEY: 'ctrl+s',
+              MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+            },
+          },
+        });
+        expect(sharedConfig.defaultTest.options.provider.config.apiKey).toBe('[REDACTED]');
+        expect(sharedConfig.description).toBe('Muse eval');
+        if (cloudEnabled) {
+          expect(sharedConfig.metadata.teamId).toBe('team-456');
+        }
+        for (const secret of [
+          'global-meta-secret',
+          'provider-meta-secret',
+          'literal-meta-secret',
+          'child-meta-secret',
+          'endpoint-secret',
+          'short-git-secret',
+          'short-pg-secret',
+          'short-auth-secret',
+          'share-webhook-token',
+          'service-password',
+          'grader-meta-secret',
+        ]) {
+          expect(request.body).not.toContain(secret);
+        }
+        expect(mockEval.config).toEqual(originalConfig);
+      },
+    );
+
     it.each([false, true])(
       'removes in-memory tracing credentials before sharing with cloud enabled: %s',
       async (cloudEnabled) => {

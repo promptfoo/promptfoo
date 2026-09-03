@@ -179,6 +179,8 @@ describe('writeOutput', () => {
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
+        META_API_KEY: 'meta-global-dev-key',
+        GITHUB_PAT: 'github-global-dev-pat',
         REGION: 'us-east-1',
       },
       providers: [
@@ -187,6 +189,24 @@ describe('writeOutput', () => {
           config: {
             apiKey: 'sk-secret-value',
             max_turns: 2,
+          },
+        },
+        {
+          id: 'muse-code',
+          env: { META_API_KEY: 'meta-provider-dev-key', OPENAI_API_KEY: 'openai-provider-dev-key' },
+          config: {
+            base_url: 'https://meta.example/v1?api_key=endpoint-config-secret',
+            env: {
+              META_API_KEY: 'meta-child-dev-key',
+              GITHUB_PAT: 'github-child-dev-pat',
+              DATABASE_PASSWORD: 'database-child-pass',
+              PGPASSWORD: 'postgres-child-pass',
+              AUTHORIZATION: 'Bearer authorization-child-token',
+              SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/export-webhook-token',
+              HTTPS_PROXY: 'http://user:proxy-child-pass@proxy.example:8080',
+              HOTKEY: 'ctrl+s',
+              PUBLIC_SETTING: 'keep-me',
+            },
           },
         },
       ],
@@ -213,6 +233,33 @@ describe('writeOutput', () => {
     const parsed = JSON.parse(outputJson);
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.META_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.GITHUB_PAT).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].env.META_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].env.OPENAI_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.base_url).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.META_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.GITHUB_PAT).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.DATABASE_PASSWORD).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.PGPASSWORD).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.AUTHORIZATION).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.SLACK_WEBHOOK_URL).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.HTTPS_PROXY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.HOTKEY).toBe('ctrl+s');
+    expect(parsed.config.providers[1].config.env.PUBLIC_SETTING).toBe('keep-me');
+    for (const credential of [
+      'github-global-dev-pat',
+      'openai-provider-dev-key',
+      'endpoint-config-secret',
+      'github-child-dev-pat',
+      'database-child-pass',
+      'postgres-child-pass',
+      'authorization-child-token',
+      'export-webhook-token',
+      'proxy-child-pass',
+    ]) {
+      expect(outputJson).not.toContain(credential);
+    }
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
@@ -223,6 +270,23 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('short-secret');
     expect(outputJson).not.toContain('tiny-reader-key');
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+  });
+
+  it('preserves environment templates and credential-file paths in exported configs', async () => {
+    const env = {
+      META_API_KEY: '{{ env.META_API_KEY }}',
+      GITHUB_PAT: '{{ token }}',
+      PGPASSWORD: '{{ password }}',
+      GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+      AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+      CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
+      DEPLOY_KEY: '{{ "template-literal-secret" }}',
+    };
+    const eval_ = new Eval({ providers: [{ id: 'muse-code', config: { env } }] });
+    await writeOutput('output.json', eval_, null);
+    const parsed = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+    expect(parsed.config.providers[0].config.env).toEqual({ ...env, DEPLOY_KEY: '[REDACTED]' });
+    expect(JSON.stringify(parsed)).not.toContain('template-literal-secret');
   });
 
   it.each([

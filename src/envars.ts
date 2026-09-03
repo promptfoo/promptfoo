@@ -356,6 +356,10 @@ type EnvVars = {
   // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
   MODEL_API_KEY?: string;
 
+  // Muse Code CLI
+  META_API_KEY?: string;
+  MUSE_CLI_PATH?: string;
+
   // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
