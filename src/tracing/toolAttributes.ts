@@ -72,6 +72,17 @@ export const TOOL_ARGUMENT_ATTRIBUTE_KEYS: readonly string[] = [
   'input',
 ];
 
+/** Normalize imported tool calls to the attributes used by trace filtering and trajectory grading. */
+export function getNormalizedToolAttributes(name: string, args?: unknown): Record<string, unknown> {
+  return {
+    'gen_ai.tool.name': name,
+    'tool.name': name,
+    ...(args !== undefined && {
+      'tool.arguments': typeof args === 'string' ? args : JSON.stringify(args),
+    }),
+  };
+}
+
 export function getFirstStringAttribute(
   attributes: Record<string, unknown> | undefined,
   keys: readonly string[],

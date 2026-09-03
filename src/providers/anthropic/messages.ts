@@ -1,5 +1,11 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
@@ -26,12 +32,14 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -286,7 +294,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
+    options: {
+      id?: string;
+      label?: string;
+      config?: AnthropicMessageOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
     super(modelName, options);
     if (
@@ -470,11 +483,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // The `gen_ai.provider.name` span attribute. Subclasses serving a different vendor
   // through the Anthropic wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {
     return 'anthropic';
+  }
+
+  // Compatible gateways can assign arbitrary model aliases. Dedicated passthrough providers
+  // may override this when they guarantee requests reach Anthropic without alias translation.
+  protected allowsClaudeGenerationFallback(): boolean {
+    return (
+      URL.canParse(this.anthropic.baseURL) &&
+      new URL(this.anthropic.baseURL).hostname.toLowerCase() === 'api.anthropic.com'
+    );
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -519,7 +541,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -608,7 +630,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            ? `${modelWarningName} always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.`
             : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
         );
         this.manualThinkingConversionWarned = true;
@@ -616,7 +638,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+          `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
         );
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
@@ -627,9 +649,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort) as
-      | Anthropic.Messages.ThinkingConfigParam
-      | undefined;
+    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {
+      allowGenerationFallback: samplingParamsDeprecated,
+    }) as Anthropic.Messages.ThinkingConfigParam | undefined;
     const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolved);
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
@@ -721,7 +743,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
     // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
     // controls reasoning depth on these models.
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback: this.allowsClaudeGenerationFallback(),
+    });
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const {
@@ -757,15 +781,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Resolve tool_choice, suppressing forced tool use only for legacy budget-based thinking.
-    //
-    // The incompatibility is specific to `thinking: { type: 'enabled' }` — the API rejects
-    // that pairing with "Thinking may not be enabled when tool_choice forces tool use."
-    // Adaptive thinking is compatible: verified live that `adaptive` + a forced `any` or
-    // named tool_choice returns 200 on Opus 5, Opus 4.8, Opus 4.6, Sonnet 4.6, Sonnet 5, and
-    // Fable 5. Keying this off "is thinking on at all" silently dropped the user's
-    // tool_choice on every adaptive config, quietly changing tool-routing evals.
-    const forcedToolChoiceRejected = resolvedThinking?.type === 'enabled';
+    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
+    // this on thinkingEnabled: doing so would silently change their tool-routing evals.
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
+    const forcedToolChoiceRejected =
+      resolvedThinking?.type === 'enabled' || modelRejectsForcedToolChoice;
     let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
     if (config.tool_choice) {
       const transformed = transformToolChoice(
@@ -774,7 +795,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ) as Anthropic.Messages.ToolChoice;
       if (forcedToolChoiceRejected && (transformed.type === 'any' || transformed.type === 'tool')) {
         logger.warn(
-          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+          modelRejectsForcedToolChoice
+            ? `tool_choice type '${transformed.type}' (forced tool use) is not supported on ${modelWarningName} and will be omitted. Use 'auto' or 'none' instead.`
+            : `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
         );
       } else {
         resolvedToolChoice = transformed;
@@ -825,7 +848,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     ) {
       logger.warn(
         alwaysOnAdaptiveThinking
-          ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
+          ? `temperature, top_p, and top_k are not supported on ${modelWarningName} and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`
           : `temperature is deprecated on ${modelWarningName} and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`,
       );
       this.samplingParamsDeprecationWarned = true;
@@ -851,9 +874,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
-      max_tokens:
+      // resolvedThinking, not the raw config: a sampling-deprecated model has already had
+      // its manual budget converted to adaptive, and there is nothing left to clamp against.
+      max_tokens: clampMaxTokensForThinkingBudget(
         config.max_tokens ??
-        getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+          getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+        resolvedThinking,
+      ),
       messages: extractedMessages,
       stream: shouldStream,
       ...(omitTemperature
@@ -946,17 +973,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const cache = await getCache();
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(
       {
         ...cacheKeyParams,
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
+    const shouldUseResponseCache =
+      isCacheEnabled() &&
+      config.mcp?.enabled !== true &&
+      !this.hasCustomHeaders() &&
+      Object.keys(config.headers ?? {}).length === 0;
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
@@ -972,6 +1010,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
+            cached: true,
             tokenUsage: createEmptyTokenUsage(),
           };
         }
@@ -1020,7 +1059,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       if (shouldUseResponseCache) {
         try {
-          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+          await this.setCachedResponse(
+            cache,
+            cacheKey,
+            ephemeralCacheKey,
+            cacheClearGeneration,
+            getCacheTtlMs(),
+            JSON.stringify(resolvedMessage),
+          );
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }

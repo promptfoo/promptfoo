@@ -66,15 +66,24 @@ type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaMessagesConfig;
 };
 
-// Published Meta Model API pricing in USD per token (the pricing page lists
-// $1.25 / $0.15 (cached) / $4.25 per 1M tokens for muse-spark-1.1; reasoning
-// tokens bill at the output rate). Models missing from this table fall back to
-// user-supplied `cost` / `inputCost` / `outputCost` overrides.
-// https://dev.meta.ai/docs/getting-started/pricing-rate-limits
+// Published Meta Model API pricing in USD per token. Reasoning tokens bill at
+// the output rate. Contributor models permit training on prompts and completions
+// and must be selected explicitly. Unknown models use caller pricing overrides.
+// https://dev.meta.ai/docs/pricing-rate-limits
 export const META_MODEL_PRICES: Record<
   string,
   { input: number; cachedInput: number; output: number }
 > = {
+  'muse-spark-1.3': {
+    input: 1.25 / 1e6,
+    cachedInput: 0.15 / 1e6,
+    output: 4.25 / 1e6,
+  },
+  'muse-spark-1.3-contributor': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.002 / 1e6,
+    output: 0.2 / 1e6,
+  },
   'muse-spark-1.1': {
     input: 1.25 / 1e6,
     cachedInput: 0.15 / 1e6,
@@ -169,9 +178,18 @@ function applyMetaOutputCap(
   value: number | undefined,
 ): void {
   if (field in passthrough) {
+    if (field === 'max_output_tokens') {
+      delete body.max_completion_tokens;
+    }
     return;
   }
-  const outputCap = passthrough.max_tokens ?? value;
+  const outputCap =
+    (field === 'max_output_tokens' ? passthrough.max_completion_tokens : undefined) ??
+    passthrough.max_tokens ??
+    value;
+  if (field === 'max_output_tokens') {
+    delete body.max_completion_tokens;
+  }
   if (outputCap === undefined) {
     delete body[field];
   } else {
@@ -189,6 +207,14 @@ function assertSupportedMetaRequest(
     );
   }
   if ('logprobs' in body) {
+    throw new Error('Muse Spark models do not support logprobs.');
+  }
+  if (
+    Array.isArray(body.include) &&
+    body.include.some(
+      (include) => include === 'logprobs' || include === 'message.output_text.logprobs',
+    )
+  ) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
@@ -229,8 +255,13 @@ function applyMetaSamplingHygiene(
     }
   }
   for (const key of samplingKeys) {
-    if (config[key] === undefined && !(key in passthrough)) {
+    if (key in passthrough) {
+      continue;
+    }
+    if (config[key] === undefined) {
       delete body[key];
+    } else {
+      body[key] = config[key];
     }
   }
 }
@@ -561,15 +592,31 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // gateway/proxy secrets) and must not be sent to Meta; a null value tells
   // the SDK to drop the header.
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions();
+    const suppressedEnvHeaders = {
+      ...getAnthropicEnvHeaderSuppressions(this.env),
+      'x-api-key': null,
+    };
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
+    const authorizationHeaders = Object.fromEntries(
+      Object.keys(suppressedEnvHeaders)
+        .filter((name) => name.toLowerCase() === 'authorization')
+        .map((name) => [name, `Bearer ${this.apiKey}`]),
+    );
     return {
       ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
       defaultHeaders: {
-        ...options.defaultHeaders,
+        ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}`, ...authorizationHeaders } : {}),
       },
     };
   }
@@ -583,6 +630,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // Ignore ANTHROPIC_BASE_URL overrides — those are Anthropic-scoped.
   override getApiBaseUrl(): string {
     return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
   }
 
   protected override getGenAISystem(): string {

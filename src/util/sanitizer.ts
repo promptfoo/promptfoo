@@ -125,6 +125,19 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+
+  // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
+  // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to
+  // 'awssecretaccesskey' while the documented provider config field
+  // `secretAccessKey` collapses to 'secretaccesskey'. These are first-class,
+  // documented Bedrock config fields (see site/docs/providers/aws-bedrock.md),
+  // so an inline credential otherwise reaches logs and shared configs in clear text.
+  'secretaccesskey',
+  'awssecretaccesskey',
+  'sessiontoken',
+  'awssessiontoken',
+  'accesskeyid',
+  'awsaccesskeyid',
   'authorization',
   'auth',
   'bearer',
@@ -137,6 +150,15 @@ export const SECRET_FIELD_NAMES = new Set([
   'xauth', // x-auth
   'xsecret', // x-secret
   'xcsrftoken', // x-csrf-token
+  // Portkey gateway credential headers. The provider derives these from `portkey*` config
+  // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
+  'portkeyapikey', // portkeyApiKey config field
+  'portkeyvirtualkey', // portkeyVirtualKey config field
+  'xportkeyapikey', // x-portkey-api-key
+  'xportkeyvirtualkey', // x-portkey-virtual-key
+  'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id
+  'xportkeyawssecretaccesskey', // x-portkey-aws-secret-access-key
+  'xportkeyawssessiontoken', // x-portkey-aws-session-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
   'sessionid', // session-id
@@ -341,9 +363,13 @@ export function preserveTracingCredentialReferences(
     env: new Map(),
   };
 
-  for (const key of ['token', 'password'] as const) {
-    const template = sourceProvider.auth?.[key];
-    const renderedValue = renderedProvider.auth?.[key];
+  for (const [key, template] of Object.entries(sourceProvider.auth ?? {})) {
+    if (key !== 'token' && key !== 'password') {
+      continue;
+    }
+    const renderedValue = Object.entries(renderedProvider.auth ?? {}).find(
+      ([renderedKey]) => renderedKey === key,
+    )?.[1];
     if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
       references.auth.set(key, { template, renderedValue });
     }
@@ -463,7 +489,7 @@ export function sanitizeTracingConfigForPersistence(
             return [[key, value]];
           }
           const reference = references?.auth.get(key);
-          return reference?.renderedValue === value ? [[key, reference.template]] : [];
+          return reference && reference.renderedValue === value ? [[key, reference.template]] : [];
         }),
       )
     : undefined;
@@ -506,17 +532,19 @@ export function sanitizeTracingConfigForPersistence(
       )
     : undefined;
 
+  const sanitizedProvider = {
+    ...provider,
+    endpoint: sanitizedEndpoint,
+    ...(provider.auth && { auth: sanitizedAuth }),
+    ...(provider.headers && { headers: sanitizedHeaders }),
+  } as typeof provider;
+
   return {
     ...config,
     ...(config.env && { env: sanitizedEnv }),
     tracing: {
       ...config.tracing!,
-      provider: {
-        ...provider,
-        endpoint: sanitizedEndpoint,
-        ...(provider.auth && { auth: sanitizedAuth }),
-        ...(provider.headers && { headers: sanitizedHeaders }),
-      },
+      provider: sanitizedProvider,
     },
   };
 }

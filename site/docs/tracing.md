@@ -37,13 +37,13 @@ Tracing provides visibility into:
 
 ## Built-in Provider Instrumentation
 
-When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, and every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace.
+When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, with target requests and grading recorded beneath it. Every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace. Multi-turn tests keep their target requests and grading together in the same trace.
 
-Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), while custom applications can add their own child spans using the propagated `traceparent`.
+Instrumented model and agent providers add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). HTTP targets receive their automatic target span, and the application behind that target can add its own child spans using the propagated `traceparent`. Agent providers can distinguish an overall `invoke_agent` run from the individual model calls it contains.
 
 ### Supported Providers
 
-The following providers have built-in instrumentation:
+The following providers support automatic tracing. Model and agent providers can also include GenAI spans for the work they perform; HTTP targets record the target request and any spans emitted by the application.
 
 | Provider                                       | Automatic Tracing |
 | ---------------------------------------------- | ----------------- |
@@ -65,12 +65,16 @@ The following providers have built-in instrumentation:
 
 ### GenAI Span Attributes
 
-Each provider call creates a span with these attributes:
+Instrumented model and agent calls can include these attributes on their GenAI spans:
 
 **Request Attributes:**
 
-- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.provider.name` - Provider name (e.g., "openai", "anthropic", "azure.ai.openai", "aws.bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "text_completion", "embeddings", "invoke_agent", or "execute_tool")
+- `gen_ai.agent.id` - Stable identifier for hosted agents
+- `gen_ai.agent.name` - Agent name for agent invocations
+- `gen_ai.tool.name` - Tool name for tool executions
+- `openai.api.type` - OpenAI API used ("chat_completions" or "responses")
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
@@ -81,9 +85,9 @@ Each provider call creates a span with these attributes:
 
 - `gen_ai.usage.input_tokens` - Input/prompt token count
 - `gen_ai.usage.output_tokens` - Output/completion token count
-- `gen_ai.usage.total_tokens` - Total token count
-- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
-- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.usage.reasoning.output_tokens` - Reasoning token count (when available)
+- `gen_ai.usage.cache_read.input_tokens` - Input tokens read from the provider's prompt cache
+- `gen_ai.usage.cache_creation.input_tokens` - Input tokens written to the provider's prompt cache
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
 
 **Promptfoo-specific Attributes:**
@@ -92,8 +96,17 @@ Each provider call creates a span with these attributes:
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
 - `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.usage.total_tokens` - Total token count reported by the provider
+- `promptfoo.usage.cached_response_tokens` - Tokens associated with a cached Promptfoo response
+- `promptfoo.usage.accepted_prediction_tokens` - Accepted prediction tokens, when available
+- `promptfoo.usage.rejected_prediction_tokens` - Rejected prediction tokens, when available
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+Grading spans describe each assertion with `gen_ai.evaluation.name`,
+`gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
+reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
+by the grader appears in a child span.
 
 ### Example Trace Output
 
@@ -101,14 +114,14 @@ When calling OpenAI's GPT-4:
 
 ```
 Span: chat gpt-4
-├─ gen_ai.system: openai
+├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
 ├─ gen_ai.request.model: gpt-4
 ├─ gen_ai.request.max_tokens: 1000
 ├─ gen_ai.request.temperature: 0.7
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
-├─ gen_ai.usage.total_tokens: 235
+├─ promptfoo.usage.total_tokens: 235
 ├─ gen_ai.response.finish_reasons: ["stop"]
 ├─ promptfoo.provider.id: openai:chat:gpt-4
 └─ promptfoo.test.index: 0
@@ -315,7 +328,7 @@ tracing:
 ```
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
-key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
+key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
 `key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
 Patterns are matched against each attribute key **at every nesting level individually**: a
 nested key like `authorization` inside a `headers` object is matched by the pattern
@@ -449,6 +462,40 @@ Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. T
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
+#### Braintrust
+
+Promptfoo can retrieve application spans from a Braintrust project's logs:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: braintrust
+    endpoint: 'https://api.braintrust.dev'
+    projectId: '12345678-1234-4123-8123-123456789abc'
+    auth:
+      token: '{{ env.BRAINTRUST_API_KEY }}'
+```
+
+Braintrust's native trace identifiers are not necessarily the same as OpenTelemetry trace IDs. Your application must copy the trace ID from Promptfoo's `traceparent` into Braintrust span metadata as `trace_id`, `promptfoo_trace_id`, or `promptfoo.trace_id`. Promptfoo then queries the Braintrust project's recent traces and imports all spans belonging to the matching trace.
+
+#### Langfuse
+
+Use the `langfuse` trace provider to pull observations from Langfuse Cloud or a self-hosted Langfuse v4 instance:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: langfuse
+    endpoint: 'https://cloud.langfuse.com'
+    auth:
+      username: '{{ env.LANGFUSE_PUBLIC_KEY }}'
+      password: '{{ env.LANGFUSE_SECRET_KEY }}'
+```
+
+Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace ID propagated in `traceparent`. It preserves original OpenTelemetry span and resource attributes, normalizes generation, embedding, tool, agent, workflow, and retrieval observations to GenAI semantic conventions, and imports parent-child relationships, inputs, outputs, models, token usage, and costs. Langfuse Python SDK 4.7.0+, JavaScript SDK 5.4.0+, or an OpenTelemetry exporter configured with the `x-langfuse-ingestion-version: 4` header makes new observations available in real time; older ingestion paths can delay visibility by up to ten minutes. This delay makes earlier versions of Langfuse unusable for fetching traces during an evaluation.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript
@@ -546,7 +593,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 

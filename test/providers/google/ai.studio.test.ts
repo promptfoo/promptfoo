@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import {
   AIStudioChatProvider,
@@ -814,6 +814,10 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should pass API key in x-goog-api-key header instead of URL query param', async () => {
       const mockResponse = {
         data: {
@@ -843,6 +847,93 @@ describe('AIStudioChatProvider', () => {
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any;
       expect(calledOptions.headers['x-goog-api-key']).toBe('test-key');
     });
+
+    it.each([
+      ['gemini-3.8-flash', 0.002625],
+      ['gemini-3.7-flash', 0.002625],
+      ['gemini-3.6-flash', 0.002625],
+      ['gemini-3.5-flash-lite', 0.00155],
+    ])(
+      'normalizes generation controls and calculates cost for %s',
+      async (modelName, expectedCost) => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+
+        const latestProvider = new AIStudioChatProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            generationConfig: {
+              temperature: 0.6,
+              topP: 0.8,
+              topK: 30,
+              maxOutputTokens: 256,
+              thinkingConfig: { thinkingLevel: 'HIGH' },
+              candidateCount: 2,
+            } as any,
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1000,
+              candidatesTokenCount: 500,
+              totalTokenCount: 1500,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await latestProvider.callGemini('test prompt');
+        const request = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+        const body = JSON.parse(request?.[1]?.body as string);
+
+        expect(request?.[0]).toContain(`/v1beta/models/${modelName}:generateContent`);
+        expect(body.generationConfig).toEqual({
+          maxOutputTokens: 256,
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+        });
+        expect(result.cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
+
+    it.each(['gemini-3.8-flash', 'gemini-3.7-flash'])(
+      'rejects unsupported MINIMAL thinking before requesting %s',
+      async (modelName) => {
+        const latestProvider = new AIStudioChatProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+          },
+        });
+
+        await expect(latestProvider.callGemini('test prompt')).rejects.toThrow(
+          `${modelName} does not support MINIMAL thinking`,
+        );
+        expect(cache.fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['gemini-3.8-flash', 'gemini-3.7-flash'])(
+      'rejects deprecated thinking budgets before requesting %s',
+      async (modelName) => {
+        const latestProvider = new AIStudioChatProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+          },
+        });
+
+        await expect(latestProvider.callGemini('test prompt')).rejects.toThrow(
+          `${modelName} does not support thinkingBudget. Use thinkingLevel`,
+        );
+        expect(cache.fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
 
     it('should normalize Gemini TTS audio and send the required audio generation config', async () => {
       const ttsProvider = new AIStudioChatProvider('gemini-2.5-flash-preview-tts', {

@@ -304,6 +304,19 @@ describe('CloudflareGateway Provider', () => {
       expect(provider.id()).toBe('cloudflare-gateway:openai:gpt-4o');
     });
 
+    it.each(['openai', 'groq', 'mistral'])(
+      'attributes %s gateway telemetry to the underlying provider rather than a custom label',
+      (underlyingProvider) => {
+        const provider = new CloudflareGatewayOpenAiProvider(underlyingProvider, 'test-model', {
+          config: minimumConfig,
+          id: 'customer:custom-label',
+        });
+
+        expect(provider.id()).toBe('customer:custom-label');
+        expect(provider['getGenAISystem']()).toBe(underlyingProvider);
+      },
+    );
+
     it('should return correct toString()', () => {
       const provider = new CloudflareGatewayOpenAiProvider('openai', 'gpt-4o', {
         config: minimumConfig,
@@ -332,6 +345,16 @@ describe('CloudflareGateway Provider', () => {
       });
 
       expect(provider.id()).toBe('cloudflare-gateway:anthropic:claude-sonnet-4-20250514');
+    });
+
+    it('attributes gateway telemetry to Anthropic rather than the gateway or custom label', () => {
+      const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+        config: minimumConfig,
+        id: 'customer:custom-label',
+      });
+
+      expect(provider.id()).toBe('customer:custom-label');
+      expect(provider['getGenAISystem']()).toBe('anthropic');
     });
 
     it('should return correct toString()', () => {
@@ -383,6 +406,100 @@ describe('CloudflareGateway Provider', () => {
         'https://gateway.ai.cloudflare.com/v1/testAccountId/testGatewayId/anthropic/v1/messages',
         expect.any(Object),
       );
+    });
+
+    it('does not forward scoped Anthropic gateway credentials to Cloudflare', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'Authorization: Bearer ambient-secret\nX-Proxy-Secret: ambient-proxy-secret',
+      });
+      try {
+        const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+          config: minimumConfig,
+          env: {
+            ANTHROPIC_CUSTOM_HEADERS:
+              'authorization: Bearer scoped-secret\nx-proxy-secret: scoped-proxy-secret',
+          },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'claude-sonnet-4-20250514', max_tokens: 1, messages: [] },
+        });
+
+        expect(req.headers.get('authorization')).toBeNull();
+        expect(req.headers.get('x-proxy-secret')).toBeNull();
+        expect(req.headers.get('x-api-key')).toBe('testApiKey');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('keeps response caching enabled when suppressed Anthropic headers are present', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer ambient-secret',
+      });
+      try {
+        const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+          config: minimumConfig,
+          env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: scoped-secret' },
+        });
+        const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Test' }],
+          model: 'claude-sonnet-4-20250514',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 5 },
+        } as any);
+
+        await provider.callApi('Same prompt');
+        const cached = await provider.callApi('Same prompt');
+
+        expect(cached).toMatchObject({ output: 'Test', cached: true });
+        expect(create).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('keeps future Claude compatibility through the trusted Anthropic passthrough', async () => {
+      const provider = new CloudflareGatewayAnthropicProvider('claude-haiku-5', {
+        config: { ...minimumConfig, max_tokens: 10000, temperature: 0.5, top_p: 0.9 },
+      });
+      const responsePayload = {
+        id: 'msg_123',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Test' }],
+        model: 'claude-haiku-5',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 5, output_tokens: 5 },
+      };
+      mockFetch.mockResolvedValue({
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      });
+
+      await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'Test prompt',
+            thinking: { type: 'enabled', budget_tokens: 5000 },
+          },
+        ]),
+      );
+
+      const requestBody = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(requestBody).toMatchObject({
+        model: 'claude-haiku-5',
+        thinking: { type: 'adaptive' },
+      });
+      expect(requestBody).not.toHaveProperty('temperature');
+      expect(requestBody).not.toHaveProperty('top_p');
     });
   });
 
