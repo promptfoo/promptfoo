@@ -13,6 +13,105 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 }
 
 describe('hoisted mock provenance', () => {
+  it.each([
+    ['continue;', true],
+    ['break;', false],
+    ['return request;', false],
+  ])('evaluates for updates after %s only when reached', (control, violation) => {
+    const source = `const mock = vi.hoisted(() => {
+      const request = vi.fn();
+      for (let index = 0; index < 1; index++, request.mockReturnValue('x')) { ${control} }
+      return request;
+    });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source} beforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
+  it.each([
+    'globalThis.saved = inner;',
+    'opaque.saved = { inner };',
+    'globalThis.saved = () => inner;',
+  ])('keeps mocks exposed through %s independently resettable', (escape) => {
+    const source = `const outer = vi.hoisted(() => {
+        const inner = vi.fn().mockReturnValue('x'); ${escape}
+        return vi.fn().mockImplementation(() => inner);
+      }); beforeEach(() => outer.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    '() => () => inner',
+    '() => ({ read: () => inner })',
+    '() => { function read() { return inner; } return read; }',
+    '() => function* () { yield inner; }',
+  ])('follows nested closure captures in %s without executing them', (implementation) => {
+    const source = `const outer = vi.hoisted(() => {
+      const inner = vi.fn().mockReturnValue('x');
+      return vi.fn().mockImplementation(${implementation});
+    }); beforeEach(() => outer.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it.each(['() => inner', '{ read: () => inner }'])(
+    'keeps helper-scoped closure writes to globals exposed for %s',
+    (value) => {
+      const source = `const outer = vi.hoisted(() => {
+        const inner = vi.fn().mockReturnValue('x');
+        function save(inner) { globalThis.saved = ${value}; }
+        save(inner);
+        return vi.fn().mockImplementation(() => inner);
+      }); beforeEach(() => outer.mockReset());`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    },
+  );
+
+  it('tracks closures stored in literal implementation values', () => {
+    const source = `const outer = vi.hoisted(() => {
+      const inner = vi.fn().mockReturnValue('x');
+      const result = { read: () => inner };
+      return vi.fn().mockReturnValue(result);
+    }); beforeEach(() => outer.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it.each([
+    'try { return; } catch {}',
+    'try { opaque(); } catch { return; }',
+    'try {} finally { if (flag) return; }',
+  ])('keeps reset coverage conditional after %s', (control) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { ${control} mock.mockReset(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    'try { return; } catch {} finally { mock.mockReset(); }',
+    'try { opaque(); } catch { return; } finally { mock.mockReset(); }',
+  ])('accepts guaranteed finally cleanup in %s', (control) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { ${control} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it.each([
+    `describe('generated', () => { cases.forEach(() => it('generated', () => mock())); });`,
+    `cases.forEach(() => it('generated', () => mock()));`,
+    `describe('generated', () => {
+      cases.forEach(() => it('generated', () => mock()));
+      describe('nested', () => { beforeEach(() => mock.mockReset()); it('nested', () => mock()); });
+    });`,
+  ])('includes dynamically registered test scopes in %s', (generated) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      describe('direct', () => { beforeEach(() => mock.mockReset()); it('direct', () => mock()); });
+      ${generated}`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source} beforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
   it.each(['mock.mockReset()', 'vi.resetAllMocks()'])(
     'does not accept afterEach-only cleanup using %s',
     (reset) => {
