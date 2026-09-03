@@ -124,6 +124,8 @@ export const SECRET_FIELD_NAMES = new Set([
   'authtoken',
   'clientsecret',
   'webhooksecret',
+  'slackwebhookurl',
+  'discordwebhookurl',
   'anthropicapikey',
   'metaapikey',
   'awsbearertokenbedrock',
@@ -288,14 +290,20 @@ export function looksLikeSecret(value: string): boolean {
   return false;
 }
 
-function isCredentialName(name: string): boolean {
-  const words = name
+function getFieldNameWords(name: string): string[] {
+  return name
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .split(/[^a-zA-Z0-9]+/);
+    .split(/[^a-zA-Z0-9]+/)
+    .map((word) => word.toLowerCase());
+}
+
+function isCredentialName(name: string): boolean {
   return (
     isSecretField(name) ||
-    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/i.test(word))
+    getFieldNameWords(name).some(
+      (word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word),
+    )
   );
 }
 
@@ -306,13 +314,25 @@ function isCredentialValue(value: string): boolean {
   );
 }
 
-// These variables locate credentials on disk; the paths are needed to reuse the config.
-const ENV_CREDENTIAL_PATH_NAMES = new Set([
-  'muse_auth_path',
-  'google_application_credentials',
-  'aws_shared_credentials_file',
-  'aws_web_identity_token_file',
+const CREDENTIAL_PATH_WORDS = new Set([
+  'file',
+  'path',
+  'filepath',
+  'dir',
+  'directory',
+  'location',
+  'sock',
+  'socket',
 ]);
+
+function isCredentialPathName(name: string): boolean {
+  // Google ADC is the common locator whose name does not identify it as a path.
+  // Other SDKs use forms such as CREDENTIAL_FILE_OVERRIDE, AUTH_LOCATION, or AUTH_SOCK.
+  return (
+    name.toLowerCase() === 'google_application_credentials' ||
+    getFieldNameWords(name).some((word) => CREDENTIAL_PATH_WORDS.has(word))
+  );
+}
 
 function collectAuthorizationCredentials(value: string, credentials: Set<string>): void {
   const match = value.match(/^\s*(bearer|basic|token|api[-_]?key)\s+(\S+)\s*$/i);
@@ -392,6 +412,47 @@ function collectRawUrlCredentials(
   }
 }
 
+function collectWebhookPathCredentials(
+  value: string,
+  url: URL | undefined,
+  addCredential: (raw: string) => void,
+): void {
+  if (!url) {
+    return;
+  }
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  const rawPathStart = value.indexOf('/', value.indexOf('://') + 3);
+  const rawPath = rawPathStart === -1 ? '' : value.slice(rawPathStart).split(/[?#]/, 1)[0];
+  for (const pathname of [url.pathname, rawPath]) {
+    const segments = pathname.split('/').filter(Boolean);
+    const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
+    let credentialParts: string[] = [];
+    // These routes carry bearer credentials. Ordinary path IDs are intentionally preserved.
+    // https://api.slack.com/messaging/webhooks
+    // https://docs.discord.com/developers/resources/webhook#execute-webhook
+    if (host === 'hooks.slack.com' || host === 'hooks.slack-gov.com') {
+      if (prefix[0] === 'services' || prefix[0] === 'triggers') {
+        credentialParts = segments.slice(1, 4);
+      } else if (/^T[A-Z0-9]+$/i.test(prefix[0] ?? '')) {
+        credentialParts = segments.slice(0, 3);
+      }
+      if (credentialParts.length !== 3) {
+        continue;
+      }
+    } else if (/^(?:(?:canary|ptb)\.)?discord(?:app)?\.com$/.test(host)) {
+      const offset = /^v\d+$/.test(prefix[1] ?? '') ? 2 : 1;
+      if (prefix[0] !== 'api' || prefix[offset] !== 'webhooks') {
+        continue;
+      }
+      credentialParts = segments.slice(offset + 1, offset + 3);
+      if (credentialParts.length !== 2) {
+        continue;
+      }
+    }
+    credentialParts.forEach((part) => addCredential(part));
+  }
+}
+
 // Use the same credential detection for child responses, config exports, and provider records.
 export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: string): string[] {
   const credentials = new Set<string>();
@@ -434,6 +495,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
     }
 
     collectRawUrlCredentials(value, addRawCredential);
+    collectWebhookPathCredentials(value, url, addRawCredential);
     if (hasCredentials) {
       credentials.add(value);
     }
@@ -441,7 +503,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
   for (const [key, value] of Object.entries(env)) {
     if (typeof value === 'string' && value) {
       // An authentication-file path is an operational setting, not the credential it names.
-      const operational = ENV_CREDENTIAL_PATH_NAMES.has(key.toLowerCase());
+      const operational = isCredentialPathName(key);
       if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
         credentials.add(value);
         collectAuthorizationCredentials(value, credentials);

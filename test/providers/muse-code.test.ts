@@ -819,6 +819,62 @@ describe('MuseCodeProvider', () => {
     },
   );
 
+  it.each(['0', 'false', ''])(
+    'keeps automatic updates disabled when custom env attempts to set %j',
+    async (value) => {
+      const response = await provider({
+        config: { env: { MUSE_NO_AUTO_UPDATE: value } },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][2]!.env!.MUSE_NO_AUTO_UPDATE).toBe('1');
+    },
+  );
+
+  it.each([
+    'https://hooks.slack.com/services/T000/B000/short-webhook-token',
+    'https://hooks.slack-gov.com/services/T000/B000/short-webhook-token',
+    'https://hooks.slack.com/triggers/T000/000000/short-webhook-token',
+    'https://discord.com/api/webhooks/123456/short-webhook-token',
+    'https://discord.com/api/v10/webhooks/123456/short-webhook-token',
+  ])('redacts webhook URLs and their path tokens from responses: %s', async (url) => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = url + ' | short-webhook-token';
+    events.at(-1)!.payload.details = { [url]: 'short-webhook-token' };
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    let tracedResponse: unknown;
+    vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => {
+      const response = await fn({} as Span);
+      tracedResponse = response;
+      return response;
+    });
+    const response = await provider({ config: { env: { SERVICE_URL: url } } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('[REDACTED] | [REDACTED]');
+    expect(tracedResponse).toEqual(response);
+    expect(JSON.stringify(tracedResponse)).not.toContain('short-webhook-token');
+  });
+
+  it.each(['a%2fb', 'café%2fsecret', 'short space%2fsecret'])(
+    'redacts raw and decoded webhook path credentials: %s',
+    async (token) => {
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload.text = token + ' | ' + decodeURIComponent(token);
+      onSpawn = (child) => {
+        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+        child.close();
+      };
+      const response = await provider({
+        config: {
+          env: { SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/' + token },
+        },
+      }).callApi(prompt);
+      expect(response.output).toBe('[REDACTED] | [REDACTED]');
+    },
+  );
+
   it('preserves operational paths that resemble long opaque credentials', async () => {
     const directory = path.join(testDir, 'x'.repeat(80));
     const events = structuredClone(fixtureEvents);
@@ -838,6 +894,11 @@ describe('MuseCodeProvider', () => {
     ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
     ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
     ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
+    ['CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE', '/home/user/gcloud-key.json'],
+    ['AZURE_AUTH_LOCATION', '/home/user/azure-auth.json'],
+    ['SSH_AUTH_SOCK', '/tmp/ssh-agent.sock'],
+    ['SSL_KEY_FILE', '/home/user/client-key.pem'],
+    ['DATABASE_PASSWORD_FILE', '/var/run/secrets/database-password'],
   ])('preserves the %s credential-file path in responses', async (name, file) => {
     const events = structuredClone(fixtureEvents);
     events.at(-1)!.payload.text = file;

@@ -854,6 +854,7 @@ describe('createShareableUrl', () => {
         PGPASSWORD: '{{ password }}',
         GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
         AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
         DEPLOY_KEY: '{{ "template-literal-secret" }}',
       };
       mockEval.config = { providers: [{ id: 'muse-code', config: { env } }] };
@@ -892,6 +893,8 @@ describe('createShareableUrl', () => {
                   GITHUB_PAT: 'short-git-secret',
                   PGPASSWORD: 'short-pg-secret',
                   AUTHORIZATION: 'Bearer short-auth-secret',
+                  SLACK_WEBHOOK_URL:
+                    'https://hooks.slack.com/services/T000/B000/share-webhook-token',
                   SERVICE_URL: 'https://service-user:service-password@service.example',
                   HOTKEY: 'ctrl+s',
                   MUSE_AUTH_PATH: '/tmp/muse-auth.json',
@@ -929,6 +932,7 @@ describe('createShareableUrl', () => {
               GITHUB_PAT: '[REDACTED]',
               PGPASSWORD: '[REDACTED]',
               AUTHORIZATION: '[REDACTED]',
+              SLACK_WEBHOOK_URL: '[REDACTED]',
               SERVICE_URL: '[REDACTED]',
               HOTKEY: 'ctrl+s',
               MUSE_AUTH_PATH: '/tmp/muse-auth.json',
@@ -949,6 +953,7 @@ describe('createShareableUrl', () => {
           'short-git-secret',
           'short-pg-secret',
           'short-auth-secret',
+          'share-webhook-token',
           'service-password',
           'grader-meta-secret',
         ]) {

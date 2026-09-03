@@ -272,6 +272,11 @@ describe('sanitizeObject', () => {
     ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
     ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
     ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
+    ['CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE', '/home/user/gcloud-key.json'],
+    ['AZURE_AUTH_LOCATION', '/home/user/azure-auth.json'],
+    ['SSH_AUTH_SOCK', '/tmp/ssh-agent.sock'],
+    ['SSL_KEY_FILE', '/home/user/client-key.pem'],
+    ['DATABASE_PASSWORD_FILE', '/var/run/secrets/database-password'],
   ])('preserves the credential locator %s without exempting literal secrets', (name, file) => {
     expect(sanitizeObject({ env: { [name]: file } })).toEqual({ env: { [name]: file } });
     expect(sanitizeObject({ env: { [name]: 'ghp_shortsecret' } })).toEqual({
@@ -281,6 +286,17 @@ describe('sanitizeObject', () => {
       sanitizeObject({ env: { [name]: 'https://user:password@example.test/key.json' } }),
     ).toEqual({
       env: { [name]: '[REDACTED]' },
+    });
+  });
+
+  it('redacts webhook credentials while preserving ordinary URL path IDs', () => {
+    const env = {
+      SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/short-webhook-token',
+      SERVICE_URL: 'https://discord.com/api/webhooks/123456/short-discord-token',
+      PUBLIC_URL: 'https://example.test/resources/11111111-1111-4111-8111-111111111111',
+    };
+    expect(sanitizeObject({ env })).toEqual({
+      env: { ...env, SLACK_WEBHOOK_URL: '[REDACTED]', SERVICE_URL: '[REDACTED]' },
     });
   });
 

@@ -457,6 +457,7 @@ describe('EvalResult', () => {
           PGPASSWORD: '{{ password }}',
           GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
           AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
           DEPLOY_KEY: '{{ "template-literal-secret" }}',
         };
         const museProvider: ProviderOptions = { id: 'muse-code', config: { env } };
@@ -481,6 +482,7 @@ describe('EvalResult', () => {
               DATABASE_PASSWORD: 'short-pass',
               PGPASSWORD: 'short-pg-pass',
               AUTHORIZATION: 'Bearer short-auth-token',
+              SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/persist-webhook-token',
               HTTPS_PROXY: 'http://proxy-user:proxy-pass@proxy.example:8080',
               MUSE_AUTH_PATH: '/tmp/muse-auth.json',
               PUBLIC_SETTING: 'keep-me',
@@ -504,6 +506,7 @@ describe('EvalResult', () => {
           DATABASE_PASSWORD: '[REDACTED]',
           PGPASSWORD: '[REDACTED]',
           AUTHORIZATION: '[REDACTED]',
+          SLACK_WEBHOOK_URL: '[REDACTED]',
           HTTPS_PROXY: '[REDACTED]',
           MUSE_AUTH_PATH: '/tmp/muse-auth.json',
           PUBLIC_SETTING: 'keep-me',
@@ -514,6 +517,7 @@ describe('EvalResult', () => {
           'short-pass',
           'short-pg-pass',
           'short-auth-token',
+          'persist-webhook-token',
           'proxy-pass',
           'endpoint-password',
         ]) {

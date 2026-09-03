@@ -202,6 +202,7 @@ describe('writeOutput', () => {
               DATABASE_PASSWORD: 'database-child-pass',
               PGPASSWORD: 'postgres-child-pass',
               AUTHORIZATION: 'Bearer authorization-child-token',
+              SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/export-webhook-token',
               HTTPS_PROXY: 'http://user:proxy-child-pass@proxy.example:8080',
               HOTKEY: 'ctrl+s',
               PUBLIC_SETTING: 'keep-me',
@@ -242,6 +243,7 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[1].config.env.DATABASE_PASSWORD).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.PGPASSWORD).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.AUTHORIZATION).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.SLACK_WEBHOOK_URL).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.HTTPS_PROXY).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.HOTKEY).toBe('ctrl+s');
     expect(parsed.config.providers[1].config.env.PUBLIC_SETTING).toBe('keep-me');
@@ -253,6 +255,7 @@ describe('writeOutput', () => {
       'database-child-pass',
       'postgres-child-pass',
       'authorization-child-token',
+      'export-webhook-token',
       'proxy-child-pass',
     ]) {
       expect(outputJson).not.toContain(credential);
@@ -276,6 +279,7 @@ describe('writeOutput', () => {
       PGPASSWORD: '{{ password }}',
       GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
       AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+      CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
       DEPLOY_KEY: '{{ "template-literal-secret" }}',
     };
     const eval_ = new Eval({ providers: [{ id: 'muse-code', config: { env } }] });

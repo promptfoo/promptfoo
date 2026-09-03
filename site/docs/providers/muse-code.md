@@ -102,9 +102,9 @@ The response contains:
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
 - `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
 
-Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT`, `DATABASE_PASSWORD`, or `PGPASSWORD`, authorization token components, and authentication in proxy or service URLs. Original URL encodings are included in that matching. These credentials are also redacted in config exports, persisted provider records, and shared eval configs.
+Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT`, `DATABASE_PASSWORD`, or `PGPASSWORD`, authorization token components, authentication in proxy or service URLs, and Slack/Discord webhook tokens in URL paths. Original URL encodings are included in that matching. These credentials are also redacted in config exports, persisted provider records, and shared eval configs.
 
-Pure environment templates and credential-file paths, such as `GOOGLE_APPLICATION_CREDENTIALS` and `AWS_SHARED_CREDENTIALS_FILE`, remain in saved configs so they can be reused.
+Simple references to environment or test variables, including `trim` and `urlencode` filters, remain in saved configs. Credential-file paths, such as `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_SHARED_CREDENTIALS_FILE`, and `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE`, are also preserved. Literal credentials embedded in template expressions are redacted.
 
 `base_url` must not contain credentials because Muse receives that option through process arguments. Supply authentication through `apiKey`, `META_API_KEY`, or an existing Muse Code login.
 

@@ -348,7 +348,7 @@ export class MuseCodeProvider implements ApiProvider {
   }
 
   private buildEnv(config: MuseCodeConfig): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { MUSE_NO_AUTO_UPDATE: '1' };
+    const env: NodeJS.ProcessEnv = {};
     for (const key of PROCESS_ENV_KEYS) {
       if (process.env[key] !== undefined) {
         env[key] = process.env[key];
@@ -359,6 +359,7 @@ export class MuseCodeProvider implements ApiProvider {
     if (apiKey !== undefined) {
       env.META_API_KEY = apiKey;
     }
+    env.MUSE_NO_AUTO_UPDATE = '1';
     return env;
   }
 
