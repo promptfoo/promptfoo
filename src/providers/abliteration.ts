@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import { renderVarsInObject } from '../util/index';
+import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvVarKey } from '../envars';
@@ -55,21 +55,18 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // The shared provider only forwards reasoning_effort for recognized OpenAI
     // model names. All Abliteration models support it while retaining max_tokens.
     if (
-      result.config.reasoning_effort !== undefined &&
-      !Object.prototype.hasOwnProperty.call(result.config.passthrough ?? {}, 'reasoning_effort')
+      config.reasoning_effort !== undefined &&
+      !Object.prototype.hasOwnProperty.call(config.passthrough ?? {}, 'reasoning_effort')
     ) {
-      result.body.reasoning_effort = renderVarsInObject(
-        result.config.reasoning_effort,
-        context?.vars,
-      );
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
-    return result;
+    return { body, config };
   }
 
   id(): string {
