@@ -1,12 +1,3 @@
-export const TRAJECTORY_STEP_TYPES = [
-  'command',
-  'message',
-  'reasoning',
-  'search',
-  'span',
-  'tool',
-] as const;
-
 export interface TraceSpan {
   spanId: string;
   parentSpanId?: string;

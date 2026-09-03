@@ -1,5 +1,6 @@
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { TRAJECTORY_STEP_TYPES } from '@promptfoo/types/tracing';
+import { TRAJECTORY_STEP_TYPES } from '@promptfoo/contracts/trajectory';
 
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
