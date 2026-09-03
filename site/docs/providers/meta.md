@@ -58,7 +58,7 @@ The provider accepts compatible [OpenAI provider](/docs/providers/openai/) optio
 - `prompt_cache_retention` — `in_memory` or `24h` for prompt caching; cached prompt tokens bill at the cached-input rate.
 - `seed` — best-effort determinism.
 
-Muse Spark does not support `logprobs`, `n > 1`, `stop`, or audio output. The provider fails fast for unsupported options instead of surfacing an HTTP 400 per request. OpenAI-compatible `stream` is also rejected because promptfoo expects a complete JSON response on the chat and Responses surfaces. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
+On Chat Completions and Responses, promptfoo rejects `logprobs`, `n > 1`, `stop`, and `logit_bias` before sending a request. It also rejects `stream` because these integrations expect a complete JSON response. OpenAI-scoped environment defaults (`OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_MAX_COMPLETION_TOKENS`, penalty variables) are not applied to Meta requests.
 
 ### Cost Tracking
 
