@@ -8,6 +8,7 @@ import { OpenAiResponsesProvider } from '../../../../src/providers/openai/respon
 import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../../src/util/fetch/index';
+import { createDeferred } from '../../../util/utils';
 import { setOpenAiEnv } from './setup';
 
 describe('OpenAiResponsesProvider request building', () => {
@@ -1753,24 +1754,19 @@ describe('OpenAiResponsesProvider request building', () => {
   it('should cancel an accepted background job when creation is aborted before the response arrives', async () => {
     const controller = new AbortController();
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    // Hold creation open until cancellation rejects, then release its response ID for cleanup.
+    const creation = createDeferred<void>();
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        return await new Promise<any>((resolve, reject) => {
-          setTimeout(
-            () =>
-              resolve({
-                data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
-                cached: false,
-                status: 200,
-                statusText: 'OK',
-                deleteFromCache,
-              }),
-            20,
-          );
-          options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-            once: true,
-          });
-        });
+        controller.abort(new Error('caller cancelled creation'));
+        await creation.promise;
+        return {
+          data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
       }
       if (String(url).endsWith('/responses/resp_accepted/cancel')) {
         return { data: {}, cached: false, status: 200, statusText: 'OK' };
@@ -1784,8 +1780,9 @@ describe('OpenAiResponsesProvider request building', () => {
     const pending = provider.callApi('Accept and then cancel', { bustCache: true } as any, {
       abortSignal: controller.signal,
     });
-    setTimeout(() => controller.abort(new Error('caller cancelled creation')), 5);
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+
+    creation.resolve();
     await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
@@ -1796,7 +1793,6 @@ describe('OpenAiResponsesProvider request building', () => {
       true,
       0,
     );
-    expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
   it('should bound polling retries by the overall background deadline', async () => {
