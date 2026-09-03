@@ -86,7 +86,7 @@ For read-only evals, set both `disable_shell: true` and `disable_write: true`. S
 
 Promptfoo always enables `--user-input-auto-resolve`, which cancels clarification questions in headless mode. This does not grant tool approval. A run that still needs human approval may remain pending until `timeout_ms`; configure `approval_mode: never` when you explicitly want unattended tool execution within the native sandbox.
 
-The child receives a small environment containing OS paths, locale, XDG directories, proxy/certificate settings, and Muse credentials. Other process environment variables are not inherited automatically; pass required values through `config.env`. Promptfoo resolves the Muse executable using absolute `PATH` directories before starting it in the workspace; empty and relative entries are ignored for this lookup. Set `muse_path` to use a specific executable. The Muse launcher is started with automatic updates disabled so an eval uses the installed binary.
+The child receives a small environment containing OS paths, locale, XDG directories, proxy/certificate settings, and Muse credentials. Other process environment variables are not inherited automatically; pass required values through `config.env`. Promptfoo resolves the Muse executable using absolute `PATH` directories before starting it in the workspace. This lookup excludes empty and relative entries, workspace directories, and symlinks into the workspace. Set `muse_path` to explicitly select a trusted executable or wrapper. The Muse launcher is started with automatic updates disabled so an eval uses the installed binary.
 
 ## Sessions and results
 

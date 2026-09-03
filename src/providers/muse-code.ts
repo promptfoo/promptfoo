@@ -126,11 +126,21 @@ const CLI_NOT_FOUND_MESSAGE =
 async function resolveMuseExecutable(
   configuredPath: string,
   env: NodeJS.ProcessEnv,
+  workspace: string,
   basePath?: string,
 ): Promise<string> {
   if (configuredPath.includes('/') || configuredPath.includes('\\')) {
     return resolveAgenticWorkingDir(configuredPath, basePath)!;
   }
+
+  const workspaceRoots = [path.resolve(workspace), await fs.realpath(workspace)];
+  const isInWorkspace = (candidate: string) =>
+    workspaceRoots.some((root) => {
+      const relative = path.relative(root, candidate);
+      return (
+        !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
+      );
+    });
 
   const names =
     process.platform === 'win32' && !path.extname(configuredPath)
@@ -138,12 +148,24 @@ async function resolveMuseExecutable(
       : [configuredPath];
   for (const directory of (env.PATH ?? env.Path ?? '').split(path.delimiter)) {
     // Never let changing the child cwd redirect PATH lookup into the target repository.
-    if (!path.isAbsolute(directory)) {
+    if (!path.isAbsolute(directory) || isInWorkspace(directory)) {
+      continue;
+    }
+    let resolvedDirectory: string;
+    try {
+      resolvedDirectory = await fs.realpath(directory);
+    } catch {
+      continue;
+    }
+    if (isInWorkspace(resolvedDirectory)) {
       continue;
     }
     for (const name of names) {
-      const candidate = path.join(directory, name);
       try {
+        const candidate = await fs.realpath(path.join(resolvedDirectory, name));
+        if (isInWorkspace(candidate)) {
+          continue;
+        }
         await fs.access(candidate, fsConstants.X_OK);
         if ((await fs.stat(candidate)).isFile()) {
           return candidate;
@@ -503,7 +525,7 @@ export class MuseCodeProvider implements ApiProvider {
       signal.throwIfAborted();
       const configuredPath =
         config.muse_path ?? this.env?.MUSE_CLI_PATH ?? getEnvString('MUSE_CLI_PATH') ?? 'muse';
-      const command = await resolveMuseExecutable(configuredPath, env, basePath);
+      const command = await resolveMuseExecutable(configuredPath, env, workspace, basePath);
       signal.throwIfAborted();
       const result = await this.execute(
         command,

@@ -89,8 +89,7 @@ describe('MuseCodeProvider', () => {
     vi.resetAllMocks();
     vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => fn({} as Span));
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'muse-provider-test-'));
-    binDir = path.join(testDir, 'bin');
-    await fs.mkdir(binDir);
+    binDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'muse-test-bin-')));
     await Promise.all(
       ['muse', 'custom-muse'].map((name) =>
         fs.writeFile(path.join(binDir, executableName(name)), '', { mode: 0o700 }),
@@ -130,6 +129,7 @@ describe('MuseCodeProvider', () => {
     }
     await Promise.all(providers.map((instance) => instance.shutdown()));
     await fs.rm(testDir, { recursive: true, force: true });
+    await fs.rm(binDir, { recursive: true, force: true });
     vi.useRealTimers();
     vi.restoreAllMocks();
     restoreEnv();
@@ -344,6 +344,69 @@ describe('MuseCodeProvider', () => {
 
   it('fails without spawning when PATH has no absolute directories', async () => {
     const response = await provider({ config: { env: { PATH: '.' } } }).callApi(prompt);
+    expect(response.error).toContain('Muse Code CLI was not found');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it.each(['direct', 'directory alias', 'workspace alias'])(
+    'excludes a workspace PATH directory through a %s path',
+    async (kind) => {
+      const workspace = path.join(testDir, 'target');
+      const workspaceBin = path.join(workspace, 'node_modules', '.bin');
+      await fs.mkdir(workspaceBin, { recursive: true });
+      await fs.writeFile(path.join(workspaceBin, executableName('muse')), '', { mode: 0o700 });
+      const alias = path.join(testDir, 'alias');
+      let workingDir = workspace;
+      let searchDirectory = workspaceBin;
+      if (kind !== 'direct') {
+        await fs.symlink(
+          kind === 'directory alias' ? workspaceBin : workspace,
+          alias,
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+        if (kind === 'directory alias') {
+          searchDirectory = alias;
+        } else {
+          workingDir = alias;
+        }
+      }
+      const response = await provider({
+        config: {
+          working_dir: workingDir,
+          env: { PATH: `${searchDirectory}${path.delimiter}${binDir}` },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'excludes an executable symlink into the workspace',
+    async () => {
+      const workspace = path.join(testDir, 'target');
+      const firstBin = path.join(testDir, 'first-bin');
+      await fs.mkdir(workspace);
+      await fs.mkdir(firstBin);
+      const malicious = path.join(workspace, 'muse');
+      await fs.writeFile(malicious, '', { mode: 0o700 });
+      await fs.symlink(malicious, path.join(firstBin, 'muse'));
+      const response = await provider({
+        config: {
+          working_dir: workspace,
+          env: { PATH: `${firstBin}${path.delimiter}${binDir}` },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, 'muse'));
+    },
+  );
+
+  it('fails without spawning when Muse is only available inside the workspace', async () => {
+    await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
+    const response = await provider({
+      config: { working_dir: testDir, env: { PATH: testDir } },
+    }).callApi(prompt);
     expect(response.error).toContain('Muse Code CLI was not found');
     expect(spawn).not.toHaveBeenCalled();
   });

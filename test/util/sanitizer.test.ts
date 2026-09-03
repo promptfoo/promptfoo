@@ -171,6 +171,14 @@ describe('sanitizeTracingConfigForPersistence', () => {
 });
 
 describe('sanitizeObject', () => {
+  it.each(['META_API_KEY', 'metaApiKey', 'meta-api-key'])(
+    'redacts the Meta API key field %s without relying on its value format',
+    (key) => {
+      expect(sanitizeObject({ env: { [key]: 'meta-dev-key', REGION: 'us-east-1' } })).toEqual({
+        env: { [key]: '[REDACTED]', REGION: 'us-east-1' },
+      });
+    },
+  );
   describe('primitives and basic types', () => {
     it('should handle null', () => {
       expect(sanitizeObject(null)).toBeNull();

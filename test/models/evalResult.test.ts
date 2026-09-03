@@ -450,6 +450,28 @@ describe('EvalResult', () => {
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
+      it('redacts the Meta API key from persisted provider records', async () => {
+        const museProvider: ProviderOptions = {
+          id: 'muse-code',
+          config: { env: { META_API_KEY: 'meta-dev-key', PUBLIC_SETTING: 'keep-me' } },
+        };
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-redact-muse-provider',
+          {
+            ...mockEvaluateResult,
+            provider: museProvider,
+          },
+          { persist: true },
+        );
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved).not.toBeNull();
+        expect(retrieved?.provider.config?.env).toEqual({
+          META_API_KEY: '[REDACTED]',
+          PUBLIC_SETTING: 'keep-me',
+        });
+        expect(JSON.stringify(retrieved?.provider)).not.toContain('meta-dev-key');
+      });
+
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(

@@ -179,6 +179,7 @@ describe('writeOutput', () => {
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
+        META_API_KEY: 'meta-global-dev-key',
         REGION: 'us-east-1',
       },
       providers: [
@@ -188,6 +189,11 @@ describe('writeOutput', () => {
             apiKey: 'sk-secret-value',
             max_turns: 2,
           },
+        },
+        {
+          id: 'muse-code',
+          env: { META_API_KEY: 'meta-provider-dev-key' },
+          config: { env: { META_API_KEY: 'meta-child-dev-key' } },
         },
       ],
       tracing: {
@@ -213,6 +219,9 @@ describe('writeOutput', () => {
     const parsed = JSON.parse(outputJson);
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.META_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].env.META_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.env.META_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
