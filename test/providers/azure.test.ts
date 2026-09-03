@@ -671,6 +671,101 @@ describe('Azure Provider Tests', () => {
       });
     });
 
+    describe('Grok deployments', () => {
+      // Verified live 2026-09-01 against an Azure AI Foundry grok-4.6 GlobalStandard
+      // deployment: presence_penalty, frequency_penalty and stop return HTTP 400, while
+      // max_tokens, temperature and reasoning_effort: low are accepted.
+      it('strips the sampling parameters Grok 4+ rejects', async () => {
+        const provider = new AzureChatCompletionProvider('qa-grok-46', {
+          config: { apiHost: 'test.openai.azure.com', stop: ['\n\n'] },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeUndefined();
+        expect(body.frequency_penalty).toBeUndefined();
+        expect(body.stop).toBeUndefined();
+        // Grok keeps the non-reasoning request shape: max_tokens and temperature stay.
+        expect(body.max_tokens).toBeDefined();
+        expect(body.temperature).toBeDefined();
+      });
+
+      it('strips them even when the user sets them explicitly', async () => {
+        const provider = new AzureChatCompletionProvider('grok-4.3-prod', {
+          config: {
+            apiHost: 'test.openai.azure.com',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.5,
+            stop: ['x'],
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeUndefined();
+        expect(body.frequency_penalty).toBeUndefined();
+        expect(body.stop).toBeUndefined();
+      });
+
+      it('forwards an explicitly configured reasoning_effort', async () => {
+        const provider = new AzureChatCompletionProvider('qa-grok-46', {
+          config: { apiHost: 'test.openai.azure.com', reasoning_effort: 'low' },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.reasoning_effort).toBe('low');
+      });
+
+      it('does not inject reasoning_effort when the user did not set one', async () => {
+        const provider = new AzureChatCompletionProvider('qa-grok-46', {
+          config: { apiHost: 'test.openai.azure.com' },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.reasoning_effort).toBeUndefined();
+      });
+
+      it('keeps a future Grok 10 on the restricted path', async () => {
+        const provider = new AzureChatCompletionProvider('grok-10-preview', {
+          config: { apiHost: 'test.openai.azure.com', stop: ['x'] },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeUndefined();
+        expect(body.stop).toBeUndefined();
+      });
+
+      it('leaves Grok 3 and grok-code-fast deployments alone', async () => {
+        // Only Grok 4 and newer restrict these parameters.
+        for (const deployment of ['grok-3', 'grok-3-mini', 'grok-code-fast-1']) {
+          const provider = new AzureChatCompletionProvider(deployment, {
+            config: { apiHost: 'test.openai.azure.com', stop: ['x'] },
+          });
+
+          const { body } = await (provider as any).getOpenAiBody('hello');
+
+          expect(body.presence_penalty).toBeDefined();
+          expect(body.frequency_penalty).toBeDefined();
+          expect(body.stop).toEqual(['x']);
+        }
+      });
+
+      it('leaves non-Grok deployments alone', async () => {
+        const provider = new AzureChatCompletionProvider('gpt-4o-prod', {
+          config: { apiHost: 'test.openai.azure.com', stop: ['x'] },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeDefined();
+        expect(body.frequency_penalty).toBeDefined();
+        expect(body.stop).toEqual(['x']);
+      });
+    });
+
     describe('reasoning models', () => {
       it('should detect reasoning models with o1 flag', () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
@@ -721,16 +816,15 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(true);
       });
 
-      it.each([
-        'gpt-5.6-sol',
-        'gpt-5.6-terra',
-        'gpt-5.6-luna',
-      ])('should auto-detect %s by deployment name', (model) => {
-        const provider = new AzureChatCompletionProvider(model, {
-          config: {},
-        });
-        expect((provider as any).isReasoningModel()).toBe(true);
-      });
+      it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+        'should auto-detect %s by deployment name',
+        (model) => {
+          const provider = new AzureChatCompletionProvider(model, {
+            config: {},
+          });
+          expect((provider as any).isReasoningModel()).toBe(true);
+        },
+      );
 
       it('should not detect non-reasoning models', () => {
         const provider = new AzureChatCompletionProvider('gpt-4o', {

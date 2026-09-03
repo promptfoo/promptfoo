@@ -259,11 +259,7 @@ jobs:
         run: |
           npm run architecture:check
 
-      - name: Check for missing dependencies
-        run: |
-          npm run depcheck
-
-      - name: Check for unused files, exports, and dependencies
+      - name: Check dependencies, unused files, and exports
         run: |
           npm run knip -- --no-progress --reporter github-actions
 

@@ -26,11 +26,12 @@ providers:
 
 Keep this provider separate from the Codex SDK provider. They share Codex concepts, but they expose different runtime contracts.
 
-| Surface           | Best for                                      | Runtime                                              | Promptfoo provider                                 |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
-| Codex SDK         | CI, automation, simple agentic coding evals   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)        |
-| Codex app-server  | Rich-client protocol behavior and event evals | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop` |
-| Codex Desktop app | Interactive human work in the desktop product | Native app process and UI                            | Not attached directly                              |
+| Surface            | Best for                                                      | Runtime                                              | Promptfoo provider                                    |
+| ------------------ | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| Codex SDK          | CI, automation, simple agentic coding evals                   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)           |
+| Codex Security SDK | Repository scans, validated findings, scan cost, and coverage | `@openai/codex-security` library                     | [`openai:codex-security`](./openai-codex-security.md) |
+| Codex app-server   | Rich-client protocol behavior and event evals                 | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop`    |
+| Codex Desktop app  | Interactive human work in the desktop product                 | Native app process and UI                            | Not attached directly                                 |
 
 Use this provider when the thing being tested depends on app-server-only behavior such as approval request payloads, streamed item notifications, app connector events, plugin/skill metadata, or thread lifecycle operations. Use the SDK provider when you only need final Codex output, thread reuse, structured output, and traced shell/MCP/search/file steps.
 
@@ -369,7 +370,7 @@ generations and tool execution. App-server notifications do not expose those int
 model-generation boundaries, so these markers cannot distinguish batched from
 sequential tool calls inside a turn.
 
-Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
+Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Promptfoo configures Codex's trace exporter automatically unless you have already selected one, and starts a fresh app-server process for each row so the child process receives the active trace context. Reusable app-server processes and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 
 ## Local Verification
 

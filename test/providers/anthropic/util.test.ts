@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
@@ -1810,6 +1811,26 @@ describe('Anthropic utilities', () => {
       expect(result).toContain('explanation: This request involves prohibited cyber activities');
     });
 
+    it('should preserve the general_harms refusal category added in SDK 0.112.5', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'general_harms',
+          explanation: 'The request may involve a harmful area',
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(getRefusalDetails(message)).toContain('category: general_harms');
+    });
+
     it('should handle refusal with null category and explanation', () => {
       const message = {
         id: 'msg_1',
@@ -1867,6 +1888,38 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(0.025 + 0.0005 + 0.003125 + 0.0625, 6);
     });
   });
+
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    'calculateAnthropicCost for %s',
+    (model) => {
+      it('prices cache reads at 2.5% of input and keeps the existing write and output rates', () => {
+        expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.0363, 8);
+        expect(calculateAnthropicCost(model, {}, 900_000, 10_000)).toBeCloseTo(9.5, 8);
+      });
+
+      it('composes cache pricing with regional premiums and explicit per-token rates', () => {
+        expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500, 200, 100)).toBeCloseTo(
+          0.03993,
+          8,
+        );
+        expect(
+          calculateAnthropicCost(
+            model,
+            { inputCost: 20 / 1e6, outputCost: 100 / 1e6 },
+            1000,
+            500,
+            200,
+            100,
+          ),
+        ).toBeCloseTo(0.0726, 8);
+      });
+
+      it('does not invent latest aliases or dated snapshots', () => {
+        expect(calculateAnthropicCost(`${model}-latest`, {}, 1000, 500)).toBeUndefined();
+        expect(calculateAnthropicCost(`${model}-20260901`, {}, 1000, 500)).toBeUndefined();
+      });
+    },
+  );
 
   describe.each(['claude-fable-5', 'claude-mythos-5'])('calculateAnthropicCost for %s', (model) => {
     it('uses Claude 5 input and output pricing', () => {
@@ -2011,6 +2064,94 @@ describe('Anthropic utilities', () => {
       ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('raises max_tokens above a manual thinking budget', () => {
+      // Anthropic rejects max_tokens <= thinking.budget_tokens with a 400. Only the Vertex
+      // path used to enforce this, so the same config errored on the direct API.
+      expect(clampMaxTokensForThinkingBudget(2048, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9024,
+      );
+    });
+
+    it('leaves max_tokens alone when it already clears the budget', () => {
+      expect(clampMaxTokensForThinkingBudget(9000, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9000,
+      );
+    });
+
+    it('leaves max_tokens alone when there is no manual budget to clear', () => {
+      for (const thinking of [
+        undefined,
+        { type: 'adaptive' },
+        { type: 'disabled' },
+        { type: 'enabled' },
+      ]) {
+        expect(clampMaxTokensForThinkingBudget(1024, thinking as any)).toBe(1024);
+      }
+    });
+
+    it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
+      for (const id of [
+        'claude-haiku-5',
+        'anthropic:messages:claude-haiku-5-20260801',
+        'us.anthropic.claude-research-preview-5',
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-haiku-5',
+        'vertex:claude-sonnet-6',
+        'global.anthropic.claude-opus-10',
+        'claude-haiku-99',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
+      for (const id of [
+        'claude-3-5-sonnet-20241022',
+        'claude-opus-4-50',
+        'claude-sonnet-5x',
+        'notclaude-opus-5',
+        'claude-prod-20260811',
+        'claude-release-2026',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('matches the generation fallback in linear time on adversarial model IDs', () => {
+      // The family-name segment matcher is bounded so a long run of `claude-` segments cannot
+      // force a scan to end of input from every candidate start. The unbounded form took ~28s
+      // on this input; the bounded form finishes in single-digit milliseconds.
+      const adversarial = '-claude-a'.repeat(50_000);
+      const start = performance.now();
+      expect(isSamplingParamsDeprecatedClaudeModel(adversarial)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    it('still matches Claude families with several name segments', () => {
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-research-preview-5')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-a-b-c-d-e-5')).toBe(true);
+    });
+
+    it('disables generation fallback for alias-based Claude providers', () => {
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-5', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-25', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-team-blue-12', {
+          allowGenerationFallback: false,
+        }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', { allowGenerationFallback: false }),
+      ).toBe(true);
     });
 
     it('detects Claude Sonnet 5 across provider naming schemes', () => {
@@ -2164,6 +2305,29 @@ describe('Anthropic utilities', () => {
           undefined,
         ),
       ).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-prod-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'enabled', budget_tokens: 8000 });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-opus-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'adaptive' });
 
       // Fable/Mythos reject `disabled` outright, at any effort.
       expect(

@@ -204,18 +204,17 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
-  it.each([
-    'gpt-4o-mini-tts',
-    'gpt-4o-mini-tts-2025-12-15',
-    'gpt-4o-mini-tts-2025-03-20',
-  ])('should recognize and price TTS model %s without treating it as a chat model', (model) => {
-    expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
-    expect(calculateOpenAICost(model, {}, 1000, 0, 0, 500)).toBeCloseTo(
-      (1000 * 0.6 + 500 * 12) / 1e6,
-      6,
-    );
-  });
+  it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'])(
+    'should recognize and price TTS model %s without treating it as a chat model',
+    (model) => {
+      expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1000, 0, 0, 500)).toBeCloseTo(
+        (1000 * 0.6 + 500 * 12) / 1e6,
+        6,
+      );
+    },
+  );
 
   it('classifies the documented gpt-5-codex-mini API replacement as Responses-only', () => {
     const model = 'gpt-5-codex-mini';
@@ -231,15 +230,13 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
-  it.each([
-    'tts-1',
-    'tts-1-1106',
-    'tts-1-hd',
-    'tts-1-hd-1106',
-  ])('should recognize legacy speech model %s without treating it as a chat model', (model) => {
-    expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
-  });
+  it.each(['tts-1', 'tts-1-1106', 'tts-1-hd', 'tts-1-hd-1106'])(
+    'should recognize legacy speech model %s without treating it as a chat model',
+    (model) => {
+      expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    },
+  );
 
   it('should calculate cost correctly for search preview model gpt-4o-search-preview', () => {
     const cost = calculateOpenAICost('gpt-4o-search-preview', {}, 1000, 500);
@@ -256,16 +253,16 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.15 + 500 * 0.6) / 1e6, 6);
   });
 
-  it.each([
-    'gpt-5-search-api',
-    'gpt-5-search-api-2025-10-14',
-  ])('should calculate token cost correctly for Chat Completions search model %s', (model) => {
-    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
-      (1000 * 1.25 + 500 * 10) / 1e6,
-      6,
-    );
-    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(true);
-  });
+  it.each(['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'])(
+    'should calculate token cost correctly for Chat Completions search model %s',
+    (model) => {
+      expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
+        (1000 * 1.25 + 500 * 10) / 1e6,
+        6,
+      );
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    },
+  );
 
   it('should calculate cost correctly for computer use model computer-use-preview', () => {
     const cost = calculateOpenAICost('computer-use-preview', {}, 1000, 500);
@@ -400,8 +397,8 @@ describe('calculateOpenAICost', () => {
   it.each([
     ['gpt-5.6', 5, 30],
     ['gpt-5.6-sol', 5, 30],
-    ['gpt-5.6-terra', 2.5, 15],
-    ['gpt-5.6-luna', 1, 6],
+    ['gpt-5.6-terra', 2, 12],
+    ['gpt-5.6-luna', 0.2, 1.2],
   ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
     const cost = calculateOpenAICost(model, {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * inputRate + 500 * outputRate) / 1e6, 6);
@@ -410,18 +407,21 @@ describe('calculateOpenAICost', () => {
   it.each([
     ['gpt-5.6', 5, 30, 10, 45],
     ['gpt-5.6-sol', 5, 30, 10, 45],
-    ['gpt-5.6-terra', 2.5, 15, 5, 22.5],
-    ['gpt-5.6-luna', 1, 6, 2, 9],
-  ])('should apply long-context pricing above 272K for %s', (model, baseInputRate, baseOutputRate, longInputRate, longOutputRate) => {
-    expect(calculateOpenAICost(model, {}, 272_000, 1_000)).toBeCloseTo(
-      (272_000 * baseInputRate + 1_000 * baseOutputRate) / 1e6,
-      6,
-    );
-    expect(calculateOpenAICost(model, {}, 272_001, 1_000)).toBeCloseTo(
-      (272_001 * longInputRate + 1_000 * longOutputRate) / 1e6,
-      6,
-    );
-  });
+    ['gpt-5.6-terra', 2, 12, 4, 18],
+    ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
+  ])(
+    'should apply long-context pricing above 272K for %s',
+    (model, baseInputRate, baseOutputRate, longInputRate, longOutputRate) => {
+      expect(calculateOpenAICost(model, {}, 272_000, 1_000)).toBeCloseTo(
+        (272_000 * baseInputRate + 1_000 * baseOutputRate) / 1e6,
+        6,
+      );
+      expect(calculateOpenAICost(model, {}, 272_001, 1_000)).toBeCloseTo(
+        (272_001 * longInputRate + 1_000 * longOutputRate) / 1e6,
+        6,
+      );
+    },
+  );
 
   it('should calculate long-context cost correctly for gpt-5.5', () => {
     const cost = calculateOpenAICost('gpt-5.5', {}, 300_000, 1_000);
@@ -765,13 +765,16 @@ describe('calculateOpenAICost', () => {
   it.each([
     ['gpt-realtime-2.1', 4, 24, 32, 64],
     ['gpt-realtime-2.1-mini', 0.6, 2.4, 10, 20],
-  ])('should recognize and price Realtime model %s', (model, inputRate, outputRate, audioInputRate, audioOutputRate) => {
-    expect(OPENAI_REALTIME_MODELS.some((candidate) => candidate.id === model)).toBe(true);
-    expect(calculateOpenAICost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(
-      (1000 * inputRate + 500 * outputRate + 200 * audioInputRate + 100 * audioOutputRate) / 1e6,
-      6,
-    );
-  });
+  ])(
+    'should recognize and price Realtime model %s',
+    (model, inputRate, outputRate, audioInputRate, audioOutputRate) => {
+      expect(OPENAI_REALTIME_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(calculateOpenAICost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(
+        (1000 * inputRate + 500 * outputRate + 200 * audioInputRate + 100 * audioOutputRate) / 1e6,
+        6,
+      );
+    },
+  );
 
   it('should calculate audio token costs for gpt-realtime-mini-2025-12-15', () => {
     const cost = calculateOpenAICost('gpt-realtime-mini-2025-12-15', {}, 1000, 500, 200, 100);
