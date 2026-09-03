@@ -595,8 +595,13 @@ export function findHoistedPersistentMockWithoutReset(
     const allocationPath = tail
       ? context.allocationPath
       : `${context.allocationPath}/${call.start}`;
-    const key = `${context.phase}:${allocationPath}:${value.node.start}:${value.scope.id}:${unknownArity}:${[...(spreads ?? [])].join(',')}:${args.map(valueId).join(',')}`;
-    const cached = context.phase === 'ownership' ? undefined : callCache.get(key);
+    // Factory result sharing bounds helper DAGs. Collection and hook calls
+    // must perform their registration/reset effects on every guarded path.
+    const key =
+      context.phase === 'hoisted'
+        ? `${allocationPath}:${value.node.start}:${value.scope.id}:${unknownArity}:${[...(spreads ?? [])].join(',')}:${args.map(valueId).join(',')}`
+        : undefined;
+    const cached = key ? callCache.get(key) : undefined;
     if (cached) {
       return reuseCall(cached, context);
     }
@@ -616,7 +621,7 @@ export function findHoistedPersistentMockWithoutReset(
     try {
       bindParameters(value.node, args, nested, unknownArity, spreads);
       result = functionResult(value.node, nested);
-      if (context.phase !== 'ownership') {
+      if (key) {
         callCache.set(key, {
           value: result,
           guards: copyGuards(context.guards),

@@ -13,6 +13,43 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 }
 
 describe('hoisted mock provenance', () => {
+  it.each([
+    ["switch (flag) { case 'a': default: reset(); }", false],
+    ['return flag ? reset() : reset();', false],
+    ["switch (flag) { case 'a': reset(); break; default: break; }", true],
+  ])('runs reset helper effects on every selected path in %s', (body, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      function reset() { mock.mockReset(); }
+      beforeEach(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it('runs collection helper registrations on both guarded paths', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      function register() { beforeEach(() => mock.mockReset()); }
+      function setup() { return flag ? register() : register(); }
+      setup();`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('invalidates cached factory readers when an array can change', () => {
+    const source = `const mocks = vi.hoisted(() => {
+      const inner = vi.fn().mockReturnValue('x');
+      const targets = [inner, vi.fn()];
+      function first() { return targets[0]; }
+      function choose() {
+        if (flag) return first();
+        targets.shift();
+        return first();
+      }
+      return { inner, selected: choose() };
+    }); beforeEach(() => mocks.selected.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(hasHoistedPersistentMockWithoutReset(source.replace('targets.shift();', ''))).toBe(
+      false,
+    );
+  });
+
   it.each(['mock.mockReset()', 'vi.resetAllMocks()'])(
     'checks %s under the suite activation guards',
     (reset) => {
@@ -627,9 +664,9 @@ describe('hoisted mock provenance', () => {
 
   it('bounds deeply nested source syntax before recursive analysis', () => {
     const source = `${'{'.repeat(5000)}const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));${'}'.repeat(5000)}`;
-    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
-      { ruleId: 'hoisted-mock-analysis-limit' },
-    ]);
+    const findings = scanFixturePolicies(source).hoistedPersistentMock;
+    expect(findings).toMatchObject([{ ruleId: 'hoisted-mock-analysis-limit' }]);
+    expect(findings[0].snippet.length).toBeLessThanOrEqual(120);
   });
 
   it('bounds combined helper and statement depth', () => {
