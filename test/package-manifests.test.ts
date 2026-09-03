@@ -12,6 +12,10 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
+type PackageLockManifest<T = PackageManifest & { version?: string }> = {
+  packages: Record<string, T>;
+};
+
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
@@ -240,9 +244,8 @@ describe('package manifests', () => {
   });
 
   it('keeps private npm registry endpoints out of the published lockfile', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, { resolved?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ resolved?: string }>>('package-lock.json');
     const privateRegistryPackages = Object.entries(packageLock.packages)
       .filter(([, packageInfo]) => {
         if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
@@ -261,9 +264,8 @@ describe('package manifests', () => {
 
   it('holds Knip below the incompatible public re-export audit', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -286,9 +288,8 @@ describe('package manifests', () => {
 
   it('holds TanStack Table below v9 until the shared table migration is complete', () => {
     const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -325,9 +326,10 @@ describe('package manifests', () => {
         overrides?: Record<string, Record<string, string> | string>;
       }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { engines?: Record<string, string>; version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ engines?: Record<string, string>; version?: string }>>(
+        'package-lock.json',
+      );
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -492,45 +494,51 @@ describe('package manifests', () => {
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const sdkName = '@anthropic-ai/sdk';
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
     const agentVersion = packageJson.devDependencies?.[agentName];
+    const sdkPackage = packageLock.packages[`node_modules/${sdkName}`];
     const agentPackage = packageLock.packages[`node_modules/${agentName}`];
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(sdkPackage, 'the Anthropic SDK must have a lockfile entry').toBeDefined();
+    expect(agentPackage, 'the Anthropic agent SDK must have a lockfile entry').toBeDefined();
     expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
-    expect(resolvedSdkVersion).toBeDefined();
-    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
-    expect(agentPackage.version).toBe(agentVersion);
+    expect(sdkPackage.version, 'the Anthropic SDK must have a resolved version').toBeDefined();
+    expect(
+      satisfies(sdkPackage.version as string, sdkVersion as string),
+      'the resolved Anthropic SDK must satisfy its declared dependency range',
+    ).toBe(true);
+    expect(
+      agentPackage.version,
+      'the Anthropic agent SDK must have a resolved version',
+    ).toBeDefined();
+    expect(
+      satisfies(agentPackage.version as string, agentVersion as string),
+      'the resolved Anthropic agent SDK must satisfy its declared dependency range',
+    ).toBe(true);
 
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
-      expect(binaryVersion).toBe(agentVersion);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+      const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+      expect(binaryVersion).toBe(agentPackage.version);
+      expect(binaryPackage, `${binaryName} must have a lockfile entry`).toBeDefined();
+      expect(binaryPackage.version).toBe(agentPackage.version);
     }
   });
 
   it('keeps the Langfuse client optional and its SDK packages on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = '@langfuse/client';
     const developmentRange = packageJson.devDependencies?.[dependencyName];
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
@@ -552,14 +560,7 @@ describe('package manifests', () => {
 
   it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'ibm-cloud-sdk-core';
     const developmentRange = packageJson.devDependencies?.[dependencyName];
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
@@ -577,9 +578,7 @@ describe('package manifests', () => {
 
   it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const protobufRange = packageJson.dependencies?.protobufjs;
 
     expect(protobufRange).toBeDefined();
@@ -595,9 +594,7 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'gcp-metadata';
     const dependencyRange = packageJson.dependencies?.[dependencyName];
 
@@ -652,14 +649,14 @@ describe('package manifests', () => {
       const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
 
       expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
-      expect(minVersion(optionalRange!)?.compare('1.16.0')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(optionalRange!)?.compare('1.16.1')).toBeGreaterThanOrEqual(0);
       expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
       expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
       expect(
         minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-          '1.16.0',
+          '1.16.1',
         ),
       ).toBeGreaterThanOrEqual(0);
     }
@@ -686,14 +683,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.13.2')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.3')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.13.2',
+        '4.13.3',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -933,9 +930,7 @@ describe('package manifests', () => {
 
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const browserName = '@playwright/browser-chromium';
     const optionalRange = packageJson.optionalDependencies?.[browserName];
 
@@ -973,9 +968,8 @@ describe('package manifests', () => {
     const exampleManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
       'examples/config-websockets/streaming/server/package.json',
     );
-    const lockfile = readPackageJson<{
-      packages: Record<string, { engines?: { node?: string } }>;
-    }>('package-lock.json');
+    const lockfile =
+      readPackageJson<PackageLockManifest<{ engines?: { node?: string } }>>('package-lock.json');
     const readme = fs.readFileSync(
       path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
       'utf8',
@@ -1017,9 +1011,7 @@ describe('package manifests', () => {
   });
 
   it('keeps every direct and transitive js-yaml installation patched', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const workspaceManifests = [
       { path: 'package.json', lockPath: '', field: 'dependencies' },
       { path: 'site/package.json', lockPath: 'site', field: 'dependencies' },
@@ -1069,9 +1061,10 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
       'package.json',
     );
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { engines?: { node?: string }; version?: string }>
+      >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
     const parserTransportRange = parser?.dependencies?.undici;
@@ -1095,6 +1088,10 @@ describe('package manifests', () => {
     expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
     expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(
+      validRange(parserTransportRange as string),
+      'the parser transport dependency must declare a valid semver range',
+    ).not.toBeNull();
     expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
@@ -1108,7 +1105,10 @@ describe('package manifests', () => {
     expect(
       subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
     ).toBe(true);
-    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+    expect(
+      subset(parserTransportRange as string, PATCHED_UNDICI_RANGE),
+      `the parser transport dependency must not allow vulnerable undici ${parserTransportRange}`,
+    ).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
@@ -1117,7 +1117,7 @@ describe('package manifests', () => {
     // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
-    const PATCHED_UNDICI = '7.29.0';
+    const PATCHED_UNDICI_FLOOR = '7.29.0';
     const rootPackageJson = readPackageJson<{
       overrides?: Record<string, string | Record<string, string>>;
     }>('package.json');
@@ -1149,14 +1149,12 @@ describe('package manifests', () => {
 
       const minimum = minVersion(pinnedRange as string);
       expect(
-        minimum?.compare(PATCHED_UNDICI),
-        `${manifest} must not allow undici below ${PATCHED_UNDICI}`,
+        minimum?.compare(PATCHED_UNDICI_FLOOR),
+        `${manifest} must not allow undici below ${PATCHED_UNDICI_FLOOR}`,
       ).toBeGreaterThanOrEqual(0);
       minimumVersions.push(minimum?.version ?? '');
 
-      const packageLock = readPackageJson<{
-        packages: Record<string, { version?: string }>;
-      }>(lockfile);
+      const packageLock = readPackageJson<PackageLockManifest<{ version?: string }>>(lockfile);
       const installations = Object.entries(packageLock.packages).filter(
         ([packagePath]) =>
           packagePath === 'node_modules/undici' || packagePath.endsWith('/node_modules/undici'),
@@ -1201,9 +1199,8 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
 
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.

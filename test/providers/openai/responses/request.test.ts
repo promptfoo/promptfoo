@@ -8,6 +8,7 @@ import { OpenAiResponsesProvider } from '../../../../src/providers/openai/respon
 import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../../src/util/fetch/index';
+import { createDeferred } from '../../../util/utils';
 import { setOpenAiEnv } from './setup';
 
 describe('OpenAiResponsesProvider request building', () => {
@@ -1753,17 +1754,12 @@ describe('OpenAiResponsesProvider request building', () => {
   it('should cancel an accepted background job when creation is aborted before the response arrives', async () => {
     const controller = new AbortController();
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-    // Creation resolves only when the test releases it, so the ordering this test depends on
-    // (abort lands while creation is in flight, creation resolves afterwards so the cleanup
-    // path can learn the response id) never rides on wall-clock timers.
-    let releaseCreation!: () => void;
-    const creationReleased = new Promise<void>((resolve) => {
-      releaseCreation = resolve;
-    });
+    // Hold creation open until cancellation rejects, then release its response ID for cleanup.
+    const creation = createDeferred<void>();
     vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         controller.abort(new Error('caller cancelled creation'));
-        await creationReleased;
+        await creation.promise;
         return {
           data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
           cached: false,
@@ -1786,7 +1782,7 @@ describe('OpenAiResponsesProvider request building', () => {
     });
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
 
-    releaseCreation();
+    creation.resolve();
     await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
 
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
@@ -1797,7 +1793,6 @@ describe('OpenAiResponsesProvider request building', () => {
       true,
       0,
     );
-    expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
   it('should bound polling retries by the overall background deadline', async () => {

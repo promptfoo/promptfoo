@@ -3146,87 +3146,91 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
-  it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
-    const model = 'claude-fable-5';
-    provider = new VertexChatProvider(model, {
-      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
-    });
-    const mockRequest = vi.fn().mockResolvedValue({
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model,
-        content: [{ type: 'text', text: 'ok' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
+  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+    'supports %s with adaptive-safe parameters and regional pricing',
+    async (model) => {
+      provider = new VertexChatProvider(model, {
+        config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model,
+          content: [{ type: 'text', text: 'ok' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 5,
+            output_tokens: 1,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
         },
-      },
-    });
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: { request: mockRequest } as unknown as JSONClient,
-      projectId: 'test-project-id',
-    });
-    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
-      typeof creds === 'object' ? JSON.stringify(creds) : creds,
-    );
-    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+        typeof creds === 'object' ? JSON.stringify(creds) : creds,
+      );
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
-    const result = await provider.callClaudeApi('test prompt');
+      const result = await provider.callClaudeApi('test prompt');
 
-    const request = mockRequest.mock.calls[0][0];
-    const sentBody = request.data as Record<string, unknown>;
-    expect(request.url).toContain(`/publishers/anthropic/models/${model}:rawPredict`);
-    expect(sentBody.temperature).toBeUndefined();
-    expect(sentBody.top_p).toBeUndefined();
-    expect(sentBody.top_k).toBeUndefined();
-    expect(result.cost).toBeCloseTo(0.00011, 8);
-  });
+      const request = mockRequest.mock.calls[0][0];
+      const sentBody = request.data as Record<string, unknown>;
+      expect(request.url).toContain(`/publishers/anthropic/models/${model}:rawPredict`);
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      expect(result.cost).toBeCloseTo(0.00011, 8);
+    },
+  );
 
-  it('uses base Claude 5 pricing for Fable on the global Vertex region', async () => {
-    const model = 'claude-fable-5';
-    provider = new VertexChatProvider(model, {
-      config: { region: 'global', max_tokens: 32 },
-    });
-    const mockRequest = vi.fn().mockResolvedValue({
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model,
-        content: [{ type: 'text', text: 'ok' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
+  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+    'uses base pricing for %s on the global Vertex region',
+    async (model) => {
+      provider = new VertexChatProvider(model, {
+        config: { region: 'global', max_tokens: 32 },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model,
+          content: [{ type: 'text', text: 'ok' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 5,
+            output_tokens: 1,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
         },
-      },
-    });
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: { request: mockRequest } as unknown as JSONClient,
-      projectId: 'test-project-id',
-    });
-    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
-      typeof creds === 'object' ? JSON.stringify(creds) : creds,
-    );
-    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+        typeof creds === 'object' ? JSON.stringify(creds) : creds,
+      );
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
-    const result = await provider.callClaudeApi('test prompt');
+      const result = await provider.callClaudeApi('test prompt');
 
-    const request = mockRequest.mock.calls[0][0];
-    expect(request.url).toContain('/locations/global/');
-    // Global region bills at the base Claude 5 rate (no 10% regional premium):
-    // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
-    expect(result.cost).toBeCloseTo(0.0001, 8);
-  });
+      const request = mockRequest.mock.calls[0][0];
+      expect(request.url).toContain('/locations/global/');
+      // Global region bills at the base Claude 5 rate (no 10% regional premium):
+      // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
+      expect(result.cost).toBeCloseTo(0.0001, 8);
+    },
+  );
 
   it('does not stack the Vertex regional premium on a user-provided cost override for Fable', async () => {
     const model = 'claude-fable-5';

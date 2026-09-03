@@ -121,6 +121,10 @@ describe('MoonshotProvider key resolution', () => {
 
   it('does NOT fall back to OPENAI_API_KEY or forward the OpenAI organization', () => {
     const restore = mockProcessEnv({
+      // Clear the real key: a developer with MOONSHOT_API_KEY set (or a .env in
+      // the repo) would otherwise see the provider resolve it and the
+      // no-fallback assertion fail.
+      MOONSHOT_API_KEY: undefined,
       OPENAI_API_KEY: 'sk-openai-secret',
       OPENAI_ORGANIZATION: 'org-openai-secret',
     });
