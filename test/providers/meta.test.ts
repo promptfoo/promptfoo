@@ -491,10 +491,10 @@ describe('MetaProvider callApi cost', () => {
     data: {
       choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
       usage: {
-        total_tokens: 15,
-        prompt_tokens: 10,
-        completion_tokens: 5,
-        prompt_tokens_details: { cached_tokens: 4 },
+        total_tokens: 1500,
+        prompt_tokens: 1000,
+        completion_tokens: 500,
+        prompt_tokens_details: { cached_tokens: 400 },
       },
     },
     cached: false,
@@ -510,7 +510,7 @@ describe('MetaProvider callApi cost', () => {
         config: { apiKey: 'LLM|1|k' },
       });
       const result = await provider.callApi('Say hi');
-      expect(result.cost).toBeCloseTo(expectedCost / 100, 12);
+      expect(result.cost).toBeCloseTo(expectedCost, 12);
     },
   );
 
