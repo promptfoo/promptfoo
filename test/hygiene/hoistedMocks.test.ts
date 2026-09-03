@@ -13,6 +13,194 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 }
 
 describe('hoisted mock provenance', () => {
+  it.each(['mock.mockReset()', 'vi.resetAllMocks()'])(
+    'does not accept afterEach-only cleanup using %s',
+    (reset) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('initial'));
+        afterEach(() => { ${reset}; });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+      expect(hasHoistedPersistentMockWithoutReset(source.replace('afterEach', 'beforeEach'))).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each([
+    [
+      'a top-level test',
+      `describe('nested', () => {
+      beforeEach(() => mock.mockReset()); it('inside', () => mock());
+    }); it('outside', () => mock());`,
+      true,
+    ],
+    [
+      'a sibling suite',
+      `describe('first', () => {
+      beforeEach(() => mock.mockReset()); it('first', () => mock());
+    }); describe('second', () => { it('second', () => mock()); });`,
+      true,
+    ],
+    [
+      'parent hooks',
+      `describe('parent', () => {
+      beforeEach(() => mock.mockReset());
+      describe('first', () => { it('first', () => mock()); });
+      describe('second', () => { it('second', () => mock()); });
+    });`,
+      false,
+    ],
+    [
+      'separate sibling hooks',
+      `describe('first', () => {
+      beforeEach(() => mock.mockReset()); it('first', () => mock());
+    }); describe('second', () => {
+      beforeEach(() => mock.mockReset()); it('second', () => mock());
+    });`,
+      false,
+    ],
+  ])('respects reset ownership with %s', (_name, suites, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('initial')); ${suites}`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it.each([
+    "let request; switch (flag) { case 'a': request = vi.fn().mockReturnValue('a'); break; default: request = vi.fn().mockReturnValue('b'); } return request;",
+    "let request; switch ('a') { case 'a': request = vi.fn().mockReturnValue('a'); break; default: request = vi.fn().mockReturnValue('b'); } return request;",
+    "let request; switch (flag) { case 'a': case 'b': request = vi.fn().mockReturnValue('a'); break; default: request = vi.fn().mockReturnValue('b'); } return request;",
+    "let request; switch (flag) { default: case 'a': request = vi.fn().mockReturnValue('a'); break; case 'b': request = vi.fn().mockReturnValue('b'); } return request;",
+  ])('preserves switch selection and fallthrough in %s', (body) => {
+    const source = `const mock = vi.hoisted(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(`${source}\nbeforeEach(() => mock.mockReset());`),
+    ).toBe(false);
+  });
+
+  it.each([
+    `switch (flag) { case 'a': return; default: break; }`,
+    `switch (flag) { case 'a': break; case 'b': return; default: break; }`,
+    `for (const current of unknownValues) { return; }`,
+    `for (const current of [1]) { if (flag) return; }`,
+    `for (; flag;) { return; }`,
+    `while (flag) { return; }`,
+    `do { if (flag) return; } while (false);`,
+  ])('does not grant unconditional reset coverage after %s', (control) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { ${control} mock.mockReset(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    ['[mocks.first, mocks.second]', '', false],
+    ['[]', '', true],
+    ['unknownValues', '', true],
+    ['[mocks.first, mocks.second]', 'break;', true],
+  ])('follows known for-of values from %s with %s', (iterable, control, violation) => {
+    const source = `const mocks = vi.hoisted(() => ({
+      first: vi.fn().mockReturnValue('a'), second: vi.fn().mockReturnValue('b'),
+    })); beforeEach(() => {
+      for (const current of ${iterable}) { current.mockReset(); ${control} }
+    });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it.each([
+    'targets.pop();',
+    'targets.length = 0;',
+    'targets.length--;',
+    'delete targets[0];',
+    'removeTargets(targets);',
+    'remover.remove(targets);',
+  ])('does not assume array contents survive %s', (mutation) => {
+    const source = `const mocks = vi.hoisted(() => ({
+        first: vi.fn().mockReturnValue('a'), second: vi.fn().mockReturnValue('b'),
+      })); const targets = [mocks.first, mocks.second]; ${mutation}
+      beforeEach(() => { for (const current of targets) current.mockReset(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each(['() => inner', '() => ({ inner })', '() => inner()'])(
+    'tracks callback ownership without executing %s',
+    (implementation) => {
+      const source = `const outer = vi.hoisted(() => {
+        const inner = vi.fn().mockReturnValue('x');
+        return vi.fn().mockImplementation(${implementation});
+      }); beforeEach(() => outer.mockReset());`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it('does not execute callback-only setters or register callback-only hooks', () => {
+    const source = `const mocks = vi.hoisted(() => {
+      const inner = vi.fn();
+      const outer = vi.fn().mockImplementation(() => {
+        beforeEach(() => inner.mockReset());
+        return inner.mockReturnValue('runtime');
+      });
+      return { inner, outer };
+    }); beforeEach(() => mocks.outer.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    expect(
+      hasHoistedPersistentMockWithoutReset(
+        source.replace(
+          'const inner = vi.fn();',
+          "const inner = vi.fn().mockReturnValue('initial');",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    `const outer = vi.hoisted(() => {
+      const inner = vi.fn().mockReturnValue('x');
+      return { disposable: vi.fn().mockImplementation(() => inner), retained: vi.fn(() => inner) };
+    }); beforeEach(() => { outer.disposable.mockReset(); outer.retained.mockReset(); });`,
+    `const mocks = vi.hoisted(() => {
+      const inner = vi.fn().mockReturnValue('x');
+      return { inner, outer: vi.fn().mockImplementation(() => inner) };
+    }); beforeEach(() => mocks.outer.mockReset().mockImplementation(() => mocks.inner));`,
+  ])('requires resets for callback captures that remain reachable in %s', (source) => {
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('does not mutate enclosing bindings while inspecting callback captures', () => {
+    const source = `const mocks = vi.hoisted(() => {
+      let inner = vi.fn().mockReturnValue('x');
+      const outer = vi.fn().mockImplementation(() => { inner = unrelated; });
+      return { inner, outer };
+    }); beforeEach(() => { mocks.inner.mockReset(); mocks.outer.mockReset(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('bounds deeply nested source syntax before recursive analysis', () => {
+    const source = `${'{'.repeat(5000)}const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));${'}'.repeat(5000)}`;
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
+      { ruleId: 'hoisted-mock-analysis-limit' },
+    ]);
+  });
+
+  it('bounds combined helper and statement depth', () => {
+    const helpers = ["function build0() { return vi.fn().mockReturnValue('x'); }"];
+    for (let depth = 1; depth <= 20; depth += 1) {
+      helpers.push(
+        `function build${depth}() { ${'{'.repeat(80)}return build${depth - 1}();${'}'.repeat(80)} }`,
+      );
+    }
+    const source = [...helpers, 'const mock = vi.hoisted(build20);'].join('\n');
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
+      { ruleId: 'hoisted-mock-analysis-limit' },
+    ]);
+  });
+
+  it('charges accumulated guard snapshots to the analysis budget', () => {
+    const guards = Array.from({ length: 2400 }, (_, index) => `if (flag${index}) return;`);
+    const calls = Array.from({ length: 2400 }, () => 'noop();');
+    const source = `function noop() {} beforeEach(() => { ${[...guards, ...calls].join('\n')} });`;
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
+      { ruleId: 'hoisted-mock-analysis-limit' },
+    ]);
+  });
+
   it.each([
     "import { vi as mockApi } from 'vitest'; const mock = mockApi.hoisted(() => mockApi.fn().mockReturnValue('x'));",
     "import { vi as mockApi } from 'vitest'; const mock = mockApi['hoisted'](() => mockApi.fn()['mockReturnValue']('x'));",

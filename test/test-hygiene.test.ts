@@ -778,12 +778,15 @@ function addPolicyDiagnostic(
 
 function scanFilePolicies(file: HygieneFile): FilePolicyResults {
   const results = createEmptyPolicyResults();
-  const syntaxResults = scanSyntaxPolicies(file);
-  results.testControlUsages.push(...syntaxResults.testControlUsages);
   const hoistedViolation = findHoistedPersistentMockWithoutReset(file);
   if (hoistedViolation) {
     results.hoistedPersistentMock.push(hoistedViolation);
+    if (hoistedViolation.ruleId === 'hoisted-mock-analysis-limit') {
+      return results; // Fail closed before invoking the other recursive policy walkers.
+    }
   }
+  const syntaxResults = scanSyntaxPolicies(file);
+  results.testControlUsages.push(...syntaxResults.testControlUsages);
   addPolicyDiagnostic(
     results.directProcessEnvMutation,
     file,
@@ -882,6 +885,13 @@ function hasModuleScopePersistentMockWithoutReset(source: string): boolean {
 const rootPolicyResults = scanRootTestPolicies();
 
 describe('root test hygiene', () => {
+  it('reports deep syntax before running recursive policies', () => {
+    const source = `${'{'.repeat(5000)}it('nested', () => {});${'}'.repeat(5000)}`;
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
+      { ruleId: 'hoisted-mock-analysis-limit' },
+    ]);
+  });
+
   it.each([false, true])(
     'checks namespace-qualified module mocks with global reset=%s',
     (reset) => {

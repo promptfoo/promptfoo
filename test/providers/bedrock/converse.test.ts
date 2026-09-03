@@ -36,18 +36,10 @@ interface MockConverseCommandOutput {
 const mockSend = vi.hoisted(() => vi.fn<(command: unknown) => Promise<unknown>>());
 const mcpMocks = vi.hoisted(() => {
   const mockConstructor = vi.fn();
-  const mockInitialize = vi.fn().mockResolvedValue(undefined);
-  const mockCleanup = vi.fn().mockResolvedValue(undefined);
-  const mockGetAllTools = vi.fn().mockReturnValue([
-    {
-      name: 'list_resources',
-      description: 'List available resources',
-      inputSchema: { type: 'object', properties: { resourceType: { type: 'string' } } },
-    },
-  ]);
-  const mockCallTool = vi.fn().mockResolvedValue({
-    content: 'Available resources: [docs, tickets]',
-  });
+  const mockInitialize = vi.fn();
+  const mockCleanup = vi.fn();
+  const mockGetAllTools = vi.fn();
+  const mockCallTool = vi.fn();
 
   class MockMCPClient {
     constructor(config: unknown) {

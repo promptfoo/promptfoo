@@ -4,7 +4,7 @@ const { mockWriteFileSync, mockReadFileSync, mockGetDbSignalPath, mockLoggerWarn
   () => ({
     mockWriteFileSync: vi.fn(),
     mockReadFileSync: vi.fn(),
-    mockGetDbSignalPath: vi.fn().mockReturnValue('/mock/path/signal.txt'),
+    mockGetDbSignalPath: vi.fn(),
     mockLoggerWarn: vi.fn(),
   }),
 );
@@ -45,8 +45,7 @@ describe('signal', () => {
     vi.clearAllMocks();
     mockWriteFileSync.mockReset();
     mockReadFileSync.mockReset();
-    // Re-set the mock return value after reset
-    mockGetDbSignalPath.mockReturnValue('/mock/path/signal.txt');
+    mockGetDbSignalPath.mockReset().mockReturnValue('/mock/path/signal.txt');
   });
 
   afterEach(() => {
