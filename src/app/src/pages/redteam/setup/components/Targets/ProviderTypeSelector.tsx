@@ -604,7 +604,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-3.7-flash',
+          id: 'google:gemini-3.8-flash',
           config: {},
           label: currentLabel,
         },
@@ -613,7 +613,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-3.7-flash',
+          id: 'vertex:gemini-3.8-flash',
           config: { region: 'global' },
           label: currentLabel,
         },

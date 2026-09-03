@@ -33,8 +33,9 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `vertex:gemini-3.5-flash-lite` - Low-latency Gemini 3.5 model for high-volume agentic tasks ($0.30/1M input, $2.50/1M output on the global endpoint)
 
-Use `config.region: global` for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite.
-The `us` and `eu` multi-regions carry a 10% premium for Gemini 3.8 Flash,
+For the lowest token prices, choose `config.region: global` for Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite. The optional `us` and `eu` multi-regions
+carry a 10% premium for Gemini 3.8 Flash,
 3.7 Flash, 3.6 Flash, 3.5 Flash, and 3.5 Flash-Lite. Promptfoo includes this
 premium in cost calculations. Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash introductory pricing
 ends December 31, 2026; their published standard rates are $1.50/1M input and
