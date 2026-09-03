@@ -122,6 +122,39 @@ const PROCESS_ENV_KEYS = [
 const CLI_NOT_FOUND_MESSAGE =
   'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.';
 
+async function getProjectRoots(workspace: string, basePath?: string): Promise<string[]> {
+  const projectRoots = new Set(
+    [workspace, basePath ?? process.cwd(), process.cwd()].map((root) => path.resolve(root)),
+  );
+  for (const root of [...projectRoots]) {
+    projectRoots.add(await fs.realpath(root));
+  }
+  const visited = new Set<string>();
+  for (const root of [...projectRoots]) {
+    let directory = root;
+    while (!visited.has(directory)) {
+      visited.add(directory);
+      try {
+        // Git worktrees use a file here. Inspect every ancestor so a nested
+        // marker cannot hide a repository bin above the selected workspace.
+        await fs.lstat(path.join(directory, '.git'));
+        projectRoots.add(directory);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+          throw error;
+        }
+      }
+      const parent = path.dirname(directory);
+      if (parent === directory) {
+        break;
+      }
+      directory = parent;
+    }
+  }
+  return [...projectRoots];
+}
+
 async function resolveMuseExecutable(
   configuredPath: string,
   env: NodeJS.ProcessEnv,
@@ -132,9 +165,9 @@ async function resolveMuseExecutable(
     return resolveAgenticWorkingDir(configuredPath, basePath)!;
   }
 
-  const workspaceRoots = [path.resolve(workspace), await fs.realpath(workspace)];
-  const isInWorkspace = (candidate: string) =>
-    workspaceRoots.some((root) => {
+  const projectRoots = await getProjectRoots(workspace, basePath);
+  const isInProject = (candidate: string) =>
+    projectRoots.some((root) => {
       const relative = path.relative(root, candidate);
       return (
         !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
@@ -147,7 +180,7 @@ async function resolveMuseExecutable(
       : [configuredPath];
   for (const directory of (env.PATH ?? env.Path ?? '').split(path.delimiter)) {
     // Never let changing the child cwd redirect PATH lookup into the target repository.
-    if (!path.isAbsolute(directory) || isInWorkspace(directory)) {
+    if (!path.isAbsolute(directory) || isInProject(directory)) {
       continue;
     }
     let resolvedDirectory: string;
@@ -156,13 +189,13 @@ async function resolveMuseExecutable(
     } catch {
       continue;
     }
-    if (isInWorkspace(resolvedDirectory)) {
+    if (isInProject(resolvedDirectory)) {
       continue;
     }
     for (const name of names) {
       try {
         const candidate = await fs.realpath(path.join(resolvedDirectory, name));
-        if (isInWorkspace(candidate)) {
+        if (isInProject(candidate)) {
           continue;
         }
         await fs.access(candidate, fsConstants.X_OK);

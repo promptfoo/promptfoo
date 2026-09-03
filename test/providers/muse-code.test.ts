@@ -408,6 +408,92 @@ describe('MuseCodeProvider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it.each([undefined, 'target'])(
+    'excludes the config directory from PATH with workspace %j',
+    async (workingDir) => {
+      const repositoryBin = path.join(testDir, 'node_modules', '.bin');
+      await fs.mkdir(repositoryBin, { recursive: true });
+      await fs.mkdir(path.join(testDir, 'target'));
+      await fs.writeFile(path.join(repositoryBin, executableName('muse')), '', { mode: 0o700 });
+      const response = await provider({
+        config: {
+          basePath: testDir,
+          working_dir: workingDir,
+          env: { PATH: `${repositoryBin}${path.delimiter}${binDir}` },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
+    },
+  );
+
+  it.each(['directory', 'file', 'nested markers', 'alias'])(
+    'excludes ancestor repository bins with a %s Git marker',
+    async (kind) => {
+      const repository = path.join(testDir, 'repository');
+      const configDir = path.join(repository, 'evaluations');
+      const workspace = path.join(repository, 'src');
+      const repositoryBin = path.join(repository, 'node_modules', '.bin');
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.mkdir(workspace);
+      await fs.mkdir(repositoryBin, { recursive: true });
+      if (kind === 'directory') {
+        await fs.mkdir(path.join(repository, '.git'));
+      } else {
+        await fs.writeFile(path.join(repository, '.git'), 'gitdir: unused');
+      }
+      if (kind === 'nested markers') {
+        await fs.writeFile(path.join(configDir, '.git'), 'nested marker');
+        await fs.writeFile(path.join(workspace, '.git'), 'nested marker');
+      }
+      let basePath = configDir;
+      if (kind === 'alias') {
+        const alias = path.join(testDir, 'repository-alias');
+        await fs.symlink(repository, alias, process.platform === 'win32' ? 'junction' : 'dir');
+        basePath = path.join(alias, 'evaluations');
+      }
+      await fs.writeFile(path.join(repositoryBin, executableName('muse')), '', { mode: 0o700 });
+      const response = await provider({
+        config: {
+          basePath,
+          working_dir: '../src',
+          env: { PATH: `${repositoryBin}${path.delimiter}${binDir}` },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
+    },
+  );
+
+  it('excludes cwd bins when config and workspace directories are elsewhere', async () => {
+    const cwd = path.join(testDir, 'current-project');
+    const configDir = path.join(testDir, 'config');
+    const workspace = path.join(testDir, 'workspace');
+    await fs.mkdir(cwd);
+    await fs.mkdir(configDir);
+    await fs.mkdir(workspace);
+    await fs.writeFile(path.join(cwd, executableName('muse')), '', { mode: 0o700 });
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+    const response = await provider({
+      config: {
+        basePath: configDir,
+        working_dir: workspace,
+        env: { PATH: `${cwd}${path.delimiter}${binDir}` },
+      },
+    }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
+  });
+
+  it('fails without spawning when Muse is only available in the config repository', async () => {
+    await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
+    const response = await provider({
+      config: { basePath: testDir, env: { PATH: testDir } },
+    }).callApi(prompt);
+    expect(response.error).toContain('Muse Code CLI was not found');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it.each([
     { timeout_ms: 0 },
     { timeout_ms: 2_147_483_648 },
@@ -604,6 +690,33 @@ describe('MuseCodeProvider', () => {
       },
     }).callApi(prompt);
     expect(response.error).toBe('Muse Code exited with code 1: [REDACTED] [REDACTED] [REDACTED]');
+  });
+
+  it.each(
+    [
+      'short+secret',
+      'a%2fb',
+      'café%2fsecret',
+      'short space%2fsecret',
+      "'quote%2fsecret",
+      'unpaired\uD800%2fsecret',
+      'a+%2fb;second',
+    ].flatMap((raw) => ['query', 'userinfo', 'fragment'].map((location) => [location, raw])),
+  )('redacts a raw %s URL credential %j', async (location, raw) => {
+    const baseUrl =
+      location === 'userinfo'
+        ? `https://user:${raw}@meta.example/v1`
+        : `https://meta.example/v1${location === 'query' ? '?' : '#'}api_key=${raw}`;
+    onSpawn = (child) => {
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload.text = raw;
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({ config: { base_url: baseUrl } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('[REDACTED]');
+    expect(JSON.stringify(response)).not.toContain(raw);
   });
 
   it.each([

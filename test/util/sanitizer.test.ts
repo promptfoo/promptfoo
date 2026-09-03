@@ -171,6 +171,21 @@ describe('sanitizeTracingConfigForPersistence', () => {
 });
 
 describe('sanitizeObject', () => {
+  it.each([
+    ['base_url', 'https://user:password@example.test/v1'],
+    ['base_url', 'https://example.test/v1?api_key=short-secret'],
+    ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
+    ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
+    ['base_url', 'https://example.test/v1#api_key=short-secret'],
+  ])('redacts credentials in endpoint field %s: %s', (key, value) => {
+    expect(sanitizeObject({ [key]: value })).toEqual({ [key]: '[REDACTED]' });
+  });
+
+  it('preserves a base_url without credentials', () => {
+    const baseUrl = 'https://example.test/v1?model=muse-code&region=us-east-1';
+    expect(sanitizeObject({ base_url: baseUrl })).toEqual({ base_url: baseUrl });
+  });
+
   it('redacts credential-bearing environment entries while preserving ordinary settings', () => {
     const env = {
       GITHUB_PAT: 'abc123',

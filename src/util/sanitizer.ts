@@ -305,35 +305,97 @@ function isCredentialValue(value: string): boolean {
   );
 }
 
+function collectRawUrlCredentials(
+  value: string,
+  addCredential: (raw: string, formEncoded?: boolean) => void,
+): void {
+  // URL parsing normalizes spaces, Unicode, and some punctuation. Keep the
+  // original userinfo and query values so the child cannot echo those spellings.
+  const schemeIndex = value.indexOf('://');
+  if (schemeIndex !== -1) {
+    const authority = value.slice(schemeIndex + 3).split(/[/?#]/, 1)[0];
+    const atIndex = authority.lastIndexOf('@');
+    if (atIndex !== -1) {
+      const userinfo = authority.slice(0, atIndex);
+      const colonIndex = userinfo.indexOf(':');
+      for (const raw of colonIndex === -1
+        ? [userinfo]
+        : [userinfo.slice(0, colonIndex), userinfo.slice(colonIndex + 1)]) {
+        addCredential(raw);
+      }
+    }
+  }
+  const addRawPair = (pair: string) => {
+    const equalsIndex = pair.indexOf('=');
+    if (equalsIndex === -1) {
+      return;
+    }
+    const rawKey = pair.slice(0, equalsIndex);
+    if (isCredentialName(decodeFormComponent(rawKey) ?? rawKey)) {
+      addCredential(pair.slice(equalsIndex + 1), true);
+    }
+  };
+  const hashIndex = value.indexOf('#');
+  const beforeHash = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const queryIndex = beforeHash.indexOf('?');
+  const fields = [
+    queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1),
+    hashIndex === -1 ? '' : value.slice(hashIndex + 1),
+  ];
+  for (const field of fields) {
+    for (const pair of field.split('&')) {
+      addRawPair(pair);
+      if (pair.includes(';')) {
+        for (const segment of pair.split(';')) {
+          addRawPair(segment);
+        }
+      }
+    }
+  }
+}
+
 // Use the same credential detection for child responses, config exports, and provider records.
 export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: string): string[] {
   const credentials = new Set<string>();
   const addUrlCredentials = (value: string) => {
-    let url: URL;
+    let url: URL | undefined;
     try {
       url = new URL(value);
     } catch {
-      return;
-    }
-    let hasCredentials = false;
-    for (const encoded of [url.username, url.password]) {
-      if (encoded) {
-        hasCredentials = true;
-        credentials.add(encoded);
-        try {
-          credentials.add(decodeURIComponent(encoded));
-        } catch {
-          // Keep the original value when URL userinfo has malformed percent encoding.
-        }
+      // Config exports can contain an unresolved hostname template.
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+        return;
       }
     }
-    for (const [key, secret] of url.searchParams) {
+    let hasCredentials = false;
+    const addRawCredential = (raw: string, formEncoded = false) => {
+      if (!raw) {
+        return;
+      }
+      hasCredentials = true;
+      credentials.add(raw);
+      try {
+        const decoded = decodeURIComponent(formEncoded ? raw.replace(/\+/g, ' ') : raw);
+        credentials.add(decoded);
+        credentials.add(encodeURIComponent(decoded));
+      } catch {
+        // Preserve the original representation even for malformed URI encodings.
+      }
+    };
+    for (const encoded of [url?.username, url?.password]) {
+      if (encoded) {
+        addRawCredential(encoded);
+      }
+    }
+    for (const [key, secret] of url?.searchParams ?? []) {
       if (secret && isCredentialName(key)) {
         hasCredentials = true;
         credentials.add(secret);
         credentials.add(encodeURIComponent(secret));
       }
     }
+
+    collectRawUrlCredentials(value, addRawCredential);
     if (hasCredentials) {
       credentials.add(value);
     }
@@ -1017,6 +1079,8 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
         ]),
       );
       sanitized[key] = recursiveSanitize(env, depth + 1, maxDepth);
+    } else if (normalizeFieldName(key) === 'baseurl' && typeof value === 'string') {
+      sanitized[key] = collectEnvCredentials({}, value).length ? REDACTED : sanitizeUrl(value);
     } else if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretField(key)) {

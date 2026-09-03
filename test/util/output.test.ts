@@ -195,6 +195,7 @@ describe('writeOutput', () => {
           id: 'muse-code',
           env: { META_API_KEY: 'meta-provider-dev-key', OPENAI_API_KEY: 'openai-provider-dev-key' },
           config: {
+            base_url: 'https://meta.example/v1?api_key=endpoint-config-secret',
             env: {
               META_API_KEY: 'meta-child-dev-key',
               GITHUB_PAT: 'github-child-dev-pat',
@@ -233,6 +234,7 @@ describe('writeOutput', () => {
     expect(parsed.config.env.GITHUB_PAT).toBe('[REDACTED]');
     expect(parsed.config.providers[1].env.META_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.providers[1].env.OPENAI_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.base_url).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.META_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.GITHUB_PAT).toBe('[REDACTED]');
     expect(parsed.config.providers[1].config.env.DATABASE_PASSWORD).toBe('[REDACTED]');
@@ -242,6 +244,7 @@ describe('writeOutput', () => {
     for (const credential of [
       'github-global-dev-pat',
       'openai-provider-dev-key',
+      'endpoint-config-secret',
       'github-child-dev-pat',
       'database-child-pass',
       'proxy-child-pass',

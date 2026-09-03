@@ -454,6 +454,7 @@ describe('EvalResult', () => {
         const museProvider: ProviderOptions = {
           id: 'muse-code',
           config: {
+            base_url: 'https://user:endpoint-password@meta.example/v1',
             env: {
               META_API_KEY: 'meta-dev-key',
               GITHUB_PAT: 'abc123',
@@ -474,6 +475,7 @@ describe('EvalResult', () => {
         );
         const retrieved = await EvalResult.findById(result.id);
         expect(retrieved).not.toBeNull();
+        expect(retrieved?.provider.config?.base_url).toBe('[REDACTED]');
         expect(retrieved?.provider.config?.env).toEqual({
           META_API_KEY: '[REDACTED]',
           GITHUB_PAT: '[REDACTED]',
@@ -482,7 +484,13 @@ describe('EvalResult', () => {
           MUSE_AUTH_PATH: '/tmp/muse-auth.json',
           PUBLIC_SETTING: 'keep-me',
         });
-        for (const credential of ['meta-dev-key', 'abc123', 'short-pass', 'proxy-pass']) {
+        for (const credential of [
+          'meta-dev-key',
+          'abc123',
+          'short-pass',
+          'proxy-pass',
+          'endpoint-password',
+        ]) {
           expect(JSON.stringify(retrieved?.provider)).not.toContain(credential);
         }
       });

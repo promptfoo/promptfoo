@@ -86,7 +86,7 @@ For read-only evals, set both `disable_shell: true` and `disable_write: true`. S
 
 Promptfoo always enables `--user-input-auto-resolve`, which cancels clarification questions in headless mode. This does not grant tool approval. A run that still needs human approval may remain pending until `timeout_ms`; configure `approval_mode: never` when you explicitly want unattended tool execution within the native sandbox.
 
-The child receives a small environment containing OS paths, locale, XDG directories, proxy/certificate settings, and Muse credentials. Other process environment variables are not inherited automatically; pass required values through `config.env`. Promptfoo resolves the Muse executable using absolute `PATH` directories before starting it in the workspace. This lookup excludes empty and relative entries, workspace directories, and symlinks into the workspace. Set `muse_path` to explicitly select a trusted executable or wrapper. The Muse launcher is started with automatic updates disabled so an eval uses the installed binary.
+The child receives a small environment containing OS paths, locale, XDG directories, proxy/certificate settings, and Muse credentials. Other process environment variables are not inherited automatically; pass required values through `config.env`. Promptfoo resolves the Muse executable before starting it in the workspace, using absolute `PATH` entries outside the workspace, config directory, current directory, and containing Git repositories. This also checks resolved symlink targets. Set `muse_path` to explicitly select a trusted executable or wrapper, including a local installation inside one of those directories. The Muse launcher is started with automatic updates disabled so an eval uses the installed binary.
 
 ## Sessions and results
 
@@ -102,7 +102,7 @@ The response contains:
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
 - `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
 
-Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT` or `DATABASE_PASSWORD`, recognizable token values, and authentication in proxy or endpoint URLs.
+Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT` or `DATABASE_PASSWORD`, recognizable token values, and authentication in proxy or endpoint URLs. Original URL encodings are included in that matching. Credential-bearing `base_url` settings and child environment entries are also redacted in config exports and persisted provider records.
 
 Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.
 
