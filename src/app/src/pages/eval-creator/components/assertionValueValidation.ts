@@ -1,4 +1,4 @@
-import { TRAJECTORY_STEP_TYPES } from '@promptfoo/types/tracing';
+import { TRAJECTORY_STEP_TYPES } from '@promptfoo/contracts/trajectory';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [

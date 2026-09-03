@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { TRAJECTORY_STEP_TYPES } from '../types/tracing';
 import { renderVarsInObject } from '../util/render';
 import { matchesPattern } from './traceUtils';
 import {
