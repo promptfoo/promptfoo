@@ -76,7 +76,7 @@ Use `muse-code:<model>` or `config.model` to select a model, for example `muse-c
 | `max_output_bytes`            | number  | Combined stdout/stderr limit. Defaults to 10 MiB. Exceeding it stops the run with an error.           |
 | `env`                         | object  | Additional environment variables for the child process.                                               |
 
-Prompt-level configuration overrides provider-level configuration. String values can use test variables such as `model: '{{model}}'`.
+Prompt-level configuration overrides provider-level configuration. String values can use test variables such as `model: '{{model}}'` or `reasoning_effort: '{{effort}}'`. Constrained values are validated after rendering.
 
 ## Workspaces and permissions
 
@@ -102,7 +102,7 @@ The response contains:
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
 - `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
 
-Promptfoo redacts literal occurrences of the supplied Meta API key from response fields and journal data before tracing or export.
+Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_TOKEN` or `DATABASE_PASSWORD`, and authentication in proxy or endpoint URLs.
 
 Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.
 

@@ -40,6 +40,9 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
   if (!provider || typeof provider.id !== 'function') {
     return false;
   }
+  if (provider.supportsAgenticGrading === true) {
+    return true;
+  }
 
   let providerId: string;
   try {
@@ -59,6 +62,9 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
     return false;
+  }
+  if (provider.supportsAgenticGrading !== undefined) {
+    return provider.supportsAgenticGrading === true;
   }
 
   const providerId = provider.id();

@@ -38,6 +38,7 @@ export const ApiProviderSchema = z.object({
     )
     .optional(),
   label: z.custom<ProviderLabel>().optional(),
+  supportsAgenticGrading: z.boolean().optional(),
   transform: StringOrFunctionSchema.optional(),
   delay: z.number().optional(),
   config: z.any().optional(),

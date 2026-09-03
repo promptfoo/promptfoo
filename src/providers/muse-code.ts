@@ -9,7 +9,8 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
 import { renderVarsInObject } from '../util/render';
-import { REDACTED } from '../util/sanitizer';
+import { normalizeFieldName, REDACTED, SECRET_FIELD_NAMES } from '../util/sanitizer';
+import { escapeRegExp } from '../util/text';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { providerRegistry } from './providerRegistry';
 
@@ -51,6 +52,18 @@ const MuseCodeConfigSchema = z.object({
 });
 
 type MuseCodeConfig = z.infer<typeof MuseCodeConfigSchema>;
+
+const TemplateStringSchema = z.string().regex(/{{[\s\S]*?}}|{%[\s\S]*?%}|{#[\s\S]*?#}/);
+// Preserve per-test templates during construction; validate their resolved values in callApi.
+const MuseCodeInputSchema = MuseCodeConfigSchema.extend({
+  base_url: MuseCodeConfigSchema.shape.base_url.or(TemplateStringSchema),
+  reasoning_effort: MuseCodeConfigSchema.shape.reasoning_effort.or(TemplateStringSchema),
+  approval_mode: MuseCodeConfigSchema.shape.approval_mode.or(TemplateStringSchema),
+  sandbox_network: MuseCodeConfigSchema.shape.sandbox_network.or(TemplateStringSchema),
+  session_id: MuseCodeConfigSchema.shape.session_id.or(TemplateStringSchema),
+}).strict();
+
+type MuseCodeInputConfig = z.infer<typeof MuseCodeInputSchema>;
 
 // Muse Code 1.0.2 emits versioned journal envelopes, not Codex's item.* events.
 const MuseEventSchema = z
@@ -169,11 +182,71 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
-function redactApiKey(response: ProviderResponse, apiKey: string | undefined): ProviderResponse {
-  if (!apiKey) {
+const CREDENTIAL_SUFFIXES = [...SECRET_FIELD_NAMES, 'key'];
+
+function isCredentialName(name: string): boolean {
+  const normalized = normalizeFieldName(name);
+  return CREDENTIAL_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+}
+
+function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] {
+  const credentials = new Set<string>();
+  const addUrlCredentials = (value: string) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return;
+    }
+    let hasCredentials = false;
+    for (const encoded of [url.username, url.password]) {
+      if (encoded) {
+        hasCredentials = true;
+        credentials.add(encoded);
+        try {
+          credentials.add(decodeURIComponent(encoded));
+        } catch {
+          // Keep the original value when URL userinfo has malformed percent encoding.
+        }
+      }
+    }
+    for (const [key, secret] of url.searchParams) {
+      if (secret && isCredentialName(key)) {
+        hasCredentials = true;
+        credentials.add(secret);
+        credentials.add(encodeURIComponent(secret));
+      }
+    }
+    if (hasCredentials) {
+      credentials.add(value);
+    }
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (value) {
+      if (isCredentialName(key)) {
+        credentials.add(value);
+      }
+      addUrlCredentials(value);
+    }
+  }
+  if (baseUrl) {
+    addUrlCredentials(baseUrl);
+  }
+  return [...credentials];
+}
+
+function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
+  if (!credentials.length) {
     return response;
   }
-  const redact = (value: string) => value.split(apiKey).join(REDACTED);
+  const pattern = new RegExp(
+    credentials
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRegExp)
+      .join('|'),
+    'g',
+  );
+  const redact = (value: string) => value.replace(pattern, REDACTED);
   return JSON.parse(
     JSON.stringify(response, (_key, value) => {
       if (typeof value === 'string') {
@@ -190,14 +263,15 @@ function redactApiKey(response: ProviderResponse, apiKey: string | undefined): P
 
 /** Runs Meta's installed Muse Code CLI. Each call starts a new session unless explicitly resumed. */
 export class MuseCodeProvider implements ApiProvider {
-  config: MuseCodeConfig;
+  readonly supportsAgenticGrading = true;
+  config: MuseCodeInputConfig;
   private readonly providerId: string;
   private readonly env: ProviderOptions['env'];
   private readonly calls = new Map<AbortController, Promise<ProviderResponse>>();
   private readonly activeSessions = new Set<string>();
 
   constructor(options: ProviderOptions = {}) {
-    this.config = MuseCodeConfigSchema.strict().parse(options.config ?? {});
+    this.config = MuseCodeInputSchema.parse(options.config ?? {});
     this.providerId = options.id ?? 'muse-code';
     this.env = options.env;
     providerRegistry.register(this);
@@ -220,7 +294,7 @@ export class MuseCodeProvider implements ApiProvider {
     return false;
   }
 
-  getApiKey(config: MuseCodeConfig = this.config): string | undefined {
+  getApiKey(config: MuseCodeInputConfig = this.config): string | undefined {
     return (
       config.apiKey ??
       config.env?.META_API_KEY ??
@@ -360,6 +434,7 @@ export class MuseCodeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
+    const credentials = collectCredentials(env, config.base_url);
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
@@ -389,16 +464,16 @@ export class MuseCodeProvider implements ApiProvider {
         signal,
         env,
       );
-      // Redact the actual injected key before tracing or persisting any response fields.
-      return redactApiKey(parseResponse(result), env.META_API_KEY);
+      // Redact credentials from the actual child environment before tracing or persistence.
+      return redactCredentials(parseResponse(result), credentials);
     } catch (error) {
-      return redactApiKey(
+      return redactCredentials(
         {
           error: signal.aborted
             ? 'Muse Code call aborted'
             : `Muse Code: ${error instanceof Error ? error.message : String(error)}`,
         },
-        env.META_API_KEY,
+        credentials,
       );
     } finally {
       if (tempDir) {

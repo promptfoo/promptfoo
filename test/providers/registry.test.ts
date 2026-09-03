@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isAgenticGradingProvider, isAgenticProvider } from '../../src/providers/agentic-utils';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
@@ -114,6 +115,8 @@ describe('Provider Registry', () => {
         try {
           expect(provider.id()).toBe('muse-comparison');
           expect(provider.config.model).toBe('muse-spark-1.2');
+          expect(isAgenticProvider(provider)).toBe(true);
+          expect(isAgenticGradingProvider(provider)).toBe(true);
         } finally {
           await (provider as MuseCodeProvider).shutdown();
         }

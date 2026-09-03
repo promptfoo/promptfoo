@@ -813,6 +813,9 @@
             "callEmbeddingApi": {},
             "callClassificationApi": {},
             "label": {},
+            "supportsAgenticGrading": {
+              "type": "boolean"
+            },
             "transform": {
               "type": "string"
             },
@@ -1567,6 +1570,9 @@
                 "callEmbeddingApi": {},
                 "callClassificationApi": {},
                 "label": {},
+                "supportsAgenticGrading": {
+                  "type": "boolean"
+                },
                 "transform": {
                   "type": "string"
                 },

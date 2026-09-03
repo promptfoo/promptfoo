@@ -70,6 +70,18 @@ describe('agentic-utils', () => {
       expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
     });
 
+    it('uses an explicit grading capability regardless of the display ID', () => {
+      const grader = { ...provider('custom-grader'), supportsAgenticGrading: true };
+      expect(isAgenticProvider(grader)).toBe(true);
+      expect(isAgenticGradingProvider(grader)).toBe(true);
+    });
+
+    it('allows coding agents to explicitly decline rubric grading', () => {
+      const scanner = { ...provider('openai:codex-sdk'), supportsAgenticGrading: false };
+      expect(isAgenticProvider(scanner)).toBe(true);
+      expect(isAgenticGradingProvider(scanner)).toBe(false);
+    });
+
     it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(
       'does not classify security scanner %s as a rubric grading provider',
       (id) => {

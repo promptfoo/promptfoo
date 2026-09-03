@@ -320,6 +320,33 @@ describe('MuseCodeProvider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['base_url', 'https://meta.example/v1', '--base-url'],
+    ['reasoning_effort', 'high', '--reasoning-effort'],
+    ['approval_mode', 'never', '--approval-mode'],
+    ['sandbox_network', 'restricted', '--sandbox-network'],
+    ['session_id', sessionId, '--session-id'],
+  ])('renders constrained provider option %s before validating it', async (key, value, flag) => {
+    const instance = provider({ config: { working_dir: testDir, [key]: '{{setting}}' } });
+    const response = await instance.callApi(prompt, {
+      vars: { setting: value },
+      prompt: { raw: prompt, label: 'test' },
+    });
+    expect(response.error).toBeUndefined();
+    const args = vi.mocked(spawn).mock.calls[0][1]!;
+    expect(args[args.indexOf(flag) + 1]).toBe(value);
+  });
+
+  it('rejects an invalid constrained option after rendering', async () => {
+    const instance = provider({ config: { approval_mode: '{{mode}}' } });
+    const response = await instance.callApi(prompt, {
+      vars: { mode: 'invalid' },
+      prompt: { raw: prompt, label: 'test' },
+    });
+    expect(response.error).toContain('Invalid Muse Code config');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('validates prompt-level overrides before starting a process', async () => {
     const result = await provider().callApi(prompt, {
       vars: {},
@@ -413,6 +440,68 @@ describe('MuseCodeProvider', () => {
       }
     },
   );
+
+  it('redacts other injected credentials and URL authentication from journal data', async () => {
+    const proxy = 'http://proxy-user:p%40ssword@proxy.example:8080';
+    const restoreProxy = mockProcessEnv({ HTTPS_PROXY: proxy });
+    const sensitive = [
+      'github-credential',
+      'database-credential',
+      'deploy-credential',
+      proxy,
+      'proxy-user',
+      'p%40ssword',
+      'p@ssword',
+      'query-credential',
+      'endpoint-password',
+    ];
+    try {
+      onSpawn = (child) => {
+        const env = vi.mocked(spawn).mock.calls[0][2]!.env!;
+        expect(env.GITHUB_TOKEN).toBe(sensitive[0]);
+        expect(env.DATABASE_PASSWORD).toBe(sensitive[1]);
+        expect(env.HTTPS_PROXY).toBe(proxy);
+        const events = structuredClone(fixtureEvents);
+        events.at(-1)!.payload.text = `${sensitive.join(' | ')} | keep-me`;
+        events.at(-1)!.payload.details = { values: sensitive, [sensitive[0]]: 'field name' };
+        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+        child.close();
+      };
+      const response = await provider({
+        config: {
+          base_url: 'https://endpoint-user:endpoint-password@meta.example',
+          env: {
+            GITHUB_TOKEN: sensitive[0],
+            DATABASE_PASSWORD: sensitive[1],
+            DEPLOY_KEY: sensitive[2],
+            SERVICE_URL: 'https://service.example?api_key=query-credential',
+            PUBLIC_SETTING: 'keep-me',
+          },
+        },
+      }).callApi(prompt);
+      expect(response.error).toBeUndefined();
+      expect(response.output).toContain('keep-me');
+      for (const credential of sensitive) {
+        expect(JSON.stringify(response)).not.toContain(credential);
+      }
+    } finally {
+      restoreProxy();
+    }
+  });
+
+  it('redacts overlapping credentials in stderr without rewriting redaction markers', async () => {
+    onSpawn = (child) => {
+      child.stderr.write('RED-secret RED literal.[key]+$');
+      child.close(1);
+    };
+    const response = await provider({
+      config: {
+        apiKey: 'RED',
+        env: { GITHUB_TOKEN: 'RED-secret', DATABASE_PASSWORD: 'literal.[key]+$' },
+      },
+    }).callApi(prompt);
+    expect(response.error).toBe('Muse Code exited with code 1: [REDACTED] [REDACTED] [REDACTED]');
+  });
 
   it.each(['failed', 'cancelled'])(
     'fails a %s terminal event even when the process exits zero',
