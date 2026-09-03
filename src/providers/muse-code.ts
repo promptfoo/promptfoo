@@ -232,7 +232,10 @@ function isCredentialName(name: string): boolean {
 }
 
 function isCredentialValue(value: string): boolean {
-  return looksLikeSecret(value) || /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value);
+  return (
+    /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
+    (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
+  );
 }
 
 function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] {
@@ -269,12 +272,9 @@ function collectCredentials(env: NodeJS.ProcessEnv, baseUrl?: string): string[] 
   };
   for (const [key, value] of Object.entries(env)) {
     if (value) {
-      // Paths and other inherited settings can resemble opaque keys without being credentials.
+      // An authentication-file path is an operational setting, not the credential it names.
       const operational = OPERATIONAL_ENV_KEYS.has(key.toLowerCase());
-      if (
-        (!operational && isCredentialName(key)) ||
-        ((!operational || !path.isAbsolute(value)) && isCredentialValue(value))
-      ) {
+      if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
         credentials.add(value);
       }
       addUrlCredentials(value);

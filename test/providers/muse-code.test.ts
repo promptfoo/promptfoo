@@ -598,6 +598,19 @@ describe('MuseCodeProvider', () => {
     expect(response.raw).toEqual(events);
   });
 
+  it('preserves a nonsecret checksum supplied through the environment', async () => {
+    const checksum = 'a'.repeat(64);
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = checksum;
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({ config: { env: { CHECKSUM: checksum } } }).callApi(prompt);
+    expect(response.output).toBe(checksum);
+    expect(response.raw).toEqual(events);
+  });
+
   it.each(['failed', 'cancelled'])(
     'fails a %s terminal event even when the process exits zero',
     async (terminal) => {
