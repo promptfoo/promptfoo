@@ -164,10 +164,10 @@ The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
 - `trajectory:step-count`
 - `trajectory:step-status`
 
-`trajectory:step-status` verifies that a traced tool or workflow step completed with
-the expected OpenTelemetry status. For example, the trajectory configuration checks
-that the simulated `search_corpus` calls complete successfully, rather than merely
-checking that the tool was selected.
+`trajectory:step-status` requires at least one matching step with the expected status.
+This example requires a successful `search_corpus` call and uses
+`not-trajectory:step-status` to reject any errored call, alongside the tool count and
+sequence checks.
 
 Promptfoo accepts generic tool span attributes such as `tool.name` and `tool.arguments`, and it also recognizes Vercel AI SDK telemetry attributes such as `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`.
 

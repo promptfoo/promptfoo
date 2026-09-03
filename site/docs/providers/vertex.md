@@ -16,9 +16,13 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.8:**
+
+- `vertex:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
+
 **Gemini 3.7:**
 
-- `vertex:gemini-3.7-flash` - Latest Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
+- `vertex:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 
 **Gemini 3.6:**
 
@@ -29,15 +33,17 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `vertex:gemini-3.5-flash-lite` - Low-latency Gemini 3.5 model for high-volume agentic tasks ($0.30/1M input, $2.50/1M output on the global endpoint)
 
-Use `config.region: global` for Gemini 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite.
-Gemini 3.5 Flash and Flash-Lite also support the `us` and `eu` multi-regions,
-which carry a 10% premium. Gemini 3.7 Flash and 3.6 Flash introductory pricing
+For the lowest token prices, choose `config.region: global` for Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite. The optional `us` and `eu` multi-regions
+carry a 10% premium for Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, 3.5 Flash, and 3.5 Flash-Lite. Promptfoo includes this
+premium in cost calculations. Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash introductory pricing
 ends December 31, 2026; their published standard rates are $1.50/1M input and
 $7.50/1M output starting January 1, 2027.
 
 These models ignore the deprecated `temperature`, `topP`, and `topK` sampling
 controls, which promptfoo removes automatically. Configure reasoning with
-`generationConfig.thinkingConfig.thinkingLevel`; Gemini 3.7 Flash supports `LOW`,
+`generationConfig.thinkingConfig.thinkingLevel`; Gemini 3.8 Flash and 3.7 Flash support `LOW`,
 `MEDIUM`, and `HIGH`, but not `MINIMAL` or the legacy `thinkingBudget` setting.
 
 **Gemini 3.1:**
