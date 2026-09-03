@@ -34,8 +34,8 @@ issue. No stage depends on an unreleased service or API key.
 The matcher supports a tool/command/span `name` or glob `pattern`, optional `type`,
 and one status constraint. Status values are `success`, `error`, or a numeric status
 code. An optional `message` pattern matches `statusMessage`. A missing status never
-matches `success` or `error`; a numeric zero is treated as unset, consistent with the
-existing trajectory model. `not-trajectory:step-status` uses the same matcher and
+matches `success` or `error`; a numeric zero is treated as unset and matches only an
+explicit `status: 0`. `not-trajectory:step-status` uses the same matcher and
 inverts only the actual match result.
 
 ## Implementation boundaries
@@ -67,5 +67,5 @@ For each implementation PR:
 
 This does not invent a provider-specific status vocabulary, inspect tool-result
 payloads, or change OpenTelemetry span status ingestion. Numeric codes are compared
-exactly; semantic success/error is deliberately limited to the conventional zero/non-
-zero distinction until maintainers approve a broader policy.
+exactly. Semantic success matches OpenTelemetry OK (`1`) or HTTP 2xx/3xx; error
+matches OpenTelemetry ERROR (`2`) or HTTP 4xx/5xx.

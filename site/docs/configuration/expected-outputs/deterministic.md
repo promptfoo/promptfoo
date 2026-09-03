@@ -948,7 +948,8 @@ The `trajectory:step-status` assertion checks whether a normalized trajectory st
 matching a name or glob pattern completed with the expected execution status. Use
 `success` for an OpenTelemetry OK status (`1`) or a 2xx/3xx status, `error` for an
 OpenTelemetry ERROR status (`2`) or a 4xx/5xx status, or an exact numeric status
-code. A missing status (or status code `0`) does not match either semantic status.
+code. A missing status never matches. Status code `0` is unset: it does not match
+either semantic status, but can be matched explicitly with `status: 0`.
 
 ```yaml
 tests:
@@ -963,7 +964,9 @@ tests:
           status: error
 ```
 
-Add `message` to match the recorded status message with a glob pattern, or add
+The assertion passes when at least one step matches; prefix the type with `not-`
+to require that no step matches. Add `message` to match the recorded status message
+with a glob pattern (`message: ''` matches only an empty or absent message), or add
 `type: tool`, `command`, or another trajectory step type to narrow the match. This
 assertion is useful for distinguishing a correctly selected tool that failed from a
 tool that completed successfully, including retry and forbidden-error evaluations.
