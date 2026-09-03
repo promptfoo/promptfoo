@@ -14,6 +14,7 @@ type Value =
       properties: Map<string, ValueSlot>;
       unknownProperties: boolean;
       array: boolean;
+      elements?: ArrayElement[];
     }
   | { kind: 'function'; node: FunctionNode; scope: Scope; moduleVariable: boolean }
   | { kind: 'api'; name: string }
@@ -21,6 +22,7 @@ type Value =
 type ValueSlot =
   | Value
   | { kind: 'choice'; condition: string; consequent: ValueSlot; alternate: ValueSlot };
+type ArrayElement = { value: Value; optional?: boolean };
 type Binding = { value: ValueSlot; directFunction: boolean };
 type Scope = {
   id: number;
@@ -30,13 +32,14 @@ type Scope = {
 };
 type Suite = { parent?: Suite; hasChildren: boolean; empty: boolean };
 type GuardPath = ReadonlyMap<string, boolean>;
-type ControlPath = { kind: 'break' | 'continue'; guards: GuardPath };
+type ControlPath = { kind: 'break' | 'continue'; label?: string; guards: GuardPath };
 type Context = {
   scope: Scope;
   suite: Suite;
   allocationPath: string;
   phase: 'collection' | 'hoisted' | 'setup' | 'reset' | 'ownership';
   guards: ReadonlyMap<string, boolean>;
+  hookGuards?: GuardPath;
   allocations: Set<string>;
   references?: Set<string>;
 };
@@ -64,6 +67,7 @@ const COLLECTION_APIS = new Set(['describe', 'suite']);
 const TEST_APIS = new Set(['it', 'test']);
 const HOOK_PHASES = new Map<string, 'setup' | 'reset'>([
   ['beforeAll', 'setup'],
+  ['afterEach', 'setup'],
   ['beforeEach', 'reset'],
 ]);
 const MAX_ANALYSIS_STEPS = 50_000;
@@ -126,7 +130,7 @@ function members(value: Value): Value[] {
   return value.kind === 'union' ? value.values : [value];
 }
 
-// A file-local provenance analysis, not a JavaScript runtime: follow direct
+// A file-local provenance analysis, not a JavaScript runtime: follow known
 // synchronous helpers and literal containers, but never execute imports,
 // methods or generators. Deferred implementations are inspected only for
 // captured mocks, without executing their effects. Each invocation owns its
@@ -152,8 +156,9 @@ export function findHoistedPersistentMockWithoutReset(
     callback: Value;
     context: Context;
     call: Node;
-    phase: 'setup' | 'reset';
+    api: string;
   }[] = [];
+  const controlLabels = new Map<Node, Set<string>>();
   const birthGuards = new Map<string, Map<string, boolean>[]>();
   const callCache = new Map<string, CachedCall>();
   const activeFunctions = new Set<FunctionNode>();
@@ -340,11 +345,13 @@ export function findHoistedPersistentMockWithoutReset(
     return result;
   }
 
-  function lookup(name: string, current: Scope): Binding | undefined {
+  function lookup(name: string, current: Scope, hoisted = false): Binding | undefined {
     for (let owner: Scope | undefined = current; owner; owner = owner.parent) {
       const binding = owner.bindings.get(name);
       if (binding) {
-        return binding;
+        // Local aliases are initialized by the factory. Module aliases are
+        // unavailable when Vitest moves vi.hoisted ahead of their declarations.
+        return !hoisted || owner.parent || binding.directFunction ? binding : undefined;
       }
     }
     return undefined;
@@ -565,10 +572,12 @@ export function findHoistedPersistentMockWithoutReset(
       tail = false,
       root = false,
       unknownArity = false,
+      spreads,
     }: {
       tail?: boolean;
       root?: boolean;
       unknownArity?: boolean;
+      spreads?: ReadonlySet<number>;
     } = {},
   ): Value {
     spendStep(call);
@@ -586,7 +595,7 @@ export function findHoistedPersistentMockWithoutReset(
     const allocationPath = tail
       ? context.allocationPath
       : `${context.allocationPath}/${call.start}`;
-    const key = `${context.phase}:${allocationPath}:${value.node.start}:${value.scope.id}:${unknownArity}:${args.map(valueId).join(',')}`;
+    const key = `${context.phase}:${allocationPath}:${value.node.start}:${value.scope.id}:${unknownArity}:${[...(spreads ?? [])].join(',')}:${args.map(valueId).join(',')}`;
     const cached = context.phase === 'ownership' ? undefined : callCache.get(key);
     if (cached) {
       return reuseCall(cached, context);
@@ -605,7 +614,7 @@ export function findHoistedPersistentMockWithoutReset(
     activeFunctions.add(value.node);
     let result: Value;
     try {
-      bindParameters(value.node, args, nested, unknownArity);
+      bindParameters(value.node, args, nested, unknownArity, spreads);
       result = functionResult(value.node, nested);
       if (context.phase !== 'ownership') {
         callCache.set(key, {
@@ -629,24 +638,47 @@ export function findHoistedPersistentMockWithoutReset(
     args: Value[],
     context: Context,
     unknownArity: boolean,
+    spreads?: ReadonlySet<number>,
   ) {
+    const firstSpread = spreads?.values().next().value ?? 0;
     for (const [index, parameter] of node.params.entries()) {
       const value: Value =
         parameter.type === 'RestElement'
-          ? {
-              kind: 'object',
-              array: true,
-              unknownProperties: unknownArity,
-              properties: new Map(
-                args.slice(index).map((value, position) => {
-                  spendStep(parameter);
-                  return [String(position), value];
-                }),
-              ),
-            }
-          : (args[index] ?? MISSING);
+          ? restArray(args, index, unknownArity, spreads)
+          : unknownArity && index >= firstSpread
+            ? UNKNOWN
+            : (args[index] ?? MISSING);
       bind(parameter, value, context);
     }
+  }
+
+  function restArray(
+    args: Value[],
+    start: number,
+    unknownArity: boolean,
+    spreads?: ReadonlySet<number>,
+  ): Value {
+    if (unknownArity && !spreads?.size) {
+      return arrayValue([{ value: UNKNOWN, optional: true }]);
+    }
+    const elements: ArrayElement[] = [];
+    let minimumIndex = 0;
+    let uncertainPosition = false;
+    for (const [index, value] of args.entries()) {
+      spendStep();
+      if (spreads?.has(index)) {
+        uncertainPosition = true;
+        elements.push({ value, optional: true });
+      } else {
+        // A known argument belongs to the rest array once even its earliest
+        // possible position is beyond the fixed parameters.
+        if (minimumIndex >= start || uncertainPosition) {
+          elements.push({ value, optional: minimumIndex < start });
+        }
+        minimumIndex += 1;
+      }
+    }
+    return arrayValue(elements);
   }
 
   function markReset(value: Value, context: Context) {
@@ -696,7 +728,7 @@ export function findHoistedPersistentMockWithoutReset(
       seen.add(next);
       const children =
         next.kind === 'object'
-          ? next.properties.values()
+          ? (next.elements?.map((element) => element.value) ?? next.properties.values())
           : next.kind === 'union'
             ? next.values
             : [];
@@ -788,7 +820,8 @@ export function findHoistedPersistentMockWithoutReset(
       }
       case 'vi.resetAllMocks':
         if (context.phase === 'reset') {
-          recordReset(setters.keys(), context);
+          // A conditional setter later in this hook may introduce an obligation.
+          recordReset(mocks.keys(), context);
         }
         break;
     }
@@ -804,9 +837,7 @@ export function findHoistedPersistentMockWithoutReset(
     if (COLLECTION_APIS.has(base) && !curried) {
       const callback = args.at(-1);
       if (callback?.kind === 'function') {
-        const empty =
-          callback.node.body?.type === 'BlockStatement' &&
-          callback.node.body.body.every((statement) => statement.type === 'EmptyStatement');
+        const empty = isEmptySuite(callback.node.body);
         invoke(
           callback,
           [{ kind: 'api', name: 'test' }],
@@ -820,12 +851,42 @@ export function findHoistedPersistentMockWithoutReset(
     } else if (HOOK_PHASES.has(base)) {
       const callback = args[0];
       if (callback?.kind === 'function') {
-        setupCallbacks.push({ callback, context, call: node, phase: HOOK_PHASES.get(base)! });
+        setupCallbacks.push({ callback, context, call: node, api: base });
       }
     } else if (TEST_APIS.has(base) && !curried && !api.endsWith('.todo') && args.length >= 2) {
       suitesWithTests.add(context.suite);
     }
     return { kind: 'api', name: curried ? base : api };
+  }
+
+  function isEmptySuite(node: Node | null | undefined): boolean {
+    if (!node) {
+      return true;
+    }
+    spendStep(node);
+    if (isFunction(node)) {
+      return true;
+    }
+    switch (node.type) {
+      case 'Identifier':
+      case 'Literal':
+      case 'EmptyStatement':
+        return true;
+      case 'BlockStatement':
+        return node.body.every(isEmptySuite);
+      case 'ExpressionStatement':
+        return isEmptySuite(node.expression);
+      case 'ReturnStatement':
+        return isEmptySuite(node.argument);
+      case 'VariableDeclaration':
+        return node.declarations.every(
+          (declaration) => declaration.id.type === 'Identifier' && isEmptySuite(declaration.init),
+        );
+      case 'UnaryExpression':
+        return node.operator === 'void' && isEmptySuite(node.argument);
+      default:
+        return false;
+    }
   }
 
   function callbackReferences(value: Value, context: Context, node: Node): Set<string> {
@@ -902,17 +963,34 @@ export function findHoistedPersistentMockWithoutReset(
         context,
       );
     }
-    if (persistentMockMethodNames.has(method) && context.phase !== 'reset') {
-      for (let part of members(receiver)) {
-        if (part.kind !== 'mock' && context.phase === 'hoisted') {
-          part = makeMock(node, context);
-        }
-        if (part.kind === 'mock' && (context.phase === 'hoisted' || hoistedMocks.has(part.key))) {
-          setters.set(part.key, setters.get(part.key) ?? node);
-        }
-      }
+    if (persistentMockMethodNames.has(method)) {
+      recordPersistentSetter(receiver, node, context);
     }
     return method.startsWith('mock') ? receiver : UNKNOWN;
+  }
+
+  function recordPersistentSetter(receiver: Value, node: Node, context: Context) {
+    if (context.phase === 'reset' && !hasConditionalSetup(context)) {
+      return;
+    }
+    for (let part of members(receiver)) {
+      if (part.kind !== 'mock' && context.phase === 'hoisted') {
+        part = makeMock(node, context);
+      }
+      if (part.kind === 'mock' && (context.phase === 'hoisted' || hoistedMocks.has(part.key))) {
+        setters.set(part.key, setters.get(part.key) ?? node);
+      }
+    }
+  }
+
+  function hasConditionalSetup(context: Context): boolean {
+    for (const [condition, outcome] of context.guards) {
+      spendStep();
+      if (context.hookGuards?.get(condition) !== outcome) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function callExpression(
@@ -933,13 +1011,14 @@ export function findHoistedPersistentMockWithoutReset(
         : undefined;
     let callable = receiver ? get(receiver, method, context) : evaluate(callee, context);
     if (
+      context.phase === 'hoisted' &&
       callee.type === 'Identifier' &&
       callable.kind === 'function' &&
-      !lookup(callee.name, context.scope)?.directFunction
+      !lookup(callee.name, context.scope, true)
     ) {
       callable = UNKNOWN;
     }
-    const { args, unknownArity } = callArguments(node, callable, context);
+    const { args, spreads } = callArguments(node, context);
     if (callable.kind === 'api') {
       return callApi(callable.name, args, context, node);
     }
@@ -960,39 +1039,27 @@ export function findHoistedPersistentMockWithoutReset(
       forgetArrays(...args);
       exposeArguments(args, context);
     }
-    return invoke(callable, args, context, node, { tail, unknownArity });
+    return invoke(callable, args, context, node, {
+      tail,
+      unknownArity: spreads.size > 0,
+      spreads,
+    });
   }
 
   function callArguments(
     node: Extract<Node, { type: 'CallExpression' }>,
-    callable: Value,
     context: Context,
-  ): { args: Value[]; unknownArity: boolean } {
+  ): { args: Value[]; spreads: Set<number> } {
     const args: Value[] = [];
-    let unknownSpread = false;
-    for (const argument of node.arguments) {
-      const value = evaluate(
-        argument.type === 'SpreadElement' ? argument.argument : argument,
-        context,
-      );
-      if (argument.type === 'SpreadElement') {
-        if (!unknownSpread && value.kind === 'object' && value.array && !value.unknownProperties) {
-          for (const element of value.properties.values()) {
-            spendStep(argument);
-            args.push(resolveSlot(element, context.guards));
-          }
-          continue;
-        }
-        unknownSpread = true;
+    const spreads = new Set<number>();
+    for (const element of evaluateElements(node.arguments, context)) {
+      spendStep(node);
+      if (element.optional) {
+        spreads.add(args.length);
       }
-      args.push(unknownSpread ? UNKNOWN : value);
+      args.push(element.value);
     }
-    if (unknownSpread && callable.kind === 'function') {
-      while (args.length < callable.node.params.length) {
-        args.push(UNKNOWN);
-      }
-    }
-    return { args, unknownArity: unknownSpread };
+    return { args, spreads };
   }
 
   function exposeArguments(values: Value[], context: Context) {
@@ -1009,8 +1076,13 @@ export function findHoistedPersistentMockWithoutReset(
     // They are no longer statically known reset targets after that call.
     for (const next of reachableValues(...values)) {
       if (next.kind === 'object' && next.array) {
+        callCache.clear();
         next.properties.clear();
         next.unknownProperties = true;
+        if (next.elements) {
+          next.elements.length = 0;
+          next.elements = undefined;
+        }
       }
     }
   }
@@ -1052,31 +1124,37 @@ export function findHoistedPersistentMockWithoutReset(
     return { kind: 'object', properties, unknownProperties, array: false };
   }
 
-  function evaluateArray(
-    node: Extract<Node, { type: 'ArrayExpression' }>,
-    context: Context,
-  ): Value {
-    const properties = new Map<string, ValueSlot>();
-    let unknownProperties = false;
-    let index = 0;
-    for (const element of node.elements) {
+  function evaluateElements(nodes: readonly (Node | null)[], context: Context): ArrayElement[] {
+    const elements: ArrayElement[] = [];
+    for (const element of nodes) {
       if (element?.type === 'SpreadElement') {
         const spread = evaluate(element.argument, context);
-        if (spread.kind === 'object' && spread.array && !spread.unknownProperties) {
-          for (const value of spread.properties.values()) {
+        if (spread.kind === 'object' && spread.array && spread.elements) {
+          for (const value of spread.elements) {
             spendStep(element);
-            properties.set(String(index++), value);
+            elements.push(value);
           }
         } else {
-          unknownProperties = true;
+          elements.push({ value: UNKNOWN, optional: true });
         }
-      } else if (!unknownProperties) {
-        properties.set(String(index++), element ? evaluate(element, context) : MISSING);
-      } else if (element) {
-        evaluate(element, context);
+      } else {
+        elements.push({ value: element ? evaluate(element, context) : MISSING });
       }
     }
-    return { kind: 'object', properties, unknownProperties, array: true };
+    return elements;
+  }
+
+  function arrayValue(elements: ArrayElement[]): Extract<Value, { kind: 'object' }> {
+    const properties = new Map<string, ValueSlot>();
+    let unknownProperties = false;
+    for (const [index, element] of elements.entries()) {
+      spendStep();
+      unknownProperties ||= element.optional === true;
+      if (!unknownProperties) {
+        properties.set(String(index), element.value);
+      }
+    }
+    return { kind: 'object', properties, unknownProperties, array: true, elements };
   }
 
   function evaluateIdentifier(
@@ -1163,7 +1241,7 @@ export function findHoistedPersistentMockWithoutReset(
       }
       if (part.array) {
         // Index/length writes can introduce holes or truncate the iterable.
-        part.unknownProperties = true;
+        forgetArrays(part);
       }
       if (key === undefined) {
         for (const [name, previous] of part.properties) {
@@ -1306,7 +1384,7 @@ export function findHoistedPersistentMockWithoutReset(
       case 'ObjectExpression':
         return evaluateObject(node, context);
       case 'ArrayExpression':
-        return evaluateArray(node, context);
+        return arrayValue(evaluateElements(node.elements, context));
       case 'ConditionalExpression':
         return evaluateConditional(node, context, tail);
       case 'LogicalExpression':
@@ -1531,11 +1609,15 @@ export function findHoistedPersistentMockWithoutReset(
     return controls;
   }
 
-  function iterationPaths(flow: ReturnFlow | undefined, context: Context): GuardPath[] {
+  function targetsControl(control: ControlPath, node: Node): boolean {
+    return !control.label || controlLabels.get(node)?.has(control.label) === true;
+  }
+
+  function iterationPaths(flow: ReturnFlow | undefined, context: Context, node: Node): GuardPath[] {
     return [
       ...normalPaths(flow, context),
       ...collectControls([flow])
-        .filter((control) => control.kind === 'continue')
+        .filter((control) => control.kind === 'continue' && targetsControl(control, node))
         .map((control) => control.guards),
     ];
   }
@@ -1598,7 +1680,7 @@ export function findHoistedPersistentMockWithoutReset(
       }
       returns.push(result.value);
       for (const control of collectControls([result])) {
-        if (control.kind === 'break') {
+        if (control.kind === 'break' && targetsControl(control, node)) {
           exits.push(control.guards);
         } else {
           controls.push(control);
@@ -1640,7 +1722,7 @@ export function findHoistedPersistentMockWithoutReset(
     }
     const bodyContext = test.kind === 'literal' ? nested : guarded(nested, node, true);
     const result = execute(node.body, bodyContext);
-    const updates = iterationPaths(result, bodyContext);
+    const updates = iterationPaths(result, bodyContext, node);
     if (node.update && updates.length) {
       evaluate(node.update, {
         ...bodyContext,
@@ -1659,9 +1741,9 @@ export function findHoistedPersistentMockWithoutReset(
       node.type === 'ForOfStatement' &&
       iterable.kind === 'object' &&
       iterable.array &&
-      !iterable.unknownProperties
+      iterable.elements
     ) {
-      return executeArrayLoop(node, iterable, context);
+      return executeArrayLoop(node, iterable.elements, context);
     }
     const nested = loopBinding(node, UNKNOWN, guarded(context, node, true));
     const result = execute(node.body, nested);
@@ -1670,28 +1752,39 @@ export function findHoistedPersistentMockWithoutReset(
 
   function executeArrayLoop(
     node: Extract<Node, { type: 'ForOfStatement' }>,
-    iterable: Extract<Value, { kind: 'object' }>,
+    elements: ArrayElement[],
     context: Context,
   ): ReturnFlow | undefined {
     const returns: Value[] = [];
     const exits: GuardPath[] = [];
+    const controls: ControlPath[] = [];
     let reachesEnd = true;
-    for (const [index, value] of iterable.properties) {
-      const nested = loopBinding(node, resolveSlot(value, context.guards), {
+    for (const [index, element] of elements.entries()) {
+      const iteration = {
         ...context,
         allocationPath: `${context.allocationPath}/for:${node.start}:${index}`,
-      });
+      };
+      const nested = loopBinding(
+        node,
+        element.value,
+        element.optional ? guarded(iteration, node, true) : iteration,
+      );
       const result = execute(node.body, nested);
       if (!result) {
         continue;
       }
       returns.push(result.value);
       for (const control of collectControls([result])) {
-        if (control.kind === 'break') {
+        if (!targetsControl(control, node)) {
+          controls.push(control);
+        } else if (control.kind === 'break') {
           exits.push(control.guards);
         }
       }
-      const next = iterationPaths(result, nested);
+      const next = iterationPaths(result, nested, node);
+      if (element.optional) {
+        next.push(guarded(iteration, node, false).guards);
+      }
       if (!next.length) {
         reachesEnd = false;
         break;
@@ -1706,6 +1799,7 @@ export function findHoistedPersistentMockWithoutReset(
           value: union(returns),
           fallsThrough: exits.length > 0,
           continuationGuards: mergeContinuations(exits, context, node),
+          controls,
         }
       : undefined;
   }
@@ -1744,7 +1838,7 @@ export function findHoistedPersistentMockWithoutReset(
     }
     const result = execute(node.body, bodyContext);
     if (node.type === 'DoWhileStatement') {
-      const conditions = iterationPaths(result, bodyContext);
+      const conditions = iterationPaths(result, bodyContext, node);
       if (conditions.length) {
         evaluate(node.test, {
           ...bodyContext,
@@ -1765,9 +1859,12 @@ export function findHoistedPersistentMockWithoutReset(
     if (!result) {
       return undefined;
     }
+    const controls = collectControls([result]);
     const exits = [
       ...normalPaths(result, bodyContext),
-      ...collectControls([result]).map((control) => control.guards),
+      ...controls
+        .filter((control) => targetsControl(control, node))
+        .map((control) => control.guards),
     ];
     if (!guaranteedIteration) {
       exits.push(guarded(context, node, false).guards);
@@ -1776,6 +1873,38 @@ export function findHoistedPersistentMockWithoutReset(
       value: result.value,
       fallsThrough: exits.length > 0,
       continuationGuards: mergeContinuations(exits, context, node),
+      controls: controls.filter((control) => !targetsControl(control, node)),
+    };
+  }
+
+  function executeLabeled(
+    node: Extract<Node, { type: 'LabeledStatement' }>,
+    context: Context,
+  ): ReturnFlow | undefined {
+    const labels = new Set<string>();
+    let body: Node = node;
+    while (body.type === 'LabeledStatement') {
+      spendStep(body);
+      labels.add(body.label.name);
+      body = body.body;
+    }
+    controlLabels.set(body, labels);
+    const result = execute(body, context);
+    if (!result) {
+      return undefined;
+    }
+    const controls = collectControls([result]);
+    const exits = new Set(
+      controls.filter(
+        (control) => control.kind === 'break' && control.label && labels.has(control.label),
+      ),
+    );
+    const paths = [...normalPaths(result, context), ...[...exits].map((control) => control.guards)];
+    return {
+      ...result,
+      fallsThrough: paths.length > 0,
+      continuationGuards: mergeContinuations(paths, context, node),
+      controls: controls.filter((control) => !exits.has(control)),
     };
   }
 
@@ -1844,13 +1973,13 @@ export function findHoistedPersistentMockWithoutReset(
         return {
           value: union([]),
           fallsThrough: false,
-          controls: [{ kind: 'break', guards: context.guards }],
+          controls: [{ kind: 'break', label: node.label?.name, guards: context.guards }],
         };
       case 'ContinueStatement':
         return {
           value: union([]),
           fallsThrough: false,
-          controls: [{ kind: 'continue', guards: context.guards }],
+          controls: [{ kind: 'continue', label: node.label?.name, guards: context.guards }],
         };
       case 'VariableDeclaration':
         executeVariables(node, context);
@@ -1871,6 +2000,8 @@ export function findHoistedPersistentMockWithoutReset(
         return executeWhile(node, context);
       case 'TryStatement':
         return executeTry(node, context);
+      case 'LabeledStatement':
+        return executeLabeled(node, context);
       case 'CatchClause': {
         const nested = { ...context, scope: scope(context.scope) };
         if (node.param) {
@@ -1930,10 +2061,10 @@ export function findHoistedPersistentMockWithoutReset(
     return { ...context, guards };
   }
 
-  function hookArguments(phase: 'setup' | 'reset'): Value[] {
-    // Vitest supplies [suite] to beforeAll and [test.context, suite] to beforeEach.
+  function hookArguments(api: string): Value[] {
+    // Vitest supplies [suite] to beforeAll and [test.context, suite] to per-test hooks.
     return Array.from(
-      { length: phase === 'reset' ? 2 : 1 },
+      { length: api === 'beforeAll' ? 1 : 2 },
       (): Value => ({
         kind: 'object',
         properties: new Map(),
@@ -1960,10 +2091,14 @@ export function findHoistedPersistentMockWithoutReset(
     );
     for (const phase of ['setup', 'reset'] as const) {
       for (const hook of setupCallbacks) {
-        if (hook.phase === phase) {
-          invoke(hook.callback, hookArguments(phase), { ...hook.context, phase }, hook.call, {
-            root: true,
-          });
+        if (HOOK_PHASES.get(hook.api) === phase) {
+          invoke(
+            hook.callback,
+            hookArguments(hook.api),
+            { ...hook.context, phase, hookGuards: hook.context.guards },
+            hook.call,
+            { root: true },
+          );
         }
       }
     }

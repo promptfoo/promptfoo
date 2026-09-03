@@ -60,6 +60,23 @@ describe('hoisted mock provenance', () => {
     },
   );
 
+  it.each(['undefined', 'void 0', 'null', '0', '{ return undefined; }', '{ const unused = 0; }'])(
+    'does not require reset coverage in a side-effect-free suite with body %s',
+    (body) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+        describe('empty', () => ${body});
+        describe('populated', () => { beforeEach(() => mock.mockReset()); it('uses mock', () => mock()); });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
+
+  it('keeps an effectful void expression suite in reset coverage', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      describe('dynamic', () => void registerTests());
+      describe('populated', () => { beforeEach(() => mock.mockReset()); it('uses mock', () => mock()); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
   it.each(['consume(() => inner)', 'new Consumer(() => inner)', 'tag`${() => inner}`'])(
     'inspects nested callback captures in %s without running the enclosing call',
     (expression) => {
@@ -114,6 +131,25 @@ describe('hoisted mock provenance', () => {
   });
 
   it.each([
+    ['...unknownValues, mock', '...values', '', false],
+    ['mock, ...unknownValues', '...values', '', false],
+    ['...unknownValues, ...[mock]', '...values', '', false],
+    ['...[...unknownValues, mock]', '...values', '', false],
+    ['...unknownValues, unrelated, mock', 'first, ...values', '', false],
+    ['...unknownValues, mock', 'first, ...values', '', true],
+    ['...unknownValues, mock', '...values', 'break;', true],
+    ['...unknownValues, mock', '...values', 'return;', true],
+  ])(
+    'retains guaranteed rest values in %s with parameters %s and control %s',
+    (args, parameters, control, violation) => {
+      const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+        function reset(${parameters}) { for (const current of values) { current.mockReset(); ${control} } }
+        beforeEach(() => reset(${args}));`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+    },
+  );
+
+  it.each([
     ['for (const value of [mock]) { if (flag) continue; } mock.mockReset();', false],
     ['for (const value of [mock]) { if (flag) break; } mock.mockReset();', false],
     [
@@ -135,6 +171,108 @@ describe('hoisted mock provenance', () => {
     expect(
       hasHoistedPersistentMockWithoutReset(`${source} beforeEach(() => mock.mockReset());`),
     ).toBe(false);
+  });
+
+  it.each(['afterEach', 'cleanup', 'vitest.afterEach'])(
+    'discovers persistent defaults installed by %s without crediting cleanup as a reset',
+    (hook) => {
+      const source = `import { afterEach as cleanup } from 'vitest';
+        import * as vitest from 'vitest';
+        const mock = vi.hoisted(() => vi.fn());
+        ${hook}(() => { mock.mockReset(); mock.mockReturnValue('x'); });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+      expect(
+        hasHoistedPersistentMockWithoutReset(`${source} beforeEach(() => mock.mockReset());`),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    ['', true],
+    ['mock.mockReset();', false],
+    ['vi.resetAllMocks();', false],
+  ])('requires a beforeEach reset for conditional setup after %s', (reset, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      beforeEach((context) => {
+        ${reset}
+        if (context.task.name === 'special') mock.mockReturnValue('x');
+      });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it('keeps unconditional per-test setup distinct from a conditional setter', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      if (enabled) describe('suite', () => {
+        beforeEach(() => mock.mockReturnValue('x'));
+        it('uses mock', () => mock());
+      });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it.each([
+    ['const runReset = reset;', false],
+    ['let runReset; runReset = reset;', false],
+    ['const runReset = () => { const cleanup = reset; cleanup(); };', false],
+    ['let runReset = reset; if (flag) runReset = unrelated;', true],
+    ['let runReset = reset; runReset = unrelated;', true],
+  ])('follows only known reset helper aliases in %s', (declaration, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      function reset() { mock.mockReset(); }
+      ${declaration}
+      beforeEach(() => runReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
+  });
+
+  it.each(['const run = build;', 'let run; run = build;'])(
+    'follows a helper alias initialized inside its hoisted factory: %s',
+    (declaration) => {
+      const source = `const mock = vi.hoisted(() => {
+        function build() { return vi.fn().mockReturnValue('x'); }
+        ${declaration}
+        return run();
+      });`;
+      expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+      expect(
+        hasHoistedPersistentMockWithoutReset(`${source} beforeEach(() => mock.mockReset());`),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { for (const current of [0]) continue outer; return; }',
+      false,
+    ],
+    [
+      'outer: alias: for (let index = 0; index < 1; index++, mock.mockReset()) { for (const current of [0]) continue outer; return; }',
+      false,
+    ],
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { for (const current of [0]) break outer; mock.mockReset(); }',
+      true,
+    ],
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { for (const current of [0]) continue; return; }',
+      true,
+    ],
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { switch (true) { default: continue outer; } return; }',
+      false,
+    ],
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { while (true) continue outer; return; }',
+      false,
+    ],
+    [
+      'outer: for (let index = 0; index < 1; index++, mock.mockReset()) { do { continue outer; } while (false); return; }',
+      false,
+    ],
+    ['done: { break done; mock.mockReset(); }', true],
+    ['done: { break done; } mock.mockReset();', false],
+  ])('consumes labeled controls only at their target in %s', (body, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { ${body} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
   });
 
   it('does not run defaults for the context and suite supplied to beforeEach', () => {
@@ -354,6 +492,34 @@ describe('hoisted mock provenance', () => {
       })); const targets = [mocks.first, mocks.second]; ${mutation}
       beforeEach(() => { for (const current of targets) current.mockReset(); });`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('invalidates remaining array elements when the loop body mutates the array', () => {
+    const source = `const mocks = vi.hoisted(() => ({
+      first: vi.fn().mockReturnValue('a'), second: vi.fn().mockReturnValue('b'),
+    })); beforeEach(() => {
+      const targets = [mocks.first, mocks.second];
+      for (const current of targets) { current.mockReset(); targets.pop(); }
+    });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    ['', false],
+    ['targets.shift();', true],
+    ['removeTarget(targets);', true],
+    ['removeTarget({ targets });', true],
+  ])('invalidates cached array-dependent helper results after %s', (mutation, violation) => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      const targets = [mock, unrelatedMock];
+      function first() { return targets[0]; }
+      function choose() {
+        if (flag) return first();
+        ${mutation}
+        return first();
+      }
+      beforeEach(() => choose().mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
   });
 
   it.each(['() => inner', '() => ({ inner })', '() => inner()'])(
@@ -1478,6 +1644,14 @@ describe('hoisted mock provenance', () => {
       [
         "const build = () => vi.fn().mockReturnValue('x');",
         'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+    [
+      'a module-scope function alias unavailable during Vitest hoisting',
+      [
+        "function build() { return vi.fn().mockReturnValue('x'); }",
+        'const run = build;',
+        'const mock = vi.hoisted(() => run());',
       ].join('\n'),
     ],
   ])('preserves deferred function boundaries for %s', (_case, source) => {
