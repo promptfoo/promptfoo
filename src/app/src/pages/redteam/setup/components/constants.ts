@@ -2,6 +2,8 @@ import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.5';
 export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4';
+export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
+export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
 export const predefinedTargets: RedteamUITarget[] = [
   { value: '', label: 'Select a target' },
@@ -30,9 +32,11 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
   { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
   { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
+  { value: DEFAULT_GOOGLE_TARGET_ID, label: 'Google Gemini 3.8 Flash' },
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
   { value: 'google:gemini-3.6-flash', label: 'Google Gemini 3.6 Flash' },
   { value: 'google:gemini-3.5-flash-lite', label: 'Google Gemini 3.5 Flash-Lite' },
+  { value: DEFAULT_VERTEX_TARGET_ID, label: 'Google Vertex AI Gemini 3.8 Flash' },
   { value: 'vertex:gemini-3.7-flash', label: 'Google Vertex AI Gemini 3.7 Flash' },
   { value: 'vertex:gemini-3.6-flash', label: 'Google Vertex AI Gemini 3.6 Flash' },
   { value: 'vertex:gemini-3.5-flash-lite', label: 'Google Vertex AI Gemini 3.5 Flash-Lite' },
