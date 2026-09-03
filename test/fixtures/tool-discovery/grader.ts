@@ -11,12 +11,13 @@ export default class ToolDiscoveryEvalProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     invariant(typeof context?.vars.response === 'string', 'Expected a response to grade');
+    invariant(typeof context.vars.purpose === 'string', 'Expected an application purpose');
 
     const { grade } = await new ToolDiscoveryGrader().getResult(
       prompt,
       context.vars.response,
       {
-        metadata: { purpose: 'A general assistant that helps with research, writing, and coding.' },
+        metadata: { purpose: context.vars.purpose },
       },
       undefined,
       undefined,
