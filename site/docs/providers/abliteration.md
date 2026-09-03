@@ -1,34 +1,30 @@
 ---
 title: Abliteration Provider
 sidebar_label: Abliteration
-description: "Evaluate Abliteration's GLM-5.3-based Large V2 model with Promptfoo. Set API keys, reasoning effort, tool calling, structured outputs, and text-only inputs."
+description: 'Evaluate Abliteration models with Promptfoo, including GLM-5.3-based Large V2. Configure API keys, reasoning effort, token limits, and multimodal prompts.'
 sidebar_position: 85
 ---
 
 # Abliteration
 
-[Abliteration](https://abliteration.ai/) is a third-party service that hosts
-**"abliterated"** models - open-weight LLMs where the refusal direction has
-been removed from the residual stream so the model no longer declines
-requests it would ordinarily refuse. It exposes an OpenAI-compatible chat
-completions API, and Promptfoo ships a thin `abliteration:` wrapper around the
-[OpenAI provider](/docs/providers/openai/) for it.
+The `abliteration:` provider connects Promptfoo to
+[Abliteration's](https://abliteration.ai/) OpenAI-compatible chat-completions API.
 
 :::warning Safety
 
-Abliterated models intentionally bypass the safety training of their base
-models. They are primarily useful for red-teaming, jailbreak evaluation, and
-safety research - not for production traffic. You are responsible for how
-outputs are used and for complying with the model licenses and laws that
-apply in your jurisdiction.
+These models are modified to reduce refusals. Review outputs before using
+them in applications, and follow the applicable model licenses.
 
 :::
 
 ## Setup
 
-1. Obtain an API key from the [Abliteration console](https://abliteration.ai/console).
-2. Set the `ABLIT_KEY` environment variable, or pass `apiKey` in your
-   provider config.
+1. Create an API key in the [Abliteration console](https://abliteration.ai/console).
+2. Set it in your shell:
+
+   ```sh
+   export ABLIT_KEY=your-key-here
+   ```
 
 ## Environment Variables
 
@@ -47,9 +43,9 @@ Provider config values take precedence over environment variables.
 | `abliterated-model-large`    | Text                | 1,000,000 tokens |
 | `abliterated-model`          | Text, images, video | 262,144 tokens   |
 
-Large V2 is based on GLM-5.3. Both large models reject image and video inputs;
-use `abliterated-model` for multimodal evals. See Abliteration's
-[model reference](https://docs.abliteration.ai/models) for current capabilities.
+Large V2 is based on GLM-5.3. Context windows include input and output tokens.
+See Abliteration's [model reference](https://docs.abliteration.ai/models)
+for current limits and capabilities.
 
 ## Basic Configuration
 
@@ -72,24 +68,31 @@ tests:
         value: CWE-89
 ```
 
+Run the eval:
+
+```sh
+npx promptfoo@latest eval --no-cache
+```
+
 `abliteration:<model>` is the default syntax;
 `abliteration:chat:<model>` is also supported.
 
 ## Reasoning
 
-Set `reasoning_effort` to `low`, `high`, or `max` for Large V2. It defaults to
-`max` when no effort is supplied. Use an explicit `max_tokens` budget for
-reasoning workloads, as in the example above.
+For Large V2, set `reasoning_effort` to `low`, `high`, or `max`. Omitting it
+uses the API's default, `max`. Set `max_tokens` explicitly for reasoning
+workloads, as in the example above.
 
-Large V2 always reasons: `reasoning_effort: none` selects low effort and hides
-the reasoning trace. The base model and previous large model can disable
-reasoning with `none`. See the
+Large V2 always reasons. `none` selects low effort and hides the trace.
+On `abliterated-model` and `abliterated-model-large`, `none` disables
+reasoning. See the
 [reasoning guide](https://docs.abliteration.ai/capabilities/thinking) for the
 other accepted effort aliases and their model-specific behavior.
 
-Promptfoo excludes `reasoning_content` from the graded output by default. Set
-`showThinking: true` to include it. This controls output display; it does not
-change the model's reasoning effort. To ask the API to omit the trace, use:
+Promptfoo grades only the final answer by default. Set `showThinking: true`
+to include the reasoning trace in the output sent to assertions.
+
+To omit the trace from the API response, use:
 
 ```yaml
 config:
@@ -98,16 +101,17 @@ config:
     include_reasoning: false
 ```
 
+Hiding the trace does not reduce reasoning token usage.
+
 ## OpenAI Compatibility
 
-Abliteration speaks the OpenAI chat-completions protocol, so most options
-from the [OpenAI provider](/docs/providers/openai/) work here too, including
-sampling options, tool calling, and structured output. Multimodal messages
-require `abliterated-model`.
+Sampling parameters, tool calling, and structured output use the same
+configuration as the [OpenAI provider](/docs/providers/openai/).
 
 ## Multimodal Example
 
-This example uses the base model because Large V2 accepts text only.
+Use `abliterated-model` for images and video. Both large models accept text
+only. This image example disables reasoning with `none`.
 
 ```json title="prompt.json"
 [
@@ -131,6 +135,10 @@ prompts:
 
 providers:
   - id: abliteration:abliterated-model
+    config:
+      reasoning_effort: none
+      temperature: 0.2
+      max_tokens: 512
 
 tests:
   - vars:

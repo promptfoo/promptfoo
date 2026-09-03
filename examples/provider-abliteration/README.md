@@ -1,6 +1,6 @@
 # provider-abliteration (Abliteration)
 
-You can run this example with:
+Run text and image evals against Abliteration:
 
 ```bash
 npx promptfoo@latest init --example provider-abliteration
@@ -9,38 +9,33 @@ cd provider-abliteration
 
 ## Prerequisites
 
-- An [Abliteration](https://abliteration.ai/) account and API key.
-- Access to `abliterated-model-large-v2` for the text eval, or
-  `abliterated-model` for the image eval.
+Create an API key in the [Abliteration console](https://abliteration.ai/console)
+with access to the model you want to test.
 
 ## Setup
 
-1. Set your API key:
+Set your API key:
 
-   ```bash
-   export ABLIT_KEY=your-key-here
-   ```
-
-2. Choose the text or image config below. Large V2 is text-only, so it cannot
-   be used with the image prompt.
+```bash
+export ABLIT_KEY=your-key-here
+```
 
 ## Run
 
-To evaluate GLM-5.3-based **Large V2** on security weakness classification:
+For security weakness classification with `abliterated-model-large-v2`:
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.large-v2.yaml --no-cache
 ```
 
-The config uses `reasoning_effort: low` and `max_tokens: 16384`. Large V2 also
-supports `high` and `max` effort. It always reasons; `none` selects low effort
-with the trace hidden. Promptfoo hides reasoning from graded output by default.
-
-To run the base model's image example:
+For image recognition with `abliterated-model`:
 
 ```bash
 npx promptfoo@latest eval --no-cache
 ```
 
-See [the Abliteration provider docs](https://www.promptfoo.dev/docs/providers/abliteration/)
-for safety context and additional configuration options.
+The text eval uses low reasoning effort. The image eval disables reasoning;
+Large V2 accepts text only and cannot run the image eval.
+
+See the [provider docs](https://www.promptfoo.dev/docs/providers/abliteration/)
+for model capabilities and reasoning settings.

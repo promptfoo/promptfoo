@@ -7,6 +7,7 @@ prompts:
 providers:
   - id: abliteration:abliterated-model
     config:
+      reasoning_effort: none
       temperature: 0.2
       max_tokens: 512
 
