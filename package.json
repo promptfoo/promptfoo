@@ -159,7 +159,7 @@
       "@opentelemetry/core": "2.10.0"
     },
     "serialize-javascript": ">=7.0.5",
-    "gaxios": "^7.1.4",
+    "gaxios": "^8.0.0",
     "https-proxy-agent": "^9.0.0",
     "ip-address": "10.5.0",
     "mongoose": {
@@ -260,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.146.0",
+    "oxc-parser": "^0.147.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -300,7 +300,7 @@
     "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.21",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.62.5",
+    "@rollup/rollup-linux-x64-gnu": "^4.63.0",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.16.1",
