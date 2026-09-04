@@ -37,6 +37,7 @@ export interface GoogleModel {
 }
 
 export const GEMINI_FLASH_MODELS = [
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
   { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },
@@ -84,18 +85,21 @@ const GEMINI_3_5_FLASH_LITE_COST = {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
-  // Gemini 3.7 Flash and 3.6 Flash receive a 50% discount through 2026-12-31.
-  ...['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'].map((id) => ({
-    id,
-    cost: {
-      input: 1.5 / 1e6,
-      output: 7.5 / 1e6,
-      cacheRead: 0.15 / 1e6,
-      priorityMultiplier: 1.8,
-      flexMultiplier: 0.5,
-    },
-    introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
-  })),
+  // Gemini 3.8, 3.7, and 3.6 Flash receive a 50% discount through 2026-12-31.
+  ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'].map(
+    (id) => ({
+      id,
+      cost: {
+        input: 1.5 / 1e6,
+        output: 7.5 / 1e6,
+        cacheRead: 0.15 / 1e6,
+        priorityMultiplier: 1.8,
+        flexMultiplier: 0.5,
+      },
+      introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
+      vertexRegionalMultiplier: 1.1,
+    }),
+  ),
 
   // Gemini 3.5 models.
   {

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -6,7 +6,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
-import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
+import {
+  DEFAULT_GOOGLE_TARGET_ID,
+  DEFAULT_OPENAI_TARGET_ID,
+  DEFAULT_VERTEX_TARGET_ID,
+} from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -111,6 +115,13 @@ const allProviderOptions = [
     value: 'openai-agents-sdk',
     label: 'OpenAI Agents SDK',
     description: "OpenAI's official agent framework",
+    tag: 'agents',
+    recommended: true,
+  },
+  {
+    value: 'codex-security',
+    label: 'Codex Security SDK',
+    description: 'Evaluate security scans, finding validation, model reasoning, and cost',
     tag: 'agents',
     recommended: true,
   },
@@ -597,7 +608,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-3.7-flash',
+          id: DEFAULT_GOOGLE_TARGET_ID,
           config: {},
           label: currentLabel,
         },
@@ -606,7 +617,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-3.7-flash',
+          id: DEFAULT_VERTEX_TARGET_ID,
           config: { region: 'global' },
           label: currentLabel,
         },
@@ -939,6 +950,21 @@ export default function ProviderTypeSelector({
         },
         'openai-agents-sdk',
       );
+    } else if (value === 'codex-security') {
+      setProvider(
+        {
+          id: 'openai:codex-security:gpt-5.6-luna',
+          config: {
+            operation: 'security-scan',
+            repository: '',
+            auth: 'auto',
+            model_reasoning_effort: 'high',
+            max_cost_usd: 1,
+          },
+          label: currentLabel ?? 'Codex Security SDK',
+        },
+        'codex-security',
+      );
     } else if (value === 'pydantic-ai') {
       setProvider(
         {
@@ -1055,21 +1081,19 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
-  const filteredProviderOptions = allProviderOptions.filter((option) => {
-    // Filter by availableProviderIds if provided
-    const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+  const filteredProviderOptions = useMemo(() => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    return allProviderOptions.filter((option) => {
+      const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+      const matchesSearch =
+        !normalizedSearch ||
+        option.label.toLowerCase().includes(normalizedSearch) ||
+        option.description.toLowerCase().includes(normalizedSearch);
+      const matchesTag = !selectedTag || option.tag === selectedTag;
 
-    // Filter by search term if provided
-    const matchesSearch =
-      !searchTerm ||
-      option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      option.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Filter by selected tag if provided
-    const matchesTag = !selectedTag || option.tag === selectedTag;
-
-    return isAvailable && matchesSearch && matchesTag;
-  });
+      return isAvailable && matchesSearch && matchesTag;
+    });
+  }, [searchTerm, selectedTag, availableProviderIds]);
 
   // Get the selected provider option for collapsed view
   const selectedOption = selectedProviderType

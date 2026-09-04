@@ -37,6 +37,7 @@ The OpenAI provider supports the following model formats:
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
 - `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.5`
+- `openai:codex-security` - runs Codex Security scans and finding validation, with optional inline model selection
 - `openai:codex-app-server` / `openai:codex-desktop` - runs the experimental Codex app-server protocol for rich-client event, approval, sandbox, skill, plugin, and thread lifecycle evals
 
 The `openai:<endpoint>:<model name>` construction is useful for newly released or custom models.
@@ -2821,6 +2822,20 @@ providers:
 ```
 
 See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.
+
+### Codex Security SDK
+
+Use the [OpenAI Codex Security SDK provider](/docs/providers/openai-codex-security) to compare standard, deep, and diff scans; validate findings; and track model reasoning, repository coverage, SDK-reported token usage, and estimated scan cost.
+
+```yaml
+providers:
+  - id: openai:codex-security:gpt-5.6-sol
+    config:
+      operation: deep-security-scan
+      repository: ./service
+      model_reasoning_effort: high
+      max_cost_usd: 2
+```
 
 ### Codex App Server
 

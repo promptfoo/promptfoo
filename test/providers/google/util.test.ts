@@ -2578,6 +2578,7 @@ describe('util', () => {
 
   describe('removeDeprecatedGeminiGenerationParams', () => {
     it.each([
+      'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.6-flash',
       'gemini-3.5-flash-lite',
@@ -2617,6 +2618,14 @@ describe('util', () => {
 
     it.each([
       {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
         modelName: 'gemini-3.7-flash',
         generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
       },
@@ -2637,11 +2646,19 @@ describe('util', () => {
       },
     ])('rejects unsupported MINIMAL thinking on $modelName', ({ modelName, generationConfig }) => {
       expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
-        'Gemini 3.7 Flash does not support MINIMAL thinking',
+        `${modelName} does not support MINIMAL thinking`,
       );
     });
 
     it.each([
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
       {
         modelName: 'gemini-3.7-flash',
         generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
@@ -2667,7 +2684,7 @@ describe('util', () => {
       },
     ])('rejects deprecated thinking budgets on $modelName', ({ modelName, generationConfig }) => {
       expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
-        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel',
+        `${modelName} does not support thinkingBudget. Use thinkingLevel`,
       );
     });
   });
@@ -2769,7 +2786,7 @@ describe('util', () => {
     });
 
     describe('Gemini Flash introductory pricing', () => {
-      it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
+      it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
         'switches %s to standard rates when introductory pricing expires',
         (modelName) => {
           const now = vi.spyOn(Date, 'now');
@@ -2812,7 +2829,7 @@ describe('util', () => {
       },
     );
 
-    it.each(['gemini-3.7-flash', 'gemini-3.6-flash'])(
+    it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'])(
       'applies cached, priority, and flex pricing for %s',
       (modelName) => {
         const standard = calculateGoogleCost(
@@ -2919,6 +2936,11 @@ describe('util', () => {
     });
 
     it.each([
+      { modelName: 'gemini-3.8-flash', region: 'global', expectedCost: 0.002625 },
+      { modelName: 'gemini-3.8-flash', region: 'us', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.8-flash', region: 'eu', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.7-flash', region: 'us', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.6-flash', region: 'eu', expectedCost: 0.0028875 },
       { modelName: 'gemini-3.5-flash-lite', region: 'us', expectedCost: 0.001705 },
       { modelName: 'gemini-3.5-flash-lite', region: 'eu', expectedCost: 0.001705 },
       { modelName: 'gemini-3.5-flash', region: 'us', expectedCost: 0.0066 },
@@ -2929,6 +2951,31 @@ describe('util', () => {
         const cost = calculateGoogleCost(modelName, { region }, 1000, 500, true);
 
         expect(cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
+
+    it.each([
+      { date: Date.UTC(2026, 11, 31), expectedCost: 0.0025905 },
+      { date: Date.UTC(2027, 0, 1), expectedCost: 0.005181 },
+    ])(
+      'combines Gemini 3.8 Flash regional and cached pricing at $date',
+      ({ date, expectedCost }) => {
+        vi.spyOn(Date, 'now').mockReturnValue(date);
+
+        const cost = calculateGoogleCost(
+          'gemini-3.8-flash',
+          { region: 'eu' },
+          1000,
+          500,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(cost).toBeCloseTo(expectedCost, 12);
       },
     );
 
