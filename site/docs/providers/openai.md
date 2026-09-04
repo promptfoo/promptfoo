@@ -115,7 +115,7 @@ Supported parameters include:
 | `audioCost`              | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                 |
 | `audioInputCost`         | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                                                             |
 | `audioOutputCost`        | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                                                            |
-| `max_tokens`             | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                                                                           |
+| `max_tokens`             | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                                                                                                 |
 | `maxRetries`             | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries. Hard-quota responses (`insufficient_quota`, `billing_hard_limit_reached`, `access_terminated`, etc.) are never retried regardless of this setting — retrying an exhausted account only amplifies load.                                                |
 | `metadata`               | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                                                                                       |
 | `omitDefaults`           | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                                                                                    |
@@ -130,7 +130,7 @@ Supported parameters include:
 | `seed`                   | Seed used for deterministic output.                                                                                                                                                                                                                                                                                                                         |
 | `stop`                   | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                                                                                 |
 | `store`                  | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                                                                           |
-| `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because it is unsupported by many of those models.                                                                                                                                   |
+| `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series and GPT-5 family) because it is unsupported by many of those models.                                                                                                                                                         |
 | `tool_choice`            | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                                                                   |
 | `tools`                  | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                                                                           |
 | `top_p`                  | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                                                                               |
@@ -299,17 +299,10 @@ GPT-5.1 is a GPT-5 family model that emphasizes coding, agentic tasks, and more 
 
 #### Available Models
 
-| Model               | Description                                        | Best For                                    |
-| ------------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1             | Primary GPT-5.1 model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
-| gpt-5.1-codex       | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
-| gpt-5.1-codex-max   | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
-| gpt-5.1-codex-mini  | Cost-efficient GPT-5.1 coding model                | High-throughput coding tasks                |
-| gpt-5.1-chat-latest | Chat-optimized alias                               | Conversational applications                 |
-
-The GPT-5.1 Codex variants are Responses-only models. Use `openai:responses:<model>` (or the
-bare `openai:<model>` shorthand) instead of Chat Completions.
+| Model              | Description            | Best For                                    |
+| ------------------ | ---------------------- | ------------------------------------------- |
+| gpt-5.1            | Primary GPT-5.1 model  | Complex reasoning and broad world knowledge |
+| gpt-5.1-2025-11-13 | Dated snapshot version | Locked behavior for production              |
 
 #### Key Features
 
@@ -365,60 +358,7 @@ For tasks requiring reasoning, start with `medium` effort and increase to `high`
 
 ### GPT-5.1-Codex-Max
 
-GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated foundational reasoning model trained on agentic tasks across software engineering, math, research, and more. It's designed for long-running, detailed coding work.
-
-#### Key Capabilities
-
-- **Compaction**: First model natively trained to operate across multiple context windows through compaction, coherently working over millions of tokens in a single task
-- **Long-running tasks**: Supports project-scale refactors, deep debugging sessions, and multi-hour agent loops
-- **Token efficiency**: 30% fewer thinking tokens compared to GPT-5.1-Codex at the same reasoning effort level
-- **Windows support**: First model trained to operate in Windows environments
-- **Improved collaboration**: Better performance as a coding partner in CLI environments
-
-#### Usage Examples
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5.1-codex-max
-    config:
-      reasoning:
-        effort: 'medium' # Recommended for most tasks
-      max_output_tokens: 25000 # Reserve space for reasoning and outputs
-```
-
-For latency-insensitive tasks requiring maximum quality:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5.1-codex-max
-    config:
-      reasoning:
-        effort: 'xhigh' # Extra high reasoning for best results
-      max_output_tokens: 40000
-```
-
-:::warning
-GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses:`). It does not work with the Chat Completions API (`openai:chat:`).
-:::
-
-#### Reasoning Effort Levels
-
-- **`low`**: Minimal reasoning for straightforward tasks
-- **`medium`**: Balanced reasoning, recommended as daily driver
-- **`high`**: Maximum reasoning for complex problem-solving
-- **`xhigh`**: Extra high reasoning for non-latency-sensitive tasks requiring best results
-
-#### Best Practices
-
-- Use for agentic coding tasks in Codex or Codex-like environments
-- Reserve at least 25,000 tokens for reasoning and outputs when starting
-- Start with `medium` reasoning effort for most tasks
-- Use `xhigh` effort only for complex tasks where latency is not a concern
-- Review agent work before deploying to production
-
-:::note
-GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and is not a general-purpose model like GPT-5.1.
-:::
+GPT-5.1 Codex variants were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on July 23, 2026. Use a supported coding model such as `gpt-5.3-codex` with `openai:responses:`.
 
 ### GPT-5.2
 
@@ -430,8 +370,6 @@ GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard
 | ---------------------- | ------------------------------- | ---------------------------------- |
 | gpt-5.2                | Standard GPT-5.2 model          | Complex reasoning and coding tasks |
 | gpt-5.2-2025-12-11     | Snapshot version                | Locked behavior for production     |
-| gpt-5.2-chat-latest    | Chat-optimized alias            | Conversational applications        |
-| gpt-5.2-codex          | GPT-5.2 coding variant          | Agentic coding workflows           |
 | gpt-5.2-pro            | Premium GPT-5.2 model           | Highest-quality reasoning tasks    |
 | gpt-5.2-pro-2025-12-11 | Snapshot version of GPT-5.2-pro | Locked behavior for production     |
 
@@ -440,18 +378,18 @@ GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard
 - **Context window**: 400,000 tokens
 - **Max output tokens**: 128,000 tokens
 - **Reasoning support**: Full reasoning token support with configurable effort levels
-- **Pricing (`gpt-5.2`, `gpt-5.2-chat-latest`, `gpt-5.2-codex`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
+- **Pricing (`gpt-5.2`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
 - **Pricing (`gpt-5.2-pro`)**: $21 per 1M input tokens, $168 per 1M output tokens
 
 #### Usage Examples
 
-Standard GPT-5.2 and its chat alias are available via both the Chat Completions API and Responses API. GPT-5.2 Codex and Pro are Responses-only:
+Standard GPT-5.2 is available via both the Chat Completions API and Responses API. GPT-5.2 Pro is Responses-only:
 
 **Chat Completions API:**
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.2-chat-latest
+  - id: openai:chat:gpt-5.2
     config:
       max_completion_tokens: 4096
 
@@ -466,7 +404,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5.2-codex
+  - id: openai:responses:gpt-5.2
     config:
       max_output_tokens: 4096
 
@@ -524,37 +462,15 @@ providers:
 
 ### GPT-5.3 Instant
 
-GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
-
-#### Available Models
-
-| Model               | Description          | Pricing (Input / Output)  |
-| ------------------- | -------------------- | ------------------------- |
-| gpt-5.3-chat-latest | Chat-optimized alias | $1.75 / $14 per 1M tokens |
-| gpt-5.3-codex       | GPT-5.3 coding model | $1.75 / $14 per 1M tokens |
-
-#### Key Specifications
-
-- **Endpoint support**: `gpt-5.3-chat-latest` supports Chat Completions and Responses; `gpt-5.3-codex` is Responses-only.
-- **Limits and pricing**: The `-latest` alias can move over time. Check [OpenAI model docs](https://developers.openai.com/api/docs/models) and [API pricing](https://developers.openai.com/api/docs/pricing) for current context limits and rates.
-
-#### Usage Examples
+GPT-5.3 Instant (`gpt-5.3-chat-latest`) was [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on August 10, 2026. The separate `gpt-5.3-codex` coding model remains available through the Responses API:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.3-chat-latest
-    config:
-      max_completion_tokens: 2048
-
   - id: openai:responses:gpt-5.3-codex
     config:
       reasoning:
         effort: 'high'
       max_output_tokens: 4096
-
-  - id: openai:responses:gpt-5.3-chat-latest
-    config:
-      max_output_tokens: 2048
 ```
 
 ### GPT-6 Astra
@@ -2061,9 +1977,8 @@ image inputs with streaming text and audio outputs.
 - `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-realtime-mini-2025-12-15`
 - `gpt-realtime-mini-2025-10-06`
-- `gpt-4o-mini-realtime-preview-2024-12-17` - Deprecated preview snapshot still available until its published shutdown date
 
-Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several older preview aliases on May 7, 2026, while the dated `gpt-4o-mini-realtime-preview-2024-12-17` snapshot remains available until its published July 23, 2026 shutdown date.
+Use the current `gpt-realtime*` models for new evals. The older preview aliases and snapshots have been [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations).
 
 The Realtime 2.1 models support a 128k context window and up to 32k output tokens. The current
 Realtime request schema still accepts an integer `max_response_output_tokens` only up to 4,096;
@@ -2252,29 +2167,18 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
 - `gpt-5` - Earlier GPT-5 family model
-- `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model
-- `gpt-5.1-chat-latest` - GPT-5.1 chat alias
-- `gpt-5.3-chat-latest` - GPT-5.3 chat alias
-- `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
-- `gpt-5.2-codex` - GPT-5.2 coding variant
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($21/$168 per 1M tokens)
 - `o1` - Powerful reasoning model
-- `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
 - `o3-pro` - Highest-tier reasoning model
 - `o3` - General-purpose reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Fast, cost-effective reasoning model
-- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 - `gpt-5-codex-mini` - Responses replacement for the retired `codex-mini-latest` model
 - `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
-The Pro and Codex variants of GPT-5, GPT-5.1, GPT-5.2, and GPT-5.3, along with `o1-pro`, `o3-pro`,
-and `computer-use-preview`, are Responses-only. Promptfoo auto-routes their bare IDs to Responses.
-Several older Codex and computer-use snapshots have published July 23, 2026 shutdown dates; check
-OpenAI's deprecation schedule before adding new eval coverage. `codex-mini-latest` has already
-been shut down; OpenAI recommends `gpt-5-codex-mini` as its Responses API replacement. `gpt-5-pro`
+The supported Pro variants, `gpt-5.3-codex`, `gpt-5-codex-mini`, `o1-pro`, and `o3-pro` are Responses-only. Promptfoo auto-routes their bare IDs to Responses. Models past their [OpenAI shutdown dates](https://developers.openai.com/api/docs/deprecations) are omitted from the supported model catalogs; historical billing and explicitly configured compatible gateways remain supported. `gpt-5-pro`
 and its dated snapshot require `reasoning.effort: high`, while
 `gpt-5.2-pro` and its snapshot support `medium`, `high`, and `xhigh`.
 
@@ -2481,110 +2385,11 @@ providers:
 
 ### Deep Research Models (Responses API Only)
 
-Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.
-
-Available models:
-
-- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
-- `o3-deep-research-2025-06-26` - Snapshot version
-- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
-- `o4-mini-deep-research-2025-06-26` - Snapshot version
-
-OpenAI has scheduled these deep research aliases and snapshots to shut down on July 23, 2026 and
-recommends `gpt-5.5-pro` for new integrations. Retain them only for existing eval coverage.
-
-All deep research models:
-
-- **Require** at least one data source: `web_search`, `web_search_preview`, `file_search` with `vector_store_ids`, or an MCP tool
-- Support 200,000 token context window
-- Support up to 100,000 output tokens
-- May take 2-10 minutes to complete research tasks
-- Use significant tokens for reasoning before generating output
-
-Example configuration:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:o4-mini-deep-research
-    config:
-      max_output_tokens: 50000 # High limit recommended
-      tools:
-        - type: web_search_preview # Data source
-```
-
-#### Advanced Configuration
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:o3-deep-research
-    config:
-      max_output_tokens: 100000
-      max_tool_calls: 50 # Limit searches to control cost/latency
-      background: true # Recommended for long-running tasks
-      store: true # Store conversation for 30 days
-      tools:
-        - type: web_search_preview # Data source
-        - type: code_interpreter # Optional: For data analysis
-          container:
-            type: auto
-        - type: mcp # Optional: Connect to private data
-          server_label: mycompany_data
-          server_url: https://api.mycompany.com/mcp
-          require_approval: never # Must be 'never' for deep research
-```
-
-#### Response Format
-
-Deep research models return specialized output items:
-
-- **web_search_call**: Web search actions (search, open_page, find_in_page)
-- **code_interpreter_call**: Code execution for analysis
-- **message**: Final answer with inline citations and annotations
-
-Example response structure:
-
-```json
-{
-  "output": [
-    {
-      "type": "web_search_call",
-      "action": {
-        "type": "search",
-        "query": "latest AI research papers 2025"
-      }
-    },
-    {
-      "type": "message",
-      "content": [
-        {
-          "type": "output_text",
-          "text": "Based on my research...",
-          "annotations": [
-            {
-              "url": "https://arxiv.org/...",
-              "title": "Paper Title",
-              "start_index": 123,
-              "end_index": 145
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### Best Practices
-
-1. **Use Background Mode**: For production, always use `background: true` to handle long response times
-2. **Set High Token Limits**: Use `max_output_tokens: 50000` or higher
-3. **Configure Timeouts**: Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts
-4. **Control Costs**: Use `max_tool_calls` to limit the number of searches
-5. **Enhance Prompts**: Consider using a faster model to clarify/rewrite prompts before deep research
+The `o3-deep-research` and `o4-mini-deep-research` aliases and snapshots were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on July 23, 2026. OpenAI recommends `gpt-5.6-sol` for research workloads. Use a supported Responses model with the appropriate [web search tools](#responses-specific-configuration-options).
 
 #### Timeout Configuration
 
-Deep research models, GPT-5 pro variants, and any Responses request with `background: true`
+GPT-5 pro variants and any Responses request with `background: true`
 automatically use appropriate timeouts:
 
 - If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it bounds the full API call, including background creation
@@ -2613,17 +2418,9 @@ export PROMPTFOO_EVAL_TIMEOUT_MS=900000  # 15 minutes
 export REQUEST_TIMEOUT_MS=600000  # 10 minutes
 ```
 
-:::tip
-Deep research models require high `max_output_tokens` values (50,000+) and long timeouts. Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts.
-:::
-
-:::warning
-Deep research models require at least one supported data source. The provider will return an error if none of `web_search`, `web_search_preview`, `file_search` with `vector_store_ids`, or a remote MCP tool is configured.
-:::
-
 ### GPT-5 Pro Timeout Configuration
 
-`gpt-5-pro`, `gpt-5.2-pro`, `gpt-5.4-pro`, and `gpt-5.5-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants automatically receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro`, `gpt-5.2-pro`, `gpt-5.4-pro`, and `gpt-5.5-pro` are long-running models that often require extended timeouts due to advanced reasoning. These variants automatically receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 

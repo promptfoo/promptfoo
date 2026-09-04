@@ -281,9 +281,8 @@ Supported models include:
 - **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
 - **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
 - **GPT-5.3 Codex** - GPT-5.3 coding generation (`gpt-5.3-codex`). `gpt-5.3-codex-spark` is available through eligible ChatGPT Pro/Codex authentication, not the public Responses API.
-- **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
-- **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
-- **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
+- **GPT-5.2** - GPT-5.2 base model (`gpt-5.2`)
+- **GPT-5 Codex Mini** - Smaller coding model (`gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
 `gpt-5-codex-mini` is also OpenAI's documented Responses API replacement for the retired
@@ -302,7 +301,7 @@ For faster or lower-cost evals, use mini model variants:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex-mini
+      model: gpt-5-codex-mini
 ```
 
 ## Thread Management
@@ -629,15 +628,15 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                                     | Supported Models                                                                                                                                            |
-| --------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                                                   |
-| `low`     | Light reasoning, faster responses               | All models                                                                                                                                                  |
-| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                                                  |
-| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                                  |
-| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
-| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                                                       |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                                                     |
+| Level     | Description                                     | Supported Models                                                                                                          |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                 |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                                |
+| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
+| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                   |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
