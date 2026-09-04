@@ -443,7 +443,7 @@ providers:
 
 This option applies only to servers started by promptfoo. It serializes calls on the provider and
 restarts the server when the call's traceparent changes, so it has a performance cost. It cannot be
-used with `baseUrl`.
+used with `baseUrl`, `persist_sessions: true`, or a fixed nonzero `port`.
 
 ### Ephemeral Sessions (Default)
 
