@@ -768,15 +768,14 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock converse providers correctly', async () => {
-      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
-      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      // Uses a model AWS still serves: the converse route now rejects retired ids, and the
+      // previous fixture (`anthropic.claude-v2`) is one of them.
+      const path = 'bedrock:converse:anthropic.claude-sonnet-4-6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
-      const provider = await factory!.create(
-        'bedrock:converse:anthropic.claude-v2',
-        mockProviderOptions,
-        mockContext,
-      );
+      const provider = await factory!.create(path, mockProviderOptions, mockContext);
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 

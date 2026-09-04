@@ -39,9 +39,10 @@ function getCompletionResponseMetadata(response: Anthropic.Completion) {
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
   // NOTE: As of March 15, 2025, all legacy completion models are retired
   // and should not be used for new applications.
-  // Recommended alternatives:
-  // - For claude-1.x and claude-instant-1.x: use claude-haiku-4-5
-  // - For claude-2.x: use claude-sonnet-4-6
+  // Recommended alternatives — these are Messages API models, so migrating means switching
+  // provider too (`anthropic:messages:<model>`), not just changing the id here:
+  // - For claude-1.x and claude-instant-1.x: use anthropic:messages:claude-haiku-4-5
+  // - For claude-2.x: use anthropic:messages:claude-sonnet-4-6
   static ANTHROPIC_COMPLETION_MODELS = [
     // All models below are deprecated and will be retired soon
     // Only kept for reference - migrate to newer models in new code

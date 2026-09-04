@@ -118,6 +118,10 @@ export const awsProviderFactories: ProviderFactory[] = [
 
       // Handle Converse API
       if (modelType === 'converse') {
+        // This route builds the provider directly, so it never reaches getHandlerForModel —
+        // check retirement here too, or a withdrawn model only fails at the remote API.
+        const { assertBedrockModelIsAvailable } = await import('../bedrock/index');
+        assertBedrockModelIsAvailable(modelName);
         return new AwsBedrockConverseProvider(modelName, providerOptions);
       }
 

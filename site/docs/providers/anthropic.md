@@ -74,10 +74,15 @@ the same `not_found_error` a retired model returns.
 
 ### Retired on the Anthropic API
 
-These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
-remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
-lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
-`anthropic:messages:` call will fail.
+These IDs return `404 not_found_error` from Anthropic, so a direct `anthropic:messages:`
+call will fail. Promptfoo still keeps their pricing, because cost attribution on historical
+evals needs it and because partner platforms set their own lifecycle dates.
+
+Availability elsewhere is per-model, not a blanket rule — check the row in
+[Cross-Platform Model Availability](#cross-platform-model-availability) before assuming a
+retired ID still works somewhere. Three of these are withdrawn from Bedrock as well
+(`claude-3-opus-20240229`, `claude-opus-4-20250514`, `claude-3-5-haiku-20241022`) and are
+rejected locally with `Unknown Amazon Bedrock model`.
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
@@ -128,37 +133,37 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
 | Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
+| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | Withdrawn from Bedrock                            | claude-3-5-haiku@20241022                      |
 | Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
 | Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
 
 ### Supported Parameters
 
-| Config Property | Environment Variable  | Description                                                                                       |
-| --------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                       |
-| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                       |
-| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                    |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                  |
-| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024, or 2048 on models that think by default) |
-| cost            | -                     | Legacy per-token override applied to both input and output pricing                                |
-| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                          |
-| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                         |
-| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                 |
-| top_k           | -                     | Only sample from the top K options for each subsequent token                                      |
-| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                       |
-| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                            |
-| tools           | -                     | An array of tool or function definitions for the model to call                                    |
-| tool_choice     | -                     | An object specifying the tool to call                                                             |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                   |
-| output_format   | -                     | JSON schema configuration for structured outputs                                                  |
-| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)               |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                 |
-| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                               |
-| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                          |
-| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                |
-| headers         | -                     | Additional headers to be sent with the API request                                                |
-| extra_body      | -                     | Additional parameters to be included in the API request body                                      |
+| Config Property | Environment Variable  | Description                                                                                                                                                                           |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                                                                                                           |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                                                                                                           |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                                                                                                        |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                                                                                                      |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024, or 2048 whenever thinking will consume output tokens — either because you enabled it or because the model thinks by default) |
+| cost            | -                     | Legacy per-token override applied to both input and output pricing                                                                                                                    |
+| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                                                                                                              |
+| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                                                                                                             |
+| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                                                                                                     |
+| top_k           | -                     | Only sample from the top K options for each subsequent token                                                                                                                          |
+| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                                                                                                           |
+| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                                                                                                                |
+| tools           | -                     | An array of tool or function definitions for the model to call                                                                                                                        |
+| tool_choice     | -                     | An object specifying the tool to call                                                                                                                                                 |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                                                                                                       |
+| output_format   | -                     | JSON schema configuration for structured outputs                                                                                                                                      |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)                                                                                                   |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                                                                                                     |
+| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                                                                                                                   |
+| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                                                                                                              |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                                                                                                    |
+| headers         | -                     | Additional headers to be sent with the API request                                                                                                                                    |
+| extra_body      | -                     | Additional parameters to be included in the API request body                                                                                                                          |
 
 ### Prompt Template
 

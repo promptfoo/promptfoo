@@ -2568,6 +2568,43 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
+/**
+ * Model IDs AWS no longer serves. Kept so a config pinned to one fails with a clear local
+ * error instead of reaching the `anthropic.claude` catch-all below (or, on the Converse
+ * route, the remote API) and failing with something less obvious.
+ *
+ * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
+ * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
+ * retired on the Anthropic API are still served here and must NOT be listed.
+ */
+export const RETIRED_BEDROCK_MODELS = new Set([
+  'anthropic.claude-3-opus-20240229-v1:0',
+  'us.anthropic.claude-3-opus-20240229-v1:0',
+  'anthropic.claude-opus-4-20250514-v1:0',
+  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
+  'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+  'anthropic.claude-instant-v1',
+  'anthropic.claude-v1',
+  'anthropic.claude-v2',
+  'anthropic.claude-v2:1',
+  'cohere.command-text-v14',
+  'cohere.command-light-text-v14',
+  'meta.llama2-13b-chat-v1',
+  'meta.llama2-70b-chat-v1',
+]);
+
+/**
+ * Throw for a model AWS has withdrawn. Called from both `getHandlerForModel` and the explicit
+ * `bedrock:converse:` factory route, which builds its provider directly and would otherwise
+ * skip the check entirely.
+ */
+export function assertBedrockModelIsAvailable(modelName: string): void {
+  if (RETIRED_BEDROCK_MODELS.has(modelName)) {
+    throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+  }
+}
+
 export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
@@ -2652,29 +2689,7 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
-  if (
-    [
-      'anthropic.claude-3-opus-20240229-v1:0',
-      'us.anthropic.claude-3-opus-20240229-v1:0',
-      'anthropic.claude-opus-4-20250514-v1:0',
-      'us.anthropic.claude-opus-4-20250514-v1:0',
-      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
-      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
-      // falling through to the `anthropic.claude` catch-all and failing at request time.
-      'anthropic.claude-3-5-haiku-20241022-v1:0',
-      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
-      'anthropic.claude-instant-v1',
-      'anthropic.claude-v1',
-      'anthropic.claude-v2',
-      'anthropic.claude-v2:1',
-      'cohere.command-text-v14',
-      'cohere.command-light-text-v14',
-      'meta.llama2-13b-chat-v1',
-      'meta.llama2-70b-chat-v1',
-    ].includes(modelName)
-  ) {
-    throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
-  }
+  assertBedrockModelIsAvailable(modelName);
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }
