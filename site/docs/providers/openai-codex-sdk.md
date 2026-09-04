@@ -262,7 +262,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-astra` with a Codex runtime and account that support Astra. The GPT-5.6 family remains available through its concrete tier IDs: `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`. The direct OpenAI API's `gpt-5.6` alias is not a Codex model ID.
+Use `gpt-6-astra` with [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. The GPT-5.6 family remains available through its concrete tier IDs: `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`. The direct OpenAI API's `gpt-5.6` alias is not a Codex model ID.
 
 ```yaml
 providers:

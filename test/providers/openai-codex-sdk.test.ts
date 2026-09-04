@@ -64,6 +64,7 @@ const createMockResponse = (
   usage?: {
     input_tokens?: number;
     cached_input_tokens?: number;
+    cache_write_input_tokens?: number;
     output_tokens?: number;
     reasoning_output_tokens?: number;
   },
@@ -74,6 +75,9 @@ const createMockResponse = (
     ? {
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
+        ...(usage.cache_write_input_tokens === undefined
+          ? {}
+          : { cache_write_input_tokens: usage.cache_write_input_tokens }),
         output_tokens: usage.output_tokens ?? 0,
         ...(usage.reasoning_output_tokens === undefined
           ? {}
@@ -3085,7 +3089,28 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2 through GPT-5.6 models', () => {
+    describe('GPT-5.2 through GPT-6 Astra models', () => {
+      it('includes SDK cache-write tokens in Astra usage and cost', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+            reasoning_output_tokens: 200,
+          }),
+        );
+        const provider = new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toEqual({
+          reasoning: 200,
+          cacheCreationInputTokens: 250,
+        });
+        expect(result.cost).toBeCloseTo(0.066125, 10);
+      });
+
       it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
         'should recognize %s as a known model',
         (model) => {
@@ -3767,7 +3792,7 @@ describe('OpenAICodexSDKProvider', () => {
         spy.mockRestore();
       });
 
-      it('carries cached and reasoning token usage onto the turn span', async () => {
+      it('carries cache reads, cache writes, and reasoning usage onto the turn span', async () => {
         const { emitted, spy } = await installTurnSpanTracerSpy();
         mockRunStreamed.mockResolvedValue({
           events: (async function* () {
@@ -3778,6 +3803,7 @@ describe('OpenAICodexSDKProvider', () => {
                 input_tokens: 100,
                 output_tokens: 40,
                 cached_input_tokens: 25,
+                cache_write_input_tokens: 10,
                 reasoning_output_tokens: 12,
               },
             };
@@ -3794,6 +3820,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
         expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_creation.input_tokens']).toBe(10);
         expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });

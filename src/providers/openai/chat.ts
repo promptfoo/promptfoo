@@ -321,12 +321,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
-    // Gateways such as OpenRouter can translate Chat tools to the upstream Responses API.
+    // OpenRouter can translate Chat tools to the upstream Responses API.
     applyGpt6AstraRequestRules(
       body,
       capabilityModelName,
       'chat',
-      this.getGenAISystem() !== 'openai',
+      this.getGenAISystem() === 'openrouter',
     );
 
     return { body, config };

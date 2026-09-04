@@ -4857,6 +4857,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
+        model: 'gpt-6-astra',
         thread_cleanup: 'none',
       },
     });
@@ -4941,6 +4942,7 @@ describe('OpenAICodexAppServerProvider', () => {
             cachedInputTokens: 25,
             outputTokens: 50,
             reasoningOutputTokens: 12,
+            cacheWriteInputTokens: 10,
           },
           total: {
             inputTokens: 200,
@@ -5003,9 +5005,12 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(raw.usage).toEqual({
       input_tokens: 100,
       cached_input_tokens: 25,
+      cache_write_input_tokens: 10,
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
+    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(10);
+    expect(result.cost).toBeCloseTo(0.0033, 10);
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {

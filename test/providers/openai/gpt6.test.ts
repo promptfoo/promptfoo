@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { calculateAzureCost } from '../../../src/providers/azure/util';
+import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudflare-gateway';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
@@ -54,9 +55,12 @@ describe('GPT-6 Astra requests', () => {
     },
   );
 
-  it.each([OpenAiChatCompletionProvider, OpenAiResponsesProvider])(
-    'removes unsupported parameters after a per-prompt model override in %s',
-    async (Provider) => {
+  it.each([
+    { api: 'Chat', Provider: OpenAiChatCompletionProvider },
+    { api: 'Responses', Provider: OpenAiResponsesProvider },
+  ])(
+    'removes unsupported parameters after a per-prompt model override in $api',
+    async ({ Provider }) => {
       const passthrough = {
         model: 'gpt-6-astra',
         temperature: 0.4,
@@ -64,6 +68,8 @@ describe('GPT-6 Astra requests', () => {
         logprobs: true,
         top_logprobs: 5,
         max_tokens: 100,
+        max_completion_tokens: 321,
+        max_output_tokens: 654,
       };
       const { body } = await new Provider('gpt-4.1').getOpenAiBody(
         'Summarize the job.',
@@ -81,6 +87,13 @@ describe('GPT-6 Astra requests', () => {
       expect(body.model).toBe('gpt-6-astra');
       for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs', 'max_tokens']) {
         expect(body).not.toHaveProperty(key);
+      }
+      if (Provider === OpenAiChatCompletionProvider) {
+        expect(body.max_completion_tokens).toBe(321);
+        expect(body).not.toHaveProperty('max_output_tokens');
+      } else {
+        expect(body.max_output_tokens).toBe(654);
+        expect(body).not.toHaveProperty('max_completion_tokens');
       }
       expect(passthrough.temperature).toBe(0.4);
     },
@@ -244,6 +257,23 @@ describe('GPT-6 Astra requests', () => {
       expect(calculateAzureCost('gpt-6-astra', config, 1000, 100)).toBeUndefined();
     },
   );
+
+  it('requires Responses for Azure tools routed through Cloudflare', async () => {
+    const provider = new CloudflareGatewayOpenAiProvider('azure-openai', 'gpt-6-astra', {
+      config: {
+        accountId: 'test-account',
+        gatewayId: 'test-gateway',
+        resourceName: 'test-resource',
+        deploymentName: 'gpt-6-astra',
+        apiKey: 'test-key',
+        tools: [statusTool],
+      },
+    });
+
+    await expect(provider.getOpenAiBody('Get the job status.')).rejects.toThrow(
+      'tool calling requires the Responses API',
+    );
+  });
 
   it('rejects unsupported Astra requests on custom Azure deployments', async () => {
     await expect(

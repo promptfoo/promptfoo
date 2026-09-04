@@ -587,7 +587,7 @@ The long-context rates apply to the entire request. Batch and Flex cost half the
 
 As of September 3, 2026, Astra is not listed in the public [Amazon Bedrock OpenAI catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-openai.html), [Microsoft Foundry catalog](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), or [OpenRouter model API](https://openrouter.ai/api/v1/models). Verify access and the provider's model ID before using those services. Azure requests can identify a custom Astra deployment with `config.modelName: gpt-6-astra`; use `azure:responses:<deployment>` for tools. Promptfoo does not assume Azure or Bedrock Astra prices.
 
-The [Codex SDK](/docs/providers/openai-codex-sdk) and [Codex app-server](/docs/providers/openai-codex-app-server) providers also accept `config.model: gpt-6-astra`; use a Codex runtime and account with Astra access.
+The [Codex SDK](/docs/providers/openai-codex-sdk) and [Codex app-server](/docs/providers/openai-codex-app-server) providers also accept `config.model: gpt-6-astra`; use Codex 0.153.1 or later and an account with Astra access.
 
 <a id="gpt-56-limited-preview"></a>
 

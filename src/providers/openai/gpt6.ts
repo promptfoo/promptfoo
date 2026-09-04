@@ -57,6 +57,7 @@ export function applyGpt6AstraRequestRules(
   for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs', 'max_tokens']) {
     delete body[key];
   }
+  delete body[api === 'chat' ? 'max_output_tokens' : 'max_completion_tokens'];
   if (Array.isArray(body.include)) {
     body.include = body.include.filter((item) => item !== 'message.output_text.logprobs');
   }
