@@ -358,6 +358,12 @@ For tasks requiring reasoning, start with `medium` effort and increase to `high`
 
 ### GPT-5.1-Codex-Max
 
+{/* Preserve links to the retired model subsections. */}
+<span id="key-capabilities" />
+<span id="usage-examples-2" />
+<span id="reasoning-effort-levels" />
+<span id="best-practices" />
+
 GPT-5.1 Codex variants were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on July 23, 2026. Use a supported coding model such as `gpt-5.3-codex` with `openai:responses:`.
 
 ### GPT-5.2
@@ -381,7 +387,7 @@ GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard
 - **Pricing (`gpt-5.2`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
 - **Pricing (`gpt-5.2-pro`)**: $21 per 1M input tokens, $168 per 1M output tokens
 
-#### Usage Examples
+#### Usage Examples {#usage-examples-3}
 
 Standard GPT-5.2 is available via both the Chat Completions API and Responses API. GPT-5.2 Pro is Responses-only:
 
@@ -453,7 +459,7 @@ providers:
 - **Improved prompt injection resistance**: Enhanced robustness to known prompt injection attacks
 - **Enhanced sensitive topic handling**: Better performance on mental health and emotional reliance evaluations
 
-#### Reasoning Effort Levels
+#### Reasoning Effort Levels {#reasoning-effort-levels-1}
 
 - **`none`**: No reasoning tokens, fastest responses
 - **`low`**: Minimal reasoning for straightforward tasks
@@ -461,6 +467,11 @@ providers:
 - **`high`**: Maximum reasoning for complex problem-solving
 
 ### GPT-5.3 Instant
+
+{/* Preserve links to the retired model subsections. */}
+<span id="available-models-2" />
+<span id="key-specifications-1" />
+<span id="usage-examples-4" />
 
 GPT-5.3 Instant (`gpt-5.3-chat-latest`) was [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on August 10, 2026. The separate `gpt-5.3-codex` coding model remains available through the Responses API:
 
@@ -550,7 +561,7 @@ providers:
 
 GPT-5.5 is a high-capability GPT-5 family model for professional work and agentic workflows.
 
-#### Available Models
+#### Available Models {#available-models-3}
 
 | Model                  | Description                   | Pricing (Input / Output)    |
 | ---------------------- | ----------------------------- | --------------------------- |
@@ -559,7 +570,7 @@ GPT-5.5 is a high-capability GPT-5 family model for professional work and agenti
 | gpt-5.5-pro            | Premium GPT-5.5 pro model     | $30.00 / $180 per 1M tokens |
 | gpt-5.5-pro-2026-04-23 | Dated snapshot of gpt-5.5-pro | $30.00 / $180 per 1M tokens |
 
-#### Key Specifications
+#### Key Specifications {#key-specifications-2}
 
 - **Long-context pricing**: `gpt-5.5` uses $10.00 input / $45.00 output per 1M tokens when prompts exceed 272,000 input tokens.
 - **Context window**: `gpt-5.5` and `gpt-5.5-pro` support 1,050,000 tokens.
@@ -570,7 +581,7 @@ GPT-5.5 is a high-capability GPT-5 family model for professional work and agenti
 - **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and infers Batch, Flex, or Priority rates when the API response or configured `service_tier` identifies that tier.
 - **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
 
-#### Usage Examples
+#### Usage Examples {#usage-examples-5}
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -597,7 +608,7 @@ providers:
 
 GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, and tool-heavy workflows.
 
-#### Available Models
+#### Available Models {#available-models-4}
 
 | Model                   | Description                    | Pricing (Input / Output)    |
 | ----------------------- | ------------------------------ | --------------------------- |
@@ -610,7 +621,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 | gpt-5.4-pro             | Premium GPT-5.4 pro model      | $30.00 / $180 per 1M tokens |
 | gpt-5.4-pro-2026-03-05  | Dated snapshot of gpt-5.4-pro  | $30.00 / $180 per 1M tokens |
 
-#### Key Specifications
+#### Key Specifications {#key-specifications-3}
 
 - **Context window**: `gpt-5.4` and `gpt-5.4-pro` support 1,050,000 tokens. `gpt-5.4-mini` and `gpt-5.4-nano` support 400,000 tokens.
 - **Long-context pricing**: `gpt-5.4` and `gpt-5.4-pro` use higher long-context rates when prompts exceed 272,000 input tokens.
@@ -619,7 +630,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 - **Endpoint support**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support Chat Completions and Responses API. `gpt-5.4-pro` is Responses API only. Promptfoo's Codex SDK provider supports `gpt-5.4`, `gpt-5.4-pro`, and the newer GPT-5.5 line.
 - **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M, `gpt-5.4-mini` $0.075 per 1M, and `gpt-5.4-nano` $0.02 per 1M. `gpt-5.4-pro` has no cached-input discount.
 
-#### Usage Examples
+#### Usage Examples {#usage-examples-6}
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1132,7 +1143,7 @@ Web search calls are billed separately from normal tokens:
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
-### Best Practices
+### Best Practices {#best-practices-1}
 
 1. **Use specific search queries**: More specific queries yield better verification results
 2. **Use caching**: Caching is enabled by default; results are reused to avoid repeated searches
@@ -1728,7 +1739,6 @@ OpenAI [retired the older `gpt-4o-audio-preview` model family](https://developer
 - `gpt-audio-2025-08-28` - Dated snapshot of `gpt-audio`
 - `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
-- `gpt-audio-mini-2025-10-06` - Dated snapshot of `gpt-audio-mini`
 
 ### Using audio inputs
 
@@ -1976,7 +1986,6 @@ image inputs with streaming text and audio outputs.
 - `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
 - `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-realtime-mini-2025-12-15`
-- `gpt-realtime-mini-2025-10-06`
 
 Use the current `gpt-realtime*` models for new evals. The older preview aliases and snapshots have been [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations).
 
@@ -2384,6 +2393,11 @@ providers:
 ```
 
 ### Deep Research Models (Responses API Only)
+
+{/* Preserve links to the retired model subsections. */}
+<span id="advanced-configuration" />
+<span id="response-format" />
+<span id="best-practices-2" />
 
 The `o3-deep-research` and `o4-mini-deep-research` aliases and snapshots were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on July 23, 2026. OpenAI recommends `gpt-5.6-sol` for research workloads. Use a supported Responses model with the appropriate [web search tools](#responses-specific-configuration-options).
 
