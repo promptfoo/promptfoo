@@ -300,7 +300,7 @@
     "@openai/codex-security": "^0.1.18",
     "@opencode-ai/sdk": "^1.18.21",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.62.5",
+    "@rollup/rollup-linux-x64-gnu": "^4.63.0",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.16.1",
