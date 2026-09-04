@@ -18,9 +18,10 @@ const SAFE_TEST_OPTION_KEYS = new Set([
   'transformVars',
 ]);
 
-// These assertion types invoke a default grading provider when no provider is
-// supplied. Keep this list aligned with MODEL_GRADED_ASSERTION_TYPES in
-// assertions/index.ts without importing that module into the shared types layer.
+// These assertion types invoke a default grading provider or external scoring
+// service when no provider is supplied. Keep the model-graded entries aligned
+// with MODEL_GRADED_ASSERTION_TYPES in assertions/index.ts without importing
+// that module into the shared types layer.
 const MODEL_GRADED_ASSERTION_TYPES = new Set([
   'agent-rubric',
   'answer-relevance',
