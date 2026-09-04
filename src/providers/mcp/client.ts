@@ -147,14 +147,14 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
-    for (const [index, server] of servers.entries()) {
-      // Unnamed command servers may run the same executable with different env/args.
-      // Give each one a distinct map key so both connections can be used and closed.
-      const serverKey =
-        server.name ||
-        server.url ||
-        server.path ||
-        (server.command ? `${server.command}:${index}` : 'default');
+    const usedKeys = new Set(this.clients.keys());
+    for (const server of servers) {
+      const baseKey = server.name || server.url || server.path || server.command || 'default';
+      let serverKey = baseKey;
+      for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
+        serverKey = `${baseKey}:${suffix}`;
+      }
+      usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
       await this.connectToServer(server, serverKey);
     }
@@ -434,7 +434,7 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
-    await this.connectToServer(oauthConfig.serverConfig);
+    await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 

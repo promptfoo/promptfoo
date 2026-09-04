@@ -258,6 +258,19 @@ describe('MCPClient', () => {
       expect(mockClient.close).toHaveBeenCalledTimes(2);
     });
 
+    it('does not overwrite an explicitly named server with a generated command key', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [{ name: 'mcp-server:1', command: 'mcp-server' }, { command: 'mcp-server' }],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
     it('should initialize with per-server env merged into process.env', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
