@@ -766,6 +766,21 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(77);
     });
 
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          max_tokens: 8000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
+        },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+
+      expect(params.max_tokens).toBe(9024);
+    });
+
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -3451,6 +3466,15 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
+    for (const prefix of ['', 'us.', 'global.']) {
+      const model = `${prefix}anthropic.claude-${family}-5-1`;
+      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${family}-5-1`]).toBeUndefined();
+  });
+
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3459,6 +3483,13 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5']).toBeUndefined();
+    // Grok 4.6 is served natively only through its inference profiles; the bare id has no
+    // on-demand throughput and is handled by the mantle Responses path instead.
+    expect(getHandlerForModel('us.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(getHandlerForModel('global.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(() => getHandlerForModel('xai.grok-4.6')).toThrow(/inference profile/);
+    expect(() => getHandlerForModel('us.xai.grok-4.3')).toThrow(/inference profile/);
+
     expect(getHandlerForModel('anthropic.claude-fable-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(() => getHandlerForModel('anthropic.claude-mythos-5')).toThrow(/Anthropic Messages API/);
     expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
@@ -3876,6 +3907,38 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.output).toBe('ok');
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
+
+  it.each([
+    ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
+    ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
+    ['global.anthropic.claude-fable-5', 0, 0.02645],
+  ] as const)(
+    'prices Claude Runtime cache tokens once for %s',
+    async (modelName, inputTokens, expectedCost) => {
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: 500,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 100,
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelName, {
+        config: { region: 'us-west-2' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.tokenUsage?.prompt).toBe(inputTokens + 300);
+      expect(result.cost).toBeCloseTo(expectedCost, 8);
+    },
+  );
 
   it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
     const responseJson = JSON.stringify({

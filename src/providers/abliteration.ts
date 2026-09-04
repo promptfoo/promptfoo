@@ -1,9 +1,15 @@
 import { getEnvString } from '../envars';
+import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../types/index';
 
 const ABLITERATION_API_BASE_URL = 'https://api.abliteration.ai/v1';
 const ABLITERATION_API_BASE_URL_ENV_VAR = 'ABLIT_API_BASE_URL';
@@ -42,6 +48,25 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
 
   override getOrganization(): undefined {
     return undefined;
+  }
+
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
+
+    // The shared provider only forwards reasoning_effort for recognized OpenAI
+    // model names. All Abliteration models support it while retaining max_tokens.
+    if (!Object.prototype.hasOwnProperty.call(config.passthrough ?? {}, 'reasoning_effort')) {
+      const reasoningEffort = renderVarsInObject(config.reasoning_effort, context?.vars);
+      if (reasoningEffort) {
+        body.reasoning_effort = reasoningEffort;
+      }
+    }
+
+    return { body, config };
   }
 
   id(): string {

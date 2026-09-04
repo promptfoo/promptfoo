@@ -49,6 +49,99 @@ describe('AbliterationProvider', () => {
     expect(provider.config.showThinking).toBe(false);
   });
 
+  it.each(['abliterated-model', 'abliterated-model-large', 'abliterated-model-large-v2'])(
+    'forwards reasoning effort without changing sampling or token limits for %s',
+    async (modelName) => {
+      const provider = new AbliterationProvider(modelName, {
+        config: { reasoning_effort: 'high', max_tokens: 16384, temperature: 0.2 },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).toMatchObject({
+        model: modelName,
+        reasoning_effort: 'high',
+        max_tokens: 16384,
+        temperature: 0.2,
+      });
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
+
+  it.each(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])(
+    'forwards Large V2 reasoning effort %s without remapping it',
+    async (reasoningEffort) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: reasoningEffort },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning_effort).toBe(reasoningEffort);
+    },
+  );
+
+  it('renders prompt-level reasoning effort and preserves provider configuration', async () => {
+    const provider = new AbliterationProvider('abliterated-model-large-v2', {
+      config: { reasoning_effort: 'max' },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      prompt: {
+        raw: 'Test prompt',
+        label: 'test',
+        config: { reasoning_effort: '{{effort}}' },
+      },
+      vars: { effort: 'low' },
+    });
+
+    expect(body.reasoning_effort).toBe('low');
+    expect(provider.config.reasoning_effort).toBe('max');
+  });
+
+  it.each([undefined, null])(
+    'leaves the server reasoning default when effort is %s',
+    async (effort) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: effort },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
+
+  it.each<Record<string, string>>([{}, { effort: '' }])(
+    'omits empty rendered reasoning effort for vars %j',
+    async (vars) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: '{{effort}}' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: { raw: 'Test prompt', label: 'test' },
+        vars,
+      });
+
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
+
+  it.each(['low', null])('preserves passthrough reasoning effort %s', async (reasoningEffort) => {
+    const provider = new AbliterationProvider('abliterated-model-large-v2', {
+      config: {
+        reasoning_effort: 'max',
+        passthrough: { reasoning_effort: reasoningEffort, include_reasoning: false },
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.reasoning_effort).toBe(reasoningEffort);
+    expect(body.include_reasoning).toBe(false);
+  });
+
   it('allows overriding the API base URL', () => {
     const provider = new AbliterationProvider('abliterated-model', {
       config: {
@@ -268,6 +361,36 @@ describe('AbliterationProvider', () => {
     const result = await provider.callApi('Test prompt');
 
     expect(result.output).toBe('Final answer');
+  });
+
+  it('sends Large V2 reasoning options and returns the final answer with token usage', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: { content: 'CWE-89', reasoning_content: 'Example reasoning' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new AbliterationProvider('abliterated-model-large-v2', {
+      config: { reasoning_effort: 'low', max_tokens: 16384 },
+    });
+
+    const result = await provider.callApi('Identify the CWE for SQL injection.');
+
+    expect(JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string)).toMatchObject({
+      model: 'abliterated-model-large-v2',
+      reasoning_effort: 'low',
+      max_tokens: 16384,
+    });
+    expect(result.output).toBe('CWE-89');
+    expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30, numRequests: 1 });
   });
 
   it('includes reasoning content when showThinking is enabled', async () => {
