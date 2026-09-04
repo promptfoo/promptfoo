@@ -2008,6 +2008,172 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.output).toContain('"name":"get_weather"');
     });
 
+    it('publishes executed MCP tool calls as metadata.toolCalls across rounds', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool
+        .mockResolvedValueOnce({ content: 'Acme Solar, Helio Grid' })
+        .mockResolvedValueOnce({ content: 'Acme Solar: 412 employees' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_2',
+              name: 'search_companies',
+              input: { query: 'Acme Solar headcount' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar has 412 employees.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 6, output_tokens: 3, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('How big is Acme Solar?');
+
+      // Both rounds are present, in call order, so a routing assertion can check
+      // which tool ran and with what arguments.
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'toolu_1',
+          name: 'search_companies',
+          input: { query: 'solar' },
+          output: 'Acme Solar, Helio Grid',
+          is_error: false,
+        },
+        {
+          id: 'toolu_2',
+          name: 'search_companies',
+          input: { query: 'Acme Solar headcount' },
+          output: 'Acme Solar: 412 employees',
+          is_error: false,
+        },
+      ]);
+    });
+
+    it('marks a failed MCP tool call as is_error in metadata.toolCalls', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool.mockRejectedValueOnce(new Error('upstream refused'));
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_err',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'I could not reach the tool.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 6, output_tokens: 3, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('How big is Acme Solar?');
+
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'toolu_err', name: 'search_companies', is_error: true },
+      ]);
+      expect((result.metadata?.toolCalls as any[])[0].output).toContain('upstream refused');
+    });
+
+    it('omits metadata.toolCalls entirely when no MCP tool ran', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'No tool needed.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 4, output_tokens: 2, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Say hi');
+
+      // An always-present empty array would break `metadata?.toolCalls?.length > 0`
+      // filters, so the key is absent rather than empty.
+      expect(result.metadata?.toolCalls).toBeUndefined();
+    });
+
+    it('keeps tool calls made before the max_tool_calls bail-out', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 1,
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({ content: 'Still needs another lookup.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_first',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_second',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // The run failed on the cap, but the first round did execute — that is the
+      // evidence you need to debug why the cap was hit.
+      expect(result.error).toContain('exceeded max_tool_calls=1');
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'toolu_first', name: 'search_companies', is_error: false },
+      ]);
+    });
+
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
       provider = createProvider('claude-3-5-sonnet-latest', {
         config: {

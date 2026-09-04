@@ -557,6 +557,38 @@ providers:
       max_output_tokens: 2048
 ```
 
+### GPT-6 Astra
+
+[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) supports text and image input, structured output, and a 1,050,000-token context window with up to 128,000 output tokens. Access depends on OpenAI's account rollout.
+
+Use `openai:gpt-6-astra` or `openai:responses:gpt-6-astra` for the Responses API. Explicit `openai:chat:gpt-6-astra` requests support text generation; Astra tool calling requires Responses.
+
+```yaml
+providers:
+  - id: openai:responses:gpt-6-astra
+    config:
+      reasoning:
+        effort: high
+      max_output_tokens: 8192
+      prompt_cache_options:
+        ttl: 30m
+```
+
+Supported reasoning efforts are `low`, `medium`, `high`, `xhigh`, and `max`. `none` and `minimal` are unsupported; use `low` instead. Promptfoo removes `temperature`, `top_p`, and log-probability parameters, including `message.output_text.logprobs` in Responses `include`. Use `max_completion_tokens` for Chat or `max_output_tokens` for Responses. See the [OpenAI migration guide](https://developers.openai.com/api/docs/guides/latest-model#migration-quickstart).
+
+[Standard pricing](https://developers.openai.com/api/docs/pricing), per million tokens:
+
+| Input tokens  | Input | Cached input | Cache writes | Output |
+| ------------- | ----- | ------------ | ------------ | ------ |
+| Up to 272,000 | $10   | $1           | $12.50       | $50    |
+| Above 272,000 | $20   | $2           | $25          | $75    |
+
+The long-context rates apply to the entire request. Batch and Flex cost half the Standard rates; Fast mode (`fast` or `priority`) costs twice the Standard rates. Regional processing adds 10%. Astra Fast mode is unavailable with EU data residency. Estimates include cache writes when the API reports them.
+
+As of September 3, 2026, Astra is not listed in the public [Amazon Bedrock OpenAI catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-openai.html), [Microsoft Foundry catalog](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), or [OpenRouter model API](https://openrouter.ai/api/v1/models). Verify access and the provider's model ID before using those services. Azure requests can identify a custom Astra deployment with `config.modelName: gpt-6-astra`; use `azure:responses:<deployment>` for tools. Promptfoo does not assume Azure or Bedrock Astra prices.
+
+The [Codex SDK](/docs/providers/openai-codex-sdk) and [Codex app-server](/docs/providers/openai-codex-app-server) providers also accept `config.model: gpt-6-astra`; use Codex 0.153.1 or later and an account with Astra access.
+
 <a id="gpt-56-limited-preview"></a>
 
 ### GPT-5.6
