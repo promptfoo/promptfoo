@@ -166,12 +166,12 @@ export class MCPClient {
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
-      if (server.command && server.args) {
+      if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
-          args: server.args,
+          args: server.args ?? [],
           env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
@@ -273,7 +273,7 @@ export class MCPClient {
           logger.debug('Connected using SSE transport');
         }
       } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
+        throw new Error('Either command or path or url must be specified for MCP server');
       }
 
       // Ping server to verify connection if configured

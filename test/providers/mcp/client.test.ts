@@ -213,6 +213,23 @@ describe('MCPClient', () => {
       expect(mcpClient.hasInitialized).toBe(false);
     });
 
+    it('should initialize a zero-argument command server with its configured env', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'mcp-server', env: { MCP_MODE: 'test' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'mcp-server',
+        args: [],
+        env: { ...process.env, MCP_MODE: 'test' },
+      });
+      expect(mcpClient.hasInitialized).toBe(true);
+      await mcpClient.cleanup();
+    });
+
     it('should initialize with per-server env merged into process.env', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
