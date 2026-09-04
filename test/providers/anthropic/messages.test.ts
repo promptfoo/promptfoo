@@ -3705,6 +3705,31 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.budget_tokens).toBeUndefined();
     });
 
+    it.each([
+      { model: 'claude-sonnet-5', expected: 2048 },
+      { model: 'claude-opus-5', expected: 2048 },
+      { model: 'claude-opus-4-8', expected: 1024 },
+      { model: 'claude-opus-4-7', expected: 1024 },
+    ])(
+      'sizes the default max_tokens for $model by whether it thinks by default',
+      async ({ model, expected }) => {
+        // Sonnet 5 and Opus 5 return thinking blocks for a request that never sets
+        // `thinking`, and those tokens come out of max_tokens — so the default needs
+        // headroom or answers truncate mid-sentence. Opus 4.7/4.8 do not think unless
+        // asked, and keep the smaller default.
+        const provider = createProvider(model, { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
+
+        await provider.callApi('Hello');
+
+        expect((createSpy.mock.calls[0][0] as unknown as Record<string, unknown>).max_tokens).toBe(
+          expected,
+        );
+      },
+    );
+
     it('omits the built-in temperature default for Opus 5 (no explicit config)', async () => {
       // Opus 5 inherits the Opus 4.7+ sampling-param deprecation: temperature would 400.
       const provider = createProvider('claude-opus-5', { config: {} });

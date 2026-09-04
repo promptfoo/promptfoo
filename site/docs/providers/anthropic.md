@@ -677,7 +677,7 @@ The same suppression applies when you reach Opus 4.8 through AWS Bedrock, GCP Ve
 Opus 4.7 is designed around adaptive thinking and runs with the reasoning stack always on. Promptfoo handles the key differences from earlier Opus models automatically:
 
 - **Temperature is managed for you.** Opus 4.7 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
-- **Adaptive thinking is the default.** Use `thinking: { type: 'adaptive' }` (or leave `thinking` unset) to let the model choose how much to reason per request. Budget-based modes from older models aren't used on 4.7.
+- **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model choose how much to reason per request; leaving `thinking` unset runs Opus 4.7 **without** extended thinking, even at high effort. (Opus 5 is the model where an omitted block means adaptive.) Budget-based modes from older models aren't used on 4.7.
 - **`xhigh` effort level is available.** It sits between `high` and `max` and is a good starting point for coding and agentic tasks. See the [Effort Level](#effort-level) section.
 - **Updated tokenizer.** The same input can map to 1.0–1.35× more tokens than Opus 4.6, so measure real traffic if you're comparing costs.
 
