@@ -411,6 +411,43 @@ tests:
       - type: is-json
 ```
 
+## Asserting on Executed Tool Calls
+
+When a chat provider runs MCP tools on the model's behalf (`mcp.enabled: true` on
+`anthropic:messages` or `openai:chat`), each executed call is published on
+`metadata.toolCalls`, so you can test tool _routing_ rather than only the final answer —
+useful when several tools have overlapping domains and a wrong-but-plausible call still
+produces a plausible-looking answer.
+
+Each entry is `{ id, name, input, output, is_error }`, in call order, and spans every
+continuation round. The key is absent when no MCP tool ran, so guard with `?.`:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: anthropic:messages:claude-sonnet-5
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: ['company_server.js']
+
+tests:
+  - vars:
+      prompt: How many people work at Acme Solar?
+    assert:
+      - type: javascript
+        value: |
+          const calls = context.metadata?.toolCalls ?? [];
+          return calls.some((c) => c.name === 'get_headcount' && !c.is_error);
+```
+
+The list is also populated on the failure paths — a run that trips `max_tool_calls`, or
+one where the model mixed MCP and non-MCP tool blocks, still reports the calls that did
+execute before the bail-out. `metadata.toolCalls` uses the same field names as the
+[Claude Agent SDK provider](/docs/providers/claude-agent-sdk), so one assertion reads both.
+
 ## Red Team Testing with MCP
 
 The MCP provider is particularly powerful for red team testing of agentic systems. Here's a recommended configuration for comprehensive security testing:
