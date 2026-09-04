@@ -224,14 +224,17 @@ const ENV_SECRET_SUFFIX_WORDS = [
   'CREDENTIAL',
   'SECRET',
   'TOKEN',
-  'APIKEY',
-  'PRIVATEKEY',
-  'SECRETKEY',
-  'ACCESSKEY',
-  'SIGNINGKEY',
   'PWD',
   'DSN',
-];
+  // Every credential name in SECRET_FIELD_NAMES that ends in `key`, so a prefixed spelling
+  // (`APP_ENCRYPTIONKEY`, `VENDOR_CERTKEY`) is still caught even though the exact-name match
+  // cannot see past the prefix. Derived rather than hand-listed so the two stay in sync; all
+  // are at least six characters, so none of them matches `PORTKEY` or `MONKEY`.
+  ...[...SECRET_FIELD_NAMES].filter((name) => name.endsWith('key') && name.length > 3),
+  // Not in SECRET_FIELD_NAMES on its own — that set carries `accesskeyid` — but the bare
+  // compound shows up in env vars.
+  'accesskey',
+].map((word) => word.toUpperCase());
 
 /**
  * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`

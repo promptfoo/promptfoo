@@ -187,10 +187,14 @@ describe('isSecretEnvVarName', () => {
     'Database_Password',
     // Leading underscores are legal in env var names and must not be a way around the check.
     '_GITHUB_TOKEN',
-    // Fused credential compounds: caught by explicit suffix words, not by a blanket `KEY`
-    // suffix (which would also swallow PORTKEY).
+    // Fused credential compounds: caught by the key-compound suffixes derived from
+    // SECRET_FIELD_NAMES, not by a blanket `KEY` suffix (which would swallow PORTKEY).
+    // A prefix defeats the exact-name match, which is why deriving them matters.
     'AWS_SECRETKEY',
     'GCP_PRIVATEKEY',
+    'APP_ENCRYPTIONKEY',
+    'VENDOR_CERTKEY',
+    'SVC_SIGNINGKEY',
     'DBPWD',
     'DATABASEDSN',
     // `AUTH` as the final word carries the credential (MLFLOW_BASIC_AUTH is a documented
@@ -213,6 +217,7 @@ describe('isSecretEnvVarName', () => {
     // PORTKEY_API_BASE_URL is a documented endpoint.
     'PORTKEY_API_BASE_URL',
     'MONKEY',
+    'TURKEY',
     // `AUTH` only counts as the final word: these name a method and a scope.
     'WATSONX_AI_AUTH_TYPE',
     'OAUTH_SCOPE',
