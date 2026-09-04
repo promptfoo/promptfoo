@@ -103,6 +103,7 @@ describe('Eval Routes - provider catalog enforcement', () => {
       'implicit assertion grading provider',
       { tests: [{ assert: [{ type: 'llm-rubric', value: 'is correct' }] }] },
     ],
+    ['remote PI assertion scoring', { tests: [{ assert: [{ type: 'pi', value: 'is correct' }] }] }],
   ])('rejects a direct job request with %s', async (_name, override) => {
     const response = await api.post('/api/eval/job').send({ ...minimalTestSuite, ...override });
 

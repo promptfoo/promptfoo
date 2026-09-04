@@ -31,6 +31,7 @@ const MODEL_GRADED_ASSERTION_TYPES = new Set([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'pi',
   'search-rubric',
   'trajectory:goal-success',
 ]);

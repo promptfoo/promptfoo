@@ -62,7 +62,7 @@ describe('provider catalog enforcement', () => {
     });
   });
 
-  it.each(['llm-rubric', 'not-factuality', 'trajectory:goal-success'])(
+  it.each(['llm-rubric', 'not-factuality', 'pi', 'trajectory:goal-success'])(
     'rejects implicit grading for %s assertions',
     (type) => {
       expect(
