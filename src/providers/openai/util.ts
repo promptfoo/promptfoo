@@ -463,8 +463,7 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   })),
 ];
 
-// Retired models are retained only for historical cost calculations and compatible gateways.
-// Keep them out of the active catalogs above. Shutdowns verified on 2026-09-04:
+// Billing only; these models were retired as of 2026-09-04.
 // https://developers.openai.com/api/docs/deprecations
 const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
   ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
@@ -481,13 +480,13 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 0.6 / 1e6,
     },
   })),
-  ...['chatgpt-4o-latest'].map((model) => ({
-    id: model,
+  {
+    id: 'chatgpt-4o-latest',
     cost: {
       input: 5 / 1e6,
       output: 15 / 1e6,
     },
-  })),
+  },
   ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
@@ -502,13 +501,13 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 4.4 / 1e6,
     },
   })),
-  ...['gpt-4-0314'].map((model) => ({
-    id: model,
+  {
+    id: 'gpt-4-0314',
     cost: {
       input: 30 / 1e6,
       output: 60 / 1e6,
     },
-  })),
+  },
   ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
     id: model,
     cost: {
@@ -535,86 +534,35 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 2 / 1e6,
     },
   })),
-  ...['gpt-3.5-turbo-16k-0613'].map((model) => ({
-    id: model,
+  {
+    id: 'gpt-3.5-turbo-16k-0613',
     cost: {
       input: 3 / 1e6,
       output: 4 / 1e6,
     },
-  })),
-  ...['gpt-5-chat', 'gpt-5-chat-latest'].map((model) => ({
+  },
+  ...[
+    'gpt-5-chat',
+    'gpt-5-chat-latest',
+    'gpt-5.1-chat-latest',
+    'gpt-5-codex',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,
       output: 10 / 1e6,
     },
   })),
-  ...['codex-mini-latest'].map((model) => ({
-    id: model,
+  {
+    id: 'codex-mini-latest',
     cost: {
       input: 1.5 / 1e6,
       output: 6.0 / 1e6,
     },
-  })),
-  ...['gpt-5.1-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5.2-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.3-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-audio-mini-2025-10-06'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  })),
-  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 12 / 1e6,
-    },
-  })),
-  ...['gpt-5-codex'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-5.2-codex'].map((model) => ({
+  },
+  ...['gpt-5.2-chat-latest', 'gpt-5.3-chat-latest', 'gpt-5.2-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
@@ -622,8 +570,7 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
     },
   })),
   {
-    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    type: 'chat',
+    id: 'gpt-audio-mini-2025-10-06',
     cost: {
       input: 0.6 / 1e6,
       output: 2.4 / 1e6,
@@ -631,7 +578,21 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       audioOutput: 20 / 1e6,
     },
   },
-  ...['gpt-realtime-mini-2025-10-06'].map((model) => ({
+  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
+  {
+    id: 'gpt-5.1-codex-mini',
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
+    },
+  },
+  ...['gpt-4o-mini-realtime-preview-2024-12-17', 'gpt-realtime-mini-2025-10-06'].map((model) => ({
     id: model,
     type: 'chat',
     cost: {
@@ -639,6 +600,20 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 2.4 / 1e6,
       audioInput: 10 / 1e6,
       audioOutput: 20 / 1e6,
+    },
+  })),
+  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6,
+      output: 40 / 1e6,
+    },
+  })),
+  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
     },
   })),
 ];
@@ -665,24 +640,6 @@ const RETIRED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
       output: 0.6 / 1e6,
       audioInput: 10 / 1e6,
       audioOutput: 20 / 1e6,
-    },
-  })),
-];
-
-// Retired July 23, 2026; kept for historical billing.
-const RETIRED_OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
-  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1e6,
-      output: 40 / 1e6,
-    },
-  })),
-  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6,
-      output: 8 / 1e6,
     },
   })),
 ];
@@ -846,7 +803,6 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_MODELS,
   ...OPENAI_CODEX_ONLY_MODELS,
-  ...RETIRED_OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint

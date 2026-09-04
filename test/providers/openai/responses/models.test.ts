@@ -15,6 +15,32 @@ const unsupportedAudioModels = [
 ] as const;
 
 describe('OpenAiResponsesProvider model registry', () => {
+  it.each([
+    'codex-mini-latest',
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+    'gpt-5-chat',
+    'gpt-5-chat-latest',
+    'gpt-5-codex',
+    'gpt-5.1-chat-latest',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.3-chat-latest',
+    'o1-mini',
+    'o1-mini-2024-09-12',
+    'o1-preview',
+    'o1-preview-2024-09-12',
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
+  ])('does not advertise retired model %s', (model) => {
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
+  });
+
   it('should support various model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
@@ -24,13 +50,6 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-2025-04-14');
     // GPT-5 models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5-chat-latest');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'gpt-5.2-chat-latest',
-    );
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'gpt-5.3-chat-latest',
-    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6-sol');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6-terra');
@@ -60,7 +79,6 @@ describe('OpenAiResponsesProvider model registry', () => {
     for (const model of unsupportedAudioModels) {
       expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
     }
-    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
 
   it('should support the latest o-series reasoning models', async () => {
@@ -85,7 +103,6 @@ describe('OpenAiResponsesProvider model registry', () => {
 
   it('should support gpt-5 and its variants', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5-chat-latest');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-mini');
   });
@@ -97,14 +114,6 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-05-13');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-2024-12-17');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('o1-preview');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'o1-preview-2024-09-12',
-    );
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('o1-mini');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'o1-mini-2024-09-12',
-    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro-2025-03-19');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
@@ -115,31 +124,17 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
-    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('codex-mini-latest');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-codex-mini');
     // GPT-5.1 models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-nano');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-codex');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.1-codex-max');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'gpt-5.1-codex-mini',
-    );
     // GPT-5.2 models
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'gpt-5.2-chat-latest',
-    );
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-5.2-codex');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.2-pro-2025-12-11',
     );
     // GPT-5.3 models
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'gpt-5.3-chat-latest',
-    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-codex');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
       'gpt-5.3-codex-spark',
@@ -175,16 +170,5 @@ describe('OpenAiResponsesProvider model registry', () => {
     for (const model of unsupportedAudioModels) {
       expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
     }
-    // Deep research models
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('o3-deep-research');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'o3-deep-research-2025-06-26',
-    );
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'o4-mini-deep-research',
-    );
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(
-      'o4-mini-deep-research-2025-06-26',
-    );
   });
 });

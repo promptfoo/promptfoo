@@ -993,6 +993,13 @@ describe('formatOpenAiError', () => {
 });
 
 describe('OpenAI model catalogs', () => {
+  const activeModels = [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_RESPONSES_ONLY_MODELS,
+    ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+  ].map((candidate) => candidate.id);
+
   // Shutdowns verified against https://developers.openai.com/api/docs/deprecations on 2026-09-04.
   it.each([
     'chatgpt-4o-latest',
@@ -1036,13 +1043,6 @@ describe('OpenAI model catalogs', () => {
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
   ])('does not advertise retired model %s', (model) => {
-    const activeModels = [
-      ...OPENAI_CHAT_MODELS,
-      ...OPENAI_RESPONSES_ONLY_MODELS,
-      ...OPENAI_REALTIME_MODELS,
-      ...OPENAI_COMPLETION_MODELS,
-    ].map((candidate) => candidate.id);
-
     expect(activeModels).not.toContain(model);
     // Removing suggestions must not erase historical cost estimates.
     expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
@@ -1068,13 +1068,6 @@ describe('OpenAI model catalogs', () => {
     'gpt-realtime-mini',
     'gpt-realtime-mini-2025-12-15',
   ])('retains model %s before its announced shutdown', (model) => {
-    const activeModels = [
-      ...OPENAI_CHAT_MODELS,
-      ...OPENAI_RESPONSES_ONLY_MODELS,
-      ...OPENAI_REALTIME_MODELS,
-      ...OPENAI_COMPLETION_MODELS,
-    ].map((candidate) => candidate.id);
-
     expect(activeModels).toContain(model);
   });
 });
