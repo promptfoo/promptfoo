@@ -4,10 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/node', () => ({
-  evaluateWithSource: vi.fn().mockResolvedValue({
-    toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
-    id: 'eval-id',
-  }),
+  evaluateWithSource: vi.fn(),
 }));
 vi.mock('../../../src/models/eval', () => ({
   default: { findById: vi.fn() },

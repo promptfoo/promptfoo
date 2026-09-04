@@ -1014,7 +1014,7 @@ describe('EvaluateTestSuiteCreator', () => {
       providers: [approvedProvider],
       prompts: ['Prompt'],
       tests: [{ vars: { topic: 'test' } }],
-      ...override,
+      ...(override as Partial<UnifiedConfig>),
     });
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
