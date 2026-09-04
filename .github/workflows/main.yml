@@ -216,11 +216,13 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -234,9 +236,15 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@11.18.0
 
-      - name: Install Dependencies
+      # Madge's TypeScript peer dependency differs from the repository's compiler.
+      - name: Install CI tools
         run: |
-          npm ci
+          npm install --prefix "$RUNNER_TEMP/promptfoo-ci-tools" --ignore-scripts --no-audit \
+            check-dependency-version-consistency@6.0.0 madge@8.0.0 lockfile-lint@5.0.1
+
+      - name: Install Dependencies
+        # Static checks do not need browser downloads or native addon builds.
+        run: npm ci --ignore-scripts --no-audit
 
       - name: Run Biome CI
         run: |
@@ -248,12 +256,12 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npx check-dependency-version-consistency
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/check-dependency-version-consistency"
 
       - name: Check for circular dependencies
         run: |
           # shellcheck disable=SC2046
-          npx madge $(git ls-files '*.ts') --circular
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/madge" $(git ls-files '*.ts') --circular
 
       - name: Check architecture boundaries
         run: |
@@ -265,7 +273,7 @@ jobs:
 
       - name: Validate lockfile integrity
         run: |
-          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/lockfile-lint" --path package-lock.json --allowed-hosts npm --validate-https
 
   shell-format:
     name: Shell Format Check
@@ -390,11 +398,13 @@ jobs:
 
   code-scan-action:
     name: Code Scan Action
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -410,11 +420,12 @@ jobs:
 
       # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
       - name: Install Root Dependencies
-        run: npm ci
+        # Type checking and bundling do not need browser downloads or native addon builds.
+        run: npm ci --ignore-scripts --no-audit
 
       - name: Install Code Scan Action Dependencies
         working-directory: code-scan-action
-        run: npm install
+        run: npm ci --ignore-scripts --no-audit
 
       - name: Type Check
         working-directory: code-scan-action
