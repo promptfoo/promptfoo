@@ -1,7 +1,9 @@
+import { readFileSync } from 'fs';
 import fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { Command } from 'commander';
+import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -43,7 +45,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -85,6 +87,10 @@ vi.mock('../../src/util/cloud', async () => ({
   getEvalConfigFromCloud: vi.fn(),
 }));
 vi.mock('fs');
+vi.mock('glob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob')>()),
+  globSync: vi.fn(),
+}));
 vi.mock('path', async () => {
   const actualPath = await vi.importActual('path');
   return {
@@ -98,6 +104,7 @@ const chokidarMocks = vi.hoisted(() => {
       handlers.set(event, handler);
       return watcher;
     }),
+    close: vi.fn(async () => {}),
   };
 
   return {
@@ -115,6 +122,7 @@ vi.mock('chokidar', () => ({
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
+  maybeReadConfig: vi.fn(),
 }));
 vi.mock('../../src/util/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/index')>()),
@@ -184,6 +192,9 @@ describe('evalCommand', () => {
         return chokidarMocks.watcher;
       });
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
+    vi.mocked(globSync).mockReset().mockReturnValue([]);
+    vi.mocked(readFileSync).mockReset();
+    vi.mocked(maybeReadConfig).mockReset().mockResolvedValue(undefined);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -477,14 +488,17 @@ describe('evalCommand', () => {
     });
   });
 
-  it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
-    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
-    cmd.exitOverride();
+  it.each(['invalid', '=value', ' =value', ' = ', 'key =value', 'key\t=value'])(
+    'should reject malformed --tag value %s',
+    (tagValue) => {
+      const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+      cmd.exitOverride();
 
-    expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
-      '--tag must be specified in key=value format.',
-    );
-  });
+      expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    },
+  );
 
   it('should load cloud eval config when config is a single UUID', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
@@ -536,6 +550,391 @@ describe('evalCommand', () => {
       '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
     );
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  describe('watch paths for tests', () => {
+    // doEval derives the base path from the config file location
+    // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
+    const watchBase = path.dirname(defaultConfigPath);
+
+    // doEval() -> runEvaluation() calls loadDefaultConfig(), which probes the default
+    // config filenames through the same `maybeReadConfig` mock these tests assert on and
+    // memoizes the answer in a module-level cache. Whether that probe runs at all -- and
+    // whether it "finds" the mocked config and rewrites cmdObj.config with it -- then
+    // depends on which sibling test warmed the cache first. Pin it to "no default config
+    // found" so every test here drives the same path and only the watch-path recovery
+    // branch under test can reach `maybeReadConfig`.
+    let loadDefaultConfigSpy: ReturnType<typeof vi.spyOn>;
+
+    afterEach(() => {
+      loadDefaultConfigSpy.mockRestore();
+    });
+
+    beforeEach(() => {
+      loadDefaultConfigSpy = vi
+        .spyOn(defaultConfigModule, 'loadDefaultConfig')
+        .mockResolvedValue({ defaultConfig: {}, defaultConfigPath: undefined });
+      // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
+      // restore only its default in `finally`, which leaves the queue intact if the
+      // test bails early. A leftover "missing API keys" value fails the run before it
+      // reaches the watcher, which file order hides and CI's shuffled order does not.
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    async function watchedPathsFor(
+      resolvedTests: UnifiedConfig['tests'],
+      rawConfigTests?: UnifiedConfig['tests'],
+    ) {
+      const config = { prompts: [], providers: [], tests: resolvedTests } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      if (rawConfigTests !== undefined) {
+        // doEval now reads the config file directly rather than through readConfig(),
+        // so that a .js config is not executed a second time. Drive it the same way.
+        const resolvedConfig = path.resolve(process.cwd(), defaultConfigPath);
+        // testCaseReader also uses globSync to resolve test references, so only answer
+        // for the config path here and leave test references to fall through unmatched.
+        vi.mocked(globSync).mockImplementation((pattern) =>
+          pattern === resolvedConfig ? [resolvedConfig] : [],
+        );
+        vi.mocked(maybeReadConfig).mockResolvedValue({
+          prompts: [],
+          providers: [],
+          tests: rawConfigTests,
+        } as UnifiedConfig);
+      }
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+      // The shared chokidar mock is declared as `vi.fn(() => watcher)`, so its
+      // recorded call args type as an empty tuple. Read the first argument through
+      // `unknown` rather than widening the shared mock's signature.
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      return lastCall?.[0] ?? [];
+    }
+
+    it('recovers a scalar reference that combineConfigs already expanded', async () => {
+      // This is the shape that matters. With an explicit -c/--config, resolveConfigs
+      // has already run combineConfigs(), which reads `tests: file://cases.yaml` and
+      // replaces it with concrete test cases. By the time watch mode looks at
+      // `config.tests` the reference is gone, so the file it came from has to be
+      // recovered from the config on disk or it is never watched.
+      const watched = await watchedPathsFor(
+        [{ vars: { question: 'expanded from cases.yaml' } }] as UnifiedConfig['tests'],
+        'file://cases.yaml' as UnifiedConfig['tests'],
+      );
+      expect(watched).toContain(path.resolve(watchBase, 'cases.yaml'));
+    });
+
+    it('recovers a generator object that combineConfigs already expanded', async () => {
+      const watched = await watchedPathsFor(
+        [{ vars: { question: 'generated' } }] as UnifiedConfig['tests'],
+        { path: 'file://gen.py:make_tests' } as unknown as UnifiedConfig['tests'],
+      );
+      expect(watched).toContain(path.resolve(watchBase, 'gen.py'));
+      expect(watched).not.toContain(path.resolve(watchBase, 'gen.py:make_tests'));
+    });
+
+    it('watches vars files from the array form, which survives combineConfigs', async () => {
+      const watched = await watchedPathsFor([
+        { vars: { data: 'file://vars.csv' } },
+      ] as UnifiedConfig['tests']);
+      expect(watched).toContain(path.resolve(watchBase, 'vars.csv'));
+    });
+
+    it('watches command-line tests relative to the working directory', async () => {
+      // resolveConfigs loads cmdObj.tests with no base path, so it resolves against
+      // cwd rather than the directory holding the config file.
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      await doEval(
+        { watch: true, write: false, tests: 'file://cases.csv' },
+        config,
+        defaultConfigPath,
+        {},
+      );
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cases.csv'));
+    });
+
+    it('does not re-read an executable config, which would run it twice', async () => {
+      // readConfig() loads a .js config through importModule(), which falls back to
+      // vm.runInContext() for CommonJS and is not cached. Reading it again here to
+      // recover the raw `tests` value would execute the user's config a second time,
+      // so executable formats are skipped.
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      vi.mocked(globSync).mockImplementation((pattern) => [String(pattern)]);
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+
+      await doEval(
+        { watch: true, write: false, config: ['promptfooconfig.js'] },
+        config,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(maybeReadConfig).not.toHaveBeenCalled();
+    });
+
+    it('expands a --config glob before recovering raw tests', async () => {
+      // combineConfigs() expands config globs, so handing the literal wildcard to the
+      // reader would silently recover nothing.
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      const matched = path.resolve(process.cwd(), 'configs/a.yaml');
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        String(pattern).includes('*') ? [matched] : [],
+      );
+      vi.mocked(maybeReadConfig).mockResolvedValue({
+        prompts: [],
+        providers: [],
+        tests: 'file://cases.yaml',
+      } as UnifiedConfig);
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+
+      await doEval(
+        { watch: true, write: false, config: ['configs/*.yaml'] },
+        config,
+        defaultConfigPath,
+        {},
+      );
+
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      expect(lastCall?.[0] ?? []).toContain(path.resolve(path.dirname(matched), 'cases.yaml'));
+    });
+
+    it('does not recover config test sources when --tests overrides them', async () => {
+      // resolveConfigs() uses cmdObj.tests in place of the config's own tests, so
+      // watching the config's test sources would rerun the evaluation, and any paid
+      // provider calls with it, on an edit to a file that is not part of the run.
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+
+      await doEval(
+        { watch: true, write: false, tests: 'file://cli-cases.csv' },
+        config,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(maybeReadConfig).not.toHaveBeenCalled();
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cli-cases.csv'));
+    });
+
+    it('does not recover config test sources when --vars overrides them', async () => {
+      // `--vars` is a documented alias for `--tests` and replaces the config's tests
+      // the same way (see resolveConfigs), so it needs the same guard. Unlike --tests
+      // it keeps the config's base path.
+      const config = { prompts: [], providers: [], tests: 'cli-cases.csv' } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      // Make the config re-read reachable, so the assertion below proves the guard
+      // skipped it rather than the glob mock simply finding no config to read.
+      const resolvedConfig = path.resolve(process.cwd(), defaultConfigPath);
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        pattern === resolvedConfig ? [resolvedConfig] : [],
+      );
+      vi.mocked(maybeReadConfig).mockResolvedValue({
+        prompts: [],
+        providers: [],
+        tests: 'file://config-cases.yaml',
+      } as UnifiedConfig);
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+
+      await doEval(
+        { watch: true, write: false, vars: 'cli-cases.csv' },
+        config,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(maybeReadConfig).not.toHaveBeenCalled();
+      const watched = (chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]])[0];
+      expect(watched).toContain(path.resolve(watchBase, 'cli-cases.csv'));
+      expect(watched).not.toContain(path.resolve(watchBase, 'config-cases.yaml'));
+    });
+
+    it('tolerates tests being absent', async () => {
+      const watched = await watchedPathsFor(undefined);
+      expect(watched).toContain(defaultConfigPath);
+    });
+  });
+
+  describe('watch mode process lifecycle', () => {
+    // main() resolves as soon as the eval action handler returns, and its `finally`
+    // then runs shutdownGracefully(), which closes the database and HTTP dispatcher
+    // and calls process.exit() 100ms later. If doEval returns while the watcher is
+    // still running, that tears down everything a re-run needs and kills the process
+    // before chokidar can report a single change -- which is what made `--watch` a
+    // no-op in the shipped CLI.
+
+    /** Resolves when doEval reaches chokidar.watch(). */
+    const watcherCreated = () =>
+      new Promise<void>((resolve) => {
+        chokidarMocks.watch.mockImplementation(() => {
+          resolve();
+          return chokidarMocks.watcher;
+        });
+      });
+
+    /** Every doEval this block starts, so afterEach can guarantee none outlives its test. */
+    let started: Promise<unknown>[] = [];
+
+    const startWatch = (evaluateOptions: Record<string, unknown>) => {
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: path.dirname(defaultConfigPath),
+      });
+      // Own every mock this path reads. Sibling tests queue one-shot values on these
+      // shared mocks and restore only the default, so a leftover can fail the run
+      // before it reaches the watcher. mockReset() drains the queue; clearAllMocks()
+      // in the outer beforeEach does not. Queue one-shot values here in turn, so this
+      // block leaks nothing forward either.
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
+      const run = doEval(
+        { watch: true, write: false },
+        config,
+        defaultConfigPath,
+        evaluateOptions as never,
+      );
+      started.push(run);
+      return run;
+    };
+
+    /**
+     * Wait for the watcher, failing loudly if doEval settles first: a run that bails
+     * early never installs the handler, and racing here reports that instead of
+     * hanging until the suite timeout.
+     */
+    const startWatching = async (evaluateOptions: Record<string, unknown>) => {
+      const created = watcherCreated();
+      const pending = startWatch(evaluateOptions);
+      const bailedEarly = pending.then(() => {
+        throw new Error('doEval returned before it created a watcher');
+      });
+      // When the watcher wins the race nothing awaits this branch, so keep its
+      // eventual rejection from surfacing as an unhandled rejection.
+      bailedEarly.catch(() => {});
+      await Promise.race([created, bailedEarly]);
+      // Wrapped so callers await the race, not the long-lived doEval promise.
+      return { pending };
+    };
+
+    const hasSettled = async (promise: Promise<unknown>) => {
+      let done = false;
+      void promise.then(() => {
+        done = true;
+      });
+      // Drain what is already queued; the watcher is up by the time this is called.
+      await new Promise((resolve) => setImmediate(resolve));
+      return done;
+    };
+
+    /** The listeners watch mode installed, without disturbing anyone else's. */
+    const installedSince = (before: NodeJS.SignalsListener[]) =>
+      process.listeners('SIGINT').filter((listener) => !before.includes(listener));
+
+    let before: NodeJS.SignalsListener[];
+
+    beforeEach(() => {
+      before = process.listeners('SIGINT');
+      started = [];
+    });
+
+    afterEach(async () => {
+      // Signal rather than just unregister. Watch mode only returns on a signal, so
+      // removing the listener would strand doEval forever -- and a stranded run keeps
+      // executing, landing its mock calls inside whichever test comes next. A failing
+      // test never reaches its own signal, so this has to happen here.
+      for (const listener of installedSince(before)) {
+        listener('SIGINT');
+      }
+      await Promise.allSettled(started);
+      // Anything still registered after that is not going to settle; drop it so it
+      // cannot fire during another test. vitest installs its own handler, so only
+      // remove what this block added.
+      for (const listener of installedSince(before)) {
+        process.removeListener('SIGINT', listener);
+      }
+    });
+
+    it('does not resolve while the CLI is watching, and resolves on SIGINT', async () => {
+      const { pending } = await startWatching({ eventSource: 'cli' });
+
+      expect(await hasSettled(pending)).toBe(false);
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+
+      // Call watch mode's own handler rather than process.emit('SIGINT'), which
+      // would also run vitest's.
+      const [onSignal] = installedSince(before);
+      expect(onSignal).toBeDefined();
+      onSignal('SIGINT');
+      await pending;
+
+      expect(chokidarMocks.watcher.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes its signal handlers so a second Ctrl-C terminates', async () => {
+      const { pending } = await startWatching({ eventSource: 'cli' });
+      expect(installedSince(before)).toHaveLength(1);
+
+      const [onSignal] = installedSince(before);
+      onSignal('SIGINT');
+      await pending;
+
+      expect(installedSince(before)).toHaveLength(0);
+    });
+
+    it('still resolves immediately for library callers, which own their own lifetime', async () => {
+      // isCliEventSource() gates process-lifecycle behavior; a library embedder
+      // decides when to stop watching, so doEval must not block on a signal.
+      await expect(startWatch({})).resolves.toBeDefined();
+      expect(chokidarMocks.watch).toHaveBeenCalled();
+      expect(chokidarMocks.watcher.close).not.toHaveBeenCalled();
+      expect(installedSince(before)).toHaveLength(0);
+    });
   });
 
   it('should keep watching after config resolution fails on a file change', async () => {

@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.0",
+  "version": "0.122.2",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -116,7 +116,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.11"
+      "@asamuzakjp/css-color": "6.0.7"
     },
     "storybook": {
       "esbuild": "0.28.2"
@@ -214,14 +214,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.109.2",
-    "dompurify": "3.4.13",
+    "dompurify": "3.4.14",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.13"
+      "dompurify": "3.4.14"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.233",
+    "@anthropic-ai/claude-agent-sdk": "0.3.241",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -231,10 +231,10 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.8",
+    "@biomejs/biome": "2.5.10",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.4.0",
+    "@langfuse/client": "^5.10.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -260,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.144.0",
+    "oxc-parser": "^0.146.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.233",
+    "@anthropic-ai/claude-agent-sdk": "0.3.241",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -293,23 +293,24 @@
     "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.4.0",
+    "@langfuse/client": "^5.10.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
-    "@opencode-ai/sdk": "^1.18.18",
+    "@openai/codex-security": "^0.1.18",
+    "@opencode-ai/sdk": "^1.18.21",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.62.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.62.5",
     "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.16.0",
-    "@swc/core-darwin-arm64": "^1.16.0",
-    "@swc/core-darwin-x64": "^1.16.0",
-    "@swc/core-linux-x64-gnu": "^1.16.0",
-    "@swc/core-linux-x64-musl": "^1.16.0",
-    "@swc/core-win32-x64-msvc": "^1.16.0",
+    "@swc/core": "^1.16.1",
+    "@swc/core-darwin-arm64": "^1.16.1",
+    "@swc/core-darwin-x64": "^1.16.1",
+    "@swc/core-linux-x64-gnu": "^1.16.1",
+    "@swc/core-linux-x64-musl": "^1.16.1",
+    "@swc/core-win32-x64-msvc": "^1.16.1",
     "google-auth-library": "^11.0.2",
-    "hono": "^4.13.2",
+    "hono": "^4.13.3",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
@@ -322,12 +323,12 @@
     "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.117.1",
+    "@anthropic-ai/sdk": "0.120.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.0",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
-    "@inquirer/core": "^11.1.5",
+    "@inquirer/core": "^12.0.0",
     "@inquirer/editor": "^5.0.8",
     "@inquirer/input": "^5.0.8",
     "@inquirer/search": "^4.1.8",
@@ -341,7 +342,7 @@
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.190",
+    "ai": "^6.0.264",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",

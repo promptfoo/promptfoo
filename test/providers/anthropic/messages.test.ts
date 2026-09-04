@@ -3923,70 +3923,110 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5', 'claude-mythos-5'])('%s model', (model) => {
-    const mockResponse = (modelName: string) =>
-      ({
-        content: [{ type: 'text', text: 'Response' }],
-        model: modelName,
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      }) as Anthropic.Messages.Message;
+  describe.each(['claude-fable-5', 'claude-mythos-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+    '%s model',
+    (model) => {
+      const mockResponse = (modelName: string) =>
+        ({
+          content: [{ type: 'text', text: 'Response' }],
+          model: modelName,
+          id: 'test-id',
+          role: 'assistant',
+          stop_reason: 'end_turn',
+          stop_details: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }) as Anthropic.Messages.Message;
 
-    it('is accepted as a known model and uses adaptive-safe request parameters', async () => {
-      const warnSpy = vi.spyOn(logger, 'warn');
+      it('is accepted as a known model and uses adaptive-safe request parameters', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const provider = createProvider(model, {
+          config: {
+            max_tokens: 4096,
+            temperature: 0.5,
+            top_p: 0.9,
+            top_k: 40,
+            thinking: { type: 'enabled', budget_tokens: 2048, display: 'summarized' },
+          },
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResponse(model));
+
+        await provider.callApi('Test prompt');
+
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params.model).toBe(model);
+        expect(params.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+        expect(params).not.toHaveProperty('temperature');
+        expect(params).not.toHaveProperty('top_p');
+        expect(params).not.toHaveProperty('top_k');
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using unknown'));
+        // The per-call thinking-incompatibility warnings ("temperature/top_k is
+        // incompatible with extended thinking...") must not fire when sampling
+        // params are deprecated at the model level — the deduped model-level
+        // warning below covers the omission instead.
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('incompatible with extended thinking'),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'temperature, top_p, and top_k are not supported on Claude Fable',
+          ),
+        );
+      });
+
+      it('omits unsupported disabled thinking and treats adaptive thinking as always on', async () => {
+        const provider = createProvider(model, { config: { thinking: { type: 'disabled' } } });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResponse(model));
+
+        await provider.callApi('Test prompt');
+
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('thinking');
+        expect(params).not.toHaveProperty('temperature');
+        expect(params.max_tokens).toBe(2048);
+      });
+    },
+  );
+
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])('%s tool choice', (model) => {
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+      { type: 'none' as const },
+    ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
       const provider = createProvider(model, {
         config: {
-          max_tokens: 4096,
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'enabled', budget_tokens: 2048, display: 'summarized' },
+          tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
+          tool_choice,
+          thinking: { type: 'adaptive' },
         },
       });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue(mockResponse(model));
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-51',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
 
-      await provider.callApi('Test prompt');
+      await provider.callApi('Check the weather');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params.model).toBe(model);
-      expect(params.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
-      expect(params).not.toHaveProperty('temperature');
-      expect(params).not.toHaveProperty('top_p');
-      expect(params).not.toHaveProperty('top_k');
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using unknown'));
-      // The per-call thinking-incompatibility warnings ("temperature/top_k is
-      // incompatible with extended thinking...") must not fire when sampling
-      // params are deprecated at the model level — the deduped model-level
-      // warning below covers the omission instead.
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('incompatible with extended thinking'),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5',
-        ),
-      );
-    });
-
-    it('omits unsupported disabled thinking and treats adaptive thinking as always on', async () => {
-      const provider = createProvider(model, { config: { thinking: { type: 'disabled' } } });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue(mockResponse(model));
-
-      await provider.callApi('Test prompt');
-
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params).not.toHaveProperty('thinking');
-      expect(params).not.toHaveProperty('temperature');
-      expect(params.max_tokens).toBe(2048);
+      const params = createSpy.mock.calls[0][0];
+      expect(params.tools).toHaveLength(1);
+      if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
+        expect(params).not.toHaveProperty('tool_choice');
+      } else {
+        expect(params.tool_choice).toEqual(tool_choice);
+      }
     });
   });
 
