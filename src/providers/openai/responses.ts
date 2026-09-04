@@ -1079,6 +1079,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  /**
+   * Resolve the credential used for one request. Most OpenAI-compatible providers have a static
+   * API key, but subclasses may need an asynchronous request-scoped credential (for example, a
+   * short-lived cloud-provider bearer token).
+   */
+  protected async getApiKeyForRequest(): Promise<string | undefined> {
+    return this.getApiKey();
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1087,7 +1096,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if (callApiOptions?.abortSignal?.aborted) {
       throw getAbortError(callApiOptions.abortSignal);
     }
-    if (this.requiresApiKey() && !this.getApiKey()) {
+    const apiKey = await this.getApiKeyForRequest();
+    if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
@@ -1122,10 +1132,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return withGenAISpan(
       { ...spanContext, openaiApiType: 'responses' },
       () =>
-        this.callApiInternal(context, {
-          ...resolved,
-          abortSignal: callApiOptions?.abortSignal,
-        }),
+        this.callApiInternal(
+          context,
+          { ...resolved, abortSignal: callApiOptions?.abortSignal },
+          apiKey,
+        ),
       extractProviderResponseAttributes,
     );
   }
@@ -1136,6 +1147,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
     // is already baked into `prepared.body`, so it is not needed here.
     prepared: { body: any; config: any; abortSignal?: AbortSignal },
+    apiKey: string | undefined,
   ): Promise<ProviderResponse> {
     const { body, config, abortSignal } = prepared;
 
@@ -1205,8 +1217,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         method: 'POST',
         headers: {
           ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
-          ...(this.getApiKey() && !hasCustomHeader('authorization')
-            ? { Authorization: `Bearer ${this.getApiKey()}` }
+          ...(apiKey && !hasCustomHeader('authorization')
+            ? { Authorization: `Bearer ${apiKey}` }
             : {}),
           ...customHeaders,
         },
