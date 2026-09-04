@@ -32,7 +32,7 @@ assert:
 
 - `value` - Expected answer/ground truth
 - `context` - Retrieved text (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 0)
+- `threshold` - Minimum score 0-1 (default: 0.5)
 
 ### Full example
 
