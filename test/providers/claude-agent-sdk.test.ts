@@ -1394,7 +1394,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
     describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
-        error: SDKAssistantMessageError | (string & {}) | undefined,
+        error: SDKAssistantMessageError | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
       ): Partial<SDKMessage> => ({
         type: 'assistant',
@@ -1403,7 +1403,7 @@ describe('ClaudeCodeSDKProvider', () => {
         uuid: (opts.uuid ??
           '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
         session_id: 'test-session-123',
-        ...(error ? { error: error as any } : {}),
+        ...(error ? { error } : {}),
         ...(opts.request_id ? { request_id: opts.request_id } : {}),
         ...(opts.subagent_type ? { subagent_type: opts.subagent_type } : {}),
       });

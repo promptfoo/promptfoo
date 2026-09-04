@@ -1388,6 +1388,34 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKey).toBe('secret');
   });
 
+  it('resolves env templates inside per-server MCP env maps', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_MCP_TOKEN: 'resolved-secret',
+        } as any,
+        config: {
+          mcp: {
+            enabled: true,
+            servers: [
+              {
+                name: 'local',
+                command: 'node',
+                args: ['server.js'],
+                env: { SERVER_TOKEN: '{{ env.MY_MCP_TOKEN }}', LOG_LEVEL: 'debug' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(provider.config.mcp.servers[0].env).toEqual({
+      SERVER_TOKEN: 'resolved-secret',
+      LOG_LEVEL: 'debug',
+    });
+  });
+
   it('passes provider env overrides to provider instances', async () => {
     const provider = (await loadApiProvider('openai:chat', {
       options: {

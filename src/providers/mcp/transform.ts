@@ -227,7 +227,7 @@ async function transformMCPServerConfigToClaudeCode(
       type: 'stdio',
       command: config.command,
       args: config.args ?? [],
-      ...(config.env !== undefined ? { env: config.env } : {}),
+      ...(config.env && { env: config.env }),
     };
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
@@ -236,7 +236,7 @@ async function transformMCPServerConfigToClaudeCode(
       type: 'stdio',
       command,
       args: [config.path],
-      ...(config.env !== undefined ? { env: config.env } : {}),
+      ...(config.env && { env: config.env }),
     };
   } else {
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');

@@ -243,6 +243,57 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it('should merge per-server env for path-based stdio servers', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { name: 'scripted', path: 'script.js', env: { CUSTOM_MCP_VAR: 'custom_value' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: process.execPath,
+        args: ['script.js'],
+        env: { ...(process.env as Record<string, string>), CUSTOM_MCP_VAR: 'custom_value' },
+      });
+      await mcpClient.cleanup();
+    });
+
+    it('should let per-server env override an inherited process.env value', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      vi.stubEnv('PROMPTFOO_MCP_ENV_FIXTURE', 'inherited');
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'override',
+          command: 'npm',
+          args: ['start'],
+          env: { PROMPTFOO_MCP_ENV_FIXTURE: 'per-server' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      const passedEnv = vi.mocked(StdioClientTransport).mock.calls[0][0].env as Record<
+        string,
+        string
+      >;
+      expect(passedEnv.PROMPTFOO_MCP_ENV_FIXTURE).toBe('per-server');
+      // The rest of the parent environment is still inherited.
+      expect(passedEnv.PATH).toBe(process.env.PATH);
+      await mcpClient.cleanup();
+      vi.unstubAllEnvs();
+    });
+
     it('should initialize with multiple servers', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValue(undefined);

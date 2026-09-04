@@ -37,6 +37,16 @@ interface OAuthServerConfig {
 }
 
 /**
+ * Environment for a spawned stdio MCP server: the promptfoo process environment with
+ * the server's own `env` map layered on top. Per-server values win so a config can
+ * override an inherited variable (e.g. a scoped token) without unsetting the rest.
+ */
+function getStdioEnv(server: MCPServerConfig): Record<string, string> {
+  const parentEnv = process.env as Record<string, string>;
+  return server.env ? { ...parentEnv, ...server.env } : parentEnv;
+}
+
+/**
  * MCP SDK RequestOptions type for timeout configuration.
  */
 interface MCPRequestOptions {
@@ -162,9 +172,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
-          env: server.env
-            ? { ...(process.env as Record<string, string>), ...server.env }
-            : (process.env as Record<string, string>),
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.path) {
@@ -188,9 +196,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
-          env: server.env
-            ? { ...(process.env as Record<string, string>), ...server.env }
-            : (process.env as Record<string, string>),
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
