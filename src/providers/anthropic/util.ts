@@ -224,8 +224,8 @@ interface ClaudeModelFamily {
   /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
   forcedToolChoiceUnsupported?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5, Sonnet 5), so
+   * requests that never set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -271,10 +271,15 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
   },
+  // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
+  // thinking blocks and bills thinking tokens against `max_tokens` (verified live — an
+  // omitted block returned `['thinking', 'text']` with `thinking_tokens: 59`). Opus 4.7/4.8
+  // are the models where omitting it means no thinking at all.
   {
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
