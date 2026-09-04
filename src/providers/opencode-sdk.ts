@@ -1276,6 +1276,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
         'OpenCode restart_server_per_call cannot preserve persistent sessions across server restarts.',
       );
     }
+    if (config.restart_server_per_call && config.port) {
+      throw new Error(
+        'OpenCode restart_server_per_call requires an automatically allocated port; it cannot reuse a fixed port.',
+      );
+    }
 
     if (config.workspace && !config.baseUrl && !config.working_dir) {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');

@@ -1939,6 +1939,20 @@ describe('OpenCodeSDKProvider', () => {
         );
         expect(mockCreateOpencode).not.toHaveBeenCalled();
       });
+
+      it('should reject a fixed port with restart_server_per_call', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            port: 4096,
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /requires an automatically allocated port/,
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
     });
 
     describe('model and provider config', () => {
