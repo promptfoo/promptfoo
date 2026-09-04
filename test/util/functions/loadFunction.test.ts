@@ -234,20 +234,20 @@ describe('loadFunction', () => {
       expect(runPython).toHaveBeenCalledWith(mixedCasePath, 'custom_function', ['test input']);
     });
 
-    it.each([
-      '/test/resolved/file?handler=score.PY',
-      '/test/resolved/file#score.PY',
-    ])('should reject a query-like mixed-case Python path: %s', async (queryLikePath) => {
-      mockResolve.mockReturnValueOnce(queryLikePath);
+    it.each(['/test/resolved/file?handler=score.PY', '/test/resolved/file#score.PY'])(
+      'should reject a query-like mixed-case Python path: %s',
+      async (queryLikePath) => {
+        mockResolve.mockReturnValueOnce(queryLikePath);
 
-      await expect(
-        loadFunction({
-          filePath: queryLikePath,
-          functionName: 'score',
-        }),
-      ).rejects.toThrow('File must be a JavaScript');
-      expect(runPython).not.toHaveBeenCalled();
-    });
+        await expect(
+          loadFunction({
+            filePath: queryLikePath,
+            functionName: 'score',
+          }),
+        ).rejects.toThrow('File must be a JavaScript');
+        expect(runPython).not.toHaveBeenCalled();
+      },
+    );
 
     it('should use default function name for Python when none specified', async () => {
       const mockPythonResult = vi.fn();
@@ -397,15 +397,15 @@ describe('parseFileUrl', () => {
     });
   });
 
-  it.each([
-    'file://./path/to/file.PY:function_name',
-    'file://C:/path/to/file.Py:function_name',
-  ])('should parse mixed-case Python file URLs with function names: %s', (fileUrl) => {
-    expect(parseFileUrl(fileUrl)).toEqual({
-      filePath: fileUrl.slice('file://'.length, -':function_name'.length),
-      functionName: 'function_name',
-    });
-  });
+  it.each(['file://./path/to/file.PY:function_name', 'file://C:/path/to/file.Py:function_name'])(
+    'should parse mixed-case Python file URLs with function names: %s',
+    (fileUrl) => {
+      expect(parseFileUrl(fileUrl)).toEqual({
+        filePath: fileUrl.slice('file://'.length, -':function_name'.length),
+        functionName: 'function_name',
+      });
+    },
+  );
 
   it.each([
     ['file://./path/to/file.PY:评分', '评分'],

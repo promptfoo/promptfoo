@@ -182,17 +182,17 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(pythonOutput);
     });
 
-    it.each([
-      'file:///path/to/config?handler=loader.PY',
-      'file:///path/to/config#loader.PY',
-    ])('should reject query-like Python file references: %s', async (fileRef) => {
-      const resolvedPath = fileRef.slice('file://'.length);
-      vi.mocked(path.resolve).mockReturnValue(resolvedPath);
-      vi.mocked(path.extname).mockReturnValue('.PY');
+    it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(
+      'should reject query-like Python file references: %s',
+      async (fileRef) => {
+        const resolvedPath = fileRef.slice('file://'.length);
+        vi.mocked(path.resolve).mockReturnValue(resolvedPath);
+        vi.mocked(path.extname).mockReturnValue('.PY');
 
-      await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .py');
-      expect(runPython).not.toHaveBeenCalled();
-    });
+        await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .py');
+        expect(runPython).not.toHaveBeenCalled();
+      },
+    );
 
     it('should load text files correctly', async () => {
       const fileRef = 'file:///path/to/config.txt';
