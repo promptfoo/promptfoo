@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { validateProviderCatalogConfig } from '../../src/types/providerCatalogEnforcement';
+import {
+  reconcileProvidersWithCatalog,
+  validateProviderCatalogConfig,
+} from '../../src/types/providerCatalogEnforcement';
 
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -179,5 +182,24 @@ describe('provider catalog enforcement', () => {
         availableProviders,
       ),
     ).toEqual({ success: true });
+  });
+
+  it('reconciles submitted providers to canonical catalog entries and drops unknown providers', () => {
+    const canonicalProvider = approvedProviders[0];
+
+    expect(
+      reconcileProvidersWithCatalog(
+        [{ ...canonicalProvider, config: { temperature: 1 } }, { id: 'unknown' }],
+        approvedProviders,
+      ),
+    ).toEqual({
+      providers: [canonicalProvider],
+      isReconciled: false,
+    });
+
+    expect(reconcileProvidersWithCatalog([canonicalProvider], approvedProviders)).toEqual({
+      providers: [canonicalProvider],
+      isReconciled: true,
+    });
   });
 });
