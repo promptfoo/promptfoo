@@ -430,7 +430,7 @@ export function clampMaxTokensForThinkingBudget(
   if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
     return maxTokens;
   }
-  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+  return maxTokens <= thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
