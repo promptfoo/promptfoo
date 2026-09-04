@@ -147,14 +147,23 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
-    for (const server of servers) {
-      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
-      await this.connectToServer(server);
+    for (const [index, server] of servers.entries()) {
+      // Unnamed command servers may run the same executable with different env/args.
+      // Give each one a distinct map key so both connections can be used and closed.
+      const serverKey =
+        server.name ||
+        server.url ||
+        server.path ||
+        (server.command ? `${server.command}:${index}` : 'default');
+      logger.info(`connecting to server ${serverKey}`);
+      await this.connectToServer(server, serverKey);
     }
   }
 
-  private async connectToServer(server: MCPServerConfig): Promise<void> {
-    const serverKey = server.name || server.url || server.path || 'default';
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey = server.name || server.url || server.path || 'default',
+  ): Promise<void> {
     const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',

@@ -230,6 +230,34 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it('keeps unnamed zero-argument command servers distinct', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'first_tool', description: '', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'second_tool', description: '', inputSchema: {} }],
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          { command: 'mcp-server', env: { MCP_MODE: 'first' } },
+          { command: 'mcp-server', env: { MCP_MODE: 'second' } },
+        ],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'first_tool',
+        'second_tool',
+      ]);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
     it('should initialize with per-server env merged into process.env', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
