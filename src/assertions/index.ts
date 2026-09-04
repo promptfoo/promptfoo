@@ -482,6 +482,7 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  const baseType = getAssertionBaseType(assertion);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -537,6 +538,9 @@ async function runAssertionInternal({
         }
       } else {
         renderedValue = processFileReference(renderedValue);
+        if (typeof renderedValue === 'string' && MODEL_GRADED_ASSERTION_TYPES.has(baseType)) {
+          renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+        }
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -557,7 +561,11 @@ async function runAssertionInternal({
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
-          return processFileReference(v);
+          const fileValue = processFileReference(v);
+          if (typeof fileValue === 'string' && MODEL_GRADED_ASSERTION_TYPES.has(baseType)) {
+            return nunjucks.renderString(fileValue, resolvedVars);
+          }
+          return fileValue;
         }
         return nunjucks.renderString(v, resolvedVars);
       }
@@ -569,7 +577,6 @@ async function runAssertionInternal({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
