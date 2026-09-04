@@ -3625,6 +3625,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       if (usage.cached) {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
       }
+      if (usage.cacheWrite) {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.cacheWrite;
+      }
       if (usage.reasoning) {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;
       }

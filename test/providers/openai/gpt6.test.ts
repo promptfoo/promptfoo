@@ -123,6 +123,20 @@ describe('GPT-6 Astra requests', () => {
     expect(include).toHaveLength(2);
   });
 
+  it.each([
+    { api: 'Chat', Provider: OpenAiChatCompletionProvider },
+    { api: 'Responses', Provider: OpenAiResponsesProvider },
+  ])('passes the effective $api service tier to billing', async ({ Provider }) => {
+    const provider = new Provider('gpt-6-astra', {
+      config: { service_tier: null, passthrough: { service_tier: 'flex' } },
+    });
+    const { body, config } = await provider.getOpenAiBody('Summarize the job.');
+
+    expect(body.service_tier).toBe('flex');
+    expect(config.service_tier).toBe('flex');
+    expect(provider.config.service_tier).toBeNull();
+  });
+
   it.each(['none', 'minimal', 'ultra'])(
     'rejects unsupported %s reasoning from the final request',
     async (effort) => {

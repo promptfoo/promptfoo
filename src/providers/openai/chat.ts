@@ -329,7 +329,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       this.getGenAISystem() === 'openrouter',
     );
 
-    return { body, config };
+    return { body, config: { ...config, service_tier: body.service_tier } };
   }
 
   /**
