@@ -14,13 +14,15 @@ import type {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  ...['claude-fable-5', 'claude-mythos-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1e6, // $10 / MTok
-      output: 50 / 1e6, // $50 / MTok
-    },
-  })),
+  ...['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 10 / 1e6, // $10 / MTok
+        output: 50 / 1e6, // $50 / MTok
+      },
+    }),
+  ),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
@@ -191,6 +193,7 @@ export const ANTHROPIC_MODELS = [
 // `claude-sonnet-5x` is not Sonnet 5) while still matching dated snapshots like
 // `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
 const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
@@ -218,9 +221,11 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  forcedToolChoiceUnsupported?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5, Sonnet 5), so
+   * requests that never set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -242,6 +247,14 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
+    warningName: 'Claude Fable 5.1 and Claude Mythos 5.1',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+  },
+  {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
@@ -258,10 +271,15 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
   },
+  // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
+  // thinking blocks and bills thinking tokens against `max_tokens` (verified live — an
+  // omitted block returned `['thinking', 'text']` with `thinking_tokens: 59`). Opus 4.7/4.8
+  // are the models where omitting it means no thinking at all.
   {
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -305,6 +323,10 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
 /** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, not `claude-sonnet-50`). */
 export function isClaudeSonnet5Model(modelId: string): boolean {
   return CLAUDE_SONNET_5_PATTERN.test(modelId);
+}
+
+export function isForcedToolChoiceUnsupportedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'forcedToolChoiceUnsupported');
 }
 
 /**
@@ -413,7 +435,7 @@ export function clampMaxTokensForThinkingBudget(
   if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
     return maxTokens;
   }
-  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+  return maxTokens <= thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
@@ -639,17 +661,20 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1 and 10% on other models.
+ * Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
   cacheCreation: number,
+  modelId = '',
 ): number {
+  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId) ? 0.025 : 0.1;
   return (
     uncachedInputTokens * baseInputRate +
-    cacheRead * baseInputRate * 0.1 +
+    cacheRead * baseInputRate * cacheReadMultiplier +
     cacheCreation * baseInputRate * 1.25
   );
 }
@@ -703,7 +728,7 @@ export function calculateAnthropicCost(
     const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
     const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
     return withRegionalPremium(
-      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation, pricingModelName) +
         completionTokens * outputCost,
     );
   }

@@ -825,6 +825,32 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`
 
 #### Claude Fable and Mythos models
 
+[Claude Fable 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-1.html)
+and [Claude Mythos 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-1.html)
+support InvokeModel, Converse, and the Anthropic-compatible Messages API on
+**Bedrock Runtime**. Use a `us.` or `global.` inference profile:
+
+```yaml
+providers:
+  - bedrock:us.anthropic.claude-fable-5-1
+  - bedrock:converse:us.anthropic.claude-mythos-5-1
+  - id: bedrock:messages:global.anthropic.claude-mythos-5-1
+    config:
+      region: us-east-1
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+```
+
+The `us.` profile keeps routing within its geography; `global.` permits worldwide
+routing. The Messages route uses
+`https://bedrock-runtime.<region>.amazonaws.com/anthropic` and requires a Bedrock
+API key. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
+thinking and use a cache-read price of $0.25 per million tokens before regional
+premiums.
+
+Fable 5.1 also supports Mantle in **GovCloud West**: use
+`bedrock:messages:anthropic.claude-fable-5-1` with `region: us-gov-west-1`.
+Set `config.apiBaseUrl` when AWS provides a custom Anthropic endpoint.
+
 [Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
 supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
 inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
@@ -1177,7 +1203,36 @@ as shown above.
 
 ### xAI Grok Models
 
-xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
+Grok reaches Bedrock two different ways, depending on the model.
+
+**Grok 4.6** (`xai.grok-4.6`) is served **natively** by `InvokeModel`/`Converse`, but only through
+an inference profile — AWS reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]` for it, so the
+bare id has no on-demand throughput. Use `us.xai.grok-4.6` or `global.xai.grok-4.6`, which
+authenticate with **ordinary AWS credentials** (no Bedrock API key required):
+
+```yaml
+providers:
+  - id: bedrock:us.xai.grok-4.6
+    config:
+      region: us-west-2 # also available in us-east-1 and us-east-2
+      max_tokens: 4096
+      reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
+```
+
+The bare `bedrock:xai.grok-4.6` id also works and routes to the Mantle Responses API described
+below, which requires `AWS_BEARER_TOKEN_BEDROCK`. Prefer the inference-profile form unless you
+specifically want the Responses API surface.
+
+:::note
+
+Cost is not reported for either Grok path — promptfoo has no Bedrock pricing table entry for
+Grok, so the provider leaves `cost` undefined and evals show `$0`. See the
+[Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for current rates.
+
+:::
+
+**Grok 4.3** (`xai.grok-4.3`) is Mantle-only — it has no inference profile, so a prefixed id like
+`us.xai.grok-4.3` is rejected. It runs on the same Bedrock **Mantle** engine as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
 `Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional

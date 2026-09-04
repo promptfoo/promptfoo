@@ -744,23 +744,17 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
   });
 
-  it('loadApiProvider with abliteration', async () => {
-    const provider = await loadApiProvider('abliteration:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
-
-  it('loadApiProvider with abliteration chat format', async () => {
-    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
+  it.each(['abliteration', 'abliteration:chat'])(
+    'loadApiProvider with %s and a custom model',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:custom-model`);
+      expect(provider).toBeInstanceOf(AbliterationProvider);
+      expect(provider.id()).toBe('abliteration:custom-model');
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+      expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+      expect(provider.config.showThinking).toBe(false);
+    },
+  );
 
   it('loadApiProvider rejects malformed abliteration routes', async () => {
     await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
@@ -1386,6 +1380,34 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('resolves env templates inside per-server MCP env maps', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_MCP_TOKEN: 'resolved-secret',
+        } as any,
+        config: {
+          mcp: {
+            enabled: true,
+            servers: [
+              {
+                name: 'local',
+                command: 'node',
+                args: ['server.js'],
+                env: { SERVER_TOKEN: '{{ env.MY_MCP_TOKEN }}', LOG_LEVEL: 'debug' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(provider.config.mcp.servers[0].env).toEqual({
+      SERVER_TOKEN: 'resolved-secret',
+      LOG_LEVEL: 'debug',
+    });
   });
 
   it('passes provider env overrides to provider instances', async () => {
