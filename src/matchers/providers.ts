@@ -197,12 +197,18 @@ export async function getGradingProvider(
     const defaultTest = cliState.config?.defaultTest;
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
-      defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
-      defaultTestObj?.options?.provider || undefined,
+      { provider: defaultTestObj?.provider || undefined, source: 'defaultTest.provider' },
+      {
+        provider: defaultTestObj?.options?.provider?.text || undefined,
+        source: 'defaultTest.options.provider.text',
+      },
+      {
+        provider: defaultTestObj?.options?.provider || undefined,
+        source: 'defaultTest.options.provider',
+      },
     ];
 
-    const cfg = fallbackProviders.find((candidateProvider) => {
+    const fallback = fallbackProviders.find(({ provider: candidateProvider }) => {
       if (!candidateProvider) {
         return false;
       }
@@ -215,13 +221,22 @@ export async function getGradingProvider(
       return true;
     });
 
+    const cfg = fallback?.provider;
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
       if (finalProvider) {
-        logger.debug('[Grading] Using provider from defaultTest fallback', {
+        const logContext = {
           providerId: finalProvider.id(),
-        });
+        };
+        if (fallback.source === 'defaultTest.provider') {
+          logger.warn(
+            '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
+            logContext,
+          );
+        } else {
+          logger.debug('[Grading] Using provider from defaultTest fallback', logContext);
+        }
       }
     } else {
       finalProvider = defaultProvider;
