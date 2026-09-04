@@ -153,6 +153,44 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should mark provider errors as grader failures', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grader provider unavailable',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grader provider unavailable',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should mark missing grader output as a grader failure', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: '',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use the overridden factuality grading config', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
@@ -214,7 +252,7 @@ describe('matchesFactuality', () => {
     });
   });
 
-  it('should fail when JSON has invalid category', async () => {
+  it('should mark JSON with an invalid category as a grader failure', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -231,6 +269,7 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
+      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
