@@ -1281,6 +1281,7 @@ function mcpServerContainsCacheSensitiveData(server: MCPServerConfig): boolean {
   if (
     server.auth ||
     Object.keys(server.headers ?? {}).length > 0 ||
+    Object.keys(server.env ?? {}).length > 0 ||
     (server.args?.length ?? 0) > 0
   ) {
     return true;
