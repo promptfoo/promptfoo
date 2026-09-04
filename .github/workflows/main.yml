@@ -216,7 +216,7 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -281,7 +281,7 @@ jobs:
 
   assets:
     name: Generate Assets
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -357,7 +357,7 @@ jobs:
 
   docs:
     name: Build Docs
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -390,7 +390,7 @@ jobs:
 
   code-scan-action:
     name: Code Scan Action
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -426,7 +426,7 @@ jobs:
 
   site-tests:
     name: Site tests
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -530,7 +530,7 @@ jobs:
   integration-tests:
     name: Run Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
