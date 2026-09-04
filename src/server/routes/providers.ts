@@ -12,12 +12,11 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import { type ProviderOptions, validateProviderCatalogConfig } from '../../types/index';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
-
-import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
 
@@ -70,6 +69,17 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   const { providerOptions } = bodyResult.data;
+
+  if (hasCustomProviderConfig()) {
+    const catalogValidation = validateProviderCatalogConfig(
+      { providers: [providerOptions] },
+      getAvailableProviders(),
+    );
+    if (!catalogValidation.success) {
+      res.status(400).json({ error: catalogValidation.error });
+      return;
+    }
+  }
 
   try {
     const loadedProvider = await loadApiProvider(providerOptions.id, {

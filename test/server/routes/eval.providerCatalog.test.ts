@@ -100,6 +100,12 @@ describe('Eval Routes - provider catalog enforcement', () => {
       { prompts: [{ raw: 'test prompt', label: 'test prompt', config: { temperature: 1 } }] },
     ],
     ['catalog environment template', { env: { GATEWAY_KEY: 'user-controlled' } }],
+    ['implicit provider environment', { env: { OPENAI_BASE_URL: 'https://redirected.test' } }],
+    ['prompt suggestion generation', { evaluateOptions: { generateSuggestions: true } }],
+    [
+      'implicit assertion grading provider',
+      { tests: [{ assert: [{ type: 'llm-rubric', value: 'is correct' }] }] },
+    ],
   ])('rejects a direct job request with %s', async (_name, override) => {
     const response = await api.post('/api/eval/job').send({ ...minimalTestSuite, ...override });
 
@@ -112,7 +118,8 @@ describe('Eval Routes - provider catalog enforcement', () => {
     const response = await api.post('/api/eval/job').send({
       ...minimalTestSuite,
       tests: [{ assert: [{ type: 'contains', value: 'expected' }] }],
-      env: { UNRELATED: 'allowed' },
+      env: {},
+      evaluateOptions: { generateSuggestions: false, maxConcurrency: 2 },
     });
 
     expect(response.status).toBe(200);

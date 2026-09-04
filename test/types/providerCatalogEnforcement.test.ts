@@ -59,6 +59,106 @@ describe('provider catalog enforcement', () => {
     });
   });
 
+  it.each(['llm-rubric', 'not-factuality', 'trajectory:goal-success'])(
+    'rejects implicit grading for %s assertions',
+    (type) => {
+      expect(
+        validateProviderCatalogConfig(
+          configWith({ tests: [{ assert: [{ type, value: 'rubric' }] }] }),
+          approvedProviders,
+        ),
+      ).toEqual({
+        success: false,
+        error:
+          'Evaluation configuration contains provider overrides outside the administrator catalog',
+      });
+    },
+  );
+
+  it('rejects implicit grading inside nested assertion sets', () => {
+    expect(
+      validateProviderCatalogConfig(
+        configWith({
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'llm-rubric', value: 'rubric' }],
+                },
+              ],
+            },
+          ],
+        }),
+        approvedProviders,
+      ),
+    ).toEqual({
+      success: false,
+      error:
+        'Evaluation configuration contains provider overrides outside the administrator catalog',
+    });
+  });
+
+  it('allows assertions that do not invoke an implicit provider', () => {
+    expect(
+      validateProviderCatalogConfig(
+        configWith({ tests: [{ assert: [{ type: 'contains', value: 'expected' }] }] }),
+        approvedProviders,
+      ),
+    ).toEqual({ success: true });
+  });
+
+  it('rejects prompt suggestion generation that uses the default suggestions provider', () => {
+    expect(
+      validateProviderCatalogConfig(
+        configWith({ evaluateOptions: { generateSuggestions: true } }),
+        approvedProviders,
+      ),
+    ).toEqual({
+      success: false,
+      error:
+        'Evaluation configuration contains provider overrides outside the administrator catalog',
+    });
+  });
+
+  it('allows evaluate options that do not invoke an implicit provider', () => {
+    expect(
+      validateProviderCatalogConfig(
+        configWith({ evaluateOptions: { generateSuggestions: false, maxConcurrency: 2 } }),
+        approvedProviders,
+      ),
+    ).toEqual({ success: true });
+  });
+
+  it('rejects all non-empty suite env because providers may consume implicit env keys', () => {
+    expect(
+      validateProviderCatalogConfig(
+        configWith({ env: { OPENAI_BASE_URL: 'https://redirected.example.test' } }),
+        approvedProviders,
+      ),
+    ).toEqual({
+      success: false,
+      error:
+        'Evaluation configuration contains provider overrides outside the administrator catalog',
+    });
+    expect(
+      validateProviderCatalogConfig(
+        configWith({ env: { NON_PROVIDER_VALUE: 'value' } }),
+        approvedProviders,
+      ),
+    ).toEqual({
+      success: false,
+      error:
+        'Evaluation configuration contains provider overrides outside the administrator catalog',
+    });
+  });
+
+  it('allows an explicitly empty suite env', () => {
+    expect(validateProviderCatalogConfig(configWith({ env: {} }), approvedProviders)).toEqual({
+      success: true,
+    });
+  });
+
   it('compares catalog providers in their JSON wire form', () => {
     const availableProviders = [
       {

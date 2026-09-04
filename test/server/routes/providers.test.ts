@@ -289,6 +289,41 @@ describe('Providers Routes', () => {
       });
     });
 
+    it('allows testing an exact catalog provider when custom config is active', async () => {
+      const providerOptions: ProviderOptions = {
+        id: 'http://approved.example.test/api',
+        config: { method: 'POST' },
+      };
+      mockedHasCustomProviderConfig.mockReturnValue(true);
+      mockedGetAvailableProviders.mockReturnValue([providerOptions]);
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Provider test successful',
+      });
+
+      const response = await api.post('/api/providers/test').send({ providerOptions });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalledOnce();
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledOnce();
+    });
+
+    it('rejects testing a provider outside the custom catalog before loading it', async () => {
+      mockedHasCustomProviderConfig.mockReturnValue(true);
+      mockedGetAvailableProviders.mockReturnValue([{ id: 'echo' }]);
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'openai:unapproved' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        error: 'Provider configuration is not in the administrator catalog',
+      });
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+    });
+
     it('should return 400 for missing providerOptions', async () => {
       const response = await api.post('/api/providers/test').send({
         prompt: 'Test prompt',

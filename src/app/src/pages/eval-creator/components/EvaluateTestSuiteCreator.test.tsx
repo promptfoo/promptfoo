@@ -13,6 +13,7 @@ import type {
   ProviderOptions,
   Scenario,
   TestCase,
+  UnifiedConfig,
 } from '@promptfoo/types';
 
 // Mock useToast hook
@@ -1147,6 +1148,43 @@ describe('EvaluateTestSuiteCreator', () => {
     act(() => {
       useStore.getState().updateConfig({ env: { GATEWAY_KEY: 'user-controlled' } });
     });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(
+        'data-provider-catalog-ready',
+        'false',
+      );
+    });
+  });
+
+  it.each([
+    [
+      'suite env that may redirect an implicit provider setting',
+      { env: { OPENAI_BASE_URL: 'https://redirected.example.test' } },
+    ],
+    [
+      'a model-graded assertion without an explicit provider',
+      { tests: [{ assert: [{ type: 'llm-rubric' as const, value: 'is correct' }] }] },
+    ],
+    ['prompt suggestion generation', { evaluateOptions: { generateSuggestions: true } }],
+  ])('keeps Run disabled for %s with a custom catalog', async (_, override) => {
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [approvedProvider],
+      prompts: ['Prompt'],
+      tests: [{ vars: { topic: 'test' } }],
+      ...(override as Partial<UnifiedConfig>),
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+    await userEvent.click(screen.getAllByRole('button', { name: /Run Options:/ })[0]);
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-run-options-section')).toHaveAttribute(

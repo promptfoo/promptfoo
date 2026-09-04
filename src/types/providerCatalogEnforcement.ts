@@ -18,6 +18,23 @@ const SAFE_TEST_OPTION_KEYS = new Set([
   'transformVars',
 ]);
 
+// These assertion types invoke a default grading provider when no provider is
+// supplied. Keep this list aligned with MODEL_GRADED_ASSERTION_TYPES in
+// assertions/index.ts without importing that module into the shared types layer.
+const MODEL_GRADED_ASSERTION_TYPES = new Set([
+  'agent-rubric',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'factuality',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'search-rubric',
+  'trajectory:goal-success',
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -30,12 +47,23 @@ function assertionsOverrideProvider(assertions: unknown): boolean {
   if (!Array.isArray(assertions)) {
     return assertions !== undefined;
   }
-  return assertions.some(
-    (assertion) =>
-      !isRecord(assertion) ||
-      Boolean(assertion.provider) ||
-      ('assert' in assertion && assertionsOverrideProvider(assertion.assert)),
-  );
+  return assertions.some((assertion) => {
+    if (!isRecord(assertion)) {
+      return true;
+    }
+    if ('provider' in assertion) {
+      return true;
+    }
+    if ('assert' in assertion && assertionsOverrideProvider(assertion.assert)) {
+      return true;
+    }
+    const type = assertion.type;
+    if (typeof type !== 'string') {
+      return false;
+    }
+    const baseType = type.startsWith('not-') ? type.slice(4) : type;
+    return MODEL_GRADED_ASSERTION_TYPES.has(baseType);
+  });
 }
 
 function providerReferenceMatchesCatalog(
@@ -140,29 +168,26 @@ function promptsOverrideProvider(prompts: unknown): boolean {
   );
 }
 
-function collectCatalogEnvNames(value: unknown, names = new Set<string>()): Set<string> {
-  if (typeof value === 'string') {
-    const envPattern = /\benv(?:\.([A-Za-z_][\w]*)|\[['"]([^'"]+)['"]\])/g;
-    for (const match of value.matchAll(envPattern)) {
-      names.add(match[1] ?? match[2]);
-    }
-  } else if (Array.isArray(value)) {
-    value.forEach((item) => collectCatalogEnvNames(item, names));
-  } else if (isRecord(value)) {
-    Object.values(value).forEach((item) => collectCatalogEnvNames(item, names));
-  }
-  return names;
-}
-
-function envOverridesCatalog(env: unknown, availableProviders: ProviderOptions[]): boolean {
+function envOverridesCatalog(env: unknown): boolean {
   if (env === undefined) {
     return false;
   }
   if (!isRecord(env)) {
     return true;
   }
-  const catalogEnvNames = collectCatalogEnvNames(availableProviders);
-  return Object.keys(env).some((name) => catalogEnvNames.has(name));
+  // Provider implementations recognize many implicit env keys (for example,
+  // OPENAI_BASE_URL) that can redirect an otherwise approved provider. There is
+  // no complete provider-to-env-key registry to validate against, so restricted
+  // mode fails closed for non-empty suite env. Process-level administrator env
+  // and env templates embedded in catalog entries continue to work.
+  return Object.keys(env).length > 0;
+}
+
+function evaluateOptionsUseImplicitProvider(evaluateOptions: unknown): boolean {
+  if (evaluateOptions === undefined) {
+    return false;
+  }
+  return !isRecord(evaluateOptions) || evaluateOptions.generateSuggestions === true;
 }
 
 function normalizeSubmittedProvider(provider: unknown): unknown {
@@ -242,7 +267,8 @@ export function hasRestrictedProviderOverride(
     promptsOverrideProvider(config.prompts) ||
     (config.extensions !== undefined &&
       (!Array.isArray(config.extensions) || config.extensions.length > 0)) ||
-    envOverridesCatalog(config.env, availableProviders)
+    envOverridesCatalog(config.env) ||
+    evaluateOptionsUseImplicitProvider(config.evaluateOptions)
   );
 }
 

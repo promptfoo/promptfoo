@@ -170,7 +170,11 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     // arbitrary env keys. Preserve the raw, schema-validated request's env for this
     // security check so those overrides cannot disappear before enforcement.
     const catalogValidation = validateProviderCatalogConfig(
-      { ...testSuite, env: (req.body as { env?: unknown }).env },
+      {
+        ...testSuite,
+        env: (req.body as { env?: unknown }).env,
+        evaluateOptions,
+      },
       getAvailableProviders(),
     );
     if (!catalogValidation.success) {
