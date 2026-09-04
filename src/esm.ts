@@ -273,6 +273,8 @@ export async function importModule(modulePath: string, functionName?: string) {
     // Note: createRequire() doesn't work for .js files in "type": "module" packages
     // because Node.js still treats them as ESM based on package.json.
     // We use Node's vm module to execute the code with proper CJS globals.
+    // Intentionally limited to ".js": ".cjs" is already handled by Node as CJS and ".mjs"
+    // is always ESM, so this fallback only applies to ambiguous ".js" in ESM packages.
     if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
         `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
@@ -297,41 +299,47 @@ export async function importModule(modulePath: string, functionName?: string) {
         logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
 
         // Create a combined error that includes both failure reasons
-        const combinedError = new Error(
-          `Failed to load module ${modulePath}:\n` +
-            `  ESM import error: ${errorMessage}\n` +
-            `  CJS fallback error: ${cjsErrorMessage}\n` +
-            `To fix this, either:\n` +
-            `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
-            `  2. Convert to ESM syntax (import/export)\n` +
-            `  3. Ensure the file has valid JavaScript syntax`,
+        const combinedError = Object.assign(
+          new Error(
+            `Failed to load module ${modulePath}:\n` +
+              `  ESM import error: ${errorMessage}\n` +
+              `  CJS fallback error: ${cjsErrorMessage}\n` +
+              `To fix this, either:\n` +
+              `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
+              `  2. Convert to ESM syntax (import/export)\n` +
+              `  3. Ensure the file has valid JavaScript syntax`,
+          ),
+          { cause: { esmError: err, cjsError: cjsErr } },
         );
-
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
-        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
     }
 
-    // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
-    // (vs a dependency inside the file being missing).
-    // This provides clearer error messages for users when their files don't exist.
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT only when the entry module itself is the
+    // unresolved target (vs a dependency imported by it), so nested import failures keep
+    // their original diagnostics. Comparing against the reported target rather than
+    // re-stat'ing the path also avoids mistaking EACCES for absence.
+    //
+    // Both spellings are required: Node names the missing entry by filesystem path
+    // ("Cannot find module '/abs/config.ts'"), while Vite's module runner names it by
+    // file URL ("Cannot find module 'file:///abs/config.ts'"). Nested failures report the
+    // dependency instead (its resolved path under Node, its raw specifier under Vite), so
+    // they match neither spelling and fall through.
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
-      try {
-        await fsPromises.access(resolvedModulePath);
-      } catch (accessError) {
-        if ((accessError as NodeJS.ErrnoException).code === 'ENOENT') {
-          // Expected during config discovery: normalize before logging any error or stack.
-          const enoentError = new Error(
-            `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
-          ) as NodeJS.ErrnoException;
-          enoentError.code = 'ENOENT';
-          enoentError.path = resolvedModulePath;
-          throw enoentError;
-        }
-        // Other access failures do not establish absence; preserve the import error below.
+      const missingTarget = nodeError.message.match(/Cannot find module ['"]([^'"]+)['"]/)?.[1];
+      if (
+        missingTarget === resolvedModulePath ||
+        missingTarget === pathToFileURL(resolvedModulePath).href
+      ) {
+        // Expected during config discovery: normalize before logging any error or stack.
+        const enoentError = new Error(
+          `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
+        ) as NodeJS.ErrnoException;
+        enoentError.code = 'ENOENT';
+        enoentError.path = resolvedModulePath;
+        throw enoentError;
       }
     }
 
