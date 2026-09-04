@@ -323,6 +323,47 @@ describe('transformMCPConfigToClaudeCode', () => {
     });
   });
 
+  it('preserves env for command-based stdio servers', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: {
+          name: 'restricted-tools',
+          command: 'uvx',
+          args: ['my-mcp-server'],
+          env: { MY_SERVER_ENABLE_TOOLSET_A: 'true' },
+        },
+      }),
+    ).resolves.toEqual({
+      'restricted-tools': {
+        type: 'stdio',
+        command: 'uvx',
+        args: ['my-mcp-server'],
+        env: { MY_SERVER_ENABLE_TOOLSET_A: 'true' },
+      },
+    });
+  });
+
+  it('preserves env for path-based stdio servers', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: {
+          name: 'path-server',
+          path: '/tmp/restricted-mcp-server.js',
+          env: { MCP_MODE: 'discovery' },
+        },
+      }),
+    ).resolves.toEqual({
+      'path-server': {
+        type: 'stdio',
+        command: process.execPath,
+        args: ['/tmp/restricted-mcp-server.js'],
+        env: { MCP_MODE: 'discovery' },
+      },
+    });
+  });
+
   it('preserves prototype-shaped server names as own entries', async () => {
     const servers = await transformMCPConfigToClaudeCode({
       enabled: true,
@@ -347,6 +388,8 @@ describe('transformMCPConfigToClaudeCode', () => {
     { enabled: true, server: { url: 123 } },
     { enabled: true, server: { path: 42 } },
     { enabled: true, server: { command: 'mcp-server', args: 'not-an-array' } },
+    { enabled: true, server: { command: 'mcp-server', env: 'not-an-object' } },
+    { enabled: true, server: { command: 'mcp-server', env: { MODE: 1 } } },
     { enabled: true, server: { url: 'https://example.test', headers: 'not-an-object' } },
     { enabled: true, server: { url: 'https://example.test', auth: [] } },
   ])('rejects malformed MCP config %#', async (config) => {

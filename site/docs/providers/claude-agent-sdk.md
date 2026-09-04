@@ -376,6 +376,8 @@ providers:
           - command: node
             args: ['mcp-server.js']
             name: local-server
+            env:
+              MY_SERVER_ENABLE_TOOLSET_A: 'true'
 
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
@@ -383,6 +385,10 @@ providers:
 This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
 `exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader
 tool set. An empty `exclude_tools` list is a no-op.
+
+For stdio MCP servers configured with `command`/`args` or `path`, use per-server `env` to pass
+environment variables to the MCP process, including variables that restrict which tools the server
+registers.
 
 For detailed MCP configuration, see [Claude Code MCP documentation](https://docs.claude.com/en/docs/claude-code/mcp).
 
