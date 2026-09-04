@@ -179,12 +179,24 @@ describe('isSecretEnvVarName', () => {
     'MY_SERVICE_SECRET',
     'DB_PASSWD',
     'OPENAI_API_KEY',
-    'AWS_SECRETKEY',
     'SIGNING_PASSPHRASE',
+    'AUTH_TOKEN',
     // Case is normalized: nothing requires an env var to be uppercase, and a lowercase name
     // reaches the subprocess exactly the same way.
     'github_token',
     'Database_Password',
+    // Leading underscores are legal in env var names and must not be a way around the check.
+    '_GITHUB_TOKEN',
+    // Fused credential compounds: caught by explicit suffix words, not by a blanket `KEY`
+    // suffix (which would also swallow PORTKEY).
+    'AWS_SECRETKEY',
+    'GCP_PRIVATEKEY',
+    'DBPWD',
+    'DATABASEDSN',
+    // `AUTH` as the final word carries the credential (MLFLOW_BASIC_AUTH is a documented
+    // promptfoo variable holding basic-auth creds).
+    'MLFLOW_BASIC_AUTH',
+    'NPM_CONFIG__AUTH',
   ])('treats %s as credential-bearing', (name) => {
     expect(isSecretEnvVarName(name)).toBe(true);
   });
@@ -197,17 +209,18 @@ describe('isSecretEnvVarName', () => {
     'AWS_REGION',
     'SERVICE_URL',
     'NODE_ENV',
-    // Short words like KEY match as whole words only, so vendor names that happen to end in
-    // one are not redacted. PORTKEY_API_BASE_URL is a documented endpoint, not a secret.
+    // `KEY` matches as a whole word only, so a vendor name ending in it is not a credential.
+    // PORTKEY_API_BASE_URL is a documented endpoint.
     'PORTKEY_API_BASE_URL',
+    'MONKEY',
+    // `AUTH` only counts as the final word: these name a method and a scope.
     'WATSONX_AI_AUTH_TYPE',
     'OAUTH_SCOPE',
-    'MONKEY',
-    // Ordinary config fields keep the exact-name behavior; the env-var rule needs an
-    // env-var-shaped name, so camelCase can never reach it.
+    // Ordinary config fields keep the exact-name behavior.
     'maxTokens',
     'tokenCount',
     'keyName',
+    'cacheKey',
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
   });

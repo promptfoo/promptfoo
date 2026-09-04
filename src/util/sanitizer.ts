@@ -203,33 +203,49 @@ export function isSecretField(fieldName: string): boolean {
 }
 
 /**
- * Credential words matched as a whole `_`-delimited word only. These are short enough to
- * appear inside ordinary words, so suffix-matching them redacts real settings: `PORTKEY`
- * ends with `KEY` (`PORTKEY_API_BASE_URL` is an endpoint, not a secret), and so does
- * `MONKEY`.
+ * Matched as a whole `_`-delimited word only. `KEY` is short enough to sit inside ordinary
+ * words — `PORTKEY_API_BASE_URL` is a documented endpoint, `MONKEY` is a word — so the
+ * credential compounds that end in it are listed explicitly below instead.
  */
-const ENV_SECRET_WHOLE_WORDS = new Set(['KEY', 'PWD', 'DSN']);
+const ENV_SECRET_WHOLE_WORDS = new Set(['KEY']);
 
 /**
- * Credential words matched as a whole word *or* a suffix, so the fused vendor spellings are
- * caught: `PGPASSWORD`, `AWS_SECRETKEY`, `MYAPPTOKEN`. Each is long and specific enough that
- * a suffix match is unambiguous. Singular on purpose — `MAX_TOKENS` ends with `TOKENS`, which
- * does not end with `TOKEN`.
+ * Matched as a whole word *or* a suffix, so fused vendor spellings are caught:
+ * `PGPASSWORD`, `GCP_PRIVATEKEY`, `DBPWD`, `DATABASEDSN`. Each is either long enough that a
+ * suffix match is unambiguous, or (like `PWD`/`DSN`) has no ordinary-word collisions.
+ *
+ * Singular on purpose: `MAX_TOKENS` ends with `TOKENS`, which does not end with `TOKEN`.
  */
 const ENV_SECRET_SUFFIX_WORDS = [
   'PASSWORD',
   'PASSWD',
   'PASSPHRASE',
-  'SECRETKEY',
-  'SECRET',
-  'TOKEN',
   'CREDENTIALS',
   'CREDENTIAL',
+  'SECRET',
+  'TOKEN',
   'APIKEY',
+  'PRIVATEKEY',
+  'SECRETKEY',
+  'ACCESSKEY',
+  'SIGNINGKEY',
+  'PWD',
+  'DSN',
 ];
 
-/** An environment-variable-shaped name. Case is normalized before this is applied. */
-const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+/**
+ * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
+ * hold a credential; `WATSONX_AI_AUTH_TYPE` names a method and `OAUTH_SCOPE` is not an
+ * `AUTH` word at all.
+ */
+const ENV_SECRET_TERMINAL_WORDS = new Set(['AUTH']);
+
+/**
+ * An environment-variable-shaped name. Leading underscores are legal and used in practice
+ * (`_GITHUB_TOKEN`), so they must not be a way around the check. Case is normalized before
+ * this is applied.
+ */
+const ENV_VAR_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
 
 /**
  * Check whether an environment-variable name looks credential-bearing.
@@ -251,13 +267,15 @@ export function isSecretEnvVarName(name: string): boolean {
   if (!ENV_VAR_NAME_RE.test(normalized)) {
     return false;
   }
-  return normalized
-    .split('_')
-    .some(
-      (word) =>
-        ENV_SECRET_WHOLE_WORDS.has(word) ||
-        ENV_SECRET_SUFFIX_WORDS.some((secret) => word.endsWith(secret)),
-    );
+  const words = normalized.split('_');
+  if (ENV_SECRET_TERMINAL_WORDS.has(words[words.length - 1])) {
+    return true;
+  }
+  return words.some(
+    (word) =>
+      ENV_SECRET_WHOLE_WORDS.has(word) ||
+      ENV_SECRET_SUFFIX_WORDS.some((secret) => word.endsWith(secret)),
+  );
 }
 
 /**
