@@ -85,13 +85,13 @@ export class AzureResponsesProvider extends AzureGenericProvider {
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and accept reasoning_effort parameter.
    */
-  isReasoningModel(): boolean {
+  isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first (match chat.ts behavior)
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
     }
 
-    const lowerName = this.deploymentName.toLowerCase();
+    const lowerName = modelName.toLowerCase();
     return (
       // OpenAI reasoning models
       lowerName.startsWith('o1') ||
@@ -103,7 +103,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel((this.config.modelName ?? lowerName).toLowerCase()) ||
+      isGpt6AstraModel(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -115,8 +115,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     );
   }
 
-  supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  supportsTemperature(modelName = this.config.modelName ?? this.deploymentName): boolean {
+    return !this.isReasoningModel(modelName);
   }
 
   async getAzureResponsesBody(
@@ -147,7 +147,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? passthroughModel
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
-    const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
+    const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -164,7 +164,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
+    const temperature = this.supportsTemperature(capabilityModelName)
       ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel

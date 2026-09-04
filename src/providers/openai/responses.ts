@@ -783,8 +783,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
-  protected isReasoningModel(): boolean {
-    return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
+  protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -841,13 +841,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
-    const isGpt6Astra = isGpt6AstraModel(
-      (config.passthrough as { model?: unknown } | undefined)?.model ??
-        this.getCapabilityModelName(),
-    );
-    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
-      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
-    );
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName =
+      typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
+    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
+    const hasAzureCustomDeploymentHost =
+      typeof passthroughModel !== 'string' &&
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
+        this.isAzureOpenAiEndpoint(endpoint),
+      );
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
@@ -857,14 +859,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel() || isGpt6Astra || isAzureResponsesDeploymentWithReasoningConfig;
+      this.isReasoningModel(capabilityModelName) ||
+      isGpt6Astra ||
+      isAzureResponsesDeploymentWithReasoningConfig;
     const supportsVerbosity =
-      this.isGPT5Model() || isGpt6Astra || isAzureResponsesDeploymentWithVerbosityConfig;
+      this.isGPT5Model(capabilityModelName) ||
+      isGpt6Astra ||
+      isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
+      supportsTemperature: this.supportsTemperature(capabilityModelName),
     };
   }
 
@@ -893,8 +900,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, supportsVerbosity } =
-      this.getDeploymentCapabilities(config);
+    const {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isReasoningModel,
+      supportsVerbosity,
+      supportsTemperature,
+    } = this.getDeploymentCapabilities(config);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -925,7 +936,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      this.supportsTemperature() && !hasAzureReasoningEffort
+      supportsTemperature && !hasAzureReasoningEffort
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;

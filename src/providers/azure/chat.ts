@@ -77,7 +77,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and accept reasoning_effort parameter.
    */
-  protected isReasoningModel(): boolean {
+  protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
@@ -85,7 +85,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Auto-detect reasoning models by deployment name (case-insensitive)
     // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
-    const lowerName = this.deploymentName.toLowerCase();
+    const lowerName = modelName.toLowerCase();
     return (
       // OpenAI reasoning models
       lowerName.startsWith('o1') ||
@@ -97,7 +97,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel((this.config.modelName ?? lowerName).toLowerCase()) ||
+      isGpt6AstraModel(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -204,7 +204,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         ? passthroughModel
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
-    const isReasoningModel = this.isReasoningModel() || isGpt6AstraModel(capabilityModelName);
+    const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
@@ -312,9 +312,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     return {
       body,
-      config: isGpt6AstraModel(capabilityModelName)
-        ? { ...config, modelName: capabilityModelName }
-        : config,
+      config:
+        typeof passthroughModel === 'string'
+          ? { ...config, modelName: capabilityModelName }
+          : config,
     };
   }
 

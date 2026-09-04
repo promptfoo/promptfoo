@@ -99,6 +99,44 @@ describe('GPT-6 Astra requests', () => {
     },
   );
 
+  it.each([
+    { api: 'OpenAI Chat', Provider: OpenAiChatCompletionProvider },
+    { api: 'OpenAI Responses', Provider: OpenAiResponsesProvider },
+    { api: 'Azure Chat', Provider: AzureChatCompletionProvider },
+    { api: 'Azure Responses', Provider: AzureResponsesProvider },
+  ])('uses GPT-4.1 capabilities when overriding Astra in $api', async ({ Provider }) => {
+    const provider = new Provider('gpt-6-astra', {
+      config: {
+        apiKey: 'test-key',
+        modelName: 'gpt-6-astra',
+        reasoning_effort: 'max',
+        reasoning: { effort: 'max', summary: 'auto' },
+        verbosity: 'low',
+        temperature: 0.4,
+        top_p: 0.8,
+      },
+    });
+    const context = {
+      vars: {},
+      prompt: {
+        raw: 'Summarize the job.',
+        label: 'summary',
+        config: { passthrough: { model: 'gpt-4.1' } },
+      },
+    };
+    const body =
+      provider instanceof AzureResponsesProvider
+        ? await provider.getAzureResponsesBody('Summarize the job.', context)
+        : (await provider.getOpenAiBody('Summarize the job.', context)).body;
+
+    expect(body).toMatchObject({ model: 'gpt-4.1', temperature: 0.4, top_p: 0.8 });
+    expect(body).not.toHaveProperty('reasoning');
+    expect(body).not.toHaveProperty('reasoning_effort');
+    expect(body).not.toHaveProperty('verbosity');
+    expect(body).not.toHaveProperty('text.verbosity');
+    expect(provider.config.reasoning_effort).toBe('max');
+  });
+
   it('preserves Responses tools, cache options, output limits, and supported includes', async () => {
     const include = ['message.output_text.logprobs', 'reasoning.encrypted_content'] as const;
     const { body } = await new OpenAiResponsesProvider('gpt-6-astra', {
