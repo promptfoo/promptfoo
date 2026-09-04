@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
@@ -1888,6 +1889,38 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    'calculateAnthropicCost for %s',
+    (model) => {
+      it('prices cache reads at 2.5% of input and keeps the existing write and output rates', () => {
+        expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.0363, 8);
+        expect(calculateAnthropicCost(model, {}, 900_000, 10_000)).toBeCloseTo(9.5, 8);
+      });
+
+      it('composes cache pricing with regional premiums and explicit per-token rates', () => {
+        expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500, 200, 100)).toBeCloseTo(
+          0.03993,
+          8,
+        );
+        expect(
+          calculateAnthropicCost(
+            model,
+            { inputCost: 20 / 1e6, outputCost: 100 / 1e6 },
+            1000,
+            500,
+            200,
+            100,
+          ),
+        ).toBeCloseTo(0.0726, 8);
+      });
+
+      it('does not invent latest aliases or dated snapshots', () => {
+        expect(calculateAnthropicCost(`${model}-latest`, {}, 1000, 500)).toBeUndefined();
+        expect(calculateAnthropicCost(`${model}-20260901`, {}, 1000, 500)).toBeUndefined();
+      });
+    },
+  );
+
   describe.each(['claude-fable-5', 'claude-mythos-5'])('calculateAnthropicCost for %s', (model) => {
     it('uses Claude 5 input and output pricing', () => {
       expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.035, 6);
@@ -2033,6 +2066,37 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('raises max_tokens above a manual thinking budget', () => {
+      // Anthropic rejects max_tokens <= thinking.budget_tokens with a 400. Only the Vertex
+      // path used to enforce this, so the same config errored on the direct API.
+      expect(clampMaxTokensForThinkingBudget(2048, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9024,
+      );
+    });
+
+    it('raises max_tokens when it exactly matches the manual thinking budget', () => {
+      expect(clampMaxTokensForThinkingBudget(8000, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9024,
+      );
+    });
+
+    it('leaves max_tokens alone when it already clears the budget', () => {
+      expect(clampMaxTokensForThinkingBudget(9000, { type: 'enabled', budget_tokens: 8000 })).toBe(
+        9000,
+      );
+    });
+
+    it('leaves max_tokens alone when there is no manual budget to clear', () => {
+      for (const thinking of [
+        undefined,
+        { type: 'adaptive' },
+        { type: 'disabled' },
+        { type: 'enabled' },
+      ]) {
+        expect(clampMaxTokensForThinkingBudget(1024, thinking as any)).toBe(1024);
+      }
+    });
+
     it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
       for (const id of [
         'claude-haiku-5',
@@ -2151,7 +2215,10 @@ describe('Anthropic utilities', () => {
       }
       // Opus 4.7/4.8 keep their own warning name and are not thinking-on-by-default.
       expect(isThinkingOnByDefaultClaudeModel('claude-opus-4-8')).toBe(false);
-      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(false);
+      expect(isThinkingOnByDefaultClaudeModel('claude-opus-4-7')).toBe(false);
+      // Sonnet 5 is not Opus 5, but it does think by default.
+      expect(isClaudeOpus5Model('claude-sonnet-5')).toBe(false);
+      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(true);
     });
 
     it('rejects disabled thinking on Opus 5 only above effort "high"', () => {
@@ -2229,8 +2296,14 @@ describe('Anthropic utilities', () => {
       // case that sizes the default max_tokens and truncates answers when it is wrong.
       expect(claudeThinkingConsumesTokens('claude-opus-5', undefined)).toBe(true);
       expect(claudeThinkingConsumesTokens('claude-opus-5', null)).toBe(true);
+      // Sonnet 5 thinks by default too. Verified against the live API: a request that omits
+      // `thinking` came back with content blocks ['thinking', 'text'] and
+      // usage.output_tokens_details.thinking_tokens = 59.
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(true);
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', null)).toBe(true);
+      // Opus 4.7/4.8 do not — same probe returned ['text'] and thinking_tokens = 0.
       expect(claudeThinkingConsumesTokens('claude-opus-4-8', undefined)).toBe(false);
-      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-opus-4-7', undefined)).toBe(false);
       // Explicitly disabled never consumes tokens (except on always-on models, where the
       // API rejects `disabled` and normalization strips it before this is called).
       expect(claudeThinkingConsumesTokens('claude-opus-5', { type: 'disabled' })).toBe(false);

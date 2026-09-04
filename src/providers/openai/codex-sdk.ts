@@ -5,10 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -22,11 +19,18 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
 import {
   getCodexTraceEndpoint,
   getCodexTraceProtocol,
@@ -44,11 +48,11 @@ import {
   getCodexSkillRootPrefixes,
 } from './codexSkillMetadata';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../../types/index';
 
@@ -121,7 +125,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
  * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
@@ -647,6 +651,7 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    'gpt-6-astra',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -1377,6 +1382,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const inputTokens = usage.input_tokens ?? usage.inputTokens;
       const outputTokens = usage.output_tokens ?? usage.outputTokens;
       const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const cacheWriteTokens = usage.cache_write_input_tokens ?? usage.cacheWriteInputTokens;
       const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
       if (typeof inputTokens === 'number') {
         attributes['gen_ai.usage.input_tokens'] = inputTokens;
@@ -1386,6 +1392,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
       if (typeof cachedTokens === 'number') {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
+      }
+      if (typeof cacheWriteTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = cacheWriteTokens;
       }
       if (typeof reasoningTokens === 'number') {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
@@ -2425,8 +2434,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
+      typeof turnUsage.cache_write_input_tokens === 'number'
+        ? {
+            completionDetails: {
+              ...(typeof turnUsage.reasoning_output_tokens === 'number'
+                ? { reasoning: turnUsage.reasoning_output_tokens }
+                : {}),
+              ...(typeof turnUsage.cache_write_input_tokens === 'number'
+                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }

@@ -1,5 +1,11 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
@@ -26,12 +32,14 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -43,6 +51,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
@@ -286,7 +295,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
+    options: {
+      id?: string;
+      label?: string;
+      config?: AnthropicMessageOptions;
+      env?: EnvOverrides;
+    } = {},
   ) {
     super(modelName, options);
     if (
@@ -331,14 +345,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     shouldStream: boolean;
-  }): Promise<{ error?: string; response: Anthropic.Messages.Message }> {
+  }): Promise<{
+    error?: string;
+    response: Anthropic.Messages.Message;
+    toolCalls: McpToolCallEntry[];
+  }> {
+    // Every return below carries `toolCalls`, including the bail-out paths: a run that
+    // trips max_tool_calls or mixes MCP and non-MCP blocks is exactly when you want to
+    // see which tools did run.
+    const toolCalls: McpToolCallEntry[] = [];
+
     if (!this.mcpClient) {
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls };
     }
 
     const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
     if (mcpToolNames.size === 0) {
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls };
     }
 
     const maxToolCalls = getMaxMcpToolCalls(config);
@@ -346,7 +369,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
       // Return the model's initial response (which may contain tool_use
       // blocks) unchanged rather than treating unexecuted tools as an error.
-      return { response: initialResponse };
+      return { response: initialResponse, toolCalls };
     }
 
     let response = initialResponse;
@@ -361,20 +384,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
       if (toolUses.length === 0) {
-        return { response: withMergedAnthropicUsage(response, responses) };
+        return { response: withMergedAnthropicUsage(response, responses), toolCalls };
       }
 
       if (toolUses.length !== responseToolUses.length) {
         logger.warn(
           'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
         );
-        return { response: withMergedAnthropicUsage(response, responses) };
+        return { response: withMergedAnthropicUsage(response, responses), toolCalls };
       }
 
       if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
         return {
           response: withMergedAnthropicUsage(response, responses),
           error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+          toolCalls,
         };
       }
 
@@ -382,6 +406,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolResultBlocks = await Promise.all(
         toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
       );
+
+      toolUses.forEach((toolUse, index) => {
+        const resultBlock = toolResultBlocks[index];
+        toolCalls.push({
+          id: toolUse.id,
+          name: toolUse.name,
+          input: coerceMcpToolInput(toolUse.input),
+          output: resultBlock.content,
+          is_error: resultBlock.is_error ?? false,
+        });
+      });
 
       messages = [
         ...messages,
@@ -420,6 +455,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     return {
       response: withMergedAnthropicUsage(response, responses),
+      toolCalls,
       ...(unresolvedToolUses.length > 0
         ? {
             error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
@@ -617,7 +653,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            ? `${modelWarningName} always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.`
             : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
         );
         this.manualThinkingConversionWarned = true;
@@ -625,7 +661,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+          `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
         );
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
@@ -768,15 +804,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Resolve tool_choice, suppressing forced tool use only for legacy budget-based thinking.
-    //
-    // The incompatibility is specific to `thinking: { type: 'enabled' }` — the API rejects
-    // that pairing with "Thinking may not be enabled when tool_choice forces tool use."
-    // Adaptive thinking is compatible: verified live that `adaptive` + a forced `any` or
-    // named tool_choice returns 200 on Opus 5, Opus 4.8, Opus 4.6, Sonnet 4.6, Sonnet 5, and
-    // Fable 5. Keying this off "is thinking on at all" silently dropped the user's
-    // tool_choice on every adaptive config, quietly changing tool-routing evals.
-    const forcedToolChoiceRejected = resolvedThinking?.type === 'enabled';
+    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
+    // this on thinkingEnabled: doing so would silently change their tool-routing evals.
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
+    const forcedToolChoiceRejected =
+      resolvedThinking?.type === 'enabled' || modelRejectsForcedToolChoice;
     let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
     if (config.tool_choice) {
       const transformed = transformToolChoice(
@@ -785,7 +818,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ) as Anthropic.Messages.ToolChoice;
       if (forcedToolChoiceRejected && (transformed.type === 'any' || transformed.type === 'tool')) {
         logger.warn(
-          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+          modelRejectsForcedToolChoice
+            ? `tool_choice type '${transformed.type}' (forced tool use) is not supported on ${modelWarningName} and will be omitted. Use 'auto' or 'none' instead.`
+            : `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
         );
       } else {
         resolvedToolChoice = transformed;
@@ -836,7 +871,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     ) {
       logger.warn(
         alwaysOnAdaptiveThinking
-          ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
+          ? `temperature, top_p, and top_k are not supported on ${modelWarningName} and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`
           : `temperature is deprecated on ${modelWarningName} and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`,
       );
       this.samplingParamsDeprecationWarned = true;
@@ -862,9 +897,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
-      max_tokens:
+      // resolvedThinking, not the raw config: a sampling-deprecated model has already had
+      // its manual budget converted to adaptive, and there is nothing left to clamp against.
+      max_tokens: clampMaxTokensForThinkingBudget(
         config.max_tokens ??
-        getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+          getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
+        resolvedThinking,
+      ),
       messages: extractedMessages,
       stream: shouldStream,
       ...(omitTemperature
@@ -957,17 +996,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const cache = await getCache();
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(
       {
         ...cacheKeyParams,
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
+    const shouldUseResponseCache =
+      isCacheEnabled() &&
+      config.mcp?.enabled !== true &&
+      !this.hasCustomHeaders() &&
+      Object.keys(config.headers ?? {}).length === 0;
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
@@ -1011,13 +1061,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         });
       }
 
-      const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+      const {
+        error,
+        response: resolvedMessage,
+        toolCalls,
+      } = await this.resolveMcpToolUse({
         config,
         headers,
         initialResponse: initialMessage,
         params,
         shouldStream,
       });
+
+      // Only attach the key when a tool actually ran: an always-present empty array
+      // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
+      const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
 
       if (error) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
@@ -1027,18 +1085,34 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
           cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+          ...(mcpMetadata ? { metadata: mcpMetadata } : {}),
         };
       }
 
       if (shouldUseResponseCache) {
         try {
-          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+          await this.setCachedResponse(
+            cache,
+            cacheKey,
+            ephemeralCacheKey,
+            cacheClearGeneration,
+            getCacheTtlMs(),
+            JSON.stringify(resolvedMessage),
+          );
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
-      return this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false);
+      const response = this.buildMessageResponse(
+        resolvedMessage,
+        config,
+        processedOutputFormat,
+        false,
+      );
+      return mcpMetadata
+        ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
+        : response;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,

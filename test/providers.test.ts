@@ -501,8 +501,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
-    'should preserve bare %s Responses routing',
+  it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route bare %s to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:${model}`);
 
@@ -814,7 +814,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Chat %s IDs to Chat Completions',
     async (model) => {
       const provider = await loadApiProvider(`openai:chat:${model}`);
@@ -824,7 +824,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Responses %s IDs to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:responses:${model}`);

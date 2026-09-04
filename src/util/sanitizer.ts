@@ -125,6 +125,19 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+
+  // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
+  // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to
+  // 'awssecretaccesskey' while the documented provider config field
+  // `secretAccessKey` collapses to 'secretaccesskey'. These are first-class,
+  // documented Bedrock config fields (see site/docs/providers/aws-bedrock.md),
+  // so an inline credential otherwise reaches logs and shared configs in clear text.
+  'secretaccesskey',
+  'awssecretaccesskey',
+  'sessiontoken',
+  'awssessiontoken',
+  'accesskeyid',
+  'awsaccesskeyid',
   'authorization',
   'auth',
   'bearer',
@@ -137,6 +150,15 @@ export const SECRET_FIELD_NAMES = new Set([
   'xauth', // x-auth
   'xsecret', // x-secret
   'xcsrftoken', // x-csrf-token
+  // Portkey gateway credential headers. The provider derives these from `portkey*` config
+  // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
+  'portkeyapikey', // portkeyApiKey config field
+  'portkeyvirtualkey', // portkeyVirtualKey config field
+  'xportkeyapikey', // x-portkey-api-key
+  'xportkeyvirtualkey', // x-portkey-virtual-key
+  'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id
+  'xportkeyawssecretaccesskey', // x-portkey-aws-secret-access-key
+  'xportkeyawssessiontoken', // x-portkey-aws-session-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
   'sessionid', // session-id
@@ -178,6 +200,58 @@ export function normalizeFieldName(fieldName: string): string {
  */
 export function isSecretField(fieldName: string): boolean {
   return SECRET_FIELD_NAMES.has(normalizeFieldName(fieldName));
+}
+
+/**
+ * Credential words that make an environment variable name secret-bearing.
+ *
+ * Singular only, on purpose: each `_`-delimited word is matched by suffix, so `MAX_TOKENS`
+ * (word `TOKENS`) and `RETRY_KEYS` stay out of the match while `GITHUB_TOKEN`,
+ * `STRIPE_SECRET_KEY` and `PGPASSWORD` are caught.
+ */
+const ENV_SECRET_WORDS = new Set([
+  'TOKEN',
+  'SECRET',
+  'PASSWORD',
+  'PASSWD',
+  'PWD',
+  'KEY',
+  'APIKEY',
+  'CREDENTIAL',
+  'CREDENTIALS',
+  'PASSPHRASE',
+  'AUTH',
+  'DSN',
+]);
+
+/** SCREAMING_SNAKE_CASE (underscores optional): `GITHUB_TOKEN`, `PGPASSWORD` — not `apiKey`. */
+const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Check whether an environment-variable name looks credential-bearing.
+ *
+ * `SECRET_FIELD_NAMES` matches exact names, which can never cover the project-specific
+ * names real environments use — `GITHUB_TOKEN`, `STRIPE_SECRET_KEY`, `PGPASSWORD` all
+ * slip through it. An `env` map is passed straight to a subprocess, so it is the one
+ * place a config is *expected* to hold credentials; treat a credential-worded key there
+ * as secret.
+ *
+ * Restricted to SCREAMING_SNAKE_CASE so it never fires on ordinary config fields
+ * (`maxTokens`, `tokenCount`, `keyName`), which keep the exact-name behavior.
+ */
+export function isSecretEnvVarName(name: string): boolean {
+  if (isSecretField(name)) {
+    return true;
+  }
+  if (!ENV_VAR_NAME_RE.test(name)) {
+    return false;
+  }
+  // A word matches when it *ends with* a credential word, so the vendor-prefixed spellings
+  // that have no separator (`PGPASSWORD`, `AWS_SECRETKEY`) match too. Suffix rather than
+  // substring keeps the plurals out: `TOKENS` does not end with `TOKEN`.
+  return name
+    .split('_')
+    .some((word) => [...ENV_SECRET_WORDS].some((secret) => word.endsWith(secret)));
 }
 
 /**
@@ -915,18 +989,21 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
+function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
   const sanitized: any = {};
+  const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretField(key)) {
+    } else if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth);
+      // An `env` map is handed verbatim to a subprocess, so its keys are environment
+      // variable names and get the broader credential-word match one level down.
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
     }
   }
   return sanitized;
@@ -935,7 +1012,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
+function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
@@ -967,7 +1044,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
 }
 
 /**

@@ -85,9 +85,18 @@ function redactAppServerText(value: string): string {
       REDACTED,
     )
     .replace(
-      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-      (_match, key, separator, spacing, quote) =>
-        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+      /(\\["'](?:authorization|auth)\\["']\s*[:=]\s*\\["'])(?:bearer|basic)\s+[^\\\s"'`]+(\\["'])/gi,
+      (_match, prefix, suffix) => `${prefix}${REDACTED}${suffix}`,
+    )
+    .replace(
+      /\b(authorization|auth)(["']?)\s*([=:])(\s*)(["']?)(?:bearer|basic)\s+[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)(["']?)\s*([=:])(\s*)(["']?)[^\s"'`]+(\5)/gi,
+      (_match, key, keyQuote, separator, spacing, quote) =>
+        `${key}${keyQuote}${separator}${spacing}${quote}${REDACTED}${quote}`,
     );
 }
 
@@ -2846,7 +2855,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
-    state.completed.resolve();
+    this.handleConnectionClose(
+      state.connectionKey,
+      state.connectionInstanceId,
+      new Error(state.error),
+    );
     void state.connection.close();
     return false;
   }
@@ -3424,6 +3437,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         input: number;
         output: number;
         cached: number;
+        cacheWrite?: number;
         reasoning: number;
       }
     | undefined {
@@ -3440,6 +3454,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
+      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }
@@ -3452,6 +3467,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       input_tokens: usage.input,
       cached_input_tokens: usage.cached,
+      cache_write_input_tokens: usage.cacheWrite ?? 0,
       output_tokens: usage.output,
       reasoning_output_tokens: usage.reasoning,
     };
@@ -3467,6 +3483,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       completion: usage.output,
       total: usage.input + usage.output,
       cached: usage.cached,
+      ...(typeof usage.cacheWrite === 'number'
+        ? { completionDetails: { cacheCreationInputTokens: usage.cacheWrite } }
+        : {}),
     };
   }
 
@@ -3605,6 +3624,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
+      }
+      if (usage.cacheWrite) {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.cacheWrite;
       }
       if (usage.reasoning) {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;
