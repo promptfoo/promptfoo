@@ -181,24 +181,33 @@ describe('isSecretEnvVarName', () => {
     'OPENAI_API_KEY',
     'AWS_SECRETKEY',
     'SIGNING_PASSPHRASE',
+    // Case is normalized: nothing requires an env var to be uppercase, and a lowercase name
+    // reaches the subprocess exactly the same way.
+    'github_token',
+    'Database_Password',
   ])('treats %s as credential-bearing', (name) => {
     expect(isSecretEnvVarName(name)).toBe(true);
   });
 
   it.each([
-    // Plurals: words are matched by suffix, and TOKENS does not end with TOKEN.
+    // Plurals: suffix words are singular, and TOKENS does not end with TOKEN.
     'MAX_TOKENS',
     'RETRY_KEYS',
     'LOG_LEVEL',
     'AWS_REGION',
     'SERVICE_URL',
     'NODE_ENV',
-    // Ordinary config fields keep the exact-name behavior; the env-var rule is
-    // SCREAMING_SNAKE_CASE only, so it can never widen them.
+    // Short words like KEY match as whole words only, so vendor names that happen to end in
+    // one are not redacted. PORTKEY_API_BASE_URL is a documented endpoint, not a secret.
+    'PORTKEY_API_BASE_URL',
+    'WATSONX_AI_AUTH_TYPE',
+    'OAUTH_SCOPE',
+    'MONKEY',
+    // Ordinary config fields keep the exact-name behavior; the env-var rule needs an
+    // env-var-shaped name, so camelCase can never reach it.
     'maxTokens',
     'tokenCount',
     'keyName',
-    'max_tokens',
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
   });
@@ -214,6 +223,8 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject({
         env: {
           API_KEY: 'sk-value',
+          github_token: 'ghp_lowercase_value',
+          PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
           GITHUB_TOKEN: 'ghp_value',
           MY_SERVICE_SECRET: 'plainvalue123',
           PGPASSWORD: 'hunter2',
@@ -225,6 +236,9 @@ describe('sanitizeObject', () => {
 
       expect(result.env).toEqual({
         API_KEY: '[REDACTED]',
+        github_token: '[REDACTED]',
+        // A vendor name ending in KEY is not a credential.
+        PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
         GITHUB_TOKEN: '[REDACTED]',
         MY_SERVICE_SECRET: '[REDACTED]',
         PGPASSWORD: '[REDACTED]',

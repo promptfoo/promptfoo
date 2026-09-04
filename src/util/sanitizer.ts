@@ -203,28 +203,32 @@ export function isSecretField(fieldName: string): boolean {
 }
 
 /**
- * Credential words that make an environment variable name secret-bearing.
- *
- * Singular only, on purpose: each `_`-delimited word is matched by suffix, so `MAX_TOKENS`
- * (word `TOKENS`) and `RETRY_KEYS` stay out of the match while `GITHUB_TOKEN`,
- * `STRIPE_SECRET_KEY` and `PGPASSWORD` are caught.
+ * Credential words matched as a whole `_`-delimited word only. These are short enough to
+ * appear inside ordinary words, so suffix-matching them redacts real settings: `PORTKEY`
+ * ends with `KEY` (`PORTKEY_API_BASE_URL` is an endpoint, not a secret), and so does
+ * `MONKEY`.
  */
-const ENV_SECRET_WORDS = new Set([
-  'TOKEN',
-  'SECRET',
+const ENV_SECRET_WHOLE_WORDS = new Set(['KEY', 'PWD', 'DSN']);
+
+/**
+ * Credential words matched as a whole word *or* a suffix, so the fused vendor spellings are
+ * caught: `PGPASSWORD`, `AWS_SECRETKEY`, `MYAPPTOKEN`. Each is long and specific enough that
+ * a suffix match is unambiguous. Singular on purpose — `MAX_TOKENS` ends with `TOKENS`, which
+ * does not end with `TOKEN`.
+ */
+const ENV_SECRET_SUFFIX_WORDS = [
   'PASSWORD',
   'PASSWD',
-  'PWD',
-  'KEY',
-  'APIKEY',
-  'CREDENTIAL',
-  'CREDENTIALS',
   'PASSPHRASE',
-  'AUTH',
-  'DSN',
-]);
+  'SECRETKEY',
+  'SECRET',
+  'TOKEN',
+  'CREDENTIALS',
+  'CREDENTIAL',
+  'APIKEY',
+];
 
-/** SCREAMING_SNAKE_CASE (underscores optional): `GITHUB_TOKEN`, `PGPASSWORD` — not `apiKey`. */
+/** An environment-variable-shaped name. Case is normalized before this is applied. */
 const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 
 /**
@@ -236,22 +240,24 @@ const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
  * place a config is *expected* to hold credentials; treat a credential-worded key there
  * as secret.
  *
- * Restricted to SCREAMING_SNAKE_CASE so it never fires on ordinary config fields
- * (`maxTokens`, `tokenCount`, `keyName`), which keep the exact-name behavior.
+ * Case is normalized first: nothing requires an env var to be uppercase, and a lowercase
+ * `github_token` reaches the subprocess exactly like `GITHUB_TOKEN` does.
  */
 export function isSecretEnvVarName(name: string): boolean {
   if (isSecretField(name)) {
     return true;
   }
-  if (!ENV_VAR_NAME_RE.test(name)) {
+  const normalized = name.toUpperCase();
+  if (!ENV_VAR_NAME_RE.test(normalized)) {
     return false;
   }
-  // A word matches when it *ends with* a credential word, so the vendor-prefixed spellings
-  // that have no separator (`PGPASSWORD`, `AWS_SECRETKEY`) match too. Suffix rather than
-  // substring keeps the plurals out: `TOKENS` does not end with `TOKEN`.
-  return name
+  return normalized
     .split('_')
-    .some((word) => [...ENV_SECRET_WORDS].some((secret) => word.endsWith(secret)));
+    .some(
+      (word) =>
+        ENV_SECRET_WHOLE_WORDS.has(word) ||
+        ENV_SECRET_SUFFIX_WORDS.some((secret) => word.endsWith(secret)),
+    );
 }
 
 /**
