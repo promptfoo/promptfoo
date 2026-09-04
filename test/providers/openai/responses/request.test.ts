@@ -11,6 +11,57 @@ import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { createDeferred } from '../../../util/utils';
 import { setOpenAiEnv } from './setup';
 
+function mockBackgroundCreateAndPoll(
+  responseId: string,
+  outputText: string,
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number },
+) {
+  const counts = { creates: 0, polls: 0 };
+  const responseIds = new Set<string>();
+  vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+    if (String(url).endsWith('/responses') && options?.method === 'POST') {
+      const id = `${responseId}_${++counts.creates}`;
+      responseIds.add(id);
+      // Keep creation in flight until concurrent subscribers have registered.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return {
+        data: { id, status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+    }
+    const id = String(url).split('/').at(-1)!;
+    if (
+      responseIds.has(id) &&
+      String(url).endsWith(`/responses/${id}`) &&
+      options?.method === 'GET'
+    ) {
+      counts.polls++;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return {
+        data: {
+          id,
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: outputText }],
+            },
+          ],
+          usage,
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+    }
+    throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+  });
+  return counts;
+}
+
 describe('OpenAiResponsesProvider request building', () => {
   it('should format and call the responses API correctly', async () => {
     const mockApiResponse = {
@@ -459,50 +510,10 @@ describe('OpenAiResponsesProvider request building', () => {
   });
 
   it('should coalesce background polling for case-equivalent routing headers', async () => {
-    let creates = 0;
-    let polls = 0;
-    let creation: Promise<any> | undefined;
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
-      if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        creates++;
-        if (!creation) {
-          // Resolve on a macrotask so the in-flight creation stays coalescable
-          // until both concurrent subscribers have registered.
-          creation = new Promise((resolve) =>
-            setImmediate(() =>
-              resolve({
-                data: { id: 'resp_header_case', status: 'queued', output: [], usage: null },
-                cached: false,
-                status: 200,
-                statusText: 'OK',
-              }),
-            ),
-          );
-        }
-        return creation;
-      }
-      if (String(url).endsWith('/responses/resp_header_case') && options?.method === 'GET') {
-        polls++;
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        return {
-          data: {
-            id: 'resp_header_case',
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'Case-normalized result' }],
-              },
-            ],
-            usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    const counts = mockBackgroundCreateAndPoll('resp_header_case', 'Case-normalized result', {
+      input_tokens: 1000,
+      output_tokens: 1000,
+      total_tokens: 2000,
     });
     const upper = new OpenAiResponsesProvider('gpt-4.1', {
       config: {
@@ -528,45 +539,17 @@ describe('OpenAiResponsesProvider request building', () => {
       }),
     ]);
 
-    expect(creates).toBe(1);
-    expect(polls).toBe(1);
+    expect(counts.creates).toBe(1);
+    expect(counts.polls).toBe(1);
     expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
     expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
   });
 
   it('should coalesce semantically identical background request bodies with reordered keys', async () => {
-    let creates = 0;
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
-      if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        const id = `resp_canonical_${++creates}`;
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        return {
-          data: { id, status: 'queued', output: [], usage: null },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      if (String(url).includes('/responses/resp_canonical_') && options?.method === 'GET') {
-        return {
-          data: {
-            id: String(url).split('/').at(-1),
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'Canonical background result' }],
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    const counts = mockBackgroundCreateAndPoll('resp_canonical', 'Canonical background result', {
+      input_tokens: 10,
+      output_tokens: 5,
+      total_tokens: 15,
     });
     const first = new OpenAiResponsesProvider('gpt-4.1', {
       config: {
@@ -590,7 +573,7 @@ describe('OpenAiResponsesProvider request building', () => {
       second.callApi('Canonical task'),
     ]);
 
-    expect(creates).toBe(1);
+    expect(counts.creates).toBe(1);
     expect(results.map((result) => result.output)).toEqual([
       'Canonical background result',
       'Canonical background result',

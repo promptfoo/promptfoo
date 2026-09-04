@@ -303,6 +303,22 @@ describe('MetaProvider request body shaping', () => {
     expect(body.reasoning_effort).toBe('high');
   });
 
+  it.each([0, null, undefined, 512])(
+    'preserves canonical chat passthrough cap %s over aliases',
+    async (cap) => {
+      const provider = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: {
+            max_completion_tokens: 4096,
+            passthrough: { max_completion_tokens: cap, max_tokens: 2048 },
+          },
+        }),
+      );
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body).toHaveProperty('max_completion_tokens', cap);
+    },
+  );
+
   it('forwards max_completion_tokens', async () => {
     const provider = asChat(
       createMetaProvider('meta:chat:muse-spark-1.1', {
@@ -624,6 +640,21 @@ describe('MetaResponsesProvider', () => {
 });
 
 describe('MetaResponsesProvider request body shaping', () => {
+  it.each([0, null, undefined, 512])(
+    'preserves canonical Responses passthrough cap %s and removes chat aliases',
+    async (cap) => {
+      const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+        config: {
+          max_output_tokens: 4096,
+          passthrough: { max_output_tokens: cap, max_completion_tokens: 2048, max_tokens: 1024 },
+        },
+      });
+      const { body } = await (provider as MetaResponsesProvider).getOpenAiBody('Hello');
+      expect(body).toHaveProperty('max_output_tokens', cap);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
+
   it('maps chat-style max_completion_tokens onto max_output_tokens', async () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
       config: { max_completion_tokens: 4096 },

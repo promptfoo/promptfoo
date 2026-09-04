@@ -197,6 +197,32 @@ describe('ProviderTypeSelector', () => {
     expect(httpProvider).toBeNull();
   });
 
+  it('updates available providers after the parent changes the allowed IDs', () => {
+    const provider: ProviderOptions = { id: '', config: {} };
+    const setProvider = vi.fn();
+    const { rerender } = renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={provider}
+        setProvider={setProvider}
+        availableProviderIds={['http']}
+      />,
+    );
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.queryByText('Python')).not.toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ProviderTypeSelector
+          provider={provider}
+          setProvider={setProvider}
+          availableProviderIds={['python']}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).not.toBeInTheDocument();
+  });
+
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially

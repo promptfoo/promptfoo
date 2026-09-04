@@ -619,21 +619,15 @@ export async function createDummyFiles(
         providers.push(...providerChoices);
       }
 
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
+      const providerIds = providerChoices.filter((choice) => typeof choice === 'string');
+      if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
         await writeFile({
           file: 'provider.js',
           contents: JAVASCRIPT_PROVIDER,
           required: true,
         });
       }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
+      if (providerIds.some((id) => id.startsWith('exec:'))) {
         // Generate platform-appropriate executable provider script
         const isWindows = process.platform === 'win32';
         await writeFile({
@@ -643,11 +637,8 @@ export async function createDummyFiles(
         });
       }
       if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        providerIds.some(
+          (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
         )
       ) {
         await writeFile({
