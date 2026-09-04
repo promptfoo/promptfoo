@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-The OpenAI Codex SDK provider requires the `@openai/codex-sdk` package to be installed separately. GPT-5.6 requires version 0.144.0 or later:
+Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Astra requires version 0.153.1 or later:
 
 ```bash
-npm install @openai/codex-sdk@^0.144.0
+npm install @openai/codex-sdk@^0.153.2
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
