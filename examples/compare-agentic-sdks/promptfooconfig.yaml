@@ -11,7 +11,7 @@ providers:
   - id: openai:codex-sdk
     label: codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-5.3-codex
       working_dir: ./test-codebase
       skip_git_repo_check: true
       output_schema:

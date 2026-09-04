@@ -103,7 +103,7 @@ providers:
 
 ### DALL-E 3 and DALL-E 2
 
-`dall-e-3` and `dall-e-2` remain supported by the provider for backward compatibility, but they are deprecated by OpenAI. Use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
+`dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
 
 Promptfoo's `openai:image` provider currently supports text-to-image generation. Image edits/reference inputs, variations, and streaming partial images are not part of this example and are rejected if configured.
 
