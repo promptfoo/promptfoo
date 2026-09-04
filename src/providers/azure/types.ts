@@ -114,7 +114,7 @@ export interface AzureCompletionOptions {
  * Options shared by Azure chat and responses providers.
  */
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
-  /** Underlying Claude model ID for azure:chat compatibility and cost estimates when the deployment is aliased. */
+  /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
   modelName?: string;
   /**
    * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
