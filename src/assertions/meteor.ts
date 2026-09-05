@@ -233,7 +233,13 @@ async function calculateSingleMeteorScore(
   return (1 - penalty) * fmean;
 }
 
-async function calculateMeteorScore(
+function tokenize(text: string): string[] {
+  const trimmed = text.trim();
+  // Splitting '' yields [''], and an empty token on both sides would match itself.
+  return trimmed === '' ? [] : trimmed.split(/\s+/).map((word) => word.replace(/\.+$/, ''));
+}
+
+export async function calculateMeteorScore(
   candidate: string,
   references: string[],
   alpha: number = 0.9,
@@ -246,13 +252,7 @@ async function calculateMeteorScore(
 
   const scores = await Promise.all(
     references.map((reference) =>
-      calculateSingleMeteorScore(
-        reference.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        candidate.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        alpha,
-        beta,
-        gamma,
-      ),
+      calculateSingleMeteorScore(tokenize(reference), tokenize(candidate), alpha, beta, gamma),
     ),
   );
 
