@@ -685,6 +685,9 @@ export class A2AProvider implements ApiProvider {
         ...(this.config.configuration
           ? { configuration: renderTemplate(this.config.configuration, vars, context) }
           : {}),
+        ...(this.config.metadata
+          ? { metadata: renderTemplate(this.config.metadata, vars, context) }
+          : {}),
       };
 
       const final =
