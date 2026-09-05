@@ -1,6 +1,7 @@
 ---
+title: Red Team Plugins
 sidebar_label: Overview
-description: Red team LLM plugins by deploying trained adversarial models to detect vulnerabilities, prevent prompt injection attacks, and protect AI systems from malicious payloads
+description: Red team LLM plugins by deploying adversarial models to detect vulnerabilities, prevent prompt injection attacks, and protect AI systems from malicious payloads
 ---
 
 import React from 'react';
@@ -36,16 +37,17 @@ Promptfoo supports {PLUGINS.length} plugins across {PLUGIN_CATEGORIES.length} ca
 
 Promptfoo also supports various risk management frameworks based on common security frameworks and standards.
 
-| Framework                                                            | Plugin ID       | Example Specification      |
-| -------------------------------------------------------------------- | --------------- | -------------------------- |
-| [**NIST AI Risk Management Framework**](/docs/red-team/nist-ai-rmf/) | nist:ai:measure | nist:ai:measure:1.1        |
-| [**OWASP Top 10 for LLMs**](/docs/red-team/owasp-llm-top-10/)        | owasp:llm       | owasp:llm:01               |
-| [**OWASP API Security Top 10**](/docs/red-team/owasp-api-top-10/)    | owasp:api       | owasp:api:01               |
-| [**MITRE ATLAS**](/docs/red-team/mitre-atlas/)                       | mitre:atlas     | mitre:atlas:reconnaissance |
-| [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                       | iso:42001       | iso:42001:privacy          |
-| [**Data Protection**](/docs/red-team/gdpr/)                          | gdpr            | gdpr:art5                  |
-| [**EU AI Act**](/docs/red-team/eu-ai-act/)                           | eu:ai-act       | eu:ai-act:art5             |
-| **Promptfoo Recommended**                                            | default         | default                    |
+| Framework                                                                     | Plugin ID       | Example Specification      |
+| ----------------------------------------------------------------------------- | --------------- | -------------------------- |
+| [**NIST AI Risk Management Framework**](/docs/red-team/nist-ai-rmf/)          | nist:ai:measure | nist:ai:measure:1.1        |
+| [**OWASP Top 10 for LLMs**](/docs/red-team/owasp-llm-top-10/)                 | owasp:llm       | owasp:llm:01               |
+| [**OWASP API Security Top 10**](/docs/red-team/owasp-api-top-10/)             | owasp:api       | owasp:api:01               |
+| [**OWASP Top 10 for Agentic Applications**](/docs/red-team/owasp-agentic-ai/) | owasp:agentic   | owasp:agentic:asi01        |
+| [**MITRE ATLAS**](/docs/red-team/mitre-atlas/)                                | mitre:atlas     | mitre:atlas:reconnaissance |
+| [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                                | iso:42001       | iso:42001:privacy          |
+| [**Data Protection**](/docs/red-team/gdpr/)                                   | gdpr            | gdpr:art5                  |
+| [**EU AI Act**](/docs/red-team/eu-ai-act/)                                    | eu:ai-act       | eu:ai-act:art5             |
+| **Promptfoo Recommended**                                                     | default         | default                    |
 
 ## Available Plugins
 
