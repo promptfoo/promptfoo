@@ -39,7 +39,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+import { getNunjucksEngine, renderMetricName } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
@@ -105,6 +105,8 @@ import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
+export { renderMetricName };
+
 import type {
   AssertionOrSet,
   AssertionParams,
@@ -121,6 +123,7 @@ const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
 const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
+const nunjucks = getNunjucksEngine();
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
@@ -317,35 +320,6 @@ const ASSERTION_HANDLERS: Record<
   webhook: handleWebhook,
   'word-count': handleWordCount,
 };
-
-const nunjucks = getNunjucksEngine();
-
-/**
- * Renders a metric name template with test variables.
- * @param metric - The metric name, possibly containing Nunjucks template syntax
- * @param vars - The test variables to use for rendering
- * @returns The rendered metric name, or the original if rendering fails
- */
-export function renderMetricName(
-  metric: string | undefined,
-  vars: Record<string, unknown>,
-): string | undefined {
-  if (!metric) {
-    return metric;
-  }
-  try {
-    const rendered = nunjucks.renderString(metric, vars);
-    if (rendered === '' && metric !== '') {
-      logger.debug(`Metric template "${metric}" rendered to empty string`);
-    }
-    return rendered;
-  } catch (error) {
-    logger.warn(
-      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
-    );
-    return metric;
-  }
-}
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
