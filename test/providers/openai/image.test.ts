@@ -333,6 +333,44 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('No image URL found in response');
     });
 
+    it('should handle empty data array in response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'No image URL found in response: {"data":[]}',
+      });
+    });
+
+    it('should handle missing data field in response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { created: 123 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'No image URL found in response: {"created":123}',
+      });
+    });
+
     it('should handle error with minimal details', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
@@ -417,6 +455,44 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No base64 image data found in response');
+    });
+
+    it('should handle empty data array for base64 response format', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'No base64 image data found in response: {"data":[]}',
+      });
+    });
+
+    it('should handle missing data field for base64 response format', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { created: 123 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'No base64 image data found in response: {"created":123}',
+      });
     });
   });
 
