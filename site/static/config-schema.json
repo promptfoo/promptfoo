@@ -191,6 +191,12 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ARK_API_BASE_URL": {
+          "type": "string"
+        },
+        "ARK_API_KEY": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -1666,6 +1672,12 @@
                       "type": "string"
                     },
                     "ANTHROPIC_CUSTOM_HEADERS": {
+                      "type": "string"
+                    },
+                    "ARK_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ARK_API_KEY": {
                       "type": "string"
                     },
                     "ATLASCLOUD_API_KEY": {

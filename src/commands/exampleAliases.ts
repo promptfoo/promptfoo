@@ -173,6 +173,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'vars-referencing-vars': 'config-vars-referencing-vars',
   'vercel-ai-gateway': 'integration-vercel/ai-gateway',
   'vercel-ai-sdk': 'integration-vercel/ai-sdk',
+  volcengine: 'provider-volcengine',
   'voyage-embeddings': 'provider-voyage-embeddings',
   watsonx: 'provider-watsonx',
   websockets: 'config-websockets/basic',

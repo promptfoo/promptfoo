@@ -1312,6 +1312,24 @@ describe('Provider Registry', () => {
       );
       expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
     });
+
+    it('should handle volcengine provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('volcengine:doubao-seed-2-1-pro-260628'));
+      expect(factory).toBeDefined();
+
+      const volcengineOptions = { ...mockProviderOptions, id: undefined };
+      const defaultProvider = await factory!.create('volcengine', volcengineOptions, mockContext);
+      expect(defaultProvider).toBeDefined();
+      expect(defaultProvider.id()).toBe('volcengine:doubao-seed-2-1-pro-260628');
+
+      const modelProvider = await factory!.create(
+        'volcengine:doubao-seed-evolving',
+        volcengineOptions,
+        mockContext,
+      );
+      expect(modelProvider).toBeDefined();
+      expect(modelProvider.id()).toBe('volcengine:doubao-seed-evolving');
+    });
   });
 
   // Kept at the very end of the file because it uses vi.doMock + resetModules
