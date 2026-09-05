@@ -715,6 +715,16 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const AssertionEvidenceSchema = z.object({
+  from: z.string().regex(/^metadata(?:\.[A-Za-z0-9_$-]+|\.\d+)*$/, {
+    message: 'evidence.from must select a provider metadata path like metadata.fileChanges',
+  }),
+  label: z.string().optional(),
+  maxBytes: z.number().int().positive(),
+});
+
+export type AssertionEvidence = z.infer<typeof AssertionEvidenceSchema>;
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
@@ -744,6 +754,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: StringOrFunctionSchema.optional(),
+
+  // Project explicitly selected ProviderResponse metadata into native model graders.
+  evidence: z.array(AssertionEvidenceSchema).optional(),
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
