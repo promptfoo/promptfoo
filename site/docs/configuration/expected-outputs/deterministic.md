@@ -605,7 +605,7 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+This assertion supports multiple provider formats including OpenAI Chat Completions and Responses, Anthropic, and Google/Vertex. Responses `function_call` blocks are recognized as objects or JSON strings, including newline-separated calls mixed with text.
 
 The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
 
