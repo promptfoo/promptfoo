@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.122.3](https://github.com/promptfoo/promptfoo/compare/0.122.2...0.122.3) (2026-09-05)
+
+
+### Features
+
+* **providers:** add Claude Fable and Mythos 5.1 ([#10601](https://github.com/promptfoo/promptfoo/issues/10601)) ([ac6ba5b](https://github.com/promptfoo/promptfoo/commit/ac6ba5b7bfacf9da728219ebf2c9d813f0832240))
+* **providers:** add GPT-6 Astra support ([#10625](https://github.com/promptfoo/promptfoo/issues/10625)) ([cd4c68b](https://github.com/promptfoo/promptfoo/commit/cd4c68bd5a143b42b507ebc7b8cce1a0d9511539))
+* **providers:** add grok-4.6, grok-imagine-image-2.0, and grok-imagine-video-1.5 ([#10587](https://github.com/promptfoo/promptfoo/issues/10587)) ([48a71cd](https://github.com/promptfoo/promptfoo/commit/48a71cd0163b01ba8efb2954eb0165dd810a6c6e))
+* **providers:** expose MCP tool calls in response metadata ([#10516](https://github.com/promptfoo/promptfoo/issues/10516)) ([891d870](https://github.com/promptfoo/promptfoo/commit/891d870990b8a3f51bfd5f2db44669ac82ccb63e))
+* **providers:** support Gemini 3.8 Flash ([#10616](https://github.com/promptfoo/promptfoo/issues/10616)) ([b89a25d](https://github.com/promptfoo/promptfoo/commit/b89a25d4dbb15889ffb602927747ebcb24d91efe))
+* **providers:** support Muse Spark 1.3 ([#10617](https://github.com/promptfoo/promptfoo/issues/10617)) ([8e0de03](https://github.com/promptfoo/promptfoo/commit/8e0de03b5934392168f471a192ac7a061f1e2eac))
+
+
+### Bug Fixes
+
+* **claude-agent:** preserve per-server env for stdio MCP servers ([#10557](https://github.com/promptfoo/promptfoo/issues/10557)) ([6fd4c41](https://github.com/promptfoo/promptfoo/commit/6fd4c41bcc58c4563ba5794c2543a3aabd848083))
+* **config:** avoid stack traces for missing optional configs ([#10523](https://github.com/promptfoo/promptfoo/issues/10523)) ([3d67680](https://github.com/promptfoo/promptfoo/commit/3d676805ca5cf40f5a4e92d65db21836cb7391a3))
+* **deps:** update anthropic packages ([#10571](https://github.com/promptfoo/promptfoo/issues/10571)) ([93f963d](https://github.com/promptfoo/promptfoo/commit/93f963d880831fbe4de6a049afbf88f68301114e))
+* **deps:** update dependency @inquirer/core to v12 ([#10554](https://github.com/promptfoo/promptfoo/issues/10554)) ([90fa399](https://github.com/promptfoo/promptfoo/commit/90fa399b941364363f57288fbf305b6d6aaff7ed))
+* **deps:** update dependency ai to ^6.0.264 ([#10585](https://github.com/promptfoo/promptfoo/issues/10585)) ([da073db](https://github.com/promptfoo/promptfoo/commit/da073db4261af95bff25a23f517b1d67b89f132e))
+* **deps:** update OpenCode SDK to v1.18.21 ([#10565](https://github.com/promptfoo/promptfoo/issues/10565)) ([93b9f8c](https://github.com/promptfoo/promptfoo/commit/93b9f8c04fbbf8265f94c920e7cdea0b73ec4b40))
+* **eval:** keep the CLI alive while watch mode is watching ([#10562](https://github.com/promptfoo/promptfoo/issues/10562)) ([89d4138](https://github.com/promptfoo/promptfoo/commit/89d41387f5f1b0d9746d7175c23b8c0c9c8cfa52))
+* **eval:** watch mode ignored scalar and generator `tests` references ([#10169](https://github.com/promptfoo/promptfoo/issues/10169)) ([71499e3](https://github.com/promptfoo/promptfoo/commit/71499e3ed2c1292df16ab9f77cd11dbcf8f791ee))
+* **go-provider:** support importable packages ([#10540](https://github.com/promptfoo/promptfoo/issues/10540)) ([10deb31](https://github.com/promptfoo/promptfoo/commit/10deb31cc3ac953a28ee88fe43530cfc4d2c7927))
+* guard empty drift stats and clarify provider options ([#10645](https://github.com/promptfoo/promptfoo/issues/10645)) ([bfcd067](https://github.com/promptfoo/promptfoo/commit/bfcd0674689c538df416b7cfac4e762614149fb7))
+* harden eval and provider edge cases ([#10576](https://github.com/promptfoo/promptfoo/issues/10576)) ([1adb6e5](https://github.com/promptfoo/promptfoo/commit/1adb6e5e16084f3ebde04b1d2fb340fbdb99cf1f))
+* **http:** clear error context when signature fails due to missing private key ([#10586](https://github.com/promptfoo/promptfoo/issues/10586)) ([7abf349](https://github.com/promptfoo/promptfoo/commit/7abf349d897b58efdf860aa5b87e1574dc95d7df))
+* **http:** support Windows drive letter and file:// source paths in multipart ([#10566](https://github.com/promptfoo/promptfoo/issues/10566)) ([22468f4](https://github.com/promptfoo/promptfoo/commit/22468f45be80ee1cb40f18bf843c18b96c86aef5))
+* **providers:** address AI code quality findings ([#10552](https://github.com/promptfoo/promptfoo/issues/10552)) ([9cd1924](https://github.com/promptfoo/promptfoo/commit/9cd19241a0706fcf59dd609167f4218612fc4beb))
+* **providers:** correct stale Bedrock pricing, regional rates, and Nova cache billing ([#10593](https://github.com/promptfoo/promptfoo/issues/10593)) ([dad89cd](https://github.com/promptfoo/promptfoo/commit/dad89cda85c28425491ddc04d9a7641eecafa5cf))
+* **providers:** drop Claude model ids that resolve nowhere ([#10635](https://github.com/promptfoo/promptfoo/issues/10635)) ([281f8d4](https://github.com/promptfoo/promptfoo/commit/281f8d42984771608baf6e925ca24bb090554027))
+* **providers:** normalize typed Responses messages ([#10600](https://github.com/promptfoo/promptfoo/issues/10600)) ([a966cc5](https://github.com/promptfoo/promptfoo/commit/a966cc5d1fb3701900b2d27b409bc6f685afde5e))
+* **providers:** raise equal Claude thinking token budgets ([#10498](https://github.com/promptfoo/promptfoo/issues/10498)) ([ae3615a](https://github.com/promptfoo/promptfoo/commit/ae3615a9a09c8eb008a97b75b3e037f96889bd9e))
+* **providers:** retain failed security scan costs ([#10521](https://github.com/promptfoo/promptfoo/issues/10521)) ([04e36f3](https://github.com/promptfoo/promptfoo/commit/04e36f3b139be643a72d6b08649fe14527b0a4d0))
+* **providers:** route Grok 4.6 inference profiles on Bedrock ([#10589](https://github.com/promptfoo/promptfoo/issues/10589)) ([48bad74](https://github.com/promptfoo/promptfoo/commit/48bad74d5ee616889acff49a81a511692e581570))
+* **providers:** stop forwarding portkey provider config as HTTP headers ([#10536](https://github.com/promptfoo/promptfoo/issues/10536)) ([3f94284](https://github.com/promptfoo/promptfoo/commit/3f942845637918a72111e632952b16daf9fb2066))
+* **providers:** support Abliteration Large V2 reasoning ([#10615](https://github.com/promptfoo/promptfoo/issues/10615)) ([51b8f12](https://github.com/promptfoo/promptfoo/commit/51b8f125d14ca28e5aae2d2e1f9696ea49db2a10))
+* **providers:** treat Claude Sonnet 5 as thinking-on-by-default ([#10631](https://github.com/promptfoo/promptfoo/issues/10631)) ([5bf2ad1](https://github.com/promptfoo/promptfoo/commit/5bf2ad1ada2780871e1661d78db2f1a46f6d39fb))
+* **providers:** unbreak Grok on Azure and multimodal Responses prompts ([#10592](https://github.com/promptfoo/promptfoo/issues/10592)) ([d7ce7ec](https://github.com/promptfoo/promptfoo/commit/d7ce7ec2e68e2ca18c9ee63c65197bf0ed50e5fb))
+* **security:** redact credential-named variables in persisted env maps ([#10628](https://github.com/promptfoo/promptfoo/issues/10628)) ([811158e](https://github.com/promptfoo/promptfoo/commit/811158ee380d0bdcc909ba466f24a6806240b9ed))
+
 ## [0.122.2](https://github.com/promptfoo/promptfoo/compare/0.122.1...0.122.2) (2026-08-28)
 
 ### Features
