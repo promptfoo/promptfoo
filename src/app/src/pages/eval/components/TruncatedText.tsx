@@ -118,12 +118,12 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               display: 'inline-flex',
               alignItems: 'center',
               marginLeft: '4px',
-              color: '#3b82f6',
+              color: 'hsl(var(--primary))',
               fontWeight: 'bold',
               fontSize: '0.85em',
               padding: '1px 4px',
               borderRadius: '4px',
-              background: 'rgba(59, 130, 246, 0.1)',
+              background: 'hsl(var(--primary) / 0.1)',
               cursor: 'pointer',
             }}
             onClick={toggleTruncate}
