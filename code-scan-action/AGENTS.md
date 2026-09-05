@@ -4,6 +4,8 @@ This package contains the GitHub Action wrapper for Promptfoo code scan.
 
 ## Rules
 
+Follow these rules as defense in depth. The action is a best-effort analysis tool, not an adversarial-repository sandbox or a guarantee of scan completeness. See the root `SECURITY.md` for reportability and supported boundaries.
+
 - Treat GitHub event fields, changed paths, `guidance`, and `guidance-file` contents as
   untrusted. Pass PR-controlled values through `@actions/exec` argument arrays, not
   shell interpolation.
