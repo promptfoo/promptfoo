@@ -254,6 +254,48 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('should preserve fields from the original response on cache hits', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const mockResponse = {
+          choices: [{ message: { content: 'The output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const cachedProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const first = await cachedProvider.callApi('Repeatable prompt');
+        expect(first.cached).toBe(false);
+        expect(first.output).toBe('The output');
+        expect(first.latencyMs).toEqual(expect.any(Number));
+        expect(first.finishReason).toBe('stop');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+
+        const second = await cachedProvider.callApi('Repeatable prompt');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1); // Still 1
+        expect(second).toEqual({
+          ...first,
+
+          // The difference when the response is cached
+          cached: true,
+          tokenUsage: {
+            total: 10,
+            cached: 10,
+          },
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('returns a clean error instead of crashing on an empty choices array', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
