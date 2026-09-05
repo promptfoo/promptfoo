@@ -7,6 +7,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
  *
  * Supports:
  * - OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
+ * - OpenAI Responses format: { type: 'function_call', name: '...' }
  * - OpenAI direct array: [{ function: { name: "..." } }]
  * - Simple format: [{ name: "..." }]
  * - Anthropic format: { type: 'tool_use', name: '...' } or arrays of content blocks
@@ -82,8 +83,8 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
-  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
-  if (obj.type === 'tool_use' && typeof obj.name === 'string') {
+  // Handle single Anthropic tool_use or OpenAI Responses function_call blocks.
+  if ((obj.type === 'tool_use' || obj.type === 'function_call') && typeof obj.name === 'string') {
     names.add(obj.name);
     return names;
   }
