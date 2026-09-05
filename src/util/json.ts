@@ -424,7 +424,10 @@ function verdictsConflict(
  * genuine verdict carrying metadata that merely repeats a verdict key with
  * the SAME value does not trip this.
  */
-function containsConflictingNestedVerdict(obj: Record<string, unknown>, verdictKeys: string[]): boolean {
+function containsConflictingNestedVerdict(
+  obj: Record<string, unknown>,
+  verdictKeys: string[],
+): boolean {
   let conflict = false;
 
   const visit = (node: unknown, isRoot: boolean): void => {
@@ -517,8 +520,7 @@ export function selectVerdictObject<T extends object>(
   }
 
   const last = entries[entries.length - 1];
-  const lastIsCompleteVerdict =
-    !last.autoClosed && isVerdictShaped(last.object, verdictKeys);
+  const lastIsCompleteVerdict = !last.autoClosed && isVerdictShaped(last.object, verdictKeys);
 
   if (lastIsCompleteVerdict) {
     const lastRecord = last.object as Record<string, unknown>;
@@ -536,10 +538,7 @@ export function selectVerdictObject<T extends object>(
       continue;
     }
     const chosen = entry.object as Record<string, unknown>;
-    const lastVerdict = unwrapNestedVerdict(
-      last.object as Record<string, unknown>,
-      verdictKeys,
-    );
+    const lastVerdict = unwrapNestedVerdict(last.object as Record<string, unknown>, verdictKeys);
     if (
       isVerdictShaped(lastVerdict, verdictKeys) &&
       verdictsConflict(chosen, lastVerdict, verdictKeys)

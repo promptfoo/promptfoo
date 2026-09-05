@@ -440,7 +440,7 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
       );
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
-      expect(String(result.reason)).toContain('ambiguous verdict JSON');
+      expect(result.reason).toContain('ambiguous verdict JSON');
     });
   });
 
