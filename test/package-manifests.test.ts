@@ -22,7 +22,7 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.35.3';
+const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
@@ -487,9 +487,12 @@ describe('package manifests', () => {
       devDependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     }>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
 
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+    expect(packageLock.packages[''].dependencies?.sharp).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
