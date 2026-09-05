@@ -205,6 +205,139 @@ describe('FrameworkCompliance', () => {
     expect(renderedFrameworks.includes('nist:ai:measure')).toBe(false);
   });
 
+  it('should not count configured frameworks as compliant when none of their mapped plugins were tested', () => {
+    const categoryStats = {
+      'coding-agent:network-egress-bypass': {
+        pass: 5,
+        total: 10,
+        passWithFilter: 5,
+        failCount: 5,
+      },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['mitre:atlas', 'nist:ai:measure', 'owasp:agentic'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (0/0 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard.mock.calls).toHaveLength(3);
+    expect(
+      mockFrameworkCard.mock.calls.every(
+        ([props]) => props.isTested === false && props.isCompliant === false,
+      ),
+    ).toBe(true);
+  });
+
+  it('should count only tested frameworks while preserving partial-test compliance', () => {
+    const categoryStats = {
+      'agentic:memory-poisoning': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:agentic', 'owasp:api'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledTimes(2);
+    expect(
+      mockFrameworkCard.mock.calls.find(([props]) => props.framework === 'owasp:agentic')?.[0],
+    ).toEqual(
+      expect.objectContaining({
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({
+          compliant: expect.arrayContaining(['agentic:memory-poisoning']),
+        }),
+      }),
+    );
+    expect(
+      mockFrameworkCard.mock.calls.find(([props]) => props.framework === 'owasp:api')?.[0],
+    ).toEqual(expect.objectContaining({ isTested: false, isCompliant: false }));
+  });
+
+  it('should match fully qualified plugin IDs to framework mappings', () => {
+    const categoryStats = {
+      'promptfoo:redteam:intent': { pass: 0, total: 1, passWithFilter: 0, failCount: 1 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:agentic'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (0/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'owasp:agentic',
+        isTested: true,
+        isCompliant: false,
+        frameworkSeverity: 'high',
+        pluginCategories: expect.objectContaining({
+          nonCompliant: ['promptfoo:redteam:intent'],
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('should expand mapped plugin collections before determining framework compliance', () => {
+    const categoryStats = {
+      'harmful:violent-crime': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:llm'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'owasp:llm',
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({
+          compliant: ['harmful:violent-crime'],
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('should retain aggregate harmful results as framework evidence', () => {
+    const categoryStats = {
+      harmful: { pass: 1, total: 1, passWithFilter: 1, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['mitre:atlas'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'mitre:atlas',
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({ compliant: ['harmful'] }),
+      }),
+      undefined,
+    );
+  });
+
   it('should show all frameworks when no config.redteam.frameworks is provided', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
