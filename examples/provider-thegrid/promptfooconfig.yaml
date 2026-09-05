@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: The Grid capability tiers via the OpenAI-compatible provider
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  # THEGRID_API_KEY must be set. If it resolves to nothing and OPENAI_API_KEY is
+  # set, the OpenAI provider falls back to OPENAI_API_KEY, which would send that
+  # credential to api.thegrid.ai.
+  - id: openai:chat:text-standard
+    label: The Grid text-standard
+    config:
+      apiBaseUrl: https://api.thegrid.ai/v1
+      apiKey: '{{env.THEGRID_API_KEY}}'
+      temperature: 0
+      # Use max_tokens: promptfoo only forwards max_completion_tokens for models
+      # it classifies as reasoning models, which Grid instrument names are not.
+      max_tokens: 1024
+
+  - id: openai:chat:text-prime
+    label: The Grid text-prime
+    config:
+      apiBaseUrl: https://api.thegrid.ai/v1
+      apiKey: '{{env.THEGRID_API_KEY}}'
+      temperature: 0
+      max_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+
+  - vars:
+      question: Name the largest planet in the solar system.
+    assert:
+      - type: icontains
+        value: Jupiter
+
+  - vars:
+      question: What is 17 multiplied by 23?
+    assert:
+      - type: contains
+        value: '391'
