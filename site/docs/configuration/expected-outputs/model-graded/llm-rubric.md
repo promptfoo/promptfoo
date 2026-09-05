@@ -108,7 +108,7 @@ assert:
 
 The parent score is `sum(component.score * component.weight) / sum(component.weight)`. With a parent `threshold`, that score alone determines whether the batch passes. Without a threshold, every component must return `pass: true`. For example, scores of 1 and 0.5 with weights 2 and 1 produce a score of approximately 0.833, which passes a threshold of 0.8 even if the second component fails.
 
-Each component must have a unique, literal `metric` name and a non-empty inline rubric string in `value`. Rubric strings support test variables. Weights must be positive finite numbers, and their total must be finite. Parent and component metric names cannot use templates or reserved object keys such as `__proto__` or `constructor`; the parent metric must also differ from every component metric.
+Each component must have a unique, literal `metric` name and a non-empty inline rubric string in `value`. Rubric strings support test variables. Weights must be positive finite numbers, and their total must be finite. Parent and component metric names cannot use templates, reserved object keys such as `__proto__` or `constructor`, or the derived-metric variable `__count`; the parent metric must also differ from every component metric.
 
 Components share the parent's provider, `rubricPrompt`, and transformed candidate output. Component-level provider, prompt, transform, and threshold overrides are rejected. Use separate assertions or an `assert-set` when the criteria need different graders or settings. In redteam configurations that would otherwise use hosted remote grading, specify an explicit grading provider: hosted grading does not support the components response format.
 
