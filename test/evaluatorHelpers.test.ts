@@ -633,6 +633,39 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it('should leave placeholders inside raw blocks untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      });
+    });
+
+    it('should leave placeholders nested in another expression untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      });
+    });
+
+    it('should still substitute simple placeholders around protected spans', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{{x}} and {% raw %}{{x}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: 'yes and {% raw %}{{x}}{% endraw %}',
+      });
+    });
   });
 
   describe('runExtensionHook', () => {
