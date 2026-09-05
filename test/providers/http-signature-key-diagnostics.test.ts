@@ -102,6 +102,14 @@ describe('diagnosePrivateKeyMaterial', () => {
     );
   });
 
+  it('does not accept an unrelated END marker for a truncated key', () => {
+    const truncatedWithCertificateEnd = `${rsaPrivate.slice(0, 120)}
+-----END CERTIFICATE-----`;
+    expect(diagnosePrivateKeyMaterial(truncatedWithCertificateEnd)).toBe(
+      'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
+    );
+  });
+
   it.each([
     ['RSA', () => rsaPrivate],
     ['EC', () => ecPrivate],
@@ -144,6 +152,23 @@ describe('generateSignature key diagnostics', () => {
     const certificateContent = Buffer.from(rsaPublic, 'utf8').toString('base64');
     await expect(generateSignature({ ...baseAuth, certificateContent }, 1)).rejects.toThrow(
       'Private key from certificateContent cannot be used: it is a public key, not a private key',
+    );
+  });
+
+  it('applies the same diagnostic attribution for pfx keyContent', async () => {
+    const keyContent = Buffer.from(rsaPublic, 'utf8').toString('base64');
+    await expect(
+      generateSignature(
+        {
+          ...baseAuth,
+          type: 'pfx',
+          certContent: Buffer.from('certificate').toString('base64'),
+          keyContent,
+        },
+        1,
+      ),
+    ).rejects.toThrow(
+      'Private key from keyContent cannot be used: it is a public key, not a private key',
     );
   });
 

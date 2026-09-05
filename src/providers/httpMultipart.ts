@@ -81,8 +81,13 @@ function escapePdfText(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
+// Keep generated PDF text bounded so the simple single-line content stream stays manageable.
+const MAX_PDF_DISPLAY_TEXT_LENGTH = 800;
+
 function createBasicPdf(text: string): Buffer {
-  const displayText = escapePdfText(text.replace(/\s+/g, ' ').trim().slice(0, 800));
+  const displayText = escapePdfText(
+    text.replace(/\s+/g, ' ').trim().slice(0, MAX_PDF_DISPLAY_TEXT_LENGTH),
+  );
   const content = `BT
 /F1 16 Tf
 72 720 Td
@@ -249,7 +254,19 @@ async function loadFilePart(
   vars: Record<string, unknown>,
   abortSignal?: AbortSignal,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
-  const resolvedPath = resolvePath(renderTemplate(source.path, vars));
+  const renderedPath = renderTemplate(source.path, vars);
+  const resolvedPath = path.resolve(resolvePath(renderedPath));
+  const baseDir = path.resolve(cliState.basePath || process.cwd());
+  const relativeToBase = path.relative(baseDir, resolvedPath);
+
+  if (
+    relativeToBase === '..' ||
+    relativeToBase.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToBase)
+  ) {
+    throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
+  }
+
   const buffer = await fs.readFile(resolvedPath, { signal: abortSignal });
   return {
     buffer,
@@ -272,7 +289,8 @@ export async function renderHttpMultipartBody(
     const field = renderTemplate(part.name, vars);
 
     if (part.kind === 'field') {
-      const value = renderTemplate(String(part.value), vars);
+      const value =
+        typeof part.value === 'string' ? renderTemplate(part.value, vars) : String(part.value);
       formData.append(field, value);
       fields.push({ field, value });
       continue;

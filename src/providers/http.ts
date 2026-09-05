@@ -367,7 +367,10 @@ export function diagnosePrivateKeyMaterial(material: unknown): string | undefine
   if (!text.includes('PRIVATE KEY-----')) {
     return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
-  if (!text.includes('-----END')) {
+  if (
+    !text.includes('-----END PRIVATE KEY-----') &&
+    !text.includes('-----END ENCRYPTED PRIVATE KEY-----')
+  ) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
   }
   return undefined;

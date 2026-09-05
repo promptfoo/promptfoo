@@ -7,6 +7,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
 import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
 
@@ -183,9 +184,55 @@ describe('HttpProvider structured multipart requests', () => {
     });
   });
 
+  it('uploads a generated PNG with the expected content type and bytes', async () => {
+    const mockServer = await createMultipartDocumentSummarizerServer();
+    const provider = new HttpProvider('http', {
+      config: {
+        url: mockServer.url,
+        headers: { 'X-API-Key': 'test-api-key' },
+        multipart: {
+          parts: [
+            {
+              kind: 'file',
+              name: 'files',
+              filename: 'sample-image.png',
+              source: {
+                type: 'generated',
+                format: 'png',
+                text: 'Benign generated image used to test multipart transport.',
+              },
+            },
+            {
+              kind: 'field',
+              name: 'documentQuery',
+              value: '{{prompt}}',
+            },
+          ],
+        },
+        transformResponse: 'json.summary',
+      },
+    });
+
+    await provider.callApi('Summarize this image');
+
+    expect(mockServer.getLastRequest()).toMatchObject({
+      documentQuery: 'Summarize this image',
+      files: [
+        expect.objectContaining({
+          filename: 'sample-image.png',
+          contentType: 'image/png',
+        }),
+      ],
+    });
+    expect(mockServer.getLastRequest()?.files[0].sizeBytes).toBeGreaterThan(0);
+    expect(mockServer.getLastRequest()?.files[0].sha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it('renders path sources with per-test variables before reading local files', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
     const reportPath = path.join(tempDir, 'report-a.txt');
     const standardFileUrl = pathToFileURL(reportPath).toString();
     fs.writeFileSync(reportPath, 'report-a contents');
@@ -216,34 +263,68 @@ describe('HttpProvider structured multipart requests', () => {
       },
     });
 
-    await provider.callApi('Summarize local fixture', {
-      prompt: { raw: 'Summarize local fixture', label: 'query' },
-      vars: {
-        documentPath: reportPath,
-      },
-    });
+    try {
+      await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: {
+          documentPath: reportPath,
+        },
+      });
 
-    expect(mockServer.getLastRequest()).toMatchObject({
-      documentQuery: 'Summarize local fixture',
-      files: [
-        expect.objectContaining({
-          filename: 'report-a.txt',
-          contentType: 'text/plain',
-          sizeBytes: Buffer.byteLength('report-a contents'),
-        }),
-      ],
-    });
+      expect(mockServer.getLastRequest()).toMatchObject({
+        documentQuery: 'Summarize local fixture',
+        files: [
+          expect.objectContaining({
+            filename: 'report-a.txt',
+            contentType: 'text/plain',
+            sizeBytes: Buffer.byteLength('report-a contents'),
+          }),
+        ],
+      });
 
-    await provider.callApi('Summarize local fixture', {
-      prompt: { raw: 'Summarize local fixture', label: 'query' },
-      vars: {
-        documentPath: standardFileUrl.slice('file://'.length),
-      },
-    });
-    expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
-      filename: 'report-a.txt',
-      contentType: 'text/plain',
-    });
+      await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: {
+          documentPath: standardFileUrl.slice('file://'.length),
+        },
+      });
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'report-a.txt',
+        contentType: 'text/plain',
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('rejects path sources that escape the configured base directory', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const provider = new HttpProvider('http', {
+        config: {
+          url: 'http://127.0.0.1:1',
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: '../outside.txt' },
+              },
+            ],
+          },
+        },
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'File path escapes allowed base directory: ../outside.txt',
+      );
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
