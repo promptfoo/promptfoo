@@ -736,10 +736,13 @@ function createRunEvalState({
 }
 
 /**
- * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` below is keyed by
- * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
- * type-check until the key is added here too — keeping the omit list and the
- * producer in lockstep.
+ * Reserved keys for eval-step runtime vars injected into `vars` for prompt and
+ * provider rendering. `__evalStepId` encodes the per-(repeat, combination) test
+ * index (`test-<idx>-prompt-<idx>-repeat-<idx>`), not a stable logical test id.
+ *
+ * `EvalRuntimeVars` below is keyed by this tuple, so adding a new key to
+ * {@link getEvalRuntimeVars} fails to type-check until the key is added here
+ * too, keeping the omit list and the producer in lockstep.
  */
 const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
 const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
@@ -1604,6 +1607,10 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
+type RunEvalInternalOptions = RunEvalOptions & {
+  warnedReservedRuntimeVars?: Set<string>;
+};
+
 async function runEvalInternal({
   provider,
   prompt, // raw prompt
@@ -1624,7 +1631,8 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  warnedReservedRuntimeVars,
+}: RunEvalInternalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1640,15 +1648,29 @@ async function runEvalInternal({
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
-  Object.assign(
-    state.vars,
-    getEvalRuntimeVars({
-      evalId,
-      promptIndex,
-      repeatIndex,
-      testIndex,
-    }),
+  const runtimeVars = getEvalRuntimeVars({
+    evalId,
+    promptIndex,
+    repeatIndex,
+    testIndex,
+  });
+  // Warn about every reserved key supplied before runtime values are applied.
+  // Injected values overwrite collisions, while omitEvalRuntimeVars removes all
+  // reserved keys from result and grading vars. The evaluator shares a set so
+  // each reserved key is reported at most once per eval.
+  const collidingReservedVars = EVAL_RUNTIME_VAR_KEYS.filter(
+    (name) => Object.hasOwn(state.vars, name) && !warnedReservedRuntimeVars?.has(name),
   );
+  if (collidingReservedVars.length > 0) {
+    collidingReservedVars.forEach((name) => warnedReservedRuntimeVars?.add(name));
+    logger.warn(
+      'Vars collide with reserved promptfoo runtime vars. Runtime values override them when ' +
+        'set, and reserved values may be removed from evaluator vars before downstream use. ' +
+        'Rename the supplied vars to avoid the conflict.',
+      { collidingReservedVars },
+    );
+  }
+  Object.assign(state.vars, runtimeVars);
 
   let setup = state.setup;
   let latencyMs = 0;
@@ -3345,6 +3367,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly warnedReservedRuntimeVars = new Set<string>();
+
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3586,6 +3610,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      warnedReservedRuntimeVars: this.warnedReservedRuntimeVars,
     });
     onRowsReady?.();
     return rows;
