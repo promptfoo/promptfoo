@@ -2,8 +2,10 @@ import path from 'path';
 
 import { describe, expect, it } from 'vitest';
 import {
+  assertDevApiPortsDoNotCollide,
   browserModuleReplacements,
   browserModulesPlugin,
+  pointsAtDevUiPort,
   vendorCodeSplittingGroups,
 } from './vite.shared';
 
@@ -53,6 +55,57 @@ describe('browserModulesPlugin', () => {
     );
 
     expect(resolvedId).toBeNull();
+  });
+});
+
+describe('assertDevApiPortsDoNotCollide', () => {
+  const base = {
+    nodeEnv: 'development',
+    apiPort: '18601',
+    remoteApiBaseUrl: 'http://localhost:18601',
+  };
+
+  it('allows the default dev ports', () => {
+    expect(() => assertDevApiPortsDoNotCollide(base)).not.toThrow();
+  });
+
+  it('rejects an API port equal to the dev UI port', () => {
+    expect(() =>
+      assertDevApiPortsDoNotCollide({
+        ...base,
+        apiPort: '15500',
+        remoteApiBaseUrl: 'http://localhost:15500',
+      }),
+    ).toThrow(/collides with the dev UI port/);
+  });
+
+  it('rejects a remote API base URL that resolves to the dev UI port', () => {
+    for (const remoteApiBaseUrl of [
+      'http://localhost:15500',
+      'http://127.0.0.1:15500',
+      'http://[::1]:15500',
+    ]) {
+      expect(() => assertDevApiPortsDoNotCollide({ ...base, remoteApiBaseUrl })).toThrow(
+        /resolves to the dev UI port/,
+      );
+    }
+  });
+
+  it('does not enforce outside development', () => {
+    expect(() =>
+      assertDevApiPortsDoNotCollide({
+        nodeEnv: 'production',
+        apiPort: '15500',
+        remoteApiBaseUrl: 'http://localhost:15500',
+      }),
+    ).not.toThrow();
+  });
+
+  it('ignores non-UI ports and unparseable URLs', () => {
+    expect(pointsAtDevUiPort('http://localhost:18601')).toBe(false);
+    expect(pointsAtDevUiPort('https://api.example.com')).toBe(false);
+    expect(pointsAtDevUiPort('')).toBe(false);
+    expect(pointsAtDevUiPort('not a url')).toBe(false);
   });
 });
 

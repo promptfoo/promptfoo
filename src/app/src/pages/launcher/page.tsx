@@ -16,6 +16,14 @@ import ThemeSelector from '../../components/ThemeSelector';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
+function getDisplayApiUrl(apiBaseUrl: string) {
+  try {
+    return new URL(apiBaseUrl).host;
+  } catch {
+    return apiBaseUrl;
+  }
+}
+
 export default function LauncherPage() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [hasBeenConnected, setHasBeenConnected] = useState(false);
@@ -26,6 +34,8 @@ export default function LauncherPage() {
     refetch: checkHealth,
   } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
+  const localApiUrl = apiBaseUrl || DEFAULT_LOCAL_API_URL;
+  const displayApiUrl = getDisplayApiUrl(localApiUrl);
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
   useEffect(() => {
@@ -121,7 +131,7 @@ export default function LauncherPage() {
         >
           {isConnecting ? (
             <>
-              Connecting to Promptfoo on localhost:15500
+              Connecting to Promptfoo on {displayApiUrl}
               <Spinner size="sm" />
             </>
           ) : (
@@ -142,15 +152,15 @@ export default function LauncherPage() {
             <h2 className="text-xl font-light">Getting Started</h2>
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">
-            This app will proxy requests to <code className="text-sm">localhost:15500</code> by
+            This app will proxy requests to <code className="text-sm">{displayApiUrl}</code> by
             default. You can also visit{' '}
             <a
-              href={DEFAULT_LOCAL_API_URL}
+              href={localApiUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              localhost:15500
+              {displayApiUrl}
             </a>{' '}
             directly.
           </p>
