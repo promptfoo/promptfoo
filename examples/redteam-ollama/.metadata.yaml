@@ -1,0 +1,5 @@
+title: 'Red Team with Ollama'
+description: 'Red team a locally-hosted Ollama model for harmful content, PII leakage, hallucination, and jailbreak vulnerabilities'
+tags:
+  - Red Teaming
+  - Providers

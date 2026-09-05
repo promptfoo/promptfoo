@@ -1,0 +1,4 @@
+title: 'GitHub Models Provider'
+description: 'Evaluate OpenAI models through GitHub Models with LLM-graded assertions'
+tags:
+  - Providers

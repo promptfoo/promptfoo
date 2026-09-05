@@ -1,0 +1,4 @@
+title: 'Prompt Labels and Provider-Prompt Mapping'
+description: 'Using labels to assign specific prompts to specific providers within a single evaluation'
+tags:
+  - Configuration

@@ -1,0 +1,6 @@
+title: 'Cerebras High-Performance LLM Inference'
+description: 'Evaluate Llama models on Cerebras with tool calling and structured JSON output'
+tags:
+  - Providers
+  - Tool Use
+  - Structured Output

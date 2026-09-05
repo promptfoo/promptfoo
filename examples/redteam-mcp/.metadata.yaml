@@ -1,0 +1,6 @@
+title: 'Red Team MCP Server Tools'
+description: 'Test MCP server tool use for vulnerabilities like function discovery exploits, parameter injection, and system information leakage'
+tags:
+  - Red Teaming
+  - MCP
+  - Tool Use

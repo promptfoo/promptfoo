@@ -1,0 +1,4 @@
+title: 'HarmBench Safety Benchmark'
+description: 'Evaluate LLM safety using the HarmBench dataset by comparing vanilla and ablated Llama models via Ollama'
+tags:
+  - Red Teaming

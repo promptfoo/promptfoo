@@ -1,0 +1,4 @@
+title: 'Meta CyberSecEval Benchmark'
+description: "Run Meta's CyberSecEval benchmark to test LLMs for prompt injection vulnerabilities"
+tags:
+  - Red Teaming

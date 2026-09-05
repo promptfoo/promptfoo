@@ -1,0 +1,4 @@
+title: 'Automatic Assertion Generation'
+description: 'Generate llm-rubric assertions automatically from existing configs using the promptfoo generate command'
+tags:
+  - Evaluation

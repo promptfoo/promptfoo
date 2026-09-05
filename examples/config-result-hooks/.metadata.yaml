@@ -1,0 +1,5 @@
+title: 'Result Processing with Extension Hooks'
+description: 'Using afterAll extension hooks to process evaluation results for monitoring, alerts, and CI/CD integration'
+tags:
+  - Configuration
+  - Python

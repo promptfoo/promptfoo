@@ -1,0 +1,6 @@
+title: 'Red Team MCP with OAuth Authentication'
+description: 'Configure OAuth and other authentication methods for red team evaluations against protected MCP servers'
+tags:
+  - Red Teaming
+  - MCP
+  - Configuration

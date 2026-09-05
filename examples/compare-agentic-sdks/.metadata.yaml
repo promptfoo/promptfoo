@@ -1,0 +1,5 @@
+title: 'Agentic SDK Comparison'
+description: 'Compare OpenAI Codex SDK, Claude Agent SDK, and OpenCode SDK on a security audit task against vulnerable Python code.'
+tags:
+  - Agents
+  - Model Comparison

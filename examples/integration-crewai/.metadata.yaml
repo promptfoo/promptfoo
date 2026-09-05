@@ -1,0 +1,6 @@
+title: 'CrewAI Agent Evaluation'
+description: 'Evaluate a CrewAI recruitment agent with structured JSON output and skill-matching assertions'
+tags:
+  - Integrations
+  - Agents
+  - Python

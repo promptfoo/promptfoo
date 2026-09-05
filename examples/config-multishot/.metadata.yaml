@@ -1,0 +1,4 @@
+title: 'Few-Shot Prompting with Chat Messages'
+description: 'Comparing prompt variations with few-shot examples using JSON chat format'
+tags:
+  - Configuration

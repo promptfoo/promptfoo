@@ -1,0 +1,5 @@
+title: 'JSON Output Validation'
+description: 'Validate JSON outputs with schema checking, parsed transforms, and JavaScript assertions'
+tags:
+  - Evaluation
+  - Structured Output

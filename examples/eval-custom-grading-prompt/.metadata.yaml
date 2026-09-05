@@ -1,0 +1,5 @@
+title: 'Custom Grading Prompt'
+description: 'Override the default rubric prompt for llm-rubric assertions with a custom multi-criteria scoring system'
+tags:
+  - Evaluation
+  - Configuration
