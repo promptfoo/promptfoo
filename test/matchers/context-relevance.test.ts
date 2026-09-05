@@ -438,4 +438,81 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
   });
+
+  describe('Grader prose is not a context unit', () => {
+    // Regression (#10245): the grading prompt does not constrain the response
+    // format, so graders routinely prefix their answer with a header of their
+    // own. Every segment of the response used to count toward the numerator, so
+    // that header counted as an extracted relevant sentence and inflated the
+    // score — flipping a test from fail to pass purely on incidental formatting.
+    const PYTHON_CONTEXT =
+      'Python is a high-level, general-purpose programming language known for readability. It has a large standard library. It was created by Guido van Rossum and released in 1991. Python is widely used in data science, web development, and automation.';
+
+    it('does not count the grader response header as a relevant sentence', async () => {
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance('Who created Python?', PYTHON_CONTEXT, 0.5);
+
+      // Exactly one of the four context sentences answers the question, so the
+      // score is 1/4. Counting the "candidate sentences:" header doubled the
+      // numerator to 2/4 = 0.5, which passed the 0.5 threshold.
+      expect(result.score).toBeCloseTo(0.25, 2);
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.totalContextUnits).toBe(4);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.metadata?.extractedSentences).toEqual([
+        'It was created by Guido van Rossum and released in 1991.',
+      ]);
+    });
+
+    it('drops grader commentary that does not appear in the context', async () => {
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output:
+          'Here are the relevant sentences:\nIt was created by Guido van Rossum and released in 1991.\nThat sentence directly answers the question.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance('Who created Python?', PYTHON_CONTEXT, 0.5);
+
+      // Both the preamble and the trailing justification are the grader's own
+      // prose, not context units.
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.score).toBeCloseTo(0.25, 2);
+    });
+
+    it('still counts a sentence the grader echoes without its trailing period', async () => {
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'It was created by Guido van Rossum and released in 1991',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance('Who created Python?', PYTHON_CONTEXT, 0.2);
+
+      // Matching must tolerate punctuation drift, otherwise filtering out grader
+      // prose would silently undercount genuinely relevant sentences.
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.pass).toBe(true);
+    });
+
+    it('still counts sentences the grader returns as a quoted numbered list', async () => {
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output:
+          'Relevant sentences:\n1. "It has a large standard library."\n2. "It was created by Guido van Rossum and released in 1991."',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance('Tell me about Python', PYTHON_CONTEXT, 0.5);
+
+      // List markers and surrounding quotes are formatting, not content.
+      expect(result.metadata?.relevantSentenceCount).toBe(2);
+      expect(result.score).toBeCloseTo(0.5, 2);
+    });
+  });
 });
