@@ -145,6 +145,140 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([false, true])(
+    'aggregates a batched rubric once with nested assert-set = %s',
+    async (nested) => {
+      const grader: ApiProvider = {
+        id: () => 'batch-grader',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({
+            components: [
+              { metric: 'accuracy', pass: true, score: 1, reason: 'Correct' },
+              { metric: 'style', pass: false, score: 0.5, reason: 'Verbose' },
+            ],
+          }),
+          tokenUsage: { prompt: 12, completion: 8, numRequests: 1 },
+        }),
+      };
+      const batch = {
+        type: 'llm-rubric' as const,
+        provider: grader,
+        metric: 'quality',
+        weight: 2,
+        threshold: 0.8,
+        value: {
+          components: [
+            { metric: 'accuracy', value: 'Answers {{ topic }}', weight: 2 },
+            { metric: 'style', value: 'Uses plain language' },
+          ],
+        },
+      };
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider: grader,
+        providerResponse: { output: 'candidate' },
+        test: {
+          vars: { topic: 'planets' },
+          assert: [
+            nested
+              ? { type: 'assert-set', assert: [batch], weight: 3, metric: 'set-quality' }
+              : batch,
+            { type: 'equals', value: 'candidate' },
+          ],
+        },
+      });
+      expect(grader.callApi).toHaveBeenCalledTimes(1);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeCloseTo(nested ? 0.875 : 8 / 9);
+      expect(result.namedScores).toMatchObject({ accuracy: 1, style: 0.5, quality: 5 / 6 });
+      expect(result.namedScoreWeights).toMatchObject({
+        accuracy: nested ? 12 : 4,
+        style: nested ? 6 : 2,
+      });
+      expect(result.tokensUsed).toMatchObject({
+        total: 20,
+        prompt: 12,
+        completion: 8,
+        numRequests: 1,
+      });
+      const child = result.componentResults?.find(
+        (component) => component.assertion?.metric === 'accuracy',
+      );
+      expect(child?.assertion?.value).toBe('Answers planets');
+      expect(child?.tokensUsed).toBeUndefined();
+    },
+  );
+
+  it.each([false, true])(
+    'inverts a valid batched result but never a grader failure (%s)',
+    async (malformed) => {
+      const grader: ApiProvider = {
+        id: () => 'batch-grader',
+        callApi: vi.fn().mockResolvedValue({
+          output: malformed
+            ? '{"components": "PRIVATE_INVALID"}'
+            : JSON.stringify({
+                components: [{ metric: 'quality', pass: false, score: 0.25, reason: 'Failed' }],
+              }),
+          tokenUsage: { total: 10, numRequests: 1 },
+        }),
+      };
+      const result = await runAssertions({
+        prompt: 'prompt',
+        provider: grader,
+        providerResponse: { output: 'candidate' },
+        test: {
+          assert: [
+            {
+              type: 'not-llm-rubric',
+              provider: grader,
+              value: { components: [{ metric: 'quality', value: 'Good answer' }] },
+            },
+          ],
+        },
+      });
+      expect(result.pass).toBe(!malformed);
+      expect(result.score).toBe(malformed ? 0 : 0.75);
+      expect(result.reason).not.toContain('PRIVATE_INVALID');
+      expect(result.tokensUsed?.numRequests).toBe(1);
+      if (malformed) {
+        expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+      }
+    },
+  );
+
+  it('applies a shared transform once and does not send the original images', async () => {
+    const grader: ApiProvider = {
+      id: () => 'batch-grader',
+      callApi: vi.fn().mockResolvedValue({
+        output: { components: [{ metric: 'quality', pass: true, score: 1, reason: 'Good' }] },
+      }),
+    };
+    const result = await runAssertions({
+      prompt: 'prompt',
+      provider: grader,
+      providerResponse: {
+        output: 'ORIGINAL',
+        images: [{ data: 'aGVsbG8=', mimeType: 'image/png' }],
+      },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            provider: grader,
+            transform: 'output.toLowerCase()',
+            value: { components: [{ metric: 'quality', value: 'Good answer' }] },
+          },
+        ],
+      },
+    });
+    expect(result.pass).toBe(true);
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    const graderPrompt = vi.mocked(grader.callApi).mock.calls[0][0];
+    expect(graderPrompt).toContain('original');
+    expect(graderPrompt).not.toContain('aGVsbG8=');
+  });
+
   it('should handle output as an object', async () => {
     const output = { key: 'value' };
 
