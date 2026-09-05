@@ -76,6 +76,7 @@ export function shouldRetry(
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
+      message.includes('timed out') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||

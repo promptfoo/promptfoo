@@ -30,7 +30,7 @@ providers:
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
-- `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 300000 (5 minutes).
+- `timeoutMs` (optional): The maximum time in milliseconds to wait for the connection or next streamed message. Default is 300000 (5 minutes).
 - `protocols` (optional): A WebSocket subprotocol string or list of strings to request during the connection handshake. Use this instead of setting `Sec-WebSocket-Protocol` in `headers` when the server negotiates a selected subprotocol.
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
@@ -94,7 +94,7 @@ Some WebSocket endpoints stream their replies as multiple messages (for example,
   - `result`: the updated accumulated result you want to carry forward.
   - `complete` (boolean): set `true` only when you’ve received the final message and want to stop streaming and return the result.
 
-When `complete` is `false`, promptfoo keeps the WebSocket open and waits for the next message. When `true`, the connection is closed and `result` is returned (after being normalized as a `ProviderResponse`). The `timeoutMs` deadline covers the entire request, streamed messages included, so a stream that never reports `complete` fails with a timeout error instead of waiting indefinitely. Raise `timeoutMs` if your target legitimately streams for longer than the default 5 minutes.
+When `complete` is `false`, promptfoo keeps the WebSocket open and waits for the next message. When `true`, the connection is closed and `result` is returned (after being normalized as a `ProviderResponse`). The `timeoutMs` inactivity timer resets after each streamed message, so active streams can run longer than the timeout while stalled streams fail instead of waiting indefinitely.
 
 :::info
 `data` is the browser/Node `MessageEvent`. Most servers send the useful payload in `data.data` as a string. Parse it if needed:
@@ -235,7 +235,7 @@ Supported config options:
 | messageTemplate   | string             | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                                            |
 | transformResponse | string             | A function body or string to parse a single response. Ignored when `streamResponse` is provided.                                                                     |
 | streamResponse    | Function           | A function body, function expression, or `file://` reference that receives `(accumulator, data, context?)` and returns `[result, complete]` for streamed messages.   |
-| timeoutMs         | number             | The timeout in milliseconds for the WebSocket connection. Defaults to 300000 (5 minutes) if not specified.                                                           |
+| timeoutMs         | number             | Maximum time in milliseconds to wait for the connection or next streamed message. Defaults to 300000 (5 minutes).                                                    |
 | protocols         | string \| string[] | A WebSocket subprotocol or list of subprotocols to request during the connection handshake.                                                                          |
 | headers           | object             | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                                             |
 

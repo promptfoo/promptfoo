@@ -309,17 +309,23 @@ export class WebSocketProvider implements ApiProvider {
         protocols.length > 0
           ? new WebSocket(url, protocols, wsOptions)
           : new WebSocket(url, wsOptions);
-      const timeout = setTimeout(() => {
-        ws.close();
-        logger.error(`[WebSocket Provider] Request timed out`);
-        reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const resetTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          ws.close();
+          logger.error(`[WebSocket Provider] Request timed out`);
+          reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
+        }, this.timeoutMs);
+      };
+      resetTimeout();
       ws.on('open', () => {
         logger.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
       });
 
       ws.onmessage = (event) => {
         if (streamResponse) {
+          resetTimeout();
           try {
             logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
           } catch {
