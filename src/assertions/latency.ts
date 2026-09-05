@@ -4,11 +4,15 @@ export const handleLatency = ({
   assertion,
   latencyMs,
   inverse,
+  providerResponse,
 }: AssertionParams): GradingResult => {
   if (assertion.threshold === undefined) {
     throw new Error('Latency assertion must have a threshold in milliseconds');
   }
-  if (latencyMs === undefined) {
+  // A cache hit replays the latency recorded on the original request (or, for providers
+  // that don't persist it, reports the ~1ms cache lookup). Either way it isn't a
+  // measurement of this run, so grading it would silently green-light a stale number.
+  if (providerResponse?.cached || latencyMs === undefined) {
     throw new Error(
       'Latency assertion does not support cached results. Rerun the eval with --no-cache',
     );

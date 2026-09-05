@@ -37,6 +37,42 @@ describe('handleLatency', () => {
     );
   });
 
+  describe('cached responses', () => {
+    // Cache hits replay the latency measured on the original request, so the evaluator
+    // always hands the assertion a defined latencyMs. Grading it would report a
+    // measurement that this run never took.
+    it('throws on a cache hit even when a replayed latency is within threshold', () => {
+      expect(() =>
+        handleLatency(params({ latencyMs: 500, providerResponse: { output: '', cached: true } })),
+      ).toThrow('does not support cached results');
+    });
+
+    it('throws on a cache hit even when the replayed latency exceeds threshold', () => {
+      expect(() =>
+        handleLatency(params({ latencyMs: 1500, providerResponse: { output: '', cached: true } })),
+      ).toThrow('does not support cached results');
+    });
+
+    it('throws on a cache hit for the inverse (not-latency) assertion', () => {
+      expect(() =>
+        handleLatency(
+          params({
+            latencyMs: 500,
+            inverse: true,
+            providerResponse: { output: '', cached: true },
+          }),
+        ),
+      ).toThrow('does not support cached results');
+    });
+
+    it('grades normally when the response is explicitly not cached', () => {
+      expect(
+        handleLatency(params({ latencyMs: 500, providerResponse: { output: '', cached: false } }))
+          .pass,
+      ).toBe(true);
+    });
+  });
+
   describe('inverse (not-latency)', () => {
     it('fails when latency is within threshold', () => {
       const result = handleLatency(params({ latencyMs: 500, inverse: true }));

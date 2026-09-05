@@ -958,7 +958,7 @@ assert:
     threshold: 5000
 ```
 
-Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option. A cache hit replays the latency recorded on the original request, so the assertion errors on cached results rather than grading a measurement that the current run never took.
 
 ### Levenshtein distance
 
