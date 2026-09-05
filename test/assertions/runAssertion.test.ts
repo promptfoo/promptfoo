@@ -3773,6 +3773,122 @@ describe('runAssertion', () => {
       );
     });
 
+    it('should interpolate variables in file reference content', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file://expected_output.txt',
+      };
+
+      const fileTemplateContent = 'Expected output for {{ topic }}';
+      vi.mocked(fs.readFileSync).mockReturnValue(fileTemplateContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {
+          vars: { topic: 'capybaras' },
+        } as unknown as AtomicTestCase,
+        providerResponse: { output: 'Expected output for capybaras' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/expected_output.txt', 'utf8');
+      expect(result.pass).toBe(true);
+    });
+
+    it('should interpolate variables in file reference path and content', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file://{{ filename }}.txt',
+      };
+
+      const fileTemplateContent = 'Result is {{ value }}';
+      vi.mocked(fs.readFileSync).mockReturnValue(fileTemplateContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/my_file.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {
+          vars: { filename: 'my_file', value: '42' },
+        } as unknown as AtomicTestCase,
+        providerResponse: { output: 'Result is 42' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/my_file.txt', 'utf8');
+      expect(result.pass).toBe(true);
+    });
+
+    it('should interpolate variables in file references within array values', async () => {
+      const assertion: Assertion = {
+        type: 'contains-any',
+        value: ['Static {{ topic }}', 'file://templated_output.txt'],
+      };
+
+      const fileContent = 'Loaded {{ topic }}';
+      vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/templated_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {
+          vars: { topic: 'capybaras' },
+        } as unknown as AtomicTestCase,
+        providerResponse: { output: 'Here is Loaded capybaras today' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/templated_output.txt', 'utf8');
+      expect(result.pass).toBe(true);
+    });
+
+    it('should interpolate variables in llm-rubric file reference value', async () => {
+      const Grader = createMockProvider({
+        id: 'Grader',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: JSON.stringify({ pass: true, reason: 'Mentions capybaras', score: 1 }),
+        }),
+      });
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://rubric.txt',
+        provider: Grader,
+      };
+
+      const rubricContent = 'Fail unless the output mentions "{{ topic }}".';
+      vi.mocked(fs.readFileSync).mockReturnValue(rubricContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/rubric.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Write about capybaras',
+        assertion,
+        test: {
+          vars: { topic: 'capybaras' },
+        } as unknown as AtomicTestCase,
+        providerResponse: { output: 'I love capybaras' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/rubric.txt', 'utf8');
+      expect(Grader.callApi).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          vars: expect.objectContaining({
+            rubric: 'Fail unless the output mentions "capybaras".',
+          }),
+        }),
+      );
+      expect(result.pass).toBe(true);
+    });
+
     it('should handle file reference in object value', async () => {
       const assertion: Assertion = {
         type: 'is-json',
