@@ -81,12 +81,11 @@ function extractRunnableExamples(tree: GitHubTreeItem[]): string[] {
   return [...examples].sort((a, b) => a.localeCompare(b));
 }
 
-async function hasRootPromptfooConfig(exampleDir: string): Promise<boolean> {
+async function getExampleRootFiles(exampleDir: string): Promise<Set<string>> {
   try {
-    const entries = await fs.readdir(exampleDir);
-    return entries.some((entry) => EXAMPLE_CONFIG_FILENAMES.has(entry));
+    return new Set(await fs.readdir(exampleDir));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
@@ -255,9 +254,11 @@ async function logExampleInstructions(
   const readmeExists = await pathExists(readmePath);
   const docsUrl = getExampleDocsUrl(exampleName, refs);
   const cdCommand = `cd ${examplePath}`;
-  const isRunnableFromRoot = await hasRootPromptfooConfig(examplePath);
+  const rootFiles = await getExampleRootFiles(examplePath);
+  const isRunnableFromRoot = [...rootFiles].some((entry) => EXAMPLE_CONFIG_FILENAMES.has(entry));
+  const hasCustomRunner = rootFiles.has('run-e2e.sh');
 
-  if (exampleName.includes('redteam') || !isRunnableFromRoot) {
+  if (exampleName.includes('redteam') || !isRunnableFromRoot || hasCustomRunner) {
     if (readmeExists) {
       logger.info(
         dedent`
