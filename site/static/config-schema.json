@@ -1197,6 +1197,12 @@
         "runSerially": {
           "type": "boolean"
         },
+        "skipRenderVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "repeat": {
           "type": "integer",
           "exclusiveMinimum": 0,
