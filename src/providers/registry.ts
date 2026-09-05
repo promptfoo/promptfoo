@@ -127,9 +127,10 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
-// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
-// provider configs while allowing every tier through an explicit openai:chat: prefix.
-const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+// Preserve GPT-5.6 preview routing and default Astra to Responses, which supports its tools.
+// Each model also supports explicit openai:chat: requests.
+const OPENAI_BARE_RESPONSES_MODELS = new Set([
+  'gpt-6-astra',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
@@ -158,7 +159,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createAbliterationProvider(providerPath, {
-        config: providerOptions,
+        providerOptions,
         env: context.env,
       });
     },
@@ -1066,7 +1067,7 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+      if (OPENAI_BARE_RESPONSES_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {

@@ -51,31 +51,45 @@ This also enables [model-graded assertions](#model-graded-tests) such as `llm-ru
 
 ## Models
 
-The `anthropic` provider supports the following models via the messages API:
+These models currently resolve on the Anthropic Messages API:
 
-| Model ID                                                            | Description            |
-| ------------------------------------------------------------------- | ---------------------- |
-| `anthropic:messages:claude-fable-5-1`                               | Claude Fable 5.1       |
-| `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1      |
-| `anthropic:messages:claude-fable-5`                                 | Claude Fable 5         |
-| `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5        |
-| `anthropic:messages:claude-opus-5`                                  | Claude Opus 5          |
-| `anthropic:messages:claude-opus-4-8`                                | Claude 4.8 Opus        |
-| `anthropic:messages:claude-opus-4-7`                                | Claude 4.7 Opus        |
-| `anthropic:messages:claude-sonnet-5`                                | Claude Sonnet 5        |
-| `anthropic:messages:claude-sonnet-4-6`                              | Claude 4.6 Sonnet      |
-| `anthropic:messages:claude-opus-4-6`                                | Claude 4.6 Opus        |
-| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5)     | Claude 4.5 Opus        |
-| `anthropic:messages:claude-opus-4-20250514`                         | Claude 4 Opus          |
-| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5) | Claude 4.5 Sonnet      |
-| `anthropic:messages:claude-sonnet-4-20250514`                       | Claude 4 Sonnet        |
-| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5)   | Claude 4.5 Haiku       |
-| `anthropic:messages:claude-3-7-sonnet-20250219`                     | Claude 3.7 Sonnet      |
-| `anthropic:messages:claude-3-5-sonnet-20241022`                     | Claude 3.5 Sonnet (v2) |
-| `anthropic:messages:claude-3-5-sonnet-20240620`                     | Claude 3.5 Sonnet (v1) |
-| `anthropic:messages:claude-3-5-haiku-20241022`                      | Claude 3.5 Haiku       |
-| `anthropic:messages:claude-3-opus-20240229`                         | Claude 3 Opus          |
-| `anthropic:messages:claude-3-haiku-20240307`                        | Claude 3 Haiku         |
+| Model ID                                                            | Description       |
+| ------------------------------------------------------------------- | ----------------- |
+| `anthropic:messages:claude-fable-5-1`                               | Claude Fable 5.1  |
+| `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1 |
+| `anthropic:messages:claude-fable-5`                                 | Claude Fable 5    |
+| `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5   |
+| `anthropic:messages:claude-opus-5`                                  | Claude Opus 5     |
+| `anthropic:messages:claude-opus-4-8`                                | Claude 4.8 Opus   |
+| `anthropic:messages:claude-opus-4-7`                                | Claude 4.7 Opus   |
+| `anthropic:messages:claude-sonnet-5`                                | Claude Sonnet 5   |
+| `anthropic:messages:claude-sonnet-4-6`                              | Claude 4.6 Sonnet |
+| `anthropic:messages:claude-opus-4-6`                                | Claude 4.6 Opus   |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5)     | Claude 4.5 Opus   |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5) | Claude 4.5 Sonnet |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5)   | Claude 4.5 Haiku  |
+
+The Mythos rows are limited-access models: the ID is correct, but an org without access gets
+the same `not_found_error` a retired model returns.
+
+### Retired on the Anthropic API
+
+These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
+remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
+lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
+`anthropic:messages:` call will fail.
+
+| Model ID                     | Description            | Suggested replacement |
+| ---------------------------- | ---------------------- | --------------------- |
+| `claude-opus-4-1-20250805`   | Claude 4.1 Opus        | `claude-opus-4-8`     |
+| `claude-opus-4-20250514`     | Claude 4 Opus          | `claude-opus-4-8`     |
+| `claude-sonnet-4-20250514`   | Claude 4 Sonnet        | `claude-sonnet-4-6`   |
+| `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet      | `claude-sonnet-4-6`   |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet (v2) | `claude-sonnet-4-6`   |
+| `claude-3-5-sonnet-20240620` | Claude 3.5 Sonnet (v1) | `claude-sonnet-4-6`   |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku       | `claude-haiku-4-5`    |
+| `claude-3-opus-20240229`     | Claude 3 Opus          | `claude-opus-4-8`     |
+| `claude-3-haiku-20240307`    | Claude 3 Haiku         | `claude-haiku-4-5`    |
 
 :::note Model aliases
 
@@ -84,10 +98,9 @@ Anthropic does not publish `-latest` aliases — `claude-sonnet-4-5-latest` retu
 parentheses above: `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`.
 Claude 4.6 and newer are already unversioned IDs, so there is nothing to shorten.
 
-Rows without a parenthetical have no alias. Availability also differs by platform:
-Claude 4, 4.1, 3.7, and 3.5 no longer resolve on the direct Anthropic API, while several
-of them are still served by Bedrock, Vertex, and OpenRouter. The rows stay listed both
-for those platforms and for cost attribution on historical evals.
+Rows without a parenthetical have no alias. Availability differs by platform — see
+[Retired on the Anthropic API](#retired-on-the-anthropic-api) for the IDs that only work
+through Bedrock, Vertex, and gateways.
 
 :::
 
@@ -111,41 +124,41 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
 | Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | claude-opus-4-20250514                         | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
-| Claude 4 Sonnet   | claude-sonnet-4-20250514                       | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
-| Claude 3.7 Sonnet | claude-3-7-sonnet-20250219                     | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
-| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022                     | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | claude-3-5-haiku-20241022                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | claude-3-opus-20240229                         | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
-| Claude 3 Haiku    | claude-3-haiku-20240307                        | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
+| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
+| Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
+| Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
+| Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
+| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
+| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
+| Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
 
 ### Supported Parameters
 
-| Config Property | Environment Variable  | Description                                                                         |
-| --------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
-| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session         |
-| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.    |
-| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
-| cost            | -                     | Legacy per-token override applied to both input and output pricing                  |
-| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                            |
-| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                           |
-| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                   |
-| top_k           | -                     | Only sample from the top K options for each subsequent token                        |
-| stop_sequences  | -                     | Array of strings that will stop generation when encountered                         |
-| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                              |
-| tools           | -                     | An array of tool or function definitions for the model to call                      |
-| tool_choice     | -                     | An object specifying the tool to call                                               |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                     |
-| output_format   | -                     | JSON schema configuration for structured outputs                                    |
-| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
-| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                 |
-| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                            |
-| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                  |
-| headers         | -                     | Additional headers to be sent with the API request                                  |
-| extra_body      | -                     | Additional parameters to be included in the API request body                        |
+| Config Property | Environment Variable  | Description                                                                                       |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                       |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                       |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                    |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                  |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024, or 2048 on models that think by default) |
+| cost            | -                     | Legacy per-token override applied to both input and output pricing                                |
+| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                          |
+| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                         |
+| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                 |
+| top_k           | -                     | Only sample from the top K options for each subsequent token                                      |
+| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                       |
+| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                            |
+| tools           | -                     | An array of tool or function definitions for the model to call                                    |
+| tool_choice     | -                     | An object specifying the tool to call                                                             |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                   |
+| output_format   | -                     | JSON schema configuration for structured outputs                                                  |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)               |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                 |
+| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                               |
+| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                          |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                |
+| headers         | -                     | Additional headers to be sent with the API request                                                |
+| extra_body      | -                     | Additional parameters to be included in the API request body                                      |
 
 ### Prompt Template
 
@@ -677,7 +690,7 @@ The same suppression applies when you reach Opus 4.8 through AWS Bedrock, GCP Ve
 Opus 4.7 is designed around adaptive thinking and runs with the reasoning stack always on. Promptfoo handles the key differences from earlier Opus models automatically:
 
 - **Temperature is managed for you.** Opus 4.7 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
-- **Adaptive thinking is the default.** Use `thinking: { type: 'adaptive' }` (or leave `thinking` unset) to let the model choose how much to reason per request. Budget-based modes from older models aren't used on 4.7.
+- **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model choose how much to reason per request; leaving `thinking` unset runs Opus 4.7 **without** extended thinking, even at high effort. (Opus 5 is the model where an omitted block means adaptive.) Budget-based modes from older models aren't used on 4.7.
 - **`xhigh` effort level is available.** It sits between `high` and `max` and is a good starting point for coding and agentic tasks. See the [Effort Level](#effort-level) section.
 - **Updated tokenizer.** The same input can map to 1.0–1.35× more tokens than Opus 4.6, so measure real traffic if you're comparing costs.
 

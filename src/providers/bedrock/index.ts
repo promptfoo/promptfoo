@@ -2339,7 +2339,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
-  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2443,7 +2442,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2660,6 +2658,11 @@ export function getHandlerForModel(
       'us.anthropic.claude-3-opus-20240229-v1:0',
       'anthropic.claude-opus-4-20250514-v1:0',
       'us.anthropic.claude-opus-4-20250514-v1:0',
+      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
+      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
+      // falling through to the `anthropic.claude` catch-all and failing at request time.
+      'anthropic.claude-3-5-haiku-20241022-v1:0',
+      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
       'anthropic.claude-instant-v1',
       'anthropic.claude-v1',
       'anthropic.claude-v2',

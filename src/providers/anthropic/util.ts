@@ -79,34 +79,30 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude 4.6 models
-  ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
+  ...['claude-sonnet-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
+  ...['claude-opus-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...[
-    'claude-opus-4-1',
-    'claude-opus-4-1-20250805',
-    'claude-opus-4-20250514',
-    'claude-opus-4-0',
-    'claude-opus-4-latest',
-  ].map((model) => ({
+  // Both are retired on the Anthropic API. The rates stay because Bedrock still serves
+  // Opus 4.1, and cost attribution on historical evals needs them.
+  ...['claude-opus-4-1-20250805', 'claude-opus-4-20250514'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6, // $15 / MTok
@@ -116,10 +112,8 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
+    // Retired on the Anthropic API; still served by Bedrock in every region.
     'claude-sonnet-4-20250514',
-    'claude-sonnet-4-0',
-    'claude-sonnet-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -127,7 +121,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
@@ -150,40 +144,38 @@ export const ANTHROPIC_MODELS = [
       output: 0.024 / 1000,
     },
   })),
-  ...['claude-3-haiku-20240307', 'claude-3-haiku-latest'].map((model) => ({
+  ...['claude-3-haiku-20240307'].map((model) => ({
     id: model,
     cost: {
       input: 0.00025 / 1000,
       output: 0.00125 / 1000,
     },
   })),
-  ...['claude-3-opus-20240229', 'claude-3-opus-latest'].map((model) => ({
+  ...['claude-3-opus-20240229'].map((model) => ({
     id: model,
     cost: {
       input: 0.015 / 1000,
       output: 0.075 / 1000,
     },
   })),
-  ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
+  ...['claude-3-5-haiku-20241022'].map((model) => ({
     id: model,
     cost: {
       input: 0.8 / 1e6,
       output: 4 / 1e6,
     },
   })),
-  ...[
-    'claude-3-5-sonnet-20240620',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-sonnet-latest',
-    'claude-3-7-sonnet-20250219',
-    'claude-3-7-sonnet-latest',
-  ].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 15 / 1e6,
-    },
-  })),
+  // Retired on the Anthropic API; still served by Bedrock (3.5 Sonnet in APAC, 3.7 Sonnet in
+  // eu-west-2 and ap-south-1), so the rates stay for cost attribution there.
+  ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 3 / 1e6,
+        output: 15 / 1e6,
+      },
+    }),
+  ),
 ];
 
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
@@ -224,8 +216,8 @@ interface ClaudeModelFamily {
   /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
   forcedToolChoiceUnsupported?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5, Sonnet 5), so
+   * requests that never set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -271,10 +263,15 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
   },
+  // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
+  // thinking blocks and bills thinking tokens against `max_tokens` (verified live — an
+  // omitted block returned `['thinking', 'text']` with `thinking_tokens: 59`). Opus 4.7/4.8
+  // are the models where omitting it means no thinking at all.
   {
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -430,7 +427,7 @@ export function clampMaxTokensForThinkingBudget(
   if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
     return maxTokens;
   }
-  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+  return maxTokens <= thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {

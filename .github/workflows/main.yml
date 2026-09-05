@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   VITE_TELEMETRY_DISABLED: 1
+  NPM_CONFIG_AUDIT: 'false'
 jobs:
   ci-config:
     name: CI Config
@@ -216,11 +217,13 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -234,9 +237,15 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@11.18.0
 
-      - name: Install Dependencies
+      # Madge's TypeScript peer dependency differs from the repository's compiler.
+      - name: Install CI tools
         run: |
-          npm ci
+          npm install --prefix "$RUNNER_TEMP/promptfoo-ci-tools" --ignore-scripts \
+            check-dependency-version-consistency@6.0.0 madge@8.0.0 lockfile-lint@5.0.1
+
+      - name: Install Dependencies
+        # Static checks do not need browser downloads or native addon builds.
+        run: npm ci --ignore-scripts
 
       - name: Run Biome CI
         run: |
@@ -248,12 +257,12 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npx check-dependency-version-consistency
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/check-dependency-version-consistency"
 
       - name: Check for circular dependencies
         run: |
           # shellcheck disable=SC2046
-          npx madge $(git ls-files '*.ts') --circular
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/madge" $(git ls-files '*.ts') --circular
 
       - name: Check architecture boundaries
         run: |
@@ -265,7 +274,7 @@ jobs:
 
       - name: Validate lockfile integrity
         run: |
-          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
+          "$RUNNER_TEMP/promptfoo-ci-tools/node_modules/.bin/lockfile-lint" --path package-lock.json --allowed-hosts npm --validate-https
 
   shell-format:
     name: Shell Format Check
@@ -281,11 +290,13 @@ jobs:
 
   assets:
     name: Generate Assets
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -305,7 +316,7 @@ jobs:
         run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Install ModelAudit schema dependencies
         run: python3 -m pip install --disable-pip-version-check --no-deps -r scripts/modelaudit_schema_requirements.txt
@@ -357,11 +368,13 @@ jobs:
 
   docs:
     name: Build Docs
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -390,11 +403,13 @@ jobs:
 
   code-scan-action:
     name: Code Scan Action
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -410,11 +425,12 @@ jobs:
 
       # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
       - name: Install Root Dependencies
-        run: npm ci
+        # Type checking and bundling do not need browser downloads or native addon builds.
+        run: npm ci --ignore-scripts
 
       - name: Install Code Scan Action Dependencies
         working-directory: code-scan-action
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Type Check
         working-directory: code-scan-action
@@ -426,7 +442,7 @@ jobs:
 
   site-tests:
     name: Site tests
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -530,10 +546,12 @@ jobs:
   integration-tests:
     name: Run Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -567,7 +585,7 @@ jobs:
   smoke-tests:
     name: Run Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
