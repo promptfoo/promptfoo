@@ -567,151 +567,246 @@ describeEvaluator('evaluator grading concurrency', () => {
     ]);
   });
 
-  it('does not log error-level message when deferred grading is aborted', async () => {
-    const { default: logger } = await import('../../src/logger');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  it.each([false, true])(
+    'records thrown grading failures as retryable errors (components=%s)',
+    async (components) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const provider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'candidate' }),
+      };
+      const judge: ApiProvider = {
+        id: () => 'throwing-grader',
+        callApi: vi.fn().mockRejectedValue(new Error('PRIVATE_PROVIDER_CREDENTIAL')),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'llm-rubric',
+                rubricComponents: components,
+                value: components
+                  ? { components: [{ metric: 'quality', value: 'Good answer' }] }
+                  : 'Good answer',
+                provider: judge,
+              },
+            ],
+          },
+        ],
+      };
+      try {
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.stats.errors).toBe(1);
+        expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
+        expect(summary.results[0].success).toBe(false);
+        if (components) {
+          expect(summary.results[0].error).not.toContain('PRIVATE_PROVIDER_CREDENTIAL');
+        }
+        expect(judge.callApi).toHaveBeenCalledTimes(1);
+      } finally {
+        errorSpy.mockRestore();
+      }
+    },
+  );
 
-    const abortController = new AbortController();
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => {
-        abortController.abort();
-        const abortError = new Error('Aborted');
-        abortError.name = 'AbortError';
-        throw abortError;
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
-      tests: [
-        {
-          vars: { topic: 'alpha' },
-          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
-        },
-      ],
-    };
+  it.each([false, true])(
+    'does not log error-level message when deferred grading is aborted (components=%s)',
+    async (components) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 1,
-      abortSignal: abortController.signal,
-    });
+      const abortController = new AbortController();
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('target-provider'),
+        callApi: vi.fn(async (prompt: string) => ({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => {
+          abortController.abort();
+          const abortError = new Error('Aborted');
+          abortError.name = 'AbortError';
+          throw abortError;
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt {{topic}}')],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [
+              {
+                type: 'llm-rubric',
+                rubricComponents: components,
+                value: components
+                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
+                  : 'Judge alpha',
+                provider: judge,
+              },
+            ],
+          },
+        ],
+      };
 
-    const gradingErrorLogs = errorSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-    );
-    expect(gradingErrorLogs).toHaveLength(0);
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: abortController.signal,
+      });
 
-    const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
-      (result) => result.vars.topic === 'alpha',
-    );
-    expect(failedResult?.error).toMatch(/^Aborted: /);
+      const gradingErrorLogs = errorSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+      );
+      expect(gradingErrorLogs).toHaveLength(0);
+      expect(judge.callApi).toHaveBeenCalledWith(expect.any(String), expect.anything(), {
+        abortSignal: abortController.signal,
+      });
 
-    errorSpy.mockRestore();
-  });
+      const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
+        (result) => result.vars.topic === 'alpha',
+      );
+      expect(failedResult?.error).toMatch(/^Aborted: /);
 
-  it('suppresses the error log when deferred grading throws AbortException under abort', async () => {
-    const { default: logger } = await import('../../src/logger');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      errorSpy.mockRestore();
+    },
+  );
 
-    const abortController = new AbortController();
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => {
-        abortController.abort();
-        const abortException = new Error('Python provider cancelled');
-        abortException.name = 'AbortException';
-        throw abortException;
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
-      tests: [
-        {
-          vars: { topic: 'alpha' },
-          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
-        },
-      ],
-    };
+  it.each([false, true])(
+    'suppresses the error log when deferred grading throws AbortException under abort (components=%s)',
+    async (components) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 1,
-      abortSignal: abortController.signal,
-    });
+      const abortController = new AbortController();
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('target-provider'),
+        callApi: vi.fn(async (prompt: string) => ({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => {
+          abortController.abort();
+          const abortException = new Error('Python provider cancelled');
+          abortException.name = 'AbortException';
+          throw abortException;
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt {{topic}}')],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [
+              {
+                type: 'llm-rubric',
+                rubricComponents: components,
+                value: components
+                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
+                  : 'Judge alpha',
+                provider: judge,
+              },
+            ],
+          },
+        ],
+      };
 
-    const gradingErrorLogs = errorSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-    );
-    expect(gradingErrorLogs).toHaveLength(0);
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: abortController.signal,
+      });
 
-    errorSpy.mockRestore();
-  });
+      const gradingErrorLogs = errorSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+      );
+      expect(gradingErrorLogs).toHaveLength(0);
+      expect(judge.callApi).toHaveBeenCalledWith(expect.any(String), expect.anything(), {
+        abortSignal: abortController.signal,
+      });
 
-  it('still logs error-level when abort-shaped error fires WITHOUT an aborted signal', async () => {
-    // Regression guard: third-party SDKs sometimes surface unrelated cancellation
-    // as AbortError. If the evaluator's abort signal is NOT tripped, these are
-    // real bugs and must still surface at error level.
-    const { default: logger } = await import('../../src/logger');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
+        (result) => result.vars.topic === 'alpha',
+      );
+      expect(failedResult?.error).toMatch(/^Aborted: /);
 
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => {
-        const sdkAbortLookalike = new Error('fetch aborted by keepalive');
-        sdkAbortLookalike.name = 'AbortError';
-        throw sdkAbortLookalike;
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
-      tests: [
-        {
-          vars: { topic: 'alpha' },
-          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
-        },
-      ],
-    };
+      errorSpy.mockRestore();
+    },
+  );
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+  it.each([false, true])(
+    'still logs error-level when abort-shaped error fires WITHOUT an aborted signal (components=%s)',
+    async (components) => {
+      // Regression guard: third-party SDKs sometimes surface unrelated cancellation
+      // as AbortError. If the evaluator's abort signal is NOT tripped, these are
+      // real bugs and must still surface at error level.
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    const gradingErrorLogs = errorSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-    );
-    expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('target-provider'),
+        callApi: vi.fn(async (prompt: string) => ({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => {
+          const sdkAbortLookalike = new Error('fetch aborted by keepalive');
+          sdkAbortLookalike.name = 'AbortError';
+          throw sdkAbortLookalike;
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt {{topic}}')],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [
+              {
+                type: 'llm-rubric',
+                rubricComponents: components,
+                value: components
+                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
+                  : 'Judge alpha',
+                provider: judge,
+              },
+            ],
+          },
+        ],
+      };
 
-    const summary = await evalRecord.toEvaluateSummary();
-    expect(summary.stats.errors).toBe(1);
-    expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
-    expect(summary.results[0].error).not.toMatch(/^Aborted: /);
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-    errorSpy.mockRestore();
-  });
+      const gradingErrorLogs = errorSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+      );
+      expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats.errors).toBe(1);
+      expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
+      expect(summary.results[0].error).not.toMatch(/^Aborted: /);
+
+      errorSpy.mockRestore();
+    },
+  );
 
   it('still logs error when a non-abort-shaped error fires during an unrelated abort', async () => {
     // Regression guard: if abort is in flight but the caught error is a real

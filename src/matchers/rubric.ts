@@ -737,19 +737,32 @@ async function buildGradingProviderPrompt(
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
+  strict = false,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
-      jsonObjects = extractJsonObjects(resp.output);
+      if (strict) {
+        // Do not repair truncated JSON or accept YAML for structured batches: a
+        // partial response must never become a passing set of component grades.
+        const text = resp.output.trim();
+        const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+        jsonObjects = [JSON.parse(fenced?.[1] ?? text)];
+      } else {
+        jsonObjects = extractJsonObjects(resp.output);
+      }
       if (jsonObjects.length === 0) {
         return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
     } catch (err) {
       return {
-        failure: failWithTokens(`${label} produced malformed response: ${err}\n\n${resp.output}`),
+        failure: failWithTokens(
+          strict
+            ? `${label} produced malformed JSON`
+            : `${label} produced malformed response: ${err}\n\n${resp.output}`,
+        ),
       };
     }
   } else if (
@@ -761,7 +774,9 @@ function parseJsonGradingResponse(
   } else {
     return {
       failure: failWithTokens(
-        `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+        strict
+          ? `${label} response must be a JSON object`
+          : `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
       ),
     };
   }
@@ -770,7 +785,9 @@ function parseJsonGradingResponse(
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
-        `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+        strict
+          ? `${label} response must be a JSON object`
+          : `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
       ),
     };
   }
@@ -804,62 +821,10 @@ function graderFailureFromResponse(
   return failure;
 }
 
-export async function runJsonGradingPrompt({
-  assertion,
-  checkName,
-  defaultPrompt,
-  grading,
-  label,
-  providerCallContext,
-  throwOnError,
-  vars,
-  images,
-}: {
-  assertion?: Assertion;
-  checkName: string;
-  defaultPrompt: string;
-  grading: GradingConfig;
-  label: string;
-  providerCallContext?: CallApiContextParams;
-  throwOnError?: boolean;
-  vars: Record<string, VarValue>;
-  images?: ImageOutput[];
-}): Promise<GradingResult> {
-  const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
-
-  const defaultProviders = await getDefaultProviders();
-  const defaultProvider =
-    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
-  const finalProvider = await getAndCheckProvider(
-    'text',
-    grading.provider,
-    defaultProvider,
-    checkName,
-  );
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
-    renderedPrompt,
-    images,
-    finalProvider,
-  );
-  const resp = await callProviderWithContext(
-    finalProvider,
-    providerPrompt,
-    label,
-    vars,
-    providerCallContext,
-  );
-  if (resp.error || !resp.output) {
-    if (throwOnError) {
-      throw new Error(resp.error || 'No output');
-    }
-    return graderFailureFromResponse(resp.error || 'No output', resp);
-  }
-  const { parsed, failure } = parseJsonGradingResponse(label, resp);
-  if (!parsed) {
-    return failure as Omit<GradingResult, 'assertion'>;
-  }
-
+function normalizeScalarGradingResult(
+  parsed: Partial<GradingResult>,
+  assertion?: Assertion,
+): Pick<GradingResult, 'pass' | 'score' | 'reason'> {
   let pass = parsed.pass ?? true;
   if (typeof pass !== 'boolean') {
     pass = /^(true|yes|pass|y)$/i.test(String(pass));
@@ -878,6 +843,106 @@ export async function runJsonGradingPrompt({
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+  return { pass, score, reason };
+}
+
+export async function runJsonGradingPrompt({
+  assertion,
+  checkName,
+  defaultPrompt,
+  grading,
+  label,
+  providerCallContext,
+  throwOnError,
+  vars,
+  images,
+  parseResult,
+}: {
+  assertion?: Assertion;
+  checkName: string;
+  defaultPrompt: string;
+  grading: GradingConfig;
+  label: string;
+  providerCallContext?: CallApiContextParams;
+  throwOnError?: boolean;
+  vars: Record<string, VarValue>;
+  images?: ImageOutput[];
+  // Strict matcher families can validate and aggregate a structured response while
+  // retaining the shared provider, image, cache, and token accounting path.
+  parseResult?: (
+    parsed: unknown,
+  ) =>
+    | Pick<
+        GradingResult,
+        'pass' | 'score' | 'reason' | 'componentResults' | 'namedScores' | 'namedScoreWeights'
+      >
+    | string;
+}): Promise<GradingResult> {
+  const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
+  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
+
+  const defaultProviders = await getDefaultProviders();
+  const defaultProvider =
+    // Rubric-specific defaults (and Codex's JSON default) can enforce a scalar
+    // pass/score schema. Component batches need the unconstrained text grader.
+    parseResult
+      ? defaultProviders.gradingProvider
+      : defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const finalProvider = await getAndCheckProvider(
+    'text',
+    grading.provider,
+    defaultProvider,
+    checkName,
+  );
+  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
+    renderedPrompt,
+    images,
+    finalProvider,
+  );
+  const response = await callProviderWithContext(
+    finalProvider,
+    providerPrompt,
+    label,
+    vars,
+    providerCallContext,
+  );
+  const resp =
+    parseResult && !response.cached
+      ? {
+          ...response,
+          tokenUsage: {
+            ...response.tokenUsage,
+            numRequests: response.tokenUsage?.numRequests || 1,
+          },
+        }
+      : response;
+  if (resp.error || !resp.output) {
+    const error = parseResult
+      ? `${label} provider returned an error or no output`
+      : resp.error || 'No output';
+    if (throwOnError) {
+      throw new Error(error);
+    }
+    return graderFailureFromResponse(error, resp);
+  }
+  const { parsed, failure } = parseJsonGradingResponse(label, resp, Boolean(parseResult));
+  if (!parsed) {
+    return failure as Omit<GradingResult, 'assertion'>;
+  }
+
+  let result: Pick<
+    GradingResult,
+    'pass' | 'score' | 'reason' | 'componentResults' | 'namedScores' | 'namedScoreWeights'
+  >;
+  if (parseResult) {
+    const structuredResult = parseResult(parsed);
+    if (typeof structuredResult === 'string') {
+      return graderFailureFromResponse(structuredResult, resp);
+    }
+    result = structuredResult;
+  } else {
+    result = normalizeScalarGradingResult(parsed, assertion);
+  }
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
@@ -886,16 +951,20 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    rubricComponents: _untrustedRubricComponents,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
   return {
     assertion,
-    pass,
-    score,
-    reason,
+    ...result,
     tokensUsed: normalizeMatcherTokenUsage({
       ...resp.tokenUsage,
-      completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
+      completionDetails:
+        resp.tokenUsage?.completionDetails ||
+        (parseResult ? undefined : parsed.tokensUsed?.completionDetails),
     }),
     metadata: {
       ...trustedResponseMetadata,

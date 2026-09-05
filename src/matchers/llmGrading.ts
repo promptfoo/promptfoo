@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import {
+  COMPONENTS_GRADING_PROMPT,
   DEFAULT_GRADING_PROMPT,
   GEVAL_PROMPT_EVALUATE,
   GEVAL_PROMPT_STEPS,
@@ -11,6 +12,17 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
+import {
+  type Assertion,
+  type CallApiContextParams,
+  type GradingConfig,
+  type GradingResult,
+  LLM_RUBRIC_COMPONENTS_CONFIG_ERROR,
+  type LlmRubricComponent,
+  LlmRubricComponentsAssertionSchema,
+  type ProviderResponse,
+  type VarValue,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
@@ -28,15 +40,6 @@ import {
   runJsonGradingPrompt,
 } from './rubric';
 import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
-
-import type {
-  Assertion,
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-  ProviderResponse,
-  VarValue,
-} from '../types/index';
 
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
@@ -165,6 +168,100 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   return llmOutput;
 }
 
+function gradeRubricComponents(
+  parsed: unknown,
+  components: LlmRubricComponent[],
+  threshold?: number,
+):
+  | Pick<
+      GradingResult,
+      'pass' | 'score' | 'reason' | 'componentResults' | 'namedScores' | 'namedScoreWeights'
+    >
+  | string {
+  if (!parsed || typeof parsed !== 'object' || !('components' in parsed)) {
+    return 'llm-rubric response must contain a components array';
+  }
+  const results = parsed.components;
+  if (!Array.isArray(results) || results.length !== components.length) {
+    return 'llm-rubric response must contain exactly one result for every component';
+  }
+
+  const expectedMetrics = new Set(components.map((component) => component.metric));
+  const byMetric = new Map<string, { pass: boolean; score: number; reason: string }>();
+  for (const result of results) {
+    if (!result || typeof result !== 'object' || !expectedMetrics.has(result.metric)) {
+      return 'llm-rubric response contains an unknown or missing component metric';
+    }
+    if (byMetric.has(result.metric)) {
+      return 'llm-rubric response contains a duplicate component metric';
+    }
+    if (
+      typeof result.pass !== 'boolean' ||
+      typeof result.score !== 'number' ||
+      !Number.isFinite(result.score) ||
+      result.score < 0 ||
+      result.score > 1 ||
+      typeof result.reason !== 'string'
+    ) {
+      return 'llm-rubric components require boolean pass, finite score from 0 to 1, and string reason';
+    }
+    byMetric.set(result.metric, { pass: result.pass, score: result.score, reason: result.reason });
+  }
+
+  const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+  const componentResults = components.map((component) => ({
+    ...byMetric.get(component.metric)!,
+    assertion: { type: 'llm-rubric' as const, ...component },
+  }));
+  const score =
+    componentResults.reduce(
+      (sum, result, index) => sum + result.score * components[index].weight,
+      0,
+    ) / totalWeight;
+  const allPass = componentResults.every((result) => result.pass);
+  const pass = threshold === undefined ? allPass : score >= threshold;
+
+  return {
+    pass,
+    score,
+    reason:
+      threshold === undefined
+        ? `${componentResults.filter((result) => result.pass).length}/${components.length} rubric components passed (weighted score ${score.toFixed(2)})`
+        : `Weighted rubric score ${score.toFixed(2)} ${pass ? '≥' : '<'} ${threshold} threshold`,
+    componentResults,
+    namedScores: Object.fromEntries(
+      componentResults.map((result) => [result.assertion.metric, result.score]),
+    ),
+    namedScoreWeights: Object.fromEntries(
+      components.map((component) => [component.metric, component.weight]),
+    ),
+  };
+}
+
+function handleLlmRubricError(error: unknown, components: boolean, throwOnError?: boolean): never {
+  if (components) {
+    // Preserve the cancellation names recognized by the evaluator.
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'AbortException')
+    ) {
+      throw error;
+    }
+    const reason =
+      'Could not perform batched llm-rubric grading; check the grading provider and rubric prompt configuration';
+    throw new LlmRubricProviderError(reason);
+  }
+  if (throwOnError) {
+    throw new LlmRubricProviderError((error as Error).message || 'No output');
+  }
+  // Rethrow so the evaluator's "Assertion grading failed" path logs and
+  // marks the row as errored. SyntaxError/TypeError/etc. from a misbehaving
+  // grader represent real bugs and must not be silently suppressed —
+  // `handleLlmRubric` lets the rejection propagate, so the evaluator
+  // converts it to a row-level error rather than a passing inverse result.
+  throw error;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -184,6 +281,20 @@ export async function matchesLlmRubric(
     );
   }
 
+  let components: LlmRubricComponent[] | undefined;
+  if (assertion?.rubricComponents === true) {
+    const config = LlmRubricComponentsAssertionSchema.safeParse({
+      rubricComponents: true,
+      value: rubric,
+      threshold: assertion?.threshold,
+      metric: assertion?.metric,
+    });
+    if (!config.success) {
+      return { ...graderFail(LLM_RUBRIC_COMPONENTS_CONFIG_ERROR), assertion };
+    }
+    components = config.data.value.components;
+  }
+
   // Use remote grading when no provider is explicitly configured, or when a
   // caller injected an implicit default provider but still prefers remote.
   const shouldPreferRemote =
@@ -199,6 +310,14 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
+    if (components) {
+      return {
+        ...graderFail(
+          'Batched llm-rubric components require an explicit grading provider; hosted remote grading does not support components',
+        ),
+        assertion,
+      };
+    }
     try {
       return {
         ...(await doRemoteGrading({
@@ -220,31 +339,47 @@ export async function matchesLlmRubric(
   }
 
   try {
-    return await runJsonGradingPrompt({
+    // These are trusted, user-configured rubric templates. Candidate output and
+    // runtime vars are inserted as data and are never rendered a second time.
+    const renderedComponents = components
+      ? await Promise.all(
+          components.map(async (component) => ({
+            ...component,
+            value: JSON.parse(
+              await renderLlmRubricPrompt(JSON.stringify(component.value), vars || {}),
+            ) as string,
+          })),
+        )
+      : undefined;
+    const result = await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
-      defaultPrompt: DEFAULT_GRADING_PROMPT,
+      defaultPrompt: renderedComponents ? COMPONENTS_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
       grading,
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      ...(renderedComponents && {
+        parseResult: (parsed: unknown) =>
+          gradeRubricComponents(parsed, renderedComponents, assertion?.threshold),
+      }),
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),
-        rubric,
+        rubric: renderedComponents ? { components: renderedComponents } : rubric,
+        ...(renderedComponents && {
+          rubricText: JSON.stringify({ components: renderedComponents }),
+          outputText: gradingOutput,
+        }),
       },
     });
-  } catch (error) {
-    if (options?.throwOnError) {
-      throw new LlmRubricProviderError((error as Error).message || 'No output');
+    if (components) {
+      result.metadata = { ...result.metadata, rubricComponents: true };
     }
-    // Rethrow so the evaluator's "Assertion grading failed" path logs and
-    // marks the row as errored. SyntaxError/TypeError/etc. from a misbehaving
-    // grader represent real bugs and must not be silently suppressed —
-    // `handleLlmRubric` lets the rejection propagate, so the evaluator
-    // converts it to a row-level error rather than a passing inverse result.
-    throw error;
+    return result;
+  } catch (error) {
+    return handleLlmRubricError(error, Boolean(components), options?.throwOnError);
   }
 }
 

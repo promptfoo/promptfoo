@@ -67,6 +67,7 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  isRubricBatchAggregate,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
@@ -3509,10 +3510,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    const countedAssertions = row.gradingResult?.componentResults?.filter(
+      (result) => !isRubricBatchAggregate(result),
+    );
+    metrics.assertPassCount += countedAssertions?.filter((r) => r.pass).length || 0;
+    metrics.assertFailCount += countedAssertions?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
