@@ -1,4 +1,4 @@
-import { filterTraceSpans } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -61,7 +61,7 @@ export const handleTraceSpanCount = ({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };

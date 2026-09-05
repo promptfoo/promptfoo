@@ -185,6 +185,33 @@ describe('trace assertions', () => {
 
       expect(result.pass).toBe(pass);
       expect(result.score).toBe(pass ? 1 : 0);
+      expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
+      expect(result.reason).not.toContain('search');
+    });
+
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trace-span-count', value: { min: 1 } }, pass: false },
+      { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
+      { assertion: { type: 'trace-error-spans', value: { max_count: 0 } }, pass: true },
+    ])('explains an empty attribute selection for $assertion', async ({ assertion, pass }) => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const result = await runAssertion({
+        assertion: {
+          ...assertion,
+          value: {
+            ...(assertion.value as object),
+            pattern: '*',
+            attributes: { 'gen_ai.tool.name': 'private-tool-value' },
+          },
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(pass);
+      expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
+      expect(result.reason).not.toContain('private-tool-value');
     });
   });
 

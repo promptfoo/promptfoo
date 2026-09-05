@@ -1,4 +1,4 @@
-import { filterTraceSpans } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -107,7 +107,10 @@ export const handleTraceErrorSpans = ({
     return {
       pass: true,
       score: 1,
-      reason: `No spans found matching pattern "${pattern}"`,
+      reason: withTraceAttributeFilterContext(
+        `No spans found matching pattern "${pattern}"`,
+        attributes,
+      ),
       assertion,
     };
   }
@@ -158,7 +161,7 @@ export const handleTraceErrorSpans = ({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };

@@ -1,4 +1,4 @@
-import { filterTraceSpans } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -54,7 +54,10 @@ export const handleTraceSpanDuration = ({
     return {
       pass: true,
       score: 1,
-      reason: `No spans found matching pattern "${pattern}" with complete timing data`,
+      reason: withTraceAttributeFilterContext(
+        `No spans found matching pattern "${pattern}" with complete timing data`,
+        attributes,
+      ),
       assertion,
     };
   }
@@ -105,7 +108,7 @@ export const handleTraceSpanDuration = ({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };

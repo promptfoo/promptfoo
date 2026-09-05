@@ -368,6 +368,26 @@ function getWordCountError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
+function getTraceAttributeFiltersError(value: unknown): string | undefined {
+  if (!isRecord(value) || value.attributes === undefined) {
+    return undefined;
+  }
+  const attributes = value.attributes;
+  if (
+    !isRecord(attributes) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(attributes)) ||
+    Object.values(attributes).some(
+      (attribute) =>
+        typeof attribute !== 'string' &&
+        typeof attribute !== 'boolean' &&
+        !(typeof attribute === 'number' && Number.isFinite(attribute)),
+    )
+  ) {
+    return 'Enter trace attribute filters as a JSON object with string, boolean, or finite number values.';
+  }
+  return undefined;
+}
+
 function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
@@ -378,7 +398,7 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   ) {
     return 'Enter numeric trace span count limits.';
   }
-  return undefined;
+  return getTraceAttributeFiltersError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
@@ -394,7 +414,7 @@ function getTraceSpanDurationValueError(value: unknown): string | undefined {
   ) {
     return 'Enter a trace span percentile from 0 to 100.';
   }
-  return undefined;
+  return getTraceAttributeFiltersError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -442,6 +462,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'trace-span-duration' || assertion.type === 'not-trace-span-duration') {
     return getTraceSpanDurationValueError(assertion.value);
+  }
+  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
+    return getTraceAttributeFiltersError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-args-match' ||

@@ -4,6 +4,16 @@
 
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
 
+export function withTraceAttributeFilterContext(
+  reason: string,
+  attributes?: TraceSpanAttributeFilter,
+): string {
+  const keys = Object.keys(attributes ?? {});
+  return keys.length > 0
+    ? `${reason}. Attribute filters applied to keys: ${JSON.stringify(keys)}.`
+    : reason;
+}
+
 export function filterTraceSpans<T extends { name: string; attributes?: Record<string, unknown> }>(
   spans: T[],
   pattern: string,
