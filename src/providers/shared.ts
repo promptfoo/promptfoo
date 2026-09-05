@@ -1,6 +1,7 @@
-import { getEnvBool, getEnvInt } from '../envars';
+import { type EnvVarKey, getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
 
+import type { EnvOverrides } from '../types/env';
 import type { ApiProvider } from '../types/index';
 
 /**
@@ -8,6 +9,23 @@ import type { ApiProvider } from '../types/index';
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/**
+ * Read a provider-scoped env override, stringifying non-string values.
+ *
+ * Returns undefined when the key is absent so callers can fall through to the
+ * process environment; an explicitly-set key is honored even if it is empty.
+ */
+export function getProviderEnvString(
+  env: EnvOverrides | undefined,
+  key: EnvVarKey,
+): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
 }
 
 /**
