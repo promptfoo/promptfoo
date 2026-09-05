@@ -10,18 +10,38 @@ interface SkillCountValue {
 }
 
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
-  const rawSkillCalls = params.providerResponse?.metadata?.skillCalls;
+  const metadata = params.providerResponse?.metadata;
+  const skillCalls = normalizeSkillCalls(metadata?.skillCalls);
+
+  if (params.inverse === true) {
+    return dedupeSkillCalls([...skillCalls, ...normalizeSkillCalls(metadata?.attemptedSkillCalls)]);
+  }
+
+  // skill-used counts only confirmed successful invocations.
+  return skillCalls.filter((entry) => entry.is_error !== true);
+}
+
+function normalizeSkillCalls(rawSkillCalls: unknown): SkillCallEntry[] {
   if (!Array.isArray(rawSkillCalls)) {
     return [];
   }
 
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
-      Boolean(entry) &&
-      typeof entry === 'object' &&
-      typeof entry.name === 'string' &&
-      entry.is_error !== true,
+      Boolean(entry) && typeof entry === 'object' && typeof entry.name === 'string',
   );
+}
+
+function dedupeSkillCalls(skillCalls: SkillCallEntry[]): SkillCallEntry[] {
+  const seen = new Set<string>();
+  return skillCalls.filter((skillCall) => {
+    const key = [skillCall.name, skillCall.source, skillCall.path, skillCall.is_error].join('\0');
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function matchesSkill(skillCall: SkillCallEntry, matcher: { name?: string; pattern?: string }) {
