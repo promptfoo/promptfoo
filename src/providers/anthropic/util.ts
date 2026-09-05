@@ -112,6 +112,10 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
+    // Not an Anthropic alias — the Models API 404s on it — but Vertex recognises it (see
+    // VERTEX_CLAUDE_SONNET_4_5_MODELS in google/vertex.ts) and passes the name through to
+    // calculateAnthropicCost, so dropping the row would silently blank Vertex costs.
+    'claude-sonnet-4-5-latest',
     // Retired on the Anthropic API; still served by Bedrock in every region.
     'claude-sonnet-4-20250514',
   ].map((model) => ({
