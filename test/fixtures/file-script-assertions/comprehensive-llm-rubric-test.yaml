@@ -233,7 +233,7 @@ tests:
   # Test 24: contains with file:// numeric return
   - description: 'contains with file:// numeric return'
     vars:
-      prompt: 'The answer is 42'
+      prompt: 'The answer is 0'
     assert:
       - type: contains
         value: file://rubric-generator.cjs:numericValue

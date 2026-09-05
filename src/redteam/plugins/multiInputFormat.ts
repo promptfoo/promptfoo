@@ -170,25 +170,24 @@ function parseMultiLinePrompts(
   }
 
   const prompts: string[] = [];
-  let currentPrompt = '';
-  let inPrompt = false;
 
-  for (const line of lines) {
-    const trimmedLine = line.trim();
+  for (let i = 0; i < promptLineIndices.length; i++) {
+    const promptIndex = promptLineIndices[i];
+    const prompt = removePrefix(lines[promptIndex].trim(), 'Prompt');
 
-    if (hasPromptMarker(trimmedLine)) {
-      if (inPrompt && currentPrompt.trim().length > 0) {
-        prompts.push(currentPrompt.trim());
+    if (prompt.length === 0) {
+      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1);
+      if (promptAfterEmptyMarker.length > 0) {
+        prompts.push(promptAfterEmptyMarker);
       }
-      currentPrompt = removePrefix(trimmedLine, 'Prompt');
-      inPrompt = true;
-    } else if (inPrompt && (currentPrompt || trimmedLine)) {
-      currentPrompt += (currentPrompt ? '\n' : '') + line;
+      continue;
     }
-  }
 
-  if (inPrompt && currentPrompt.trim().length > 0) {
-    prompts.push(currentPrompt.trim());
+    // Inline "Prompt: <content>": append every line up to the next marker. `prompt`
+    // is non-empty here (removePrefix trims), so all lines join unconditionally.
+    const nextPromptIndex = promptLineIndices[i + 1] ?? lines.length;
+    const blockLines = lines.slice(promptIndex + 1, nextPromptIndex);
+    prompts.push([prompt, ...blockLines].join('\n').trim());
   }
 
   return toPromptObjects(

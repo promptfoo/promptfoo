@@ -10,6 +10,16 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      const modelName =
+        firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
+      if (modelName === 'gemini-omni-flash-preview') {
+        const { GoogleInteractionsProvider } = await import('../google/interactions');
+        return new GoogleInteractionsProvider(modelName, {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: true },
+        });
+      }
       if (firstPart === 'video') {
         const { GoogleVideoProvider } = await import('../google/video');
         const modelName = splits.slice(2).join(':');
@@ -68,6 +78,11 @@ export const googleProviderFactories: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
+
+      if (modelName === 'gemini-omni-flash-preview') {
+        const { GoogleInteractionsProvider } = await import('../google/interactions');
+        return new GoogleInteractionsProvider(modelName, providerOptions);
+      }
 
       // Check if this is a Gemini native image generation model. Dispatch is on
       // the '-image' substring (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image,

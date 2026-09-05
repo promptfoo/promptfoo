@@ -4,8 +4,10 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
+import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
+import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
@@ -19,7 +21,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -340,6 +342,7 @@ export function getShortPluginId(pluginId: string): string {
  * @param pluginId - Optional plugin ID to provide context about the attack type.
  * @param policy - Optional policy text for custom policy tests to improve intent extraction.
  * @param targetId - Optional cloud target database ID used by remote task handlers to resolve target-owned provider context.
+ * @param provider - Optional tracked generation provider used to account for the remote request.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
@@ -348,6 +351,7 @@ export async function extractGoalFromPrompt(
   pluginId?: string,
   policy?: string,
   targetId?: string,
+  provider?: ApiProvider,
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -380,10 +384,12 @@ export async function extractGoalFromPrompt(
 
   interface ExtractIntentResponse {
     intent?: string;
+    tokenUsage?: ProviderResponse['tokenUsage'];
   }
 
+  let responseRecorded = false;
   try {
-    const { data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
+    const { cached, data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -392,6 +398,11 @@ export async function extractGoalFromPrompt(
       },
       getRequestTimeoutMs(),
     );
+
+    if (provider) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+      responseRecorded = true;
+    }
 
     logger.debug(
       `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
@@ -411,6 +422,9 @@ export async function extractGoalFromPrompt(
 
     return data.intent;
   } catch (error) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+    }
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }

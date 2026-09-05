@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
-import logger from '../logger';
+import { renderVarsInObject } from '../util/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { clampCachedTokens } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -9,13 +10,13 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
-  ProviderResponse,
 } from '../types/index';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const MOONSHOT_API_BASE_URL = 'https://api.moonshot.ai/v1';
 const MOONSHOT_API_KEY_ENVAR = 'MOONSHOT_API_KEY';
-const DEFAULT_MOONSHOT_MODEL = 'kimi-k2.6';
+const DEFAULT_MOONSHOT_MODEL = 'kimi-k3';
 
 type MoonshotConfig = OpenAiCompletionOptions & {
   // Per-cached-token input rate; Moonshot returns prompt cache hits and they are
@@ -36,12 +37,14 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
   return undefined;
 }
 
-// The Kimi models (kimi-k2.5 / kimi-k2.6 / kimi-k2.7-code, …) are "thinking"
-// models that pin temperature, top_p, n and the penalties to fixed values and
-// reject any other value with a 400 ("invalid temperature: only 1 is allowed
-// for this model"). They emit `reasoning_content` (which counts against
-// `max_tokens`) and default to a 32k output budget. The moonshot-v1 generation
-// models accept arbitrary sampling params, so they keep promptfoo's defaults.
+// The Kimi models (kimi-k3, kimi-k2.5 / kimi-k2.6 / kimi-k2.7-code, …) are
+// "thinking" models that pin temperature, top_p, n and the penalties to fixed
+// values and reject any other value with a 400 ("invalid temperature: only 1
+// is allowed for this model"). They emit `reasoning_content` (which counts
+// against the output budget) and default to a large server-side budget (32k
+// for K2.x, 131k for K3). The moonshot-v1 generation models accept arbitrary
+// sampling params, so they keep promptfoo's defaults.
+// https://platform.kimi.ai/docs/guide/kimi-k3-quickstart
 // https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
 function pinsSamplingParams(modelName: string): boolean {
   return /^kimi-/i.test(modelName);
@@ -70,9 +73,7 @@ export function calculateMoonshotCost(
     return undefined;
   }
 
-  const billableCachedTokens = Number.isFinite(cachedTokens)
-    ? Math.min(Math.max(cachedTokens!, 0), promptTokens!)
-    : 0;
+  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens!);
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
   const cacheReadCost = config.cacheReadCost ?? inputCost;
 
@@ -167,6 +168,23 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+
+    // reasoning_effort is K3-only per Moonshot's parameter matrix; fail fast on
+    // other models instead of silently dropping it or sending it unsupported.
+    // https://platform.kimi.ai/docs/api/models-overview
+    if (result.config.reasoning_effort !== undefined) {
+      if (!/^kimi-k3/i.test(this.modelName)) {
+        throw new Error(
+          `Moonshot model ${this.modelName} does not support reasoning_effort (kimi-k3 family only). ` +
+            'Remove it, use `passthrough: { thinking: ... }` on K2.x, or force-send it via `passthrough: { reasoning_effort: ... }`.',
+        );
+      }
+      result.body.reasoning_effort = renderVarsInObject(
+        result.config.reasoning_effort,
+        context?.vars,
+      );
+    }
+
     if (!pinsSamplingParams(this.modelName)) {
       return result;
     }
@@ -184,65 +202,50 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     if (config.frequency_penalty === undefined) {
       delete body.frequency_penalty;
     }
-    // The base provider always injects max_tokens (default 1024) for non-OpenAI
-    // models and only forwards max_completion_tokens for OpenAI reasoning models.
-    // Moonshot's field is max_tokens, so honor an explicit max_tokens (or a
-    // max_completion_tokens, mapped across) and otherwise drop the injected 1024
-    // default so reasoning can use Moonshot's 32k server budget.
-    const maxTokens = config.max_tokens ?? config.max_completion_tokens;
+    // Moonshot's canonical field is max_completion_tokens (max_tokens is a
+    // deprecated alias). Honor an explicit value on either field — prompt-level
+    // config beats provider-level regardless of which alias each layer used —
+    // and drop the base provider's injected max_tokens: 1024 default so
+    // reasoning can use Moonshot's server budget (32k for K2.x, 131k for K3).
+    const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
+    const maxTokens =
+      promptConfig.max_completion_tokens ??
+      promptConfig.max_tokens ??
+      config.max_completion_tokens ??
+      config.max_tokens;
+    delete body.max_tokens;
     if (maxTokens === undefined) {
-      delete body.max_tokens;
+      delete body.max_completion_tokens;
     } else {
-      body.max_tokens = maxTokens;
+      body.max_completion_tokens = maxTokens;
     }
-    delete body.max_completion_tokens;
     return result;
   }
 
-  override async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error || response.cached || response.cost !== undefined) {
-      return response;
+  // promptfoo has no Moonshot price table, so cost comes from user-provided
+  // rates. Cached tokens live in the documented top-level usage.cached_tokens;
+  // the OpenAI-style prompt_tokens_details mirror is undocumented.
+  // https://platform.kimi.ai/docs/api/chat
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return undefined;
     }
-
-    // promptfoo has no Moonshot price table, so the OpenAI cost path returns
-    // undefined. Fill it in from user-provided rates (incl. cached tokens).
-    if (response.tokenUsage) {
-      const cachedTokens =
-        response.tokenUsage.completionDetails?.cacheReadInputTokens ??
-        extractCachedTokens(response.raw);
-      const cost = calculateMoonshotCost(
-        this.config,
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-      if (cost !== undefined) {
-        response.cost = cost;
-      }
-    }
-
-    return response;
+    const usage = data.usage as
+      | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cached_tokens?: number })
+      | undefined;
+    const cachedTokens = usage?.prompt_tokens_details?.cached_tokens ?? usage?.cached_tokens;
+    // config is the provider config merged with prompt-level overrides.
+    return calculateMoonshotCost(
+      config as MoonshotConfig,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      typeof cachedTokens === 'number' ? cachedTokens : 0,
+    );
   }
-}
-
-function extractCachedTokens(raw: unknown): number {
-  let parsed: any = raw;
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      logger.debug(`[Moonshot] Failed to parse raw response for cache info: ${err}`);
-      return 0;
-    }
-  }
-  const cached = parsed?.usage?.prompt_tokens_details?.cached_tokens;
-  return typeof cached === 'number' ? cached : 0;
 }
 
 export function createMoonshotProvider(

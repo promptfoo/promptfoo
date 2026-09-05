@@ -37,6 +37,7 @@ export const FINISH_REASON_MAP: Record<string, string> = {
   end_turn: 'stop', // Natural completion
   stop_sequence: 'stop', // Stop sequence matched
   max_tokens: 'length', // Token limit reached
+  model_context_window_exceeded: 'length', // Model context limit reached
   tool_use: 'tool_calls', // Tool/function was called
   refusal: 'content_filter', // Content filtering / safety refusal
   pause_turn: 'pause_turn', // Long-running turn paused, can be continued

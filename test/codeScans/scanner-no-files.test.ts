@@ -170,25 +170,28 @@ describe('Scanner machine-readable output', () => {
       { format: CodeScanOutputFormat.SARIF, diffsOnly: true },
       CodeScanOutputFormat.SARIF,
     ],
-  ])('emits an empty machine-readable response when no files are available with %s', async (_label, options, expectedFormat) => {
-    mockScanner();
+  ])(
+    'emits an empty machine-readable response when no files are available with %s',
+    async (_label, options, expectedFormat) => {
+      mockScanner();
 
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-    const { getLogLevel, setLogLevel } = await import('../../src/logger');
-    const setLogLevelMock = vi.mocked(setLogLevel);
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+      const { getLogLevel, setLogLevel } = await import('../../src/logger');
+      const setLogLevelMock = vi.mocked(setLogLevel);
 
-    await executeScan('/test/repo', options);
+      await executeScan('/test/repo', options);
 
-    expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
-      expect.any(Number),
-      { format: expectedFormat, githubPr: undefined },
-    );
-    expect(setLogLevelMock).toHaveBeenCalledWith('error');
-    expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
-    expect(getLogLevel()).toBe('info');
-  });
+      expect(displayScanResults).toHaveBeenCalledWith(
+        { success: true, comments: [], review: 'No files to scan' },
+        expect.any(Number),
+        { format: expectedFormat, githubPr: undefined },
+      );
+      expect(setLogLevelMock).toHaveBeenCalledWith('error');
+      expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
+      expect(getLogLevel()).toBe('info');
+    },
+  );
 
   it('restores the original log level when structured config loading fails early', async () => {
     mockScanner({ loadConfigError: new Error('missing config') });

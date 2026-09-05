@@ -104,6 +104,9 @@ assert:
     value: 'The expected substring'
 ```
 
+Both assertions accept string or number values. Numbers are converted to strings, so `value: 0`
+matches output containing `0`.
+
 ### Contains-All
 
 The `contains-all` assertion checks if the LLM output contains all of the specified values.
@@ -676,6 +679,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenAI Codex Security, by recording the selected native scan or finding-validation operation.
 - OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
@@ -795,7 +799,7 @@ With the configuration above:
 | `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
 | `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped. A `defaults` entry always requires the observed value to equal the declared default — even a default of `"*"` is matched literally. To tolerate an argument regardless of its value, such as a pagination cursor or other agent-generated token, list it under [`ignore`](#trajectory-tool-args-match-ignore) instead.
 
 :::note
 
@@ -805,7 +809,7 @@ Stripping runs before matching in both modes, but `partial` mode already ignores
 
 #### Ignoring arguments {#trajectory-tool-args-match-ignore}
 
-Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a pagination `cursor`, a volatile `request_id`, or an `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
 
 ```yaml
 tests:
@@ -833,6 +837,32 @@ With the configuration above:
 `ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
 
 An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
+
+Combine `defaults` with `ignore` when a tool mixes arguments that should be pinned to a known default with arguments the agent chooses freely:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+          ignore:
+            - cursor
+```
+
+| Observed tool arguments                  | Outcome | Reason                                                       |
+| ---------------------------------------- | ------- | ------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                     |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both values equal their declared defaults                    |
+| `{ status: 'Q', cursor: 'abc123' }`      | pass    | `cursor` is ignored regardless of value                      |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1)            |
+| `{ status: 'Q', delete_database: true }` | fail    | hallucinated extra is not in `args`, `defaults`, or `ignore` |
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
@@ -1111,7 +1141,7 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1322,6 +1352,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
+
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
 
 **When to use GLEU:**
 
@@ -1634,7 +1666,7 @@ tests:
 The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
-- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
 
 :::note
 Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
@@ -1935,4 +1967,4 @@ assert:
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
 - [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
-- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs
+- [Guardrails](/docs/configuration/expected-outputs/guardrails) - Evaluating target-reported guardrail decisions

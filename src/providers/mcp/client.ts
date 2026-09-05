@@ -5,6 +5,7 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -33,6 +34,16 @@ interface OAuthServerConfig {
   serverKey: string;
   serverConfig: MCPServerConfig;
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+}
+
+/**
+ * Environment for a spawned stdio MCP server: the promptfoo process environment with
+ * the server's own `env` map layered on top. Per-server values win so a config can
+ * override an inherited variable (e.g. a scoped token) without unsetting the rest.
+ */
+function getStdioEnv(server: MCPServerConfig): Record<string, string> {
+  const parentEnv = process.env as Record<string, string>;
+  return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
 /**
@@ -161,7 +172,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
-          env: process.env as Record<string, string>,
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.path) {
@@ -185,7 +196,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
-          env: process.env as Record<string, string>,
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
@@ -419,6 +430,15 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
+      this.callToolInternal(name, args),
+    );
+  }
+
+  private async callToolInternal(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
     const disconnectedServers: string[] = [];
 

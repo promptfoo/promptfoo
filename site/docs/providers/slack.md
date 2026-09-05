@@ -20,11 +20,11 @@ The Slack provider enables human-in-the-loop evaluations by sending prompts to S
 The Slack provider requires the `@slack/web-api` package to be installed separately:
 
 ```bash
-npm install @slack/web-api
+npm install @slack/web-api@^8
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Slack provider.
+This optional dependency only needs to be installed if you want to use the Slack provider.
 :::
 
 ### Slack App Setup
@@ -63,6 +63,8 @@ This is an optional dependency and only needs to be installed if you want to use
 ```bash
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 ```
+
+Slack requests respect the `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables on all supported Node.js versions.
 
 ### Basic Configuration
 

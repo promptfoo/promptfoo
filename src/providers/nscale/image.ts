@@ -43,7 +43,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
   /**
    * Create a new Nscale image provider instance.
    *
-   * @param modelName - The Nscale image model name (e.g., 'ByteDance/SDXL-Lightning-4step')
+   * @param modelName - The Nscale image model name (e.g., 'black-forest-labs/FLUX.1-schnell')
    * @param options - Provider configuration options
    */
   constructor(
@@ -130,11 +130,14 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    */
   private calculateImageCost(modelName: string, n: number = 1): number {
     // Nscale pricing varies by model - these are approximate based on their pricing page
+    // Keyed by the Hugging Face repository ID Nscale uses as its model ID. These
+    // were previously keyed on identifiers that do not exist upstream
+    // (`BlackForestLabs/...`, `ByteDance/SDXL-Lightning-4step`), so every lookup
+    // missed and silently fell through to the default rate below.
     const costPerImage: Record<string, number> = {
-      'BlackForestLabs/FLUX.1-schnell': 0.0013, // $0.0013 per 1M pixels for 1024x1024
+      'black-forest-labs/FLUX.1-schnell': 0.0013, // $0.0013 per 1M pixels for 1024x1024
       'stabilityai/stable-diffusion-xl-base-1.0': 0.003, // $0.003 per 1M pixels
-      'ByteDance/SDXL-Lightning-4step': 0.0008, // $0.0008 per 1M pixels
-      'ByteDance/SDXL-Lightning-8step': 0.0016, // $0.0016 per 1M pixels
+      'ByteDance/SDXL-Lightning': 0.0008, // $0.0008 per 1M pixels
     };
 
     const baseCost = costPerImage[modelName] || 0.002; // Default cost

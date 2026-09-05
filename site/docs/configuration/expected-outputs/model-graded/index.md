@@ -82,7 +82,7 @@ tests:
       - type: trajectory:goal-success
         value: Resolve the user's issue and provide the correct next step
         threshold: 0.8
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-5.6
 ```
 
 This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
@@ -152,7 +152,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-5.6
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -179,7 +179,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.6
 
 tests:
   - vars:
@@ -204,7 +204,7 @@ prompts:
   - 'Write a comprehensive summary of {{article}} with key points'
 
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.6
 
 tests:
   - vars:
@@ -233,7 +233,7 @@ override the grader. There are several ways to do this, depending on your prefer
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader openai:gpt-5-mini
+   promptfoo eval --grader openai:gpt-5.6
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -241,7 +241,7 @@ override the grader. There are several ways to do this, depending on your prefer
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-5-mini
+       provider: openai:gpt-5.6
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -257,7 +257,7 @@ override the grader. There are several ways to do this, depending on your prefer
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-5-mini
+           provider: openai:gpt-5.6
    ```
 
 Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
@@ -268,7 +268,7 @@ tests:
       - type: llm-rubric
         value: Is not apologetic and provides a clear, concise answer
         provider:
-          id: openai:gpt-5-mini
+          id: openai:gpt-5.6
           config:
             temperature: 0
 ```
@@ -391,12 +391,12 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.6`.
 
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-5
+    provider: openai:gpt-5.6
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -543,7 +543,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.6
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -587,7 +587,7 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.6
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?

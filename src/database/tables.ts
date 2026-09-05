@@ -473,6 +473,7 @@ export const spansTable = sqliteTable(
   (table) => ({
     traceIdIdx: index('spans_trace_id_idx').on(table.traceId),
     spanIdIdx: index('spans_span_id_idx').on(table.spanId),
+    uniqueTraceSpan: uniqueIndex('spans_trace_id_span_id_unique').on(table.traceId, table.spanId),
   }),
 );
 

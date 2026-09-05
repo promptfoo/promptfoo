@@ -315,6 +315,7 @@ describeOrSkip('PythonWorker', () => {
   let loggingWorker: PythonWorker;
   let protocolCollisionWorker: PythonWorker;
   let forgedMarkerWorker: PythonWorker;
+  let noNewlineWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -325,6 +326,7 @@ describeOrSkip('PythonWorker', () => {
   const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
   const protocolCollisionPath = path.join(__dirname, 'fixtures', 'protocol_collision_provider.py');
   const forgedMarkerPath = path.join(__dirname, 'fixtures', 'forged_marker_provider.py');
+  const noNewlinePath = path.join(__dirname, 'fixtures', 'no_trailing_newline_provider.py');
 
   beforeAll(async () => {
     // Create test fixture
@@ -405,6 +407,23 @@ def call_api(prompt, options, context):
 `,
     );
 
+    // Leaves the stdout cursor mid-line at import time and per call. Pre-fix,
+    // the wrapper's READY / DONE|<path> markers glued onto the partial line
+    // ("loading moduleREADY", "...DONE|/path"), Node's line-anchored matches
+    // never fired, and init/calls hung until their timeouts.
+    await fs.promises.writeFile(
+      noNewlinePath,
+      `
+import sys
+
+sys.stdout.write("loading module")
+
+def call_api(prompt, options, context):
+    sys.stdout.write(f"partial output for {prompt}")
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
     await Promise.all([
       fs.promises.access(nonexistentPath),
       fs.promises.access(wrongNamePath),
@@ -420,6 +439,7 @@ def call_api(prompt, options, context):
     loggingWorker = new PythonWorker(loggingPath, 'call_api');
     protocolCollisionWorker = new PythonWorker(protocolCollisionPath, 'call_api');
     forgedMarkerWorker = new PythonWorker(forgedMarkerPath, 'call_api');
+    noNewlineWorker = new PythonWorker(noNewlinePath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -431,6 +451,7 @@ def call_api(prompt, options, context):
       loggingWorker.initialize(),
       protocolCollisionWorker.initialize(),
       forgedMarkerWorker.initialize(),
+      noNewlineWorker.initialize(),
     ]);
   });
 
@@ -446,6 +467,7 @@ def call_api(prompt, options, context):
         loggingWorker,
         protocolCollisionWorker,
         forgedMarkerWorker,
+        noNewlineWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
@@ -458,6 +480,7 @@ def call_api(prompt, options, context):
       loggingPath,
       protocolCollisionPath,
       forgedMarkerPath,
+      noNewlinePath,
     ]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
@@ -580,6 +603,22 @@ def call_api(prompt, options, context):
       expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
         'sensitive-provider-marker',
       );
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should complete when provider stdout ends without a trailing newline',
+    async () => {
+      const result = (await noNewlineWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await noNewlineWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
     },
     TEST_TIMEOUT,
   );

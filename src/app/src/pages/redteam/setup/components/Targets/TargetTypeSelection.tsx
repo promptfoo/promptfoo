@@ -4,6 +4,7 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import { getProviderType } from './helpers';
@@ -18,11 +19,19 @@ interface TargetTypeSelectionProps {
 
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
+  const { clearTargetConfigValidation, targetConfigRevision } = useRedTeamTargetConfigValidation();
 
-  // Use saved selections only when they have enough data to represent an actual target.
-  // For custom providers, id is intentionally empty but providerType is set to 'custom'
+  // Keep configured imports even when their optional label is missing. The default HTTP
+  // placeholder has no URL and should still require an explicit target-type selection.
   const hasCompleteSavedConfig = Boolean(
-    config.target?.label?.trim() && (config.target?.id || providerType === 'custom'),
+    (typeof config.target?.label === 'string' &&
+      config.target.label.trim() &&
+      (config.target?.id || providerType === 'custom')) ||
+      (config.target?.id &&
+        (config.target.id !== 'http' ||
+          (typeof config.target.config?.url === 'string' && config.target.config.url.trim()) ||
+          (typeof config.target.config?.request === 'string' &&
+            config.target.config.request.trim()))),
   );
 
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(() => {
@@ -35,6 +44,15 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   });
 
   const { recordEvent } = useTelemetry();
+
+  // A full config load can replace the target while this step remains mounted.
+  // Only replacements increment the revision, so incomplete in-progress edits stay local.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sync only on full config replacement
+  useEffect(() => {
+    if (targetConfigRevision) {
+      setSelectedTarget(config.target ?? { id: '', label: '', config: {} });
+    }
+  }, [targetConfigRevision]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -56,6 +74,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     setSelectedTarget(updatedProvider);
     setProviderType(providerType);
     updateConfig('target', updatedProvider);
+    clearTargetConfigValidation?.(JSON.stringify(updatedProvider));
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,

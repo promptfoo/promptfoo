@@ -115,34 +115,32 @@ describe('fetchWithProxy compressed responses', () => {
     expect(parsed).toEqual(payload);
   });
 
-  it.each([
-    'gzip',
-    'br',
-    'deflate',
-  ] as const)('strips Content-Encoding after decoding successful %s responses', async (encoding) => {
-    // For 2xx responses the decompress interceptor decodes the body and
-    // removes the Content-Encoding header so downstream code does not
-    // double-decode. (Non-2xx responses are decoded by Node's fetch and may
-    // retain the header — body decoding is still correct.)
-    const url = await startCompressedServer(encoding, 200);
-    const response = await fetchWithProxy(url);
-    await response.text();
-    expect(response.headers.get('content-encoding')).toBeNull();
-  });
+  it.each(['gzip', 'br', 'deflate'] as const)(
+    'strips Content-Encoding after decoding successful %s responses',
+    async (encoding) => {
+      // For 2xx responses the decompress interceptor decodes the body and
+      // removes the Content-Encoding header so downstream code does not
+      // double-decode. (Non-2xx responses are decoded by Node's fetch and may
+      // retain the header — body decoding is still correct.)
+      const url = await startCompressedServer(encoding, 200);
+      const response = await fetchWithProxy(url);
+      await response.text();
+      expect(response.headers.get('content-encoding')).toBeNull();
+    },
+  );
 
-  it.each([
-    'gzip',
-    'br',
-    'deflate',
-  ] as const)('decodes chunked %s responses (no Content-Length)', async (encoding) => {
-    const url = await startCompressedServer(encoding, 200, { chunked: true });
-    const response = await fetchWithProxy(url);
-    const text = await response.text();
+  it.each(['gzip', 'br', 'deflate'] as const)(
+    'decodes chunked %s responses (no Content-Length)',
+    async (encoding) => {
+      const url = await startCompressedServer(encoding, 200, { chunked: true });
+      const response = await fetchWithProxy(url);
+      const text = await response.text();
 
-    expect(response.status).toBe(200);
-    expect(JSON.parse(text)).toEqual(payload);
-    expect(response.headers.get('content-encoding')).toBeNull();
-  });
+      expect(response.status).toBe(200);
+      expect(JSON.parse(text)).toEqual(payload);
+      expect(response.headers.get('content-encoding')).toBeNull();
+    },
+  );
 
   it('preserves Content-Length on uncompressed responses', async () => {
     // Regression: the strip interceptor must only remove headers when the

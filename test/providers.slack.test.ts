@@ -1,21 +1,28 @@
-import { WebClient } from '@slack/web-api';
+import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlackProvider } from '../src/providers/slack';
+import { fetchWithProxy } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
 import type { ApiProvider } from '../src/types/index';
 
 const slackMocks = vi.hoisted(() => ({
+  fetchWithProxy: vi.fn(),
   webClientImpl: vi.fn(),
 }));
 
-vi.mock('@slack/web-api', () => {
+vi.mock('@slack/web-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@slack/web-api')>();
   const WebClientMock = vi.fn(function WebClientMock(...args: any[]) {
     return slackMocks.webClientImpl(...args);
   });
 
-  return { WebClient: WebClientMock };
+  return { ...actual, WebClient: WebClientMock };
 });
+
+vi.mock('../src/util/fetch/index', () => ({
+  fetchWithProxy: slackMocks.fetchWithProxy,
+}));
 
 describe('SlackProvider', () => {
   let mockWebClient: any;
@@ -23,6 +30,7 @@ describe('SlackProvider', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    slackMocks.fetchWithProxy.mockReset();
     slackMocks.webClientImpl.mockReset();
     mockProcessEnv({ SLACK_BOT_TOKEN: 'xoxb-test-token' });
 
@@ -65,7 +73,7 @@ describe('SlackProvider', () => {
           channel: 'C123',
         },
       });
-      expect(WebClient).toHaveBeenCalledWith('xoxb-config-token');
+      expect(WebClient).toHaveBeenCalledWith('xoxb-config-token', { fetch: expect.any(Function) });
       expect(provider).toBeDefined();
     });
 
@@ -75,8 +83,32 @@ describe('SlackProvider', () => {
           channel: 'C123',
         },
       });
-      expect(WebClient).toHaveBeenCalledWith('xoxb-test-token');
+      expect(WebClient).toHaveBeenCalledWith('xoxb-test-token', { fetch: expect.any(Function) });
       expect(provider).toBeDefined();
+    });
+
+    it('routes Slack requests through the proxy-aware fetch implementation', async () => {
+      new SlackProvider({ config: { channel: 'C123' } });
+
+      const clientOptions = vi.mocked(WebClient).mock.calls[0]?.[1];
+      const requestUrl = new URL('https://slack.com/api/chat.postMessage');
+      const requestOptions = {
+        method: 'POST',
+        headers: { Authorization: 'Bearer xoxb-test-token' },
+      };
+      const response = new Response(JSON.stringify({ ok: true }));
+
+      slackMocks.fetchWithProxy.mockResolvedValueOnce(response);
+
+      await expect(clientOptions?.fetch?.(requestUrl, requestOptions)).resolves.toBe(response);
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        requestUrl.toString(),
+        expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+      );
+
+      const forwardedHeaders = new Headers(vi.mocked(fetchWithProxy).mock.calls[0]?.[1]?.headers);
+      expect(forwardedHeaders.get('Authorization')).toBe('Bearer xoxb-test-token');
+      expect(forwardedHeaders.get('x-promptfoo-silent')).toBe('true');
     });
   });
 
@@ -209,6 +241,24 @@ describe('SlackProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toBe('Failed to post message to Slack');
+    });
+
+    it('maps typed Slack platform errors to actionable messages', async () => {
+      mockWebClient.chat.postMessage.mockRejectedValue(
+        new WebAPIPlatformError({ ok: false, error: 'channel_not_found' }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe('Channel C123 not found. Please check the channel ID.');
+    });
+
+    it('maps typed Slack rate-limit errors to the existing provider message', async () => {
+      mockWebClient.chat.postMessage.mockRejectedValue(new WebAPIRateLimitedError(30));
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe('Slack API rate limit exceeded. Please try again later.');
     });
 
     it('should use custom message formatter if provided', async () => {
