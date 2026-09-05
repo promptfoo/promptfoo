@@ -188,6 +188,24 @@ For best results, use both features together:
 This combination gives the grader both conceptual understanding and specific examples to follow.
 :::
 
+### Setting the Grader Output Language
+
+By default the grader writes the `reason` field in English. Set `redteam.graderLanguage` to any natural-language name when your team reviews results in another language:
+
+```yaml
+redteam:
+  graderLanguage: Japanese
+  plugins:
+    - harmful:hate
+    - excessive-agency
+```
+
+The language name is injected as an instruction into every LLM grading rubric, so all grader explanations and justifications will be written in the specified language. This applies globally to every plugin in the scan; there is no per-plugin override.
+
+:::note
+Purely deterministic graders such as `cross-session-leak` and `ascii-smuggling` decide pass/fail through string matching rather than an LLM call. When `graderLanguage` is set to a non-English value these graders delegate reason generation to the grading LLM so the reason text respects the configured language, while the pass/fail verdict remains deterministic.
+:::
+
 ## Reviewing Results
 
 You can review the results of the grader by going into **Evals** section of the platform and selecting the specific scan.

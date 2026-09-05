@@ -262,4 +262,34 @@ describeEvaluator('evaluator options and hooks', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mockApiProvider2.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('should propagate graderLanguage from redteam config to test options', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { var1: 'value1' } }],
+      redteam: { graderLanguage: 'Japanese' },
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0].testCase.options?.redteamGraderLanguage).toBe('Japanese');
+  });
+
+  it('should propagate graderLanguage and graderExamples together from redteam config', async () => {
+    const graderExamples = [{ output: 'bad output', pass: false, score: 0, reason: 'harmful' }];
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { var1: 'value1' } }],
+      redteam: { graderLanguage: 'French', graderExamples },
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0].testCase.options?.redteamGraderLanguage).toBe('French');
+    expect(summary.results[0].testCase.options?.redteamGraderExamples).toEqual(graderExamples);
+  });
 });
