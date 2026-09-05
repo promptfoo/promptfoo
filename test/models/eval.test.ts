@@ -69,6 +69,23 @@ describe('evaluator', () => {
     vi.resetAllMocks();
   });
 
+  describe('updateAuthor', () => {
+    it('treats an empty-string author as unassigned for an atomic cloud claim', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const db = await getDb();
+      await db.update(evalsTable).set({ author: '' }).where(eq(evalsTable.id, eval_.id));
+      vi.mocked(updateSignalFile).mockClear();
+
+      await expect(
+        Eval.updateAuthor(eval_.id, 'cloud-user@example.com', { onlyIfUnassigned: true }),
+      ).resolves.toBe(true);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      expect(updatedEval?.author).toBe('cloud-user@example.com');
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+    });
+  });
+
   describe('addPrompts', () => {
     it('should notify watchers when persisted prompt metadata changes', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });

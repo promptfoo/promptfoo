@@ -19,6 +19,7 @@ describe('AuthorChip', () => {
     onEditAuthor: mockOnEditAuthor,
     currentUserEmail: 'user@example.com',
     editable: true,
+    isCloudEnabled: false,
   };
 
   beforeEach(() => {
@@ -38,6 +39,98 @@ describe('AuthorChip', () => {
   it('renders "Unknown" when author is null', () => {
     renderWithProviders(<AuthorChip {...defaultProps} author={null} />);
     expect(screen.getByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('opens a claim dialog instead of inline edit mode when cloud is enabled', async () => {
+    renderWithProviders(<AuthorChip {...defaultProps} author={null} isCloudEnabled />);
+
+    await userEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Claim eval')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This eval has no author assigned. Cloud authorship cannot be changed after you claim it.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('email@example.com')).not.toBeInTheDocument();
+  });
+
+  it('claims the eval with the current user email when cloud is enabled', async () => {
+    renderWithProviders(<AuthorChip {...defaultProps} author={null} isCloudEnabled />);
+
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.click(screen.getByRole('button', { name: 'Claim as mine (user@example.com)' }));
+
+    await waitFor(() => {
+      expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the cloud claim dialog open and shows an error when claim fails', async () => {
+    mockOnEditAuthor.mockRejectedValueOnce(new Error('Claim failed'));
+    renderWithProviders(<AuthorChip {...defaultProps} author={null} isCloudEnabled />);
+
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.click(screen.getByRole('button', { name: 'Claim as mine (user@example.com)' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Claim failed')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('disables the cloud claim action until the current user email is loaded', async () => {
+    renderWithProviders(
+      <AuthorChip {...defaultProps} currentUserEmail={null} author={null} isCloudEnabled />,
+    );
+
+    await userEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByRole('button', { name: 'Loading...' })).toBeDisabled();
+  });
+
+  it('keeps non-editable cloud authors focusable so the ownership tooltip is reachable', async () => {
+    renderWithProviders(
+      <AuthorChip
+        {...defaultProps}
+        author="owner@example.com"
+        currentUserEmail="user@example.com"
+        editable={false}
+        isCloudEnabled
+      />,
+    );
+
+    const chip = screen.getByRole('button', { name: /authorowner@example.com/i });
+    expect(chip).not.toBeDisabled();
+    expect(chip).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.hover(chip);
+    expect(await screen.findAllByText('This eval belongs to owner@example.com')).not.toHaveLength(
+      0,
+    );
+  });
+
+  it('does not offer a cloud claim action for an assigned eval even if marked editable', async () => {
+    renderWithProviders(
+      <AuthorChip
+        {...defaultProps}
+        author="owner@example.com"
+        currentUserEmail="user@example.com"
+        editable
+        isCloudEnabled
+      />,
+    );
+
+    const chip = screen.getByRole('button', { name: /authorowner@example.com/i });
+    expect(chip).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.click(chip);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('opens inline edit mode on click', async () => {

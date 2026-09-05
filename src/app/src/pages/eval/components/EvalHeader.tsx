@@ -18,6 +18,7 @@ import {
 } from '@app/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { EVAL_ROUTES } from '@app/constants/routes';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -64,6 +65,11 @@ export default function EvalHeader({
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
   const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const {
+    data: cloudConfig,
+    isLoading: isCloudConfigLoading,
+    error: cloudConfigError,
+  } = useCloudConfig();
 
   React.useEffect(() => {
     fetchUserEmail().then((email) => {
@@ -99,6 +105,24 @@ export default function EvalHeader({
     return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;
   }, [head.prompts, totalResultsCount]);
 
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
+
+  const canEditAuthor = React.useMemo(() => {
+    if (isCloudConfigLoading || cloudConfigError) {
+      return false;
+    }
+
+    if (!isCloudEnabled) {
+      return true;
+    }
+
+    if (currentUserEmail === null) {
+      return false;
+    }
+
+    return !author;
+  }, [author, cloudConfigError, currentUserEmail, isCloudConfigLoading, isCloudEnabled]);
+
   const handleEvalIdCopyClick = () => {
     if (evalId) {
       navigator.clipboard.writeText(evalId).then(
@@ -117,7 +141,7 @@ export default function EvalHeader({
     if (evalId) {
       try {
         await updateEvalAuthor(evalId, newAuthor);
-        setAuthor(newAuthor);
+        setAuthor(newAuthor || null);
       } catch (error) {
         console.error('Failed to update author:', error);
         throw error;
@@ -193,7 +217,8 @@ export default function EvalHeader({
               author={author}
               onEditAuthor={handleEditAuthor}
               currentUserEmail={currentUserEmail}
-              editable
+              editable={canEditAuthor}
+              isCloudEnabled={isCloudEnabled}
             />
             {formattedDate && (
               <Chip label="DATE" interactive={false}>
