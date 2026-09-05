@@ -122,6 +122,35 @@ describe('handleRougeScore', () => {
     expect(result.reason).toBe('ROUGE-S score 1.00 is greater than or equal to threshold 0.75');
   });
 
+  // A metric that scores identical text below 1.0 is broken by definition. ROUGE-N
+  // already uses clipped counts for this reason (see rouge.ts); ROUGE-L and ROUGE-S
+  // still delegate to js-rouge, which deduplicates matches before counting them, so a
+  // repeated token silently lowers a perfect match. The existing ROUGE-L/S cases above
+  // pass only because 'The Quick Brown Fox' has no repeated token.
+  describe.each([
+    ['rouge-n', 'ROUGE-N'],
+    ['rouge-l', 'ROUGE-L'],
+    ['rouge-s', 'ROUGE-S'],
+  ])('%s', (baseType, label) => {
+    it('scores identical text 1.0 even when a token repeats', () => {
+      const text = 'the cat sat on the mat';
+      const result = handleRougeScore(makeParams(text, text, { baseType }));
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe(`${label} score 1.00 is greater than or equal to threshold 0.75`);
+    });
+
+    it('scores disjoint text 0', () => {
+      const result = handleRougeScore(
+        makeParams('alpha beta gamma', 'delta epsilon zeta', { baseType }),
+      );
+
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+  });
+
   it('should throw if renderedValue is not a string', () => {
     expect(() =>
       handleRougeScore({
