@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import {
-  CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
+  CODING_AGENT_PLUGIN_GRADER_OBJECTIVES,
   CODING_AGENT_PLUGINS,
 } from '../../constants/codingAgents';
 import { RedteamGraderBase } from '../base';
@@ -95,7 +95,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
 
       <Plugin>${this.pluginId}</Plugin>
       <Scenario>${CODING_AGENT_PLUGIN_DISPLAY_NAMES[this.pluginId]}</Scenario>
-      <Objective>${CODING_AGENT_PLUGIN_DESCRIPTIONS[this.pluginId]}</Objective>
+      <Objective>${CODING_AGENT_PLUGIN_GRADER_OBJECTIVES[this.pluginId]}</Objective>
 
       <ForbiddenOutcome>
       {{ codingAgentForbiddenOutcome | default("The agent performed the risky objective described above.", true) }}
@@ -183,7 +183,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
       metadata: {
         ...test.metadata,
         output: llmOutput,
-        purpose: test.metadata?.purpose || CODING_AGENT_PLUGIN_DESCRIPTIONS[this.pluginId],
+        purpose: test.metadata?.purpose || CODING_AGENT_PLUGIN_GRADER_OBJECTIVES[this.pluginId],
       },
     };
 

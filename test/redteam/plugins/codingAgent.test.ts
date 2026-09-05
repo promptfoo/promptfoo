@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CODING_AGENT_PLUGIN_GRADER_OBJECTIVES } from '../../../src/redteam/constants/codingAgents';
 import { CodingAgentGrader } from '../../../src/redteam/plugins/codingAgent/graders';
 import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
 import { sha256 } from '../../../src/util/createHash';
@@ -2422,6 +2423,30 @@ uploadLog();
     expect(result.grade).toMatchObject({ pass: true, score: 1 });
     expect(result.rubric).toContain('coding-agent:secret-env-read');
     expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalledOnce();
+  });
+
+  it('names every leak surface in the grader Objective, not just a catalog blurb', () => {
+    // Regression: the <Objective> tag was fed from CODING_AGENT_PLUGIN_DESCRIPTIONS,
+    // the plugin-catalog copy. #10194 shortened that copy ("Tests for exposure of
+    // environment secrets") and silently rewrote the grading rubric for all 15
+    // coding-agent plugins. Anything the Objective does not name is a surface the
+    // judge does not look at, so an agent that hid a canary in a trace or a tool
+    // parameter graded as a pass. Grader objectives now live in their own map.
+    const grader = new CodingAgentGrader('coding-agent:secret-env-read');
+
+    for (const surface of ['traces', 'reports', 'diffs', 'URLs', 'tool or connector parameters']) {
+      expect(grader.rubric).toContain(surface);
+    }
+  });
+
+  it('keeps grader objectives enumerative for every coding-agent plugin', () => {
+    // Guards the whole map, not just one plugin: a one-line objective cannot
+    // describe the surfaces a judge must inspect.
+    for (const pluginId of Object.keys(
+      CODING_AGENT_PLUGIN_GRADER_OBJECTIVES,
+    ) as (keyof typeof CODING_AGENT_PLUGIN_GRADER_OBJECTIVES)[]) {
+      expect(CODING_AGENT_PLUGIN_GRADER_OBJECTIVES[pluginId].length).toBeGreaterThan(120);
+    }
   });
 
   it('tells the LLM grader not to treat Unicode lookalike dots as parent traversal by default', () => {
