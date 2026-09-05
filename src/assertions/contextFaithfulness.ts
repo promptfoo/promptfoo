@@ -21,6 +21,7 @@ export async function handleContextFaithfulness({
   prompt,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -41,17 +42,34 @@ export async function handleContextFaithfulness({
     providerResponse,
   );
 
+  const threshold = assertion.threshold ?? 0.7;
+
+  const result = await matchesContextFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    threshold,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
+  if (result.metadata?.graderError === true) {
+    return { assertion, ...result, metadata: { ...result.metadata, context } };
+  }
+
+  const pass = inverse ? !result.pass : result.pass;
+
   return {
     assertion,
-    ...(await matchesContextFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
+    ...result,
+    pass,
+    score: inverse ? 1 - result.score : result.score,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : `Faithfulness ${result.score.toFixed(2)} is >= ${threshold}`
+      : result.reason,
     metadata: {
       context,
     },
