@@ -108,7 +108,7 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span.
 
-An `llm-rubric` assertion with `value.components` emits one grading span with the aggregate
+An `llm-rubric` assertion with `rubricComponents: true` emits one grading span with the aggregate
 parent score, label, and explanation, plus the shared model-call span. It does not emit a
 grading span per component; individual criteria, scores, and reasons remain available in the
 results UI and the exported `componentResults`.
