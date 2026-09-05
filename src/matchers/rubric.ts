@@ -883,9 +883,11 @@ export async function runJsonGradingPrompt({
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
-    // Some rubric-specific defaults enforce the scalar pass/score tool schema.
-    // Structured matcher results need the general JSON grader instead.
-    (!parseResult && defaultProviders.llmRubricProvider) || defaultProviders.gradingJsonProvider;
+    // Rubric-specific defaults (and Codex's JSON default) can enforce a scalar
+    // pass/score schema. Component batches need the unconstrained text grader.
+    parseResult
+      ? defaultProviders.gradingProvider
+      : defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,

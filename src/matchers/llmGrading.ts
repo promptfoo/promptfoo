@@ -238,6 +238,38 @@ function gradeRubricComponents(
   };
 }
 
+function handleLlmRubricError(
+  error: unknown,
+  components: boolean,
+  assertion?: Assertion,
+  throwOnError?: boolean,
+): GradingResult {
+  if (components) {
+    // Preserve the cancellation names recognized by the evaluator.
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'AbortException')
+    ) {
+      throw error;
+    }
+    const reason =
+      'Could not perform batched llm-rubric grading; check the grading provider and rubric prompt configuration';
+    if (throwOnError) {
+      throw new LlmRubricProviderError(reason);
+    }
+    return { ...graderFail(reason), assertion };
+  }
+  if (throwOnError) {
+    throw new LlmRubricProviderError((error as Error).message || 'No output');
+  }
+  // Rethrow so the evaluator's "Assertion grading failed" path logs and
+  // marks the row as errored. SyntaxError/TypeError/etc. from a misbehaving
+  // grader represent real bugs and must not be silently suppressed —
+  // `handleLlmRubric` lets the rejection propagate, so the evaluator
+  // converts it to a row-level error rather than a passing inverse result.
+  throw error;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -355,23 +387,7 @@ export async function matchesLlmRubric(
       },
     });
   } catch (error) {
-    if (components) {
-      const reason =
-        'Could not perform batched llm-rubric grading; check the grading provider and rubric prompt configuration';
-      if (options?.throwOnError) {
-        throw new LlmRubricProviderError(reason);
-      }
-      return { ...graderFail(reason), assertion };
-    }
-    if (options?.throwOnError) {
-      throw new LlmRubricProviderError((error as Error).message || 'No output');
-    }
-    // Rethrow so the evaluator's "Assertion grading failed" path logs and
-    // marks the row as errored. SyntaxError/TypeError/etc. from a misbehaving
-    // grader represent real bugs and must not be silently suppressed —
-    // `handleLlmRubric` lets the rejection propagate, so the evaluator
-    // converts it to a row-level error rather than a passing inverse result.
-    throw error;
+    return handleLlmRubricError(error, Boolean(components), assertion, options?.throwOnError);
   }
 }
 

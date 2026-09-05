@@ -227,22 +227,36 @@ describe('matchesLlmRubric', () => {
       });
     });
 
-    it('uses the general JSON default instead of a scalar-only rubric default', async () => {
-      const jsonProvider = createMockProvider({ response: { output: { components: results } } });
-      const scalarProvider = createMockProvider();
+    it('uses the unconstrained Codex default for component grading', async () => {
+      const { getCodexDefaultProviders, clearCodexDefaultProvidersForTesting } = await import(
+        '../../src/providers/openai/codexDefaults'
+      );
       const defaults = await defaultProviders.getDefaultProviders();
-      const spy = vi.spyOn(defaultProviders, 'getDefaultProviders').mockResolvedValue({
-        ...defaults,
-        llmRubricProvider: scalarProvider,
-        gradingJsonProvider: jsonProvider,
-      });
+      const codex = getCodexDefaultProviders();
+      expect(codex.gradingJsonProvider).toHaveProperty(
+        'config.output_schema.additionalProperties',
+        false,
+      );
+      expect(codex.gradingProvider).not.toHaveProperty('config.output_schema');
+      const textSpy = vi
+        .spyOn(codex.gradingProvider, 'callApi')
+        .mockResolvedValue({ output: { components: results } });
+      const scalarSpy = vi
+        .spyOn(codex.gradingJsonProvider, 'callApi')
+        .mockResolvedValue({ output: { pass: true, score: 1, reason: 'scalar' } });
+      const defaultsSpy = vi
+        .spyOn(defaultProviders, 'getDefaultProviders')
+        .mockResolvedValue({ ...defaults, ...codex });
       try {
         const result = await matchesLlmRubric(value, 'candidate', {});
         expect(result.score).toBeCloseTo(5 / 6);
-        expect(jsonProvider.callApi).toHaveBeenCalledTimes(1);
-        expect(scalarProvider.callApi).not.toHaveBeenCalled();
+        expect(textSpy).toHaveBeenCalledTimes(1);
+        expect(scalarSpy).not.toHaveBeenCalled();
       } finally {
-        spy.mockRestore();
+        defaultsSpy.mockRestore();
+        textSpy.mockRestore();
+        scalarSpy.mockRestore();
+        clearCodexDefaultProvidersForTesting();
       }
     });
 
@@ -291,9 +305,11 @@ describe('matchesLlmRubric', () => {
     it.each([
       { components: [] },
       { components: [value.components[0], value.components[0]] },
-      ...['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty'].map((metric) => ({
-        components: [{ metric, value: 'rubric' }],
-      })),
+      ...['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty', '__count'].map(
+        (metric) => ({
+          components: [{ metric, value: 'rubric' }],
+        }),
+      ),
       ...[0, -1, Infinity, NaN].map((weight) => ({
         components: [{ metric: 'a', value: 'rubric', weight }],
       })),
@@ -323,6 +339,7 @@ describe('matchesLlmRubric', () => {
       for (const assertion of [
         { type: 'llm-rubric' as const, metric: 'accuracy' },
         { type: 'llm-rubric' as const, metric: '{{ metricName }}' },
+        { type: 'llm-rubric' as const, metric: '__count' },
         { type: 'llm-rubric' as const, threshold: NaN },
       ]) {
         expect(

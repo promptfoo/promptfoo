@@ -14,7 +14,7 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
-import type { TokenUsage } from '../../src/types/index';
+import type { GradingResult, TokenUsage } from '../../src/types/index';
 
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
@@ -603,6 +603,71 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('assertion counts aggregation', () => {
+    it('keeps legacy and childless failures while excluding only populated rubric aggregates', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const child: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Dimension passed',
+        assertion: { type: 'llm-rubric', value: 'Good answer', metric: 'accuracy' },
+      };
+      const batch: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Aggregate passed',
+        assertion: {
+          type: 'llm-rubric',
+          value: { components: [{ metric: 'accuracy', value: 'Good answer' }] },
+        },
+        componentResults: [child],
+      };
+      const components: GradingResult[] = [
+        batch,
+        { ...batch, assertion: { ...batch.assertion!, type: 'not-llm-rubric' } },
+        child,
+        { pass: true, score: 1, reason: 'Legacy result without assertion' },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Legacy set',
+          componentResults: [child],
+          metadata: { assertionSet: { type: 'assert-set' } },
+        },
+        { ...batch, pass: false, componentResults: undefined, metadata: { graderError: true } },
+        { ...batch, pass: false, componentResults: [] },
+        { ...batch, assertion: { type: 'llm-rubric', value: 'Legacy scalar rubric' } },
+      ];
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        promptId: 'test',
+        provider: { id: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: { output: 'test' },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0,
+        latencyMs: 1,
+        namedScores: {},
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Mixed stored results',
+          componentResults: components,
+        },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+      expect(metrics[0]).toMatchObject({ assertPassCount: 3, assertFailCount: 3 });
+    });
+
     it('should aggregate assertion pass/fail counts from componentResults', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,

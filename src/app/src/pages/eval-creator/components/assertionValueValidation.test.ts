@@ -35,6 +35,7 @@ describe('getRunnableAssertionValueError', () => {
         ],
       },
       { components: [{ metric: '__proto__', value: 'rubric' }] },
+      { components: [{ metric: '__count', value: 'rubric' }] },
       { components: [{ metric: '{{ metric }}', value: 'rubric' }] },
       { components: [{ metric: 'a', value: 'rubric', weight: 0 }] },
       { components: [{ metric: 'a', value: 'rubric', provider: 'PRIVATE_PROVIDER' }] },
@@ -50,6 +51,7 @@ describe('getRunnableAssertionValueError', () => {
       for (const options of [
         { metric: 'quality' },
         { metric: '{{ metric }}' },
+        { metric: '__count' },
         { threshold: 1.1 },
       ]) {
         expect(getRunnableAssertionValueError(make({ type, value, ...options }))).toBeDefined();

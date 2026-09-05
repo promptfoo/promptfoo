@@ -114,6 +114,7 @@ describe('index.ts exports', () => {
     'isGradingResult',
     'isProviderOptions',
     'isResultFailureReason',
+    'isRubricBatchAggregate',
     'isTransformFunction',
     'loadApiProvider',
     'loadApiProviders',

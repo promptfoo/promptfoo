@@ -16,6 +16,7 @@ import {
   type EvaluateTableOutput,
   type GradingResult,
   type ImageOutput,
+  isRubricBatchAggregate,
   ResultFailureReason,
 } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -611,6 +612,9 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   const componentResults = output.gradingResult?.componentResults;
   if (componentResults?.length) {
     componentResults.forEach((result) => {
+      if (isRubricBatchAggregate(result)) {
+        return;
+      }
       if (result?.pass) {
         passCount++;
       } else {

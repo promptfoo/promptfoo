@@ -583,6 +583,25 @@ export interface GradingResult {
   };
 }
 
+/**
+ * A batched rubric's parent retains shared diagnostics and scoring, but its
+ * dimensions already appear in the flattened results used for assertion counts.
+ * Legacy assert-set parents and grader failures without children still count.
+ */
+export function isRubricBatchAggregate(result: GradingResult | null | undefined): boolean {
+  const assertion = result?.assertion;
+  const value = assertion?.value;
+  return Boolean(
+    (assertion?.type === 'llm-rubric' || assertion?.type === 'not-llm-rubric') &&
+      value &&
+      typeof value === 'object' &&
+      'components' in value &&
+      Array.isArray(value.components) &&
+      Array.isArray(result?.componentResults) &&
+      result.componentResults.length > 0,
+  );
+}
+
 export function isGradingResult(result: any): result is GradingResult {
   return (
     typeof result === 'object' &&
@@ -705,6 +724,7 @@ const LlmRubricComponentMetricSchema = z
     (metric) =>
       metric.trim().length > 0 &&
       !/\{[{%#]/.test(metric) &&
+      metric !== '__count' &&
       metric !== 'prototype' &&
       !Object.prototype.hasOwnProperty.call(Object.prototype, metric),
     'Component and parent metrics must be non-empty literal names, not reserved object keys',
