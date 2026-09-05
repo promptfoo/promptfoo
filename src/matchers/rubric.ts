@@ -10,7 +10,12 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
-import { extractJsonObjects, safeJsonStringify } from '../util/json';
+import {
+  type ExtractedJsonObject,
+  extractJsonObjectsWithMeta,
+  safeJsonStringify,
+  selectVerdictObject,
+} from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
@@ -740,10 +745,10 @@ function parseJsonGradingResponse(
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
 
-  let jsonObjects: unknown[] = [];
+  let jsonObjects: ExtractedJsonObject[] = [];
   if (typeof resp.output === 'string') {
     try {
-      jsonObjects = extractJsonObjects(resp.output);
+      jsonObjects = extractJsonObjectsWithMeta(resp.output);
       if (jsonObjects.length === 0) {
         return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
@@ -757,7 +762,7 @@ function parseJsonGradingResponse(
     resp.output !== null &&
     !Array.isArray(resp.output)
   ) {
-    jsonObjects = [resp.output];
+    jsonObjects = [{ object: resp.output, autoClosed: false }];
   } else {
     return {
       failure: failWithTokens(
@@ -766,10 +771,16 @@ function parseJsonGradingResponse(
     };
   }
 
-  // Security: use the LAST JSON object (the grader's own verdict), not the first.
-  // A model-under-test that embeds JSON in its output can hijack the verdict when
-  // the grader references that output early in its reasoning.
-  const parsed = jsonObjects[jsonObjects.length - 1];
+  // Security: verdict selection hardening.
+  // - Use the LAST JSON object (the grader's own verdict), not the first: a
+  //   model-under-test that embeds JSON in its output can hijack the verdict
+  //   when the grader references that output early in its reasoning.
+  // - Never let an UNTERMINATED trailing fragment (auto-closed by the
+  //   extractor) outrank a complete verdict-shaped object: the judge may echo
+  //   the model-under-test's unterminated fragment AFTER its verdict.
+  // - If the chosen object is a merged shell (unterminated fragment merged
+  //   with the judge's later verdict), unwrap it to the nested verdict.
+  const parsed = selectVerdictObject(jsonObjects, ['pass', 'score']);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
