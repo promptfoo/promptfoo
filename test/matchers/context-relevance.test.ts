@@ -438,4 +438,94 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
   });
+
+  describe('Header and Preamble Handling (Issue #10245)', () => {
+    it('should not count leading markdown header as an extracted sentence in prose response', async () => {
+      const input = 'What is the capital of France?';
+      const context =
+        'Paris is the capital of France. France is in Europe. The weather is nice today.';
+      const threshold = 0.3;
+
+      // Grader outputs a leading markdown header followed by 1 relevant sentence
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: '# Extracted sentences\nParis is the capital of France.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(input, context, threshold);
+
+      // 1 relevant sentence out of 3 context sentences → score = 1/3 ≈ 0.33 (not 2/3 ≈ 0.67)
+      expect(result.score).toBeCloseTo(0.33, 2);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France.']);
+      expect(result.metadata?.totalContextUnits).toBe(3);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+    });
+
+    it('should not count leading markdown header in numbered list grader response', async () => {
+      const input = 'What is the capital of France?';
+      const context =
+        'Paris is the capital of France. France is in Europe. The weather is nice today.';
+      const threshold = 0.5;
+
+      // Grader outputs markdown header followed by a numbered list
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: '## Relevant Context:\n1. Paris is the capital of France.\n2. France is in Europe.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(input, context, threshold);
+
+      // 2 relevant sentences out of 3 → score = 2/3 ≈ 0.67 (not 3/3 = 1.0)
+      expect(result.score).toBeCloseTo(0.67, 2);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.extractedSentences).toEqual([
+        '1. Paris is the capital of France.',
+        '2. France is in Europe.',
+      ]);
+      expect(result.metadata?.totalContextUnits).toBe(3);
+      expect(result.metadata?.relevantSentenceCount).toBe(2);
+    });
+
+    it('should handle bold preamble labels and inline headers', async () => {
+      const input = 'What is the capital of France?';
+      const context =
+        'Paris is the capital of France. France is in Europe. The weather is nice today.';
+      const threshold = 0.3;
+
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: '**Extracted sentences:** Paris is the capital of France.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(input, context, threshold);
+
+      expect(result.score).toBeCloseTo(0.33, 2);
+      expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France.']);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+    });
+
+    it('should not inflate context units denominator when context includes leading header', async () => {
+      const input = 'What is the capital of France?';
+      const context =
+        '# Context\nParis is the capital of France. France is in Europe. The weather is nice today.';
+      const threshold = 0.3;
+
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'Paris is the capital of France.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(input, context, threshold);
+
+      // Total context units should be 3 (not 4 or 2 pre-segmented lines)
+      expect(result.metadata?.totalContextUnits).toBe(3);
+      expect(result.score).toBeCloseTo(0.33, 2);
+      expect(result.pass).toBe(true);
+    });
+  });
 });
