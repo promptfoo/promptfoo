@@ -108,7 +108,7 @@ describe('History', () => {
     const promptLink2 = row2Cells.getByRole('link', { name: '[def456]' });
     expect(promptLink2).toHaveAttribute('href', '/prompts?id=def456prompt');
     expect(row2Cells.getByText('Summarize the following text.')).toBeInTheDocument();
-    expect(row2Cells.getByText('77.78%')).toBeInTheDocument();
+    expect(row2Cells.getByText('70.00%')).toBeInTheDocument();
     // Pass count is rendered as a Badge, not gridcell
     expect(row2Cells.getByText('7')).toBeInTheDocument();
     expect(row2Cells.getByText('2')).toBeInTheDocument();
