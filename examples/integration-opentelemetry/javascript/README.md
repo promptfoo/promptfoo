@@ -162,6 +162,12 @@ The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
 - `trajectory:tool-args-match`
 - `trajectory:tool-sequence`
 - `trajectory:step-count`
+- `trajectory:step-status`
+
+`trajectory:step-status` requires at least one matching step with the expected status.
+This example requires a successful `search_corpus` call and uses
+`not-trajectory:step-status` to reject any errored call, alongside the tool count and
+sequence checks.
 
 Promptfoo accepts generic tool span attributes such as `tool.name` and `tool.arguments`, and it also recognizes Vercel AI SDK telemetry attributes such as `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`.
 
