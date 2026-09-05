@@ -8,6 +8,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
   combineFilterConditions,
+  createEvalId,
   EvalQueries,
   escapeJsonPathKey,
   getEvalSummaries,
@@ -67,6 +68,30 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('evaluation IDs', () => {
+    const createdAt = new Date('2026-07-30T11:35:27.918Z');
+
+    it('generates a six-character random sequence without changing the timestamp format', () => {
+      expect(createEvalId(createdAt)).toMatch(/^eval-[A-Za-z0-9]{6}-2026-07-30T11:35:27$/);
+    });
+
+    it('persists evaluations with the longer generated ID format', async () => {
+      const evaluation = await Eval.create({}, [], { createdAt });
+
+      expect(evaluation.id).toMatch(/^eval-[A-Za-z0-9]{6}-2026-07-30T11:35:27$/);
+      expect((await Eval.findById(evaluation.id))?.id).toBe(evaluation.id);
+    });
+
+    it('preserves caller-provided legacy evaluation IDs', async () => {
+      const legacyId = 'eval-x8A-2026-07-30T11:35:27';
+      const evaluation = await Eval.create({}, [], { id: legacyId, createdAt });
+
+      expect(evaluation.id).toBe(legacyId);
+      expect((await Eval.findById(legacyId))?.id).toBe(legacyId);
+      expect(new Eval({}, { id: legacyId, createdAt }).id).toBe(legacyId);
+    });
   });
 
   describe('addPrompts', () => {

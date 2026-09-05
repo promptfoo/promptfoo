@@ -12,7 +12,9 @@ describe('getEvaluationDetails eval ID validation', () => {
     it('should accept new format eval IDs with random sequence', () => {
       const validIds = [
         'eval-8h1-2025-11-15T14:17:18',
+        'eval-8h1XyZ-2025-11-15T14:17:18',
         'eval-abc-2024-01-01T00:00:00',
+        'eval-abc123-2024-01-01T00:00:00',
         'eval-XyZ-2025-12-31T23:59:59',
         'eval-123-2025-06-15T12:30:45',
       ];

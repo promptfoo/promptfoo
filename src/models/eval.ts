@@ -88,7 +88,7 @@ interface MetadataKeyResult {
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
-  return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+  return `eval-${randomSequence(6)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
