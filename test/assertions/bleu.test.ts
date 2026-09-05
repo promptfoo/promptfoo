@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculateBleuScore, handleBleuScore } from '../../src/assertions/bleu';
+import { calculateGleuScore } from '../../src/assertions/gleu';
 
 import type { AssertionParams } from '../../src/types/index';
 
@@ -425,5 +426,30 @@ describe('handleBleuScore', () => {
     } as AssertionParams);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
+  });
+});
+
+describe('empty references', () => {
+  // An empty or whitespace-only reference is a config error -- a missing
+  // variable, a blank CSV cell. `tokenize('')` yields `['']`, whose zero n-gram
+  // precision SMOOTHS to 9.99e-8 rather than 0, so the metric reported a
+  // nonzero similarity against nothing at all. GLEU already returned 0 here.
+  it.each([[''], ['   '], ['\n\t']])('scores 0 against a blank reference (%j)', (ref) => {
+    expect(calculateBleuScore('the cat sat on the mat', [ref])).toBe(0);
+  });
+
+  it('ignores a blank reference when a real one is present', () => {
+    // max-over-references: the real reference still decides the score
+    expect(calculateBleuScore('the cat sat on the mat', ['', 'the cat sat on the mat'])).toBe(1);
+  });
+
+  it('scores 0 when every reference is blank', () => {
+    expect(calculateBleuScore('the cat sat on the mat', ['', '  '])).toBe(0);
+  });
+
+  it('matches GLEU, which already returned 0 for this input', () => {
+    expect(calculateBleuScore('the cat sat on the mat', [''])).toBe(
+      calculateGleuScore('the cat sat on the mat', ['']),
+    );
   });
 });

@@ -137,7 +137,9 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [rouge-l](/docs/configuration/expected-outputs/deterministic/#rouge-l)                                             | Rouge-L (LCS) score is above a given threshold (default 0.75)      |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
+| [rouge-s](/docs/configuration/expected-outputs/deterministic/#rouge-s)                                             | Rouge-S (skip-bigram) score is above a threshold (default 0.75)    |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0             |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
