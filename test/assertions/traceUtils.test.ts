@@ -71,5 +71,36 @@ describe('tracing utilities', () => {
       expect(matchesPattern('retrieval.search.vector', '*retrieval*')).toBe(true);
       expect(matchesPattern('llm.openai.chat', 'llm.*.chat')).toBe(true);
     });
+
+    it('matches ordered segments without reusing characters', () => {
+      expect(matchesPattern('abab', '*ab*ab')).toBe(true);
+      expect(matchesPattern('ab', '*ab*ab')).toBe(false);
+      expect(matchesPattern('prefix.ab.middle.ab', 'prefix.**a?')).toBe(true);
+      expect(matchesPattern('prefix.ab.trailing', 'prefix.*ab')).toBe(false);
+    });
+
+    it('preserves case-insensitive matching without changing Unicode character widths', () => {
+      expect(matchesPattern('ÉCHEC', '*échec')).toBe(true);
+      expect(matchesPattern('İ', '?')).toBe(true);
+      expect(matchesPattern('İ', 'i')).toBe(false);
+      expect(matchesPattern('ſ', 's')).toBe(false);
+      expect(matchesPattern('ß', 'ss')).toBe(false);
+    });
+
+    it.each(['\n', '\r', '\u2028', '\u2029'])(
+      'does not let wildcards consume line terminator %j',
+      (newline) => {
+        expect(matchesPattern(`error${newline}timeout`, '*timeout')).toBe(false);
+        expect(matchesPattern(`error${newline}timeout`, 'error?timeout')).toBe(false);
+        expect(matchesPattern(`error${newline}timeout`, `error*${newline}*timeout`)).toBe(true);
+      },
+    );
+
+    it('handles repeated message fragments without combinatorial backtracking', () => {
+      const message = 'error'.repeat(20_000);
+      const pattern = '*error*error*error*error*timeout';
+      expect(matchesPattern(message, pattern)).toBe(false);
+      expect(matchesPattern(`${message}timeout`, pattern)).toBe(true);
+    });
   });
 });

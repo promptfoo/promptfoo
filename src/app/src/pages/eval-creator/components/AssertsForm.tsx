@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { getRunnableAssertionValueError } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -67,6 +68,7 @@ const assertTypes: AssertionType[] = [
   'trajectory:tool-used',
   'trajectory:tool-sequence',
   'trajectory:step-count',
+  'trajectory:step-status',
 
   // Metrics
   'bleu',
@@ -90,6 +92,7 @@ const assertTypes: AssertionType[] = [
   'not-rouge-n',
   'not-similar',
   'not-starts-with',
+  'not-trajectory:step-status',
   'not-webhook',
 ];
 
@@ -118,19 +121,39 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
+function isStepStatusAssertion(assertion: Assertion): boolean {
+  return (
+    assertion.type === 'trajectory:step-status' || assertion.type === 'not-trajectory:step-status'
+  );
+}
+
+function parseStepStatusAssertion(assertion: Assertion): Assertion {
+  if (isStepStatusAssertion(assertion) && typeof assertion.value === 'string') {
+    try {
+      return { ...assertion, value: JSON.parse(assertion.value) };
+    } catch {
+      // Preserve incomplete JSON so editing does not reset the input or keep a stale valid value.
+    }
+  }
+  return assertion;
+}
+
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
+  const updateAsserts = (newAsserts: Assertion[]) => {
+    setAsserts(newAsserts);
+    onAdd(newAsserts.map(parseStepStatusAssertion));
+  };
+
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
-    setAsserts(newAsserts);
-    onAdd(newAsserts);
+    updateAsserts(newAsserts);
   };
 
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
-    setAsserts(newAsserts);
-    onAdd(newAsserts);
+    updateAsserts(newAsserts);
   };
 
   return (
@@ -139,97 +162,118 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
 
       {asserts.length > 0 && (
         <div className="space-y-3">
-          {asserts.map((assert, index) => (
-            <Card key={index} className="p-4">
-              <div className="space-y-3">
-                {/* Header: Type selector and delete button */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
-                      Type
+          {asserts.map((assert, index) => {
+            const stepStatus = isStepStatusAssertion(assert);
+            const valueError = stepStatus
+              ? getRunnableAssertionValueError(parseStepStatusAssertion(assert))
+              : undefined;
+            return (
+              <Card key={index} className="p-4">
+                <div className="space-y-3">
+                  {/* Header: Type selector and delete button */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
+                        Type
+                      </Label>
+                      {LLM_ASSERTION_TYPES.has(assert.type) && (
+                        <Badge variant="secondary" className="text-xs">
+                          LLM
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveAssert(index)}
+                      className="shrink-0"
+                      aria-label="Remove assertion"
+                    >
+                      <DeleteIcon className="size-4" />
+                    </Button>
+                  </div>
+
+                  {/* Type selector */}
+                  <Select
+                    value={assert.type}
+                    onValueChange={(newValue) => {
+                      const newAsserts = asserts.map((a, i) =>
+                        i === index ? { ...a, type: newValue as AssertionType } : a,
+                      );
+                      updateAsserts(newAsserts);
+                    }}
+                  >
+                    <SelectTrigger id={`assert-type-${index}`}>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {assertTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                          {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Value textarea */}
+                  <div className="space-y-2">
+                    <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                      Value
                     </Label>
-                    {LLM_ASSERTION_TYPES.has(assert.type) && (
-                      <Badge variant="secondary" className="text-xs">
-                        LLM
-                      </Badge>
+                    <Textarea
+                      id={`assert-value-${index}`}
+                      placeholder={
+                        stepStatus
+                          ? '{"name": "search_orders", "status": "success"}'
+                          : 'Enter expected value or criteria...'
+                      }
+                      aria-invalid={Boolean(valueError)}
+                      aria-describedby={valueError ? `assert-value-error-${index}` : undefined}
+                      value={
+                        typeof assert.value === 'string'
+                          ? assert.value
+                          : typeof assert.value === 'number'
+                            ? String(assert.value)
+                            : typeof assert.value === 'object' && assert.value !== null
+                              ? JSON.stringify(assert.value, null, 2)
+                              : ''
+                      }
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: newValue } : a,
+                        );
+                        updateAsserts(newAsserts);
+                      }}
+                      className="min-h-20 resize-y"
+                    />
+                    {valueError && (
+                      <p
+                        id={`assert-value-error-${index}`}
+                        role="alert"
+                        className="text-xs text-destructive"
+                      >
+                        {valueError}
+                      </p>
+                    )}
+                    {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                      <p className="text-xs text-muted-foreground">
+                        Separate values with commas, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                      </p>
+                    )}
+                    {(assert.type === 'regex' || assert.type === 'not-regex') && (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a regular expression pattern, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
+                      </p>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemoveAssert(index)}
-                    className="shrink-0"
-                    aria-label="Remove assertion"
-                  >
-                    <DeleteIcon className="size-4" />
-                  </Button>
                 </div>
-
-                {/* Type selector */}
-                <Select
-                  value={assert.type}
-                  onValueChange={(newValue) => {
-                    const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
-                    );
-                    setAsserts(newAsserts);
-                    onAdd(newAsserts);
-                  }}
-                >
-                  <SelectTrigger id={`assert-type-${index}`}>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {assertTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                        {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Value textarea */}
-                <div className="space-y-2">
-                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-                    Value
-                  </Label>
-                  <Textarea
-                    id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
-                    value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
-                    }
-                    onChange={(e) => {
-                      const newValue = e.target.value;
-                      const newAsserts = asserts.map((a, i) =>
-                        i === index ? { ...a, value: newValue } : a,
-                      );
-                      setAsserts(newAsserts);
-                      onAdd(newAsserts);
-                    }}
-                    className="min-h-20 resize-y"
-                  />
-                  {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
-                    <p className="text-xs text-muted-foreground">
-                      Separate values with commas, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
-                    </p>
-                  )}
-                  {(assert.type === 'regex' || assert.type === 'not-regex') && (
-                    <p className="text-xs text-muted-foreground">
-                      Enter a regular expression pattern, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
