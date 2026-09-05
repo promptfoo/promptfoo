@@ -9,6 +9,7 @@ interface RunOptionsSectionProps {
   maxConcurrency?: number;
   onChange: (options: { description?: string; delay?: number; maxConcurrency?: number }) => void;
   isReadyToRun?: boolean;
+  isProviderCatalogReady?: boolean;
 }
 
 export function RunOptionsSection({
@@ -17,6 +18,7 @@ export function RunOptionsSection({
   maxConcurrency,
   onChange,
   isReadyToRun = false,
+  isProviderCatalogReady = true,
 }: RunOptionsSectionProps) {
   const canSetDelay = !maxConcurrency || maxConcurrency === 1;
   const canSetMaxConcurrency = !delay || delay === 0;
@@ -120,7 +122,7 @@ export function RunOptionsSection({
             </p>
           </div>
 
-          <RunTestSuiteButton />
+          <RunTestSuiteButton disabled={!isProviderCatalogReady} />
         </div>
       </Card>
     </div>

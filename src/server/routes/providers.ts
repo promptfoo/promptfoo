@@ -12,14 +12,29 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import { type ProviderOptions, validateProviderCatalogConfig } from '../../types/index';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders } from '../config/serverConfig';
+import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
-import type { ProviderOptions } from '../../types/providers';
-
 export const providersRouter = Router();
+
+/** Returns the administrator-configured provider catalog for the eval creator. */
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const providers = getAvailableProviders();
+
+    res.json(
+      ProviderSchemas.Catalog.Response.parse({
+        success: true,
+        data: { providers, hasCustomConfig: hasCustomProviderConfig() },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to load providers', error);
+  }
+});
 
 /**
  * GET /api/providers/config-status
@@ -35,8 +50,8 @@ export const providersRouter = Router();
  */
 providersRouter.get('/config-status', (_req: Request, res: Response): void => {
   try {
-    const serverProviders = getAvailableProviders();
-    const hasCustomConfig = serverProviders.length > 0;
+    getAvailableProviders();
+    const hasCustomConfig = hasCustomProviderConfig();
 
     res.json(
       ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),
@@ -54,6 +69,17 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   const { providerOptions } = bodyResult.data;
+
+  if (hasCustomProviderConfig()) {
+    const catalogValidation = validateProviderCatalogConfig(
+      { providers: [providerOptions] },
+      getAvailableProviders(),
+    );
+    if (!catalogValidation.success) {
+      res.status(400).json({ error: catalogValidation.error });
+      return;
+    }
+  }
 
   try {
     const loadedProvider = await loadApiProvider(providerOptions.id, {
