@@ -20,6 +20,7 @@ export const handleContextRecall = async ({
   prompt,
   test,
   output,
+  inverse,
   providerResponse,
   providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
@@ -35,18 +36,31 @@ export const handleContextRecall = async ({
   const result = await matchesContextRecall(
     context, // context parameter (used as {{context}} in prompt)
     renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
-    (assertion.threshold as number) ?? 0,
+    (assertion.threshold as number) ?? 0.7,
     test.options,
     test.vars,
     providerCallContext,
   );
 
+  if (result.metadata?.graderError === true) {
+    return { assertion, ...result, metadata: { ...result.metadata, context } };
+  }
+
+  const pass = inverse ? !result.pass : result.pass;
+
   return {
     assertion,
     ...result,
+    pass,
+    score: inverse ? 1 - result.score : result.score,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : `Recall ${result.score.toFixed(2)} is >= 0.7`
+      : result.reason,
     metadata: {
+      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
-      ...(result.metadata || {}),
     },
   };
 };
