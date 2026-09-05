@@ -226,6 +226,127 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads `file://` references that are nested inside an object or array var.
+ *
+ * The top-level loader in `renderPrompt` only sees string values, so a reference
+ * sitting under a key (e.g. `reporting_period.previous.report`) used to reach the
+ * prompt as the raw path. This walks plain objects and arrays and replaces any
+ * `file://` string with the file's contents, mirroring the top-level behavior for
+ * text and YAML files.
+ *
+ * Only text and YAML files are loaded. Var scripts (JS/Python), PDFs, and
+ * image/video/audio files are left as the original `file://` string: the script
+ * forms are handed the var name and the base prompt, and the binary forms have
+ * top-level handling gated behind env vars, neither of which has a clear meaning
+ * for a value buried inside a structure. Reading those as UTF-8 here would
+ * corrupt them, so they are skipped rather than guessed at.
+ *
+ * Only arrays and plain records are traversed. Class instances (Date, Map, Set,
+ * Buffer, ...) are returned as-is: rebuilding them from their enumerable entries
+ * would silently turn a Date var into `{}` before the prompt ever sees it.
+ */
+function isNestedLoadableFile(filePath: string): boolean {
+  // Extensions are compared lowercased so `report.PDF` is skipped like `report.pdf`.
+  const lower = filePath.toLowerCase();
+  return !(
+    isJavascriptFile(lower) ||
+    lower.endsWith('.py') ||
+    lower.endsWith('.pdf') ||
+    isImageFile(lower) ||
+    isVideoFile(lower) ||
+    isAudioFile(lower)
+  );
+}
+
+function isPlainRecord(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+async function loadNestedFileVars(
+  value: unknown,
+  varName: string,
+  seen: WeakMap<object, unknown> = new WeakMap(),
+): Promise<unknown> {
+  // Vars can be self-referential, and a YAML anchor can put the same object under
+  // several keys. Each input object is mapped to its output container *before* we
+  // descend into it, so a repeat visit returns the same processed container: cycles
+  // terminate, aliases stay aliases, and every reachable reference is still loaded.
+  if (value !== null && typeof value === 'object' && seen.has(value)) {
+    return seen.get(value);
+  }
+
+  // Sequential rather than Promise.all: a dataset-shaped var can hold hundreds of
+  // references, and firing every readFile at once risks EMFILE. The top-level
+  // loader is sequential too.
+  if (Array.isArray(value)) {
+    const items: unknown[] = [];
+    seen.set(value, items);
+    for (const item of value) {
+      items.push(await loadNestedFileVars(item, varName, seen));
+    }
+    return items;
+  }
+
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+
+    const filePath = path.resolve(
+      process.cwd(),
+      cliState.basePath || '',
+      value.slice('file://'.length),
+    );
+
+    if (!isNestedLoadableFile(filePath)) {
+      logger.debug(`Leaving nested file reference in var ${varName} unloaded: ${filePath}`);
+      return value;
+    }
+
+    logger.debug(`Loading nested file reference in var ${varName} from file: ${filePath}`);
+    const contents = await fs.readFile(filePath, 'utf8');
+
+    const lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.yaml') || lowerPath.endsWith('.yml')) {
+      return JSON.stringify(loadYaml(contents) as string | object);
+    }
+    return contents.trim();
+  }
+
+  if (value && typeof value === 'object') {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+    const result: Record<string, unknown> = Object.create(Object.getPrototypeOf(value));
+    seen.set(value, result);
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || descriptor.get || descriptor.set) {
+        // Accessor properties are copied through by descriptor, not invoked: calling
+        // a getter here would snapshot (and possibly side-effect) it just to look for
+        // file refs, and plain data vars from JSON/YAML never carry accessors anyway.
+        if (descriptor) {
+          Object.defineProperty(result, key, descriptor);
+        }
+        continue;
+      }
+      // defineProperty rather than assignment: an own `__proto__` key (e.g. from
+      // JSON.parse) must be copied as a data property, not fed to the legacy setter.
+      Object.defineProperty(result, key, {
+        value: await loadNestedFileVars(descriptor.value, varName, seen),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    return result;
+  }
+
+  return value;
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -250,6 +371,10 @@ export async function renderPrompt(
   let basePrompt = prompt.raw;
 
   // Load files
+  // One memo map across every var: two top-level vars pointing at the same object
+  // (or a YAML anchor shared between them) must clone once, so identity and cycles
+  // spanning top-level roots survive.
+  const nestedSeen = new WeakMap<object, unknown>();
   for (const [varName, value] of Object.entries(vars)) {
     if (skipRenderVars?.includes(varName)) {
       continue;
@@ -381,6 +506,12 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value && typeof value === 'object' && !varName.startsWith('_')) {
+      // Underscore-prefixed vars (e.g. `_conversation`) are runtime-injected, not
+      // user config — `_conversation` in particular holds prior model output, and
+      // dereferencing `file://` strings inside untrusted output would let a model
+      // pull local file contents into later prompts.
+      vars[varName] = (await loadNestedFileVars(value, varName, nestedSeen)) as VarValue;
     }
   }
 
