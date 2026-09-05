@@ -703,6 +703,7 @@ describe('CommandLineOptionsSchema', () => {
       filterFailing: 'true',
       filterFirstN: 5,
       filterMetadata: 'meta',
+      filterMetadataAny: ['meta-a', 'meta-b'],
       filterRange: '1:3',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
@@ -729,6 +730,7 @@ describe('CommandLineOptionsSchema', () => {
       filterFailing: 'true',
       filterFirstN: 10,
       filterMetadata: 'metadata',
+      filterMetadataAny: ['metadata-a', 'metadata-b'],
       filterPattern: 'pattern',
       filterProviders: 'provider1',
       filterRange: '1:3',
