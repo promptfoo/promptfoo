@@ -176,10 +176,10 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context                                      |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query                                |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query (default threshold 0.5)      |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context (default threshold 0.5)                  |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context (default threshold 0.5)              |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query (default threshold 0.5)        |
 | [conversation-relevance](/docs/configuration/expected-outputs/model-graded)                          | Ensure that responses remain relevant throughout a conversation                  |
 | [trajectory:goal-success](/docs/configuration/expected-outputs/model-graded/#trajectorygoal-success) | Use an LLM judge to decide whether the traced agent run achieved its goal        |
 | [factuality](/docs/configuration/expected-outputs/model-graded)                                      | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
