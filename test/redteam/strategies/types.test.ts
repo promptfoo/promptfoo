@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import {
+  redteamProviderManager,
+  setRedteamProviderLoader,
+} from '../../../src/redteam/providers/shared';
 import {
   getStrategyGenerationProvider,
   withPersistableGenerationProvider,
@@ -30,6 +33,38 @@ describe('getStrategyGenerationProvider', () => {
 
     expect(result).toBe(cachedJsonProvider);
     expect(getProvider).toHaveBeenCalledWith({ jsonOnly: true, preferSmallModel: true });
+  });
+
+  it('keeps the selected cached JSON provider when another request replaces the cache', async () => {
+    const firstProvider = { id: () => 'first-provider', callApi: vi.fn() } as any;
+    const firstJsonProvider = { id: () => 'first-json-provider', callApi: vi.fn() } as any;
+    const secondProvider = { id: () => 'second-provider', callApi: vi.fn() } as any;
+    const secondJsonProvider = { id: () => 'second-json-provider', callApi: vi.fn() } as any;
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce([firstProvider])
+      .mockResolvedValueOnce([firstJsonProvider])
+      .mockResolvedValueOnce([secondProvider])
+      .mockResolvedValueOnce([secondJsonProvider]);
+    const restoreLoader = setRedteamProviderLoader(loader);
+
+    try {
+      await redteamProviderManager.setProvider('first-provider');
+      const selection = await redteamProviderManager.getProviderSelection();
+      await redteamProviderManager.setProvider('second-provider');
+
+      const result = await getStrategyGenerationProvider({
+        runtimeContext: { generationProviderSelection: selection },
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
+
+      expect(result.id()).toBe('first-json-provider');
+      expect(result).toBe(firstJsonProvider);
+    } finally {
+      redteamProviderManager.clearProvider();
+      restoreLoader();
+    }
   });
 
   it('prefers the dedicated multilingual cache for cached selections', async () => {
