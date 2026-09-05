@@ -238,7 +238,9 @@ describe('matchesSearchRubric', () => {
       );
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
-      expect(result.reason).toContain('clearly harmful');
+      // The trailing auto-closed fragment conflicts with the complete verdict;
+      // the selector fails closed rather than guessing which verdict is real.
+      expect(result.reason).toContain('ambiguous verdict');
     });
 
     it('fails closed on conflicting complete verdicts instead of substring fallback', async () => {
