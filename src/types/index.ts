@@ -579,6 +579,8 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set by the llm-rubric matcher after validating an explicitly enabled batch.
+    rubricComponents?: true;
     [key: string]: any;
   };
 }
@@ -589,15 +591,10 @@ export interface GradingResult {
  * Legacy assert-set parents and grader failures without children still count.
  */
 export function isRubricBatchAggregate(result: GradingResult | null | undefined): boolean {
-  const assertion = result?.assertion;
-  const value = assertion?.value;
   return Boolean(
-    (assertion?.type === 'llm-rubric' || assertion?.type === 'not-llm-rubric') &&
-      value &&
-      typeof value === 'object' &&
-      'components' in value &&
-      Array.isArray(value.components) &&
-      Array.isArray(result?.componentResults) &&
+    (result?.assertion?.type === 'llm-rubric' || result?.assertion?.type === 'not-llm-rubric') &&
+      result.metadata?.rubricComponents === true &&
+      Array.isArray(result.componentResults) &&
       result.componentResults.length > 0,
   );
 }
@@ -732,6 +729,7 @@ const LlmRubricComponentMetricSchema = z
 
 export const LlmRubricComponentsAssertionSchema = z
   .object({
+    rubricComponents: z.literal(true),
     value: z
       .object({
         components: z
@@ -759,7 +757,7 @@ export const LlmRubricComponentsAssertionSchema = z
   );
 
 export const LLM_RUBRIC_COMPONENTS_CONFIG_ERROR =
-  'Invalid llm-rubric components: provide a non-empty list of inline string rubrics with unique, literal, non-reserved metrics distinct from the literal parent metric and positive finite weights (default 1). Only metric, value, and weight are supported per component; the parent threshold must be from 0 to 1.';
+  'Invalid llm-rubric components: set rubricComponents: true and provide a non-empty list of inline string rubrics with unique, literal, non-reserved metrics distinct from the literal parent metric and positive finite weights (default 1). Only metric, value, and weight are supported per component; the parent threshold must be from 0 to 1.';
 
 export type LlmRubricComponent = z.infer<
   typeof LlmRubricComponentsAssertionSchema
@@ -803,6 +801,9 @@ export const AssertionSchema = z.object({
 
   // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
+
+  // Opt in to grading value.components in one shared llm-rubric call.
+  rubricComponents: z.boolean().optional(),
 
   // Override the grading rubric
   rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),

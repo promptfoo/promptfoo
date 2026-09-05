@@ -162,6 +162,7 @@ describe('runAssertions', () => {
       };
       const batch = {
         type: 'llm-rubric' as const,
+        rubricComponents: true,
         provider: grader,
         metric: 'quality',
         weight: 2,
@@ -231,6 +232,7 @@ describe('runAssertions', () => {
           assert: [
             {
               type: 'not-llm-rubric',
+              rubricComponents: true,
               provider: grader,
               value: { components: [{ metric: 'quality', value: 'Good answer' }] },
             },
@@ -265,6 +267,7 @@ describe('runAssertions', () => {
         assert: [
           {
             type: 'llm-rubric',
+            rubricComponents: true,
             provider: grader,
             transform: 'output.toLowerCase()',
             value: { components: [{ metric: 'quality', value: 'Good answer' }] },

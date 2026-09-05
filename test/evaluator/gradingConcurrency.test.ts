@@ -568,6 +568,54 @@ describeEvaluator('evaluator grading concurrency', () => {
   });
 
   it.each([false, true])(
+    'records thrown grading failures as retryable errors (components=%s)',
+    async (components) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const provider: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'candidate' }),
+      };
+      const judge: ApiProvider = {
+        id: () => 'throwing-grader',
+        callApi: vi.fn().mockRejectedValue(new Error('PRIVATE_PROVIDER_CREDENTIAL')),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'llm-rubric',
+                rubricComponents: components,
+                value: components
+                  ? { components: [{ metric: 'quality', value: 'Good answer' }] }
+                  : 'Good answer',
+                provider: judge,
+              },
+            ],
+          },
+        ],
+      };
+      try {
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.stats.errors).toBe(1);
+        expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
+        expect(summary.results[0].success).toBe(false);
+        if (components) {
+          expect(summary.results[0].error).not.toContain('PRIVATE_PROVIDER_CREDENTIAL');
+        }
+        expect(judge.callApi).toHaveBeenCalledTimes(1);
+      } finally {
+        errorSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
     'does not log error-level message when deferred grading is aborted (components=%s)',
     async (components) => {
       const { default: logger } = await import('../../src/logger');
@@ -599,6 +647,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             assert: [
               {
                 type: 'llm-rubric',
+                rubricComponents: components,
                 value: components
                   ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
                   : 'Judge alpha',
@@ -664,6 +713,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             assert: [
               {
                 type: 'llm-rubric',
+                rubricComponents: components,
                 value: components
                   ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
                   : 'Judge alpha',
@@ -730,6 +780,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             assert: [
               {
                 type: 'llm-rubric',
+                rubricComponents: components,
                 value: components
                   ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
                   : 'Judge alpha',

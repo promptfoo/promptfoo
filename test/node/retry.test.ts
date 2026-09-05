@@ -16,7 +16,8 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { TestSuite, UnifiedConfig } from '../../src/types/index';
+import type EvalResult from '../../src/models/evalResult';
+import type { GradingResult, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
@@ -265,6 +266,60 @@ describe('retryCommand', () => {
       expect.objectContaining({ resultId: 'invalid-prompt-result' }),
     );
     expect(prompts[0].metrics).not.toHaveProperty('incurredCost');
+  });
+
+  it('keeps rubric dimension counts when retained and retried rows are recalculated', async () => {
+    const children: GradingResult[] = [
+      { pass: true, score: 1, reason: 'Correct' },
+      { pass: false, score: 0.2, reason: 'Verbose' },
+    ];
+    const batch: GradingResult = {
+      pass: true,
+      score: 0.84,
+      reason: 'Weighted score passed the parent threshold',
+      assertion: {
+        type: 'llm-rubric',
+        rubricComponents: true,
+        threshold: 0.8,
+        value: {
+          components: [
+            { metric: 'accuracy', value: 'Correct', weight: 4 },
+            { metric: 'style', value: 'Concise' },
+          ],
+        },
+      },
+      componentResults: children,
+      metadata: { rubricComponents: true },
+    };
+    const evalRecord = createEval({
+      persisted: true,
+      prompts: [{ id: 'prompt', raw: 'Prompt', label: 'Prompt', provider: 'local' }],
+      fetchResultsBatched: vi.fn(async function* () {
+        for (const id of ['retained-success', 'retried-success']) {
+          yield [
+            {
+              id,
+              promptIdx: 0,
+              success: true,
+              failureReason: ResultFailureReason.NONE,
+              score: 0.84,
+              gradingResult: { ...batch, componentResults: [batch, ...children] },
+            },
+          ] as unknown as EvalResult[];
+        }
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    expect(evalRecord.prompts[0].metrics).toMatchObject({
+      testPassCount: 2,
+      testFailCount: 0,
+      assertPassCount: 2,
+      assertFailCount: 2,
+      score: 1.68,
+    });
+    expect(evalRecord.addPrompts).toHaveBeenCalledWith(evalRecord.prompts);
   });
 
   it.each([

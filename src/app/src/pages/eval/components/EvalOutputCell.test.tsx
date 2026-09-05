@@ -397,6 +397,7 @@ describe('EvalOutputCell', () => {
         assertion: {
           type: 'llm-rubric',
           provider: 'local-grader',
+          rubricComponents: true,
           ...(aggregatePasses && { threshold: 0.5 }),
           value: {
             components: [
@@ -406,7 +407,10 @@ describe('EvalOutputCell', () => {
           },
         },
         componentResults: children,
-        metadata: { renderedGradingPrompt: 'Shared prompt for both rubric dimensions' },
+        metadata: {
+          rubricComponents: true,
+          renderedGradingPrompt: 'Shared prompt for both rubric dimensions',
+        },
       };
       renderWithProviders(
         <EvalOutputCell

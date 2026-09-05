@@ -436,8 +436,8 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 function getStructuredValueError(assertion: Assertion): string | undefined {
   if (
     (assertion.type === 'llm-rubric' || assertion.type === 'not-llm-rubric') &&
-    isRecord(assertion.value) &&
-    Object.prototype.hasOwnProperty.call(assertion.value, 'components') &&
+    assertion.rubricComponents === true &&
+    !(typeof assertion.value === 'string' && assertion.value.startsWith('file://')) &&
     !LlmRubricComponentsAssertionSchema.safeParse(assertion).success
   ) {
     return LLM_RUBRIC_COMPONENTS_CONFIG_ERROR;

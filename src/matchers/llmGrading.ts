@@ -238,12 +238,7 @@ function gradeRubricComponents(
   };
 }
 
-function handleLlmRubricError(
-  error: unknown,
-  components: boolean,
-  assertion?: Assertion,
-  throwOnError?: boolean,
-): GradingResult {
+function handleLlmRubricError(error: unknown, components: boolean, throwOnError?: boolean): never {
   if (components) {
     // Preserve the cancellation names recognized by the evaluator.
     if (
@@ -254,10 +249,7 @@ function handleLlmRubricError(
     }
     const reason =
       'Could not perform batched llm-rubric grading; check the grading provider and rubric prompt configuration';
-    if (throwOnError) {
-      throw new LlmRubricProviderError(reason);
-    }
-    return { ...graderFail(reason), assertion };
+    throw new LlmRubricProviderError(reason);
   }
   if (throwOnError) {
     throw new LlmRubricProviderError((error as Error).message || 'No output');
@@ -290,13 +282,9 @@ export async function matchesLlmRubric(
   }
 
   let components: LlmRubricComponent[] | undefined;
-  if (
-    rubric &&
-    typeof rubric === 'object' &&
-    !Array.isArray(rubric) &&
-    Object.prototype.hasOwnProperty.call(rubric, 'components')
-  ) {
+  if (assertion?.rubricComponents === true) {
     const config = LlmRubricComponentsAssertionSchema.safeParse({
+      rubricComponents: true,
       value: rubric,
       threshold: assertion?.threshold,
       metric: assertion?.metric,
@@ -363,7 +351,7 @@ export async function matchesLlmRubric(
           })),
         )
       : undefined;
-    return await runJsonGradingPrompt({
+    const result = await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
       defaultPrompt: renderedComponents ? COMPONENTS_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
@@ -386,8 +374,12 @@ export async function matchesLlmRubric(
         }),
       },
     });
+    if (components) {
+      result.metadata = { ...result.metadata, rubricComponents: true };
+    }
+    return result;
   } catch (error) {
-    return handleLlmRubricError(error, Boolean(components), assertion, options?.throwOnError);
+    return handleLlmRubricError(error, Boolean(components), options?.throwOnError);
   }
 }
 

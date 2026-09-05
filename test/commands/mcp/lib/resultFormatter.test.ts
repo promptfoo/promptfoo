@@ -33,6 +33,7 @@ describe('batched rubric result formatting', () => {
         reason: 'Batch summary',
         assertion: {
           type: 'llm-rubric',
+          rubricComponents: true,
           threshold,
           value: {
             components: [
@@ -42,7 +43,7 @@ describe('batched rubric result formatting', () => {
           },
         },
         componentResults: children,
-        metadata: { renderedGradingPrompt: 'Shared grading prompt' },
+        metadata: { rubricComponents: true, renderedGradingPrompt: 'Shared grading prompt' },
       };
       const gradingResult: GradingResult = {
         pass: batch.pass,

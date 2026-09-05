@@ -562,7 +562,7 @@ async function aggregateAssertions(
   // missing assertion/value/children fields in the count instead of excluding NULL.
   const countableAssertion = sql`NOT COALESCE(
     json_extract(json_each.value, '$.assertion.type') IN ('llm-rubric', 'not-llm-rubric')
-    AND json_type(json_each.value, '$.assertion.value.components') = 'array'
+    AND json_type(json_each.value, '$.metadata.rubricComponents') = 'true'
     AND json_type(json_each.value, '$.componentResults') = 'array'
     AND json_array_length(json_each.value, '$.componentResults') > 0,
     0

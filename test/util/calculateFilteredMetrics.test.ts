@@ -617,9 +617,11 @@ describe('calculateFilteredMetrics', () => {
         reason: 'Aggregate passed',
         assertion: {
           type: 'llm-rubric',
+          rubricComponents: true,
           value: { components: [{ metric: 'accuracy', value: 'Good answer' }] },
         },
         componentResults: [child],
+        metadata: { rubricComponents: true },
       };
       const components: GradingResult[] = [
         batch,
@@ -635,7 +637,11 @@ describe('calculateFilteredMetrics', () => {
         },
         { ...batch, pass: false, componentResults: undefined, metadata: { graderError: true } },
         { ...batch, pass: false, componentResults: [] },
-        { ...batch, assertion: { type: 'llm-rubric', value: 'Legacy scalar rubric' } },
+        {
+          ...batch,
+          metadata: undefined,
+          assertion: { type: 'llm-rubric', value: 'Legacy scalar rubric' },
+        },
       ];
       await eval_.addResult({
         promptIdx: 0,
