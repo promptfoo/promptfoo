@@ -89,7 +89,10 @@ describe('release-please automation', () => {
     );
     assert(driftStep, 'release drift workflow must include the drift-check step');
 
-    expect(Number(driftStep.env?.MAX_DRIFT)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
+    const maxDrift = driftStep.env?.MAX_DRIFT;
+    assert(typeof maxDrift === 'string', 'release drift workflow must define env.MAX_DRIFT');
+    assert(/^\d+$/.test(maxDrift), 'release drift env.MAX_DRIFT must be a non-negative integer');
+    expect(Number(maxDrift)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
   });
 
   it('pins the release-please job action to a SHA on the v5+ family', () => {
