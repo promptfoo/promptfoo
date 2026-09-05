@@ -19,4 +19,10 @@ export interface FetchOptions extends RequestInit {
    * header, e.g. validating/rotating a credential that is not yet saved.
    */
   skipCloudAuthInjection?: boolean;
+
+  /**
+   * Internal request-scoped marker: preserve custom Cloud auth protection across
+   * asynchronous preparation and retries, even if the saved session changes.
+   */
+  restrictCloudAuthRedirects?: true;
 }

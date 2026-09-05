@@ -1309,6 +1309,52 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it.each([
+      { credentialSource: 'explicit', cacheKey: undefined },
+      { credentialSource: 'injected', cacheKey: undefined },
+      { credentialSource: 'explicit', cacheKey: 'shared-safe-key' },
+      { credentialSource: 'injected', cacheKey: 'shared-safe-key' },
+    ])(
+      'isolates cached responses when $credentialSource Cloud redirect protection becomes active (cache key: $cacheKey)',
+      async ({ credentialSource, cacheKey }) => {
+        const token = 'synthetic-cloud-token-for-cache-isolation';
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+        const requestOptions = { headers: { 'X-Promptfoo-Api-Key': `Bearer ${token}` } };
+        mockFetchWithRetries
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'unprotected' }))
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'protected' }));
+        const fetch = (options: RequestInit = requestOptions) =>
+          fetchWithCache('https://api.promptfoo.app/api/v1/task', options, 1000, 'json', {
+            cacheKey,
+          });
+
+        try {
+          expect((await fetch()).data).toEqual({ data: 'unprotected' });
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: token });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+          const protectedOptions = credentialSource === 'explicit' ? requestOptions : {};
+          const protectedResult = await fetch(protectedOptions);
+
+          // A response accepted before the credential was identified as Cloud auth
+          // must not bypass the now-required redirect policy through a cache hit.
+          expect(protectedResult.cached).toBe(false);
+          expect(protectedResult.data).toEqual({ data: 'protected' });
+          expect((await fetch(protectedOptions)).cached).toBe(true);
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+          const unprotectedResult = await fetch();
+          expect(unprotectedResult.cached).toBe(true);
+          expect(unprotectedResult.data).toEqual({ data: 'unprotected' });
+          expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        } finally {
+          restoreEnv();
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        }
+      },
+    );
+
     it('should fingerprint the cloud auth value under a custom header name even for a short token', async () => {
       // Regression guard: isSecretField/looksLikeSecret are name/pattern heuristics that
       // miss a custom header name (e.g. X-Promptfoo-Api-Key normalizes to a name outside
