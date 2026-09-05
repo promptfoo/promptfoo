@@ -220,6 +220,22 @@ describe('MediaModal', () => {
       expect(screen.getByText('Safety')).toBeInTheDocument();
     });
 
+    it('renders grader results without reasons as non-interactive summaries', () => {
+      const item = createMockItem({
+        context: {
+          evalId: 'e',
+          graderResults: [{ name: 'Quality', pass: true, score: 0.9 }],
+        },
+      });
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      const graderName = screen.getByText('Quality');
+      expect(graderName).toBeInTheDocument();
+      expect(screen.getByText('90%')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Quality/ })).not.toBeInTheDocument();
+      expect(graderName.closest('[aria-expanded]')).toBeNull();
+    });
+
     it('expands grader reason on click', async () => {
       const user = userEvent.setup();
       const item = createMockItem({
@@ -231,9 +247,13 @@ describe('MediaModal', () => {
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
       // Click the grader to expand
-      await user.click(screen.getByText('Quality'));
+      const graderButton = screen.getByRole('button', { name: /Quality/ });
+      expect(graderButton).toHaveAttribute('aria-expanded', 'false');
+      await user.click(graderButton);
 
       expect(screen.getByText('Good quality')).toBeInTheDocument();
+      expect(graderButton).toHaveAttribute('aria-expanded', 'true');
+      expect(graderButton).toHaveAttribute('aria-controls');
     });
 
     it('toggles technical details section', async () => {
@@ -245,10 +265,16 @@ describe('MediaModal', () => {
       expect(screen.queryByText('Size')).not.toBeInTheDocument();
 
       // Click to show details
-      await user.click(screen.getByText('Show technical details'));
+      const technicalDetailsButton = screen.getByRole('button', {
+        name: 'Show technical details',
+      });
+      expect(technicalDetailsButton).toHaveAttribute('aria-expanded', 'false');
+      await user.click(technicalDetailsButton);
 
       expect(screen.getByText('Size')).toBeInTheDocument();
       expect(screen.getByText('2048 B')).toBeInTheDocument();
+      expect(technicalDetailsButton).toHaveAttribute('aria-expanded', 'true');
+      expect(technicalDetailsButton).toHaveAttribute('aria-controls', 'media-technical-details');
     });
 
     it('shows eval link', () => {
@@ -284,7 +310,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[1]} items={items} onClose={vi.fn()} onNavigate={vi.fn()} />,
       );
 
-      expect(screen.getByLabelText('Previous')).toBeInTheDocument();
+      expect(screen.getByLabelText('Previous media item')).toBeInTheDocument();
     });
 
     it('does not show Previous button for first item', () => {
@@ -293,7 +319,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[0]} items={items} onClose={vi.fn()} onNavigate={vi.fn()} />,
       );
 
-      expect(screen.queryByLabelText('Previous')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Previous media item')).not.toBeInTheDocument();
     });
 
     it('shows Next button when not last item', () => {
@@ -302,7 +328,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[1]} items={items} onClose={vi.fn()} onNavigate={vi.fn()} />,
       );
 
-      expect(screen.getByLabelText('Next')).toBeInTheDocument();
+      expect(screen.getByLabelText('Next media item')).toBeInTheDocument();
     });
 
     it('does not show Next button for last item', () => {
@@ -311,7 +337,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[2]} items={items} onClose={vi.fn()} onNavigate={vi.fn()} />,
       );
 
-      expect(screen.queryByLabelText('Next')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Next media item')).not.toBeInTheDocument();
     });
 
     it('calls onNavigate with previous item when Previous is clicked', async () => {
@@ -322,7 +348,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[1]} items={items} onClose={vi.fn()} onNavigate={onNavigate} />,
       );
 
-      await user.click(screen.getByLabelText('Previous'));
+      await user.click(screen.getByLabelText('Previous media item'));
 
       expect(onNavigate).toHaveBeenCalledWith(items[0]);
     });
@@ -335,7 +361,7 @@ describe('MediaModal', () => {
         <MediaModal item={items[1]} items={items} onClose={vi.fn()} onNavigate={onNavigate} />,
       );
 
-      await user.click(screen.getByLabelText('Next'));
+      await user.click(screen.getByLabelText('Next media item'));
 
       expect(onNavigate).toHaveBeenCalledWith(items[2]);
     });

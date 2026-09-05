@@ -113,7 +113,7 @@ function renderDataTableHeaderActions<TData, TValue>({
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-focus-within:pointer-events-auto',
         (sortDirection || isFiltered) &&
           'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
@@ -242,6 +242,32 @@ function resolveRowDisplayMode(
   return {
     isInvalidServerVirtualizationConfig,
     isServerVirtualized: resolvedRowDisplayMode === 'server-virtualized',
+  };
+}
+
+function getVirtualTableAriaMetadata({
+  hasData,
+  hasExpandedRows,
+  headerRowCount,
+  logicalDataRowCount,
+}: {
+  hasData: boolean;
+  hasExpandedRows: boolean;
+  headerRowCount: number;
+  logicalDataRowCount: number;
+}) {
+  if (!hasData || hasExpandedRows) {
+    return {
+      rowCount: undefined,
+      getHeaderRowIndex: () => undefined,
+      getDataRowIndex: () => undefined,
+    };
+  }
+
+  return {
+    rowCount: headerRowCount + logicalDataRowCount,
+    getHeaderRowIndex: (headerIndex: number) => headerIndex + 1,
+    getDataRowIndex: (dataIndex: number) => headerRowCount + dataIndex + 1,
   };
 }
 
@@ -700,6 +726,14 @@ export function DataTable<TData, TValue = unknown>({
   // When printing, show all rows instead of just the current page
   const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
   const hasData = isServerVirtualized ? serverRowCount > 0 : table.getRowModel().rows.length > 0;
+  const headerGroups = table.getHeaderGroups();
+  const headerRowCount = headerGroups.length;
+  const virtualTableAria = getVirtualTableAriaMetadata({
+    hasData,
+    hasExpandedRows: Boolean(renderSubComponent),
+    headerRowCount,
+    logicalDataRowCount: virtualizerCount,
+  });
 
   if (isLoading) {
     return (
@@ -719,7 +753,11 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3"
+          role="status"
+          aria-live="polite"
+        >
           <Spinner className="size-8" />
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading data...</p>
         </div>
@@ -745,7 +783,10 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20"
+          role="alert"
+        >
           <AlertTriangle className="size-12 text-destructive" />
           <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
           <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
@@ -775,7 +816,11 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-zinc-100/50 dark:bg-zinc-800/50">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-zinc-100/50 dark:bg-zinc-800/50"
+          role="status"
+          aria-live="polite"
+        >
           <Search className="size-12 text-zinc-400 dark:text-zinc-500" />
           <h3 className="text-lg font-semibold">No data found</h3>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-md text-center">
@@ -803,6 +848,7 @@ export function DataTable<TData, TValue = unknown>({
         <tr
           data-index={virtualIndex}
           data-rowindex={virtualIndex ?? row.index}
+          aria-rowindex={virtualTableAria.getDataRowIndex(virtualIndex ?? row.index)}
           ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
           onClick={activateRow}
           onKeyDown={(event) => {
@@ -904,6 +950,7 @@ export function DataTable<TData, TValue = unknown>({
       key={`server-skeleton-${virtualIndex}`}
       data-index={virtualIndex}
       data-rowindex={virtualIndex}
+      aria-rowindex={virtualTableAria.getDataRowIndex(virtualIndex)}
       ref={isPrinting ? undefined : rowVirtualizer.measureElement}
       aria-busy={serverIsRowLoading?.(virtualIndex) ?? true}
       className="border-b border-zinc-200 dark:border-zinc-800"
@@ -944,7 +991,11 @@ export function DataTable<TData, TValue = unknown>({
   const renderNoResultsRow = () => (
     <tr>
       <td colSpan={visibleColumnCount} className="h-[200px] text-center">
-        <div className="flex flex-col items-center justify-center gap-2">
+        <div
+          className="flex flex-col items-center justify-center gap-2"
+          role="status"
+          aria-live="polite"
+        >
           <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No results match your search</p>
         </div>
@@ -984,7 +1035,7 @@ export function DataTable<TData, TValue = unknown>({
       );
     }
 
-    return rows.map((row) => renderTableRow(row));
+    return rows.map((row, index) => renderTableRow(row, index));
   };
 
   return (
@@ -1023,15 +1074,17 @@ export function DataTable<TData, TValue = unknown>({
         >
           <table
             className="w-full print:text-black"
+            aria-rowcount={virtualTableAria.rowCount}
             style={{
               tableLayout: 'fixed',
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
             }}
           >
             <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
-              {table.getHeaderGroups().map((headerGroup) => (
+              {headerGroups.map((headerGroup, headerGroupIndex) => (
                 <tr
                   key={headerGroup.id}
+                  aria-rowindex={virtualTableAria.getHeaderRowIndex(headerGroupIndex)}
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
                   {headerGroup.headers.map((header) =>

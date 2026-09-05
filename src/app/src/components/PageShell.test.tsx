@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PageShell from './PageShell';
@@ -67,5 +68,26 @@ describe('PageShell', () => {
     await waitFor(() => {
       expect(screen.getByTestId('posthog-tracker-mock')).toBeInTheDocument();
     });
+  });
+
+  it('should expose a skip link that targets the main content region', () => {
+    renderPageShell('/', <div>Page body</div>);
+
+    const skipLink = screen.getByRole('link', { name: 'Skip to content' });
+    const mainContent = screen.getByRole('main');
+
+    expect(skipLink).toHaveAttribute('href', '#main-content');
+    expect(mainContent).toHaveAttribute('id', 'main-content');
+    expect(mainContent).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByText('Page body')).toBeInTheDocument();
+  });
+
+  it('should move focus into the main content region when activated', async () => {
+    const user = userEvent.setup();
+    renderPageShell('/', <div>Page body</div>);
+
+    await user.click(screen.getByRole('link', { name: 'Skip to content' }));
+
+    expect(screen.getByRole('main')).toHaveFocus();
   });
 });
