@@ -259,10 +259,10 @@ This command works by reading your prompts and targets and then generating a set
 
 The adversarial tests include:
 
-- Prompt injection ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
-- Jailbreaking ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
-- Excessive Agency ([OWASP LLM08](https://genai.owasp.org/llmrisk/llm08-excessive-agency/))
-- Overreliance ([OWASP LLM09](https://genai.owasp.org/llmrisk/llm09-overreliance/))
+- Prompt injection ([OWASP LLM01](/docs/red-team/owasp-llm-top-10/#1-prompt-injection-llm01))
+- Jailbreaking ([OWASP LLM01](/docs/red-team/owasp-llm-top-10/#1-prompt-injection-llm01))
+- Excessive Agency ([OWASP LLM03](/docs/red-team/owasp-llm-top-10/#3-excessive-agency-llm03))
+- Overreliance ([OWASP LLM07](/docs/red-team/owasp-llm-top-10/#7-misinformation-llm07))
 - Hallucination (when the LLM provides unfactual answers)
 - Hijacking (when the LLM is used for unintended purposes)
 - PII leaks (ensuring the model does not inadvertently disclose PII)
