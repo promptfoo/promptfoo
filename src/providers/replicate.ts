@@ -6,6 +6,7 @@ import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
+import { LLAMAGUARD_CATEGORY_DESCRIPTIONS, parseLlamaGuardOutput } from '../util/llamaGuard';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
@@ -374,24 +375,11 @@ export class ReplicateProvider implements ApiProvider {
   }
 }
 
-// Map of LlamaGuard category codes to descriptions
-// Supports both LlamaGuard 3 (S1-S13) and LlamaGuard 4 (S1-S14)
-export const LLAMAGUARD_DESCRIPTIONS: Record<string, string> = {
-  S1: 'Violent Crimes',
-  S2: 'Non-Violent Crimes',
-  S3: 'Sex Crimes',
-  S4: 'Child Exploitation',
-  S5: 'Defamation',
-  S6: 'Specialized Advice',
-  S7: 'Privacy',
-  S8: 'Intellectual Property',
-  S9: 'Indiscriminate Weapons',
-  S10: 'Hate',
-  S11: 'Self-Harm',
-  S12: 'Sexual Content',
-  S13: 'Elections',
-  S14: 'Code Interpreter Abuse', // LlamaGuard 4 only
-};
+// Map of LlamaGuard category codes to descriptions.
+// Supports both LlamaGuard 3 (S1-S13) and LlamaGuard 4 (S1-S14). Re-exported here (as
+// the pre-existing name) from the shared, dependency-free src/util/llamaGuard.ts, which
+// also backs the provider-portable `llama-guard` assertion type.
+export const LLAMAGUARD_DESCRIPTIONS = LLAMAGUARD_CATEGORY_DESCRIPTIONS;
 
 export class ReplicateModerationProvider
   extends ReplicateProvider
@@ -415,30 +403,12 @@ export class ReplicateModerationProvider
         };
       }
 
-      // Parse the LlamaGuard output format
-      const lines = output.trim().split('\n');
-      const verdict = lines[0];
-
-      if (verdict === 'safe') {
-        return { flags: [], ...tokenUsageResult };
-      }
-
-      // Parse unsafe categories
-      const flags: ModerationFlag[] = [];
-      // LlamaGuard may return categories on the second line as comma-separated values
-      if (lines.length > 1) {
-        const categoriesLine = lines[1].trim();
-        const categories = categoriesLine.split(',').map((cat) => cat.trim());
-        for (const category of categories) {
-          if (category && LLAMAGUARD_DESCRIPTIONS[category]) {
-            flags.push({
-              code: category,
-              description: LLAMAGUARD_DESCRIPTIONS[category],
-              confidence: 1.0,
-            });
-          }
-        }
-      }
+      const verdict = parseLlamaGuardOutput(output);
+      const flags: ModerationFlag[] = verdict.categories.map((code) => ({
+        code,
+        description: LLAMAGUARD_DESCRIPTIONS[code],
+        confidence: 1.0,
+      }));
 
       return { flags, ...tokenUsageResult };
     } catch (err) {

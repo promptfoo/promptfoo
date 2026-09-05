@@ -37,6 +37,7 @@ const BASE_ASSERTION_TYPES = [
   'javascript',
   'latency',
   'levenshtein',
+  'llama-guard',
   'llm-rubric',
   'meteor',
   'model-graded-closedqa',
@@ -498,9 +499,18 @@ function getRequiredStringValueError(assertion: Assertion): string | undefined {
   return 'Enter an expected value before saving this check.';
 }
 
-function getModerationValueError(assertion: Assertion): string | undefined {
+const CATEGORY_LIST_ASSERTION_TYPES = new Set<AssertionType>([
+  'moderation',
+  'not-moderation',
+  'llama-guard',
+  'not-llama-guard',
+]);
+
+// Shared by `moderation` and `llama-guard`: both take an optional list of category
+// codes to filter on (moderation flag codes / LlamaGuard S1-S14 hazard codes).
+function getCategoryListValueError(assertion: Assertion): string | undefined {
   if (
-    (assertion.type === 'moderation' || assertion.type === 'not-moderation') &&
+    CATEGORY_LIST_ASSERTION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&
     !(
       (typeof assertion.value === 'string' && assertion.value.trim() === '') ||
@@ -512,7 +522,9 @@ function getModerationValueError(assertion: Assertion): string | undefined {
         assertion.value.every((value) => typeof value === 'string'))
     )
   ) {
-    return 'Enter moderation categories as a comma-separated list.';
+    return assertion.type.includes('llama-guard')
+      ? 'Enter LlamaGuard categories (e.g. S1, S10) as a comma-separated list.'
+      : 'Enter moderation categories as a comma-separated list.';
   }
 
   return undefined;
@@ -608,7 +620,7 @@ function getSkillCountValueError(assertion: Assertion): string | undefined {
 
 function getExpectedValueError(assertion: Assertion): string | undefined {
   return (
-    getModerationValueError(assertion) ||
+    getCategoryListValueError(assertion) ||
     getBasicExpectedValueError(assertion) ||
     getRequiredStringValueError(assertion) ||
     getTrajectoryGoalValueError(assertion) ||

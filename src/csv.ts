@@ -186,7 +186,10 @@ export function assertionFromString(expected: string): Assertion {
       type === 'contains-all' ||
       type === 'contains-any' ||
       type === 'icontains-all' ||
-      type === 'icontains-any'
+      type === 'icontains-any' ||
+      // Takes a category allow-list (e.g. `llama-guard:S1,S10`); the handler requires a
+      // string array, so the generic branch's raw "S1,S10" string would be rejected.
+      type === 'llama-guard'
     ) {
       return {
         type: fullType as AssertionType,
