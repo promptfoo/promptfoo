@@ -180,11 +180,9 @@ export class ProviderRateLimitState extends EventEmitter {
           this.updateFromHeaders(headers, isRateLimited);
         }
 
-        // Release slot
-        this.slotQueue.release();
-
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
+          this.slotQueue.release();
 
           // Check if we should retry
           if (shouldRetry(attempt, undefined, true, retryPolicy)) {
@@ -211,8 +209,10 @@ export class ProviderRateLimitState extends EventEmitter {
           );
         }
 
-        // Success
-        this.handleSuccess();
+        // Success: apply latency / recovery updates BEFORE releasing slot
+        // so that maxConcurrency is adjusted before slotQueue.processQueue() admits waiting requests
+        this.handleSuccess(latencyMs);
+        this.slotQueue.release();
         this.completedRequests++;
         return result;
       } catch (error) {
@@ -226,16 +226,21 @@ export class ProviderRateLimitState extends EventEmitter {
 
         lastError = error as Error;
 
-        // Release slot
-        this.slotQueue.release();
+        let isRateLimited = false;
+        let retryAfterMs: number | undefined;
 
-        // Check if rate limited (from error, not result)
-        const isRateLimited =
-          options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
-        const retryAfterMs = options.getRetryAfter?.(undefined, lastError);
+        try {
+          // Check if rate limited (from error, not result)
+          isRateLimited =
+            options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
+          retryAfterMs = options.getRetryAfter?.(undefined, lastError);
 
-        if (isRateLimited) {
-          this.handleRateLimit(retryAfterMs);
+          if (isRateLimited) {
+            this.handleRateLimit(retryAfterMs);
+          }
+        } finally {
+          // Release slot after applying rate limit updates (guaranteed release)
+          this.slotQueue.release();
         }
 
         // Check if we should retry
@@ -336,8 +341,8 @@ export class ProviderRateLimitState extends EventEmitter {
   /**
    * Handle successful request.
    */
-  private handleSuccess(): void {
-    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+  private handleSuccess(latencyMs?: number): void {
+    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess(latencyMs));
   }
 
   /**
