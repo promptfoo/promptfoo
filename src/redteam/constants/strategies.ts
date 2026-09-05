@@ -80,6 +80,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'custom',
   'emoji',
+  'flipattack',
   'gcg',
   'goat',
   'hex',
@@ -139,8 +140,20 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'flipattack',
 ] as const;
 export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGURABLE_STRATEGIES);
+
+/**
+ * Flip modes accepted by the `flipattack` strategy. Shared by the strategy
+ * implementation and the setup UI so the two cannot drift.
+ */
+export const FLIP_ATTACK_MODES = ['char_in_sentence', 'word_order', 'char_in_word'] as const;
+export type FlipAttackMode = (typeof FLIP_ATTACK_MODES)[number];
+
+export function isFlipAttackMode(value: unknown): value is FlipAttackMode {
+  return (FLIP_ATTACK_MODES as readonly unknown[]).includes(value);
+}
 
 /**
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
@@ -151,6 +164,7 @@ export const ENCODING_STRATEGIES = new Set([
   'rot13',
   'leetspeak',
   'homoglyph',
+  'flipattack',
   'morse',
   'atbash',
   'piglatin',
