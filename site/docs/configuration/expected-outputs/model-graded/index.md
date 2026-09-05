@@ -230,6 +230,10 @@ Mistral, GitHub Models, Azure OpenAI, and Codex login credentials can each activ
 default. If you do not have access to the selected default or prefer a different judge, you can
 override the grader. There are several ways to do this, depending on your preferred workflow:
 
+:::note
+When none of these overrides is set, the grader falls back to `defaultTest.provider` — the provider that also generates the test responses — before the built-in default, so the same model grades its own output. Promptfoo prints a warning when it resolves this way; set an explicit grader at any level to silence it.
+:::
+
 1. Using the `--grader` CLI option:
 
    ```

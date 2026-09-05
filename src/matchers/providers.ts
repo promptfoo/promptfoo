@@ -151,6 +151,24 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+// Self-grading via the generator slot is usually a misconfiguration: with no
+// --grader, defaultTest.options.provider, or assertion-level provider, the
+// grader silently resolves to the same provider that produced the output.
+let hasWarnedAboutGeneratorSlotGrading = false;
+
+function warnAboutGeneratorSlotGradingOnce(providerId: string): void {
+  if (hasWarnedAboutGeneratorSlotGrading) {
+    return;
+  }
+  hasWarnedAboutGeneratorSlotGrading = true;
+  logger.warn(
+    `[Grading] Model-graded assertions are grading with defaultTest.provider ("${providerId}"), ` +
+      'the same provider that generates responses for tests without their own provider. ' +
+      'Grade with a different model via the --grader flag, defaultTest.options.provider, ' +
+      'or an assertion-level provider.',
+  );
+}
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -222,6 +240,11 @@ export async function getGradingProvider(
         logger.debug('[Grading] Using provider from defaultTest fallback', {
           providerId: finalProvider.id(),
         });
+        // Only the generator slot overlaps the producer; options.provider is
+        // a deliberate grading choice and stays silent.
+        if (cfg === defaultTestObj?.provider) {
+          warnAboutGeneratorSlotGradingOnce(finalProvider.id());
+        }
       }
     } else {
       finalProvider = defaultProvider;
