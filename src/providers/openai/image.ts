@@ -578,15 +578,17 @@ export function formatOutput(
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
+  const image = Array.isArray(data.data) ? data.data[0] : undefined;
+
   if (responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
+    const b64Json = image?.b64_json;
     if (!b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
     return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
   } else {
-    const url = data.data[0].url;
+    const url = image?.url;
     if (!url) {
       return { error: `No image URL found in response: ${JSON.stringify(data)}` };
     }
@@ -796,6 +798,7 @@ export async function processApiResponse(
   try {
     const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
     if (typeof formattedOutput === 'object') {
+      await data?.deleteFromCache?.();
       return formattedOutput;
     }
 
