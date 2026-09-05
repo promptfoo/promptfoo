@@ -399,6 +399,33 @@ describe('transformMCPConfigToClaudeCode', () => {
     });
   });
 
+  it('omits the env key entirely when the server has no env map', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      server: { name: 'plain', command: 'npx', args: ['-y', 'plain-server'] },
+    });
+
+    expect(servers.plain).toEqual({ type: 'stdio', command: 'npx', args: ['-y', 'plain-server'] });
+    // A phantom `env: undefined` must never reach the SDK either.
+    expect(Object.hasOwn(servers.plain, 'env')).toBe(false);
+  });
+
+  it('merges a single `server` entry into the same map as `servers`', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      server: { name: 'solo', command: 'node', args: ['srv.js'], env: { KEY: 'v' } },
+      servers: [{ name: 'grouped', command: 'npx', args: ['other.js'] }],
+    });
+
+    expect(servers.solo).toEqual({
+      type: 'stdio',
+      command: 'node',
+      args: ['srv.js'],
+      env: { KEY: 'v' },
+    });
+    expect(servers.grouped).toEqual({ type: 'stdio', command: 'npx', args: ['other.js'] });
+  });
+
   it.each([
     null,
     [],
