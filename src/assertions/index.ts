@@ -13,6 +13,7 @@ import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matcher
 import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
+  matchesCitationFaithfulness,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
@@ -47,6 +48,7 @@ import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleCitationFaithfulness } from './citationFaithfulness';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -125,6 +127,7 @@ const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
   'answer-relevance',
+  'citation-faithfulness',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
@@ -241,6 +244,7 @@ const ASSERTION_HANDLERS: Record<
   'contains-json': handleContainsJson,
   'contains-sql': handleContainsSql,
   'contains-xml': handleIsXml,
+  'citation-faithfulness': handleCitationFaithfulness,
   'context-faithfulness': handleContextFaithfulness,
   'context-recall': handleContextRecall,
   'context-relevance': handleContextRelevance,
@@ -912,6 +916,7 @@ export default {
   matchesFactuality,
   matchesClosedQa,
   matchesAnswerRelevance,
+  matchesCitationFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,
