@@ -106,6 +106,50 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
+  describe('character-count', () => {
+    it.each([
+      -1,
+      1.5,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      Number.NaN,
+      { min: -1 },
+      { min: 1.5 },
+      { max: Number.POSITIVE_INFINITY },
+    ])('rejects an invalid count or limit', (value) => {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'character-count', value: value as Assertion['value'] }),
+        ),
+      ).toBeDefined();
+    });
+
+    it('uses character-specific guidance when the value is missing', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'character-count', value: undefined })),
+      ).toBe('Enter an exact character count or at least one limit.');
+    });
+
+    it('rejects min > max', () => {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'character-count', value: { min: 10, max: 5 } }),
+        ),
+      ).toBe('Minimum character count cannot exceed maximum character count.');
+    });
+
+    it('accepts exact counts and inclusive ranges', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'character-count', value: 0 })),
+      ).toBeUndefined();
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'not-character-count', value: { min: 1, max: 10 } }),
+        ),
+      ).toBeUndefined();
+    });
+  });
+
   describe('thresholds', () => {
     it('rejects out-of-range thresholds for score-style assertions', () => {
       expect(

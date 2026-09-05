@@ -4,6 +4,7 @@ const BASE_ASSERTION_TYPES = [
   'agent-rubric',
   'answer-relevance',
   'bleu',
+  'character-count',
   'classifier',
   'contains',
   'contains-all',
@@ -111,6 +112,10 @@ export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 'not-word-count']);
+export const CHARACTER_COUNT_ASSERTION_TYPES = new Set<AssertionType>([
+  'character-count',
+  'not-character-count',
+]);
 
 export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'bleu',
@@ -327,42 +332,43 @@ function getThresholdError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
-function isUsableWordCount(value: unknown): value is number {
+function isUsableCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-function getWordCountError(assertion: Assertion): string | undefined {
-  if (!WORD_COUNT_ASSERTION_TYPES.has(assertion.type)) {
+function getCountError(assertion: Assertion): string | undefined {
+  const countLabel = CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type) ? 'character' : 'word';
+  if (
+    !WORD_COUNT_ASSERTION_TYPES.has(assertion.type) &&
+    !CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type)
+  ) {
     return undefined;
   }
 
-  if (isUsableWordCount(assertion.value)) {
+  if (isUsableCount(assertion.value)) {
     return undefined;
   }
 
   if (typeof assertion.value === 'string' && assertion.value.trim() !== '') {
     const parsedValue = Number(assertion.value);
-    return isUsableWordCount(parsedValue)
+    return isUsableCount(parsedValue)
       ? undefined
-      : 'Enter word counts as whole numbers, 0 or greater.';
+      : `Enter ${countLabel} counts as whole numbers, 0 or greater.`;
   }
 
   if (!isRecord(assertion.value)) {
-    return 'Enter an exact word count or at least one limit.';
+    return `Enter an exact ${countLabel} count or at least one limit.`;
   }
 
   const { min, max } = assertion.value;
   if (min === undefined && max === undefined) {
-    return 'Enter an exact word count or at least one limit.';
+    return `Enter an exact ${countLabel} count or at least one limit.`;
   }
-  if (
-    (min !== undefined && !isUsableWordCount(min)) ||
-    (max !== undefined && !isUsableWordCount(max))
-  ) {
-    return 'Enter word counts as whole numbers, 0 or greater.';
+  if ((min !== undefined && !isUsableCount(min)) || (max !== undefined && !isUsableCount(max))) {
+    return `Enter ${countLabel} counts as whole numbers, 0 or greater.`;
   }
   if (typeof min === 'number' && typeof max === 'number' && min > max) {
-    return 'Minimum word count cannot exceed maximum word count.';
+    return `Minimum ${countLabel} count cannot exceed maximum ${countLabel} count.`;
   }
 
   return undefined;
@@ -624,7 +630,7 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
 
   return (
     getThresholdError(assertion) ||
-    getWordCountError(assertion) ||
+    getCountError(assertion) ||
     getStructuredValueError(assertion) ||
     getExpectedValueError(assertion)
   );
