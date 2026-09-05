@@ -1,5 +1,7 @@
 import util from 'util';
 
+import { normalizeForComparison } from './normalize';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleEquals = async ({
@@ -23,7 +25,14 @@ export const handleEquals = async ({
     }
     renderedValue = JSON.stringify(renderedValue);
   } else {
-    pass = (String(renderedValue) === outputString) !== inverse;
+    // Opt-in Unicode normalization. Off by default so existing assertions are
+    // unchanged; when enabled it folds NFC/NFD, ligatures and non-breaking
+    // spaces, which are false negatives rather than real mismatches.
+    const normalize = assertion.normalizeUnicode;
+    pass =
+      (normalizeForComparison(String(renderedValue), normalize) ===
+        normalizeForComparison(outputString, normalize)) !==
+      inverse;
   }
 
   return {
