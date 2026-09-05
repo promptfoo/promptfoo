@@ -200,6 +200,20 @@ assert:
     threshold: 0.9 # Requires 90% accuracy for economic data
 ```
 
+## Negation with `not-search-rubric`
+
+Prepend `not-` to invert the assertion — useful for "must not" criteria:
+
+```yaml
+assert:
+  - type: not-search-rubric
+    value: States a stock price that is more than 5% off the current market price
+```
+
+`not-search-rubric` passes when the rubric criterion does **not** match. The score is inverted alongside `pass` — a negated result scores `1 - score`, clamped to `[0, 1]` — so negated assertions aggregate correctly under `threshold` and weighted scoring.
+
+Transport or parse failures from the grader are reported as failures in both directions — a grader error is not treated as evidence that the criterion was or was not met, so inversion never silently turns a failed search call into a pass.
+
 ## Best Practices
 
 1. **Write clear rubrics**: Be specific about what information you expect
