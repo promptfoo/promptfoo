@@ -433,6 +433,84 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{{ var1 }}');
     });
 
+    it('should respect Nunjucks raw tags inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: '{% raw %}{{ myVar }}{% endraw %}',
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
+    it('should respect Nunjucks escaped strings inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: `{{ '{{ myVar }}' }}`,
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
+    it('should respect whitespace-controlled raw tags inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: '{% raw -%}{{ myVar }}{% endraw %}',
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
+    it('should respect filtered Nunjucks escaped strings inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: "{{ '{{ myVar }}' | safe }}",
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
+    it('should restore nested protected Nunjucks blocks', () => {
+      const variables = {
+        foo: 'FOO',
+        bar: 'BAR',
+        template: '{{ "{% raw %}{{ foo }}{% endraw %}" }} {{ bar }}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        foo: 'FOO',
+        bar: 'BAR',
+        template: '{{ "{% raw %}{{ foo }}{% endraw %}" }} BAR',
+      });
+    });
+
+    it('should avoid colliding with variable values when protecting Nunjucks blocks', () => {
+      const variables = {
+        foo: 'FOO',
+        payload: '\u0000promptfoo-nunjucks-block-0\u0000',
+        template: '{% raw %}{{ foo }}{% endraw %} {{ payload }}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        foo: 'FOO',
+        payload: '\u0000promptfoo-nunjucks-block-0\u0000',
+        template: '{% raw %}{{ foo }}{% endraw %} \u0000promptfoo-nunjucks-block-0\u0000',
+      });
+    });
+
     it('should render variables that are template strings', async () => {
       const prompt = toPrompt('{{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});
