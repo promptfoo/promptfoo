@@ -1,12 +1,14 @@
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 interface TraceSpanCountValue {
   pattern: string;
   min?: number;
   max?: number;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 export const handleTraceSpanCount = ({
@@ -22,11 +24,11 @@ export const handleTraceSpanCount = ({
     throw new Error('trace-span-count assertion must have a value object with pattern property');
   }
 
-  const { pattern, min, max } = value;
+  const { pattern, min, max, attributes } = value;
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Count spans matching the pattern
-  const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes);
   const count = matchingSpans.length;
 
   // Check against constraints

@@ -1,12 +1,14 @@
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 interface TraceSpanDurationValue {
   pattern?: string;
   max: number;
   percentile?: number;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 function calculatePercentile(durations: number[], percentile: number): number {
@@ -32,7 +34,7 @@ export const handleTraceSpanDuration = ({
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
 
-  const { pattern = '*', max, percentile } = value;
+  const { pattern = '*', max, percentile, attributes } = value;
 
   if (
     percentile !== undefined &&
@@ -44,13 +46,9 @@ export const handleTraceSpanDuration = ({
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
-  const matchingSpans = spans.filter((span) => {
-    return (
-      matchesPattern(span.name, pattern) &&
-      span.startTime !== undefined &&
-      span.endTime !== undefined
-    );
-  });
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes).filter(
+    (span) => span.startTime !== undefined && span.endTime !== undefined,
+  );
 
   if (matchingSpans.length === 0) {
     return {

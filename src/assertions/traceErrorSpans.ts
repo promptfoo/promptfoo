@@ -1,12 +1,14 @@
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 interface TraceErrorSpansValue {
   max_count?: number;
   max_percentage?: number;
   pattern?: string;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 function isErrorSpan(span: TraceSpan): boolean {
@@ -74,6 +76,7 @@ export const handleTraceErrorSpans = ({
   let maxCount: number | undefined;
   let maxPercentage: number | undefined;
   let pattern = '*';
+  let attributes: TraceSpanAttributeFilter | undefined;
 
   // Handle simple number value for backwards compatibility
   if (typeof value === 'number') {
@@ -88,6 +91,7 @@ export const handleTraceErrorSpans = ({
     maxCount = objValue.max_count;
     maxPercentage = objValue.max_percentage;
     pattern = objValue.pattern || '*';
+    attributes = objValue.attributes;
   }
 
   if (maxCount === undefined && maxPercentage === undefined) {
@@ -97,7 +101,7 @@ export const handleTraceErrorSpans = ({
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern
-  const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
     return {

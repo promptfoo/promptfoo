@@ -131,6 +131,63 @@ describe('trace assertions', () => {
     ],
   };
 
+  describe('deterministic assertions with span attribute filters', () => {
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },
+      { assertion: { type: 'trace-span-count', value: { min: 3 } }, pass: false },
+      { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
+      {
+        assertion: { type: 'trace-span-duration', value: { max: 200, percentile: 50 } },
+        pass: true,
+      },
+      {
+        assertion: { type: 'trace-span-duration', value: { max: 200, percentile: 95 } },
+        pass: false,
+      },
+      { assertion: { type: 'trace-error-spans', value: { max_count: 1 } }, pass: true },
+      {
+        assertion: { type: 'trace-error-spans', value: { max_percentage: 49 } },
+        pass: false,
+      },
+      {
+        assertion: { type: 'trace-error-spans', value: { max_percentage: 50 } },
+        pass: true,
+      },
+    ])('applies filters before grading $assertion', async ({ assertion, pass }) => {
+      const spans = [
+        { spanId: 'search-ok', duration: 100, tool: 'search', statusCode: 0 },
+        { spanId: 'search-error', duration: 300, tool: 'search', statusCode: 2 },
+        { spanId: 'fetch-error', duration: 5000, tool: 'fetch', statusCode: 2 },
+        { spanId: 'unknown-error', duration: 9000, tool: undefined, statusCode: 2 },
+      ].map(({ spanId, duration, tool, statusCode }) => ({
+        spanId,
+        name: 'execute_tool',
+        startTime: 1000,
+        endTime: 1000 + duration,
+        attributes: tool ? { 'gen_ai.tool.name': tool } : {},
+        statusCode,
+      }));
+      mockTraceStore.getTrace.mockResolvedValue({ ...mockTraceData, spans });
+
+      const result = await runAssertion({
+        assertion: {
+          ...assertion,
+          value: {
+            ...(assertion.value as object),
+            pattern: 'execute_*',
+            attributes: { 'gen_ai.tool.name': 'search' },
+          },
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(pass);
+      expect(result.score).toBe(pass ? 1 : 0);
+    });
+  });
+
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {
       const graderSpan = vi.fn();
