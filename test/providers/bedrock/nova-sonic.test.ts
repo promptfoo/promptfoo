@@ -126,7 +126,7 @@ const _audioResponse = [
   },
 ];
 
-const _functionCallResponse = [
+const functionCallResponse = [
   {
     event: {
       textOutput: {
@@ -316,6 +316,56 @@ describe('NovaSonic Provider', () => {
 
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
     });
+
+    it('should send the configured inference settings when starting a session', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+
+      const inferenceConfig = {
+        maxTokens: 2048,
+        temperature: 0.4,
+        topP: 0.8,
+      };
+      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: { inferenceConfig },
+      });
+      (configuredProvider as any).bedrockClient = bedrockClient;
+      const sendEventSpy = vi.spyOn(configuredProvider as any, 'sendEvent');
+
+      await configuredProvider.callApi('Test prompt');
+
+      expect(sendEventSpy).toHaveBeenCalledWith(expect.any(String), {
+        event: {
+          sessionStart: {
+            inferenceConfiguration: inferenceConfig,
+          },
+        },
+      });
+    });
+
+    it('should preserve support for legacy interface configuration', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+
+      const interfaceConfig = {
+        max_new_tokens: 2048,
+        temperature: 0.4,
+        top_p: 0.8,
+      };
+      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: { interfaceConfig },
+      });
+      (configuredProvider as any).bedrockClient = bedrockClient;
+      const sendEventSpy = vi.spyOn(configuredProvider as any, 'sendEvent');
+
+      await configuredProvider.callApi('Test prompt');
+
+      expect(sendEventSpy).toHaveBeenCalledWith(expect.any(String), {
+        event: {
+          sessionStart: {
+            inferenceConfiguration: interfaceConfig,
+          },
+        },
+      });
+    });
   });
 
   describe('Response Handling', () => {
@@ -397,6 +447,25 @@ describe('NovaSonic Provider', () => {
           functionCallOccurred: true,
         },
       });
+    });
+
+    it('should return an explicit error to the model for unsupported tool calls', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      mockSend.mockResolvedValueOnce(createMockStreamResponse(functionCallResponse));
+      const sendEventSpy = vi.spyOn(provider as any, 'sendEvent');
+
+      const result = await provider.callApi('What is the weather in New York?');
+      const toolResult = sendEventSpy.mock.calls
+        .map(([, event]) => event as { event: { toolResult?: { content: string } } })
+        .find(({ event }) => event.toolResult)?.event.toolResult;
+
+      expect(toolResult).toBeDefined();
+      expect(JSON.parse(toolResult?.content ?? '{}')).toEqual({
+        error: 'Tool use is not supported by the Nova Sonic provider.',
+        toolName: 'get_weather',
+        toolUseId: 'tool-123',
+      });
+      expect(result.metadata?.functionCallOccurred).toBe(true);
     });
   });
 

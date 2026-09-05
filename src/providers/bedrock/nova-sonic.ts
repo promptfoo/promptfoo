@@ -310,8 +310,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     session.responseHandlers.set('toolUse', async (data) => {
       logger.debug('toolUse');
       functionCallOccurred = true;
-      // const result = await this.handleToolUse(data.toolName, data);
-      const result = 'Tool result';
+      const result = {
+        error: 'Tool use is not supported by the Nova Sonic provider.',
+        toolName: data.toolName,
+        toolUseId: data.toolUseId,
+      };
       const toolResultId = crypto.randomUUID();
 
       await this.sendEvent(sessionId, {
@@ -372,7 +375,10 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       await this.sendEvent(sessionId, {
         event: {
           sessionStart: {
-            inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
+            inferenceConfiguration:
+              this.config?.inferenceConfig ??
+              this.config?.interfaceConfig ??
+              DEFAULT_CONFIG.inference,
           },
         },
       });

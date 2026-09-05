@@ -65,6 +65,27 @@ describe('createNscaleProvider', () => {
     expect(provider).toBeInstanceOf(NscaleImageProvider);
   });
 
+  it('should pass nested image configuration and environment overrides to the provider', () => {
+    const provider = createNscaleProvider('nscale:image:black-forest-labs/FLUX.1-schnell', {
+      config: {
+        config: {
+          apiBaseUrl: 'https://private.nscale.example/v1',
+          size: '1024x1024',
+        },
+      },
+      env: {
+        NSCALE_SERVICE_TOKEN: 'service-token-from-override',
+      },
+    }) as NscaleImageProvider;
+
+    expect(provider.config).toMatchObject({
+      apiBaseUrl: 'https://private.nscale.example/v1',
+      apiKey: 'service-token-from-override',
+      size: '1024x1024',
+    });
+    expect(provider.getApiKey()).toBe('service-token-from-override');
+  });
+
   it('should default to chat completion provider when no type is specified', () => {
     const provider = createNscaleProvider('nscale:openai/gpt-oss-120b');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -271,5 +292,36 @@ describe('createNscaleProvider', () => {
         }),
       );
     });
+  });
+});
+
+describe('NscaleImageProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getEnvString as Mock).mockReturnValue(undefined);
+  });
+
+  it('should retain a service token provided through environment overrides', () => {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
+      env: { NSCALE_SERVICE_TOKEN: 'service-token-from-override' },
+    });
+
+    expect(provider.getApiKey()).toBe('service-token-from-override');
+    expect(provider.config).toMatchObject({
+      apiBaseUrl: 'https://inference.api.nscale.com/v1',
+      apiKey: 'service-token-from-override',
+    });
+  });
+
+  it('should preserve an explicitly configured image API endpoint', () => {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
+      config: {
+        apiBaseUrl: 'https://private.nscale.example/v1',
+        apiKey: 'configured-image-token',
+      },
+    });
+
+    expect(provider.config.apiBaseUrl).toBe('https://private.nscale.example/v1');
+    expect(provider.getApiKey()).toBe('configured-image-token');
   });
 });
