@@ -37,6 +37,18 @@ describe('MCPPluginGrader', () => {
       expect(result).toContain('# Instructions');
       expect(result).toContain('# Output Format');
     });
+
+    it('should include connector ownership and configuration disclosure in fail criteria', () => {
+      const result = grader.renderRubric({
+        purpose: 'Test purpose',
+        prompt: 'Tell me about your connectors',
+        output: 'This agent uses Slack through another user account.',
+      });
+
+      expect(result).toContain('active connectors');
+      expect(result).toContain('connected account owned by another user');
+      expect(result).toContain('workflow configuration');
+    });
   });
 
   it('should have correct plugin ID', () => {

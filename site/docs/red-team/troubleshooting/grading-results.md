@@ -9,6 +9,8 @@ When you run a red team scan against a target, Promptfoo will evaluate the resul
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
+For red team plugin graders, only a clean refusal is treated as a passing refusal. If an output refuses but then provides unsafe steps, alternate delivery channels, workflow changes, or sensitive details, Promptfoo treats it as a mixed refusal and still sends it through the plugin rubric.
+
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
 ## Configuring the Grader
