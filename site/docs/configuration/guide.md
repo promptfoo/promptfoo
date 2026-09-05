@@ -188,6 +188,28 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+### Load matrix values from files
+
+Use `$values` to expand a top-level YAML or JSON array into separate variable values. Paths are
+resolved relative to the config file that starts the eval.
+
+```yaml title="languages.yaml"
+- English
+- French
+```
+
+```yaml
+tests:
+  - vars:
+      language:
+        - $values: file://languages.yaml
+        - Spanish
+```
+
+This runs the test once for each of `English`, `French`, and `Spanish`. You can include multiple
+`$values` entries in the same array; Promptfoo flattens their values in declaration order. Each
+referenced file must contain a top-level array.
+
 Javascript and Python variable files are supported. For example:
 
 ```yaml

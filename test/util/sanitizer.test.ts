@@ -9,6 +9,7 @@ import {
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeRuntimeOptionsForPersistence,
   sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
@@ -35,8 +36,24 @@ describe('sanitizeRuntimeOptions', () => {
         abortSignal: new AbortController().signal,
         progressCallback: vi.fn(),
         providerFilter: 'selected-target',
+        configBasePath: '/home/alice/private-project/configs',
+        testFilter: { errorsOnly: '/home/alice/private-project/results.json' },
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+
+  it('retains the config base path only for local persistence', () => {
+    expect(
+      sanitizeRuntimeOptionsForPersistence({
+        providerFilter: 'selected-target',
+        configBasePath: '/workspace/configs',
+        testFilter: { firstN: 3 },
+      }),
+    ).toEqual({
+      providerFilter: 'selected-target',
+      configBasePath: '/workspace/configs',
+      testFilter: { firstN: 3 },
+    });
   });
 });
 

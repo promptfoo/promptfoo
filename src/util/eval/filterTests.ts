@@ -61,6 +61,15 @@ export interface FilterOptions {
   sampleSeed?: number;
 }
 
+export function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
+  const tupleSeed = `${seed}:${scenarioIndex}`;
+  let state = 2166136261;
+  for (let i = 0; i < tupleSeed.length; i++) {
+    state = Math.imul(state ^ tupleSeed.charCodeAt(i), 16777619);
+  }
+  return state >>> 0;
+}
+
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
 
@@ -338,4 +347,29 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   return tests;
+}
+
+export async function reapplyTestFilter(
+  testSuite: TestSuite,
+  options: FilterOptions,
+): Promise<void> {
+  testSuite.tests = await filterTests(testSuite, options);
+  for (const [scenarioIndex, scenario] of (testSuite.scenarios || []).entries()) {
+    if (typeof scenario !== 'object' || !Array.isArray(scenario.tests)) {
+      continue;
+    }
+    scenario.tests = await filterTests(
+      { ...scenario, providers: testSuite.providers, prompts: testSuite.prompts },
+      {
+        failing: options.failing,
+        firstN: options.firstN,
+        pattern: options.pattern,
+        sample: options.sample,
+        sampleSeed:
+          options.sampleSeed === undefined
+            ? undefined
+            : deriveScenarioSampleSeed(options.sampleSeed, scenarioIndex),
+      },
+    );
+  }
 }

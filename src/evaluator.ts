@@ -23,7 +23,7 @@ import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
-import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
+import { loadVarValuesFromFile, nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -119,6 +119,7 @@ import type {
   EvaluationStoreResult,
   EvaluatorResultWriter,
   EvaluatorRuntime,
+  VarValuesFileCache,
 } from './evaluator/runtime';
 import type {
   EvalConversations,
@@ -1935,20 +1936,39 @@ export function formatVarsForDisplay(
   }
 }
 
+function hasVarValuesKey(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, '$values')
+  );
+}
+
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  basePath: string = cliState.basePath || process.cwd(),
+  varValuesFileCache: VarValuesFileCache = new Map(),
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
-    let values: Array<string | object> = [];
+    let values: VarValue[] = [];
+    const rawValue = vars[key];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
-      const filePath = vars[key].slice('file://'.length);
+    if (hasVarValuesKey(rawValue)) {
+      values = loadVarValuesFromFile(rawValue, key, basePath, varValuesFileCache);
+    } else if (Array.isArray(rawValue) && rawValue.some(hasVarValuesKey)) {
+      values = rawValue.flatMap((value) =>
+        hasVarValuesKey(value)
+          ? loadVarValuesFromFile(value, key, basePath, varValuesFileCache)
+          : [value as VarValue],
+      );
+    } else if (typeof rawValue === 'string' && rawValue.startsWith('file://')) {
+      const filePath = rawValue.slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
-      const basePath = cliState.basePath || '';
       const filePaths =
         globSync(filePath, {
           cwd: basePath || process.cwd(),
@@ -1962,12 +1982,16 @@ export function generateVarCombinations(
         );
       }
     } else {
-      values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+      values = Array.isArray(rawValue) ? rawValue : [rawValue as VarValue];
     }
 
     // Check if it's an array but not a string array
-    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
-      values = [vars[key]];
+    if (
+      Array.isArray(rawValue) &&
+      !rawValue.some(hasVarValuesKey) &&
+      typeof rawValue[0] !== 'string'
+    ) {
+      values = [rawValue];
     }
 
     const newCombinations: Record<string, VarValue>[] = [];
@@ -2536,6 +2560,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
+  const varValuesFileCache: VarValuesFileCache = options.varValuesFileCache ?? new Map();
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
@@ -2555,6 +2580,7 @@ async function buildRunEvalOptions({
       runEvalOptions,
       testCase,
       testSuite,
+      varValuesFileCache,
     });
   }
 
@@ -2641,6 +2667,7 @@ function appendRunEvalOptionsForTestCase({
   runEvalOptions,
   testCase,
   testSuite,
+  varValuesFileCache,
 }: {
   concurrency: number;
   conversations: EvalConversations;
@@ -2654,13 +2681,14 @@ function appendRunEvalOptionsForTestCase({
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testSuite: TestSuite;
+  varValuesFileCache: VarValuesFileCache;
 }) {
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
   const promptSuffix = testCase.options?.suffix || getDefaultTest(testSuite)?.options?.suffix || '';
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(testCase.vars || {}, options.varValuesBasePath, varValuesFileCache);
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
@@ -3345,6 +3373,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  runtime: EvaluatorRuntime<TEvaluation, TResult>;
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3354,6 +3383,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.testSuite = testSuite;
     this.store = store;
     this.options = options;
+    this.runtime = runtime;
     this.stats = {
       successes: 0,
       failures: 0,
@@ -4739,6 +4769,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
+  private async prepareMatrixValuesSnapshot(
+    tests: AtomicTestCase[],
+    testSuite: TestSuite,
+  ): Promise<void> {
+    const { options } = this;
+    const varValuesFileCache = options.varValuesFileCache ?? new Map();
+    options.varValuesFileCache = varValuesFileCache;
+    const matrixValuesFingerprint = this.runtime.prepareVarValuesSnapshot?.(
+      tests,
+      options.varValuesBasePath || cliState.basePath || process.cwd(),
+      varValuesFileCache,
+      getDefaultTest(testSuite)?.options?.disableVarExpansion === true,
+      options.expectedMatrixValuesFingerprint,
+      options.matrixValuesFingerprintError,
+    );
+    this.store.setMatrixValuesFingerprint?.(matrixValuesFingerprint);
+    if (this.store.persisted && this.store.setMatrixValuesFingerprint) {
+      await this.store.save();
+    }
+  }
+
   private async _runEvaluation(): Promise<TEvaluation> {
     const { options } = this;
     let { testSuite } = this;
@@ -4822,6 +4873,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (const varName of varNames) {
       vars.add(varName);
     }
+    await this.prepareMatrixValuesSnapshot(tests, testSuite);
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,

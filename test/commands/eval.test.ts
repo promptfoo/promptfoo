@@ -100,10 +100,12 @@ vi.mock('path', async () => {
 const chokidarMocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: any[]) => unknown>();
   const watcher = {
+    add: vi.fn(),
     on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
       handlers.set(event, handler);
       return watcher;
     }),
+    unwatch: vi.fn().mockResolvedValue(undefined),
     close: vi.fn(async () => {}),
   };
 
@@ -191,6 +193,8 @@ describe('evalCommand', () => {
         chokidarMocks.handlers.set(event, handler);
         return chokidarMocks.watcher;
       });
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(globSync).mockReset().mockReturnValue([]);
     vi.mocked(readFileSync).mockReset();
@@ -964,6 +968,7 @@ describe('evalCommand', () => {
 
       const onChange = chokidarMocks.handlers.get('change');
       expect(onChange).toBeDefined();
+      chokidarMocks.handlers.get('ready')?.();
 
       await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
 
@@ -972,6 +977,113 @@ describe('evalCommand', () => {
     } finally {
       loggerErrorSpy.mockRestore();
     }
+  });
+
+  it('should keep watching after a values file config error on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({ config, testSuite, basePath: '/suite' })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(new ConfigResolutionError('Failed to load $values'))
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+      chokidarMocks.handlers.get('ready')?.();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([
+        path.resolve('/suite', 'vars/regions.yaml'),
+      ]);
+      expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([
+        path.resolve('/suite', 'vars/languages.yaml'),
+      ]);
+      await expect(
+        chokidarMocks.handlers.get('add')?.(path.resolve('/suite', 'vars/regions.yaml')),
+      ).resolves.toBeUndefined();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to load $values');
+      expect(evaluate).toHaveBeenCalledTimes(3);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
+  it('should not reevaluate when an existing dependency is added to the watcher', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
+    } as UnifiedConfig;
+    const resolvedSuite = {
+      prompts: [],
+      providers: [],
+      tests: reloadedConfig.tests as TestSuite['tests'],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({ config, testSuite: config as TestSuite, basePath: '/suite' })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: resolvedSuite,
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+    chokidarMocks.handlers.get('ready')?.();
+
+    await expect(
+      chokidarMocks.handlers.get('change')?.(defaultConfigPath),
+    ).resolves.toBeUndefined();
+    await expect(
+      chokidarMocks.handlers.get('add')?.(path.resolve('/suite', 'vars/regions.yaml')),
+    ).resolves.toBeUndefined();
+
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
   });
 
   it('should keep watching after email validation fails on a file change', async () => {
@@ -1682,13 +1794,53 @@ describe('evalCommand', () => {
     const config = {
       prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
       providers: ['file://providers/provider.yaml'],
-      tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
+      defaultTest: {
+        vars: {
+          defaultLanguage: { $values: 'file://vars/default-languages.yaml' },
+        },
+      },
+      scenarios: [
+        {
+          config: [
+            {
+              vars: {
+                scenarioConfig: { $values: 'file://vars/scenario-config.yaml' },
+              },
+            },
+          ],
+          tests: [
+            {
+              vars: {
+                scenarioTest: { $values: 'file://vars/scenario-test.yaml' },
+              },
+            },
+          ],
+        },
+      ],
+      tests: [
+        'file://vars/scenario.yaml',
+        {
+          vars: {
+            body: 'file://vars/body.txt',
+            inline: 'x',
+            languages: { $values: 'file://vars/languages.yaml' },
+            regions: [{ $values: 'file://vars/regions.yaml' }, 'custom'],
+          },
+        },
+      ],
     } as UnifiedConfig;
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config,
       testSuite: {
         prompts: [],
         providers: [],
+        tests: [
+          {
+            vars: {
+              importedLanguage: { $values: 'file://vars/imported-languages.yaml' },
+            },
+          },
+        ],
       },
       basePath: path.resolve('/suite'),
     });
@@ -1711,6 +1863,12 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'providers/provider.yaml'),
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
+        path.resolve('/suite', 'vars/languages.yaml'),
+        path.resolve('/suite', 'vars/regions.yaml'),
+        path.resolve('/suite', 'vars/default-languages.yaml'),
+        path.resolve('/suite', 'vars/scenario-config.yaml'),
+        path.resolve('/suite', 'vars/scenario-test.yaml'),
+        path.resolve('/suite', 'vars/imported-languages.yaml'),
       ]),
       { ignored: /^\./, persistent: true },
     );
@@ -1729,6 +1887,137 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it('should refresh watched matrix files after a config change', async () => {
+    const initialConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { language: { $values: 'file://vars/languages.yaml' } } }],
+    } as UnifiedConfig;
+    const reloadedConfig = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { region: { $values: 'file://vars/regions.yaml' } } }],
+    } as UnifiedConfig;
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config: initialConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: initialConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      })
+      .mockResolvedValueOnce({
+        config: reloadedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [],
+          tests: reloadedConfig.tests as TestSuite['tests'],
+        },
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      initialConfig,
+      undefined,
+      {},
+    );
+
+    await chokidarMocks.handlers.get('change')?.('/suite/promptfooconfig.yaml');
+
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([
+      path.resolve('/suite', 'vars/regions.yaml'),
+    ]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([
+      path.resolve('/suite', 'vars/languages.yaml'),
+    ]);
+  });
+
+  it('stores an absolute config base path for replay', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: defaultConfig,
+      testSuite: { prompts: [], providers: [] },
+      basePath: 'configs',
+    });
+    let capturedEval: Eval | undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord, options) => {
+      capturedEval = evalRecord as Eval;
+      expect(options).toEqual(
+        expect.objectContaining({
+          varValuesBasePath: path.resolve('configs'),
+          varValuesFileCache: expect.any(Map),
+        }),
+      );
+      return evalRecord as Eval;
+    });
+
+    await doEval({ write: false }, defaultConfig, undefined, {});
+
+    expect(capturedEval?.runtimeOptions?.configBasePath).toBe(path.resolve('configs'));
+    expect((capturedEval?.runtimeOptions as Record<string, unknown>)?.varValuesFileCache).toBe(
+      undefined,
+    );
+  });
+
+  it('persists deterministic test selection for replay', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ description: 'first' }, { description: 'second' }],
+    } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: config as TestSuite,
+      basePath: '/suite',
+    });
+    let capturedEval: Eval | undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      capturedEval = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval({ filterFirstN: 1, write: false }, config, defaultConfigPath, {});
+
+    expect(capturedEval?.runtimeOptions?.testFilter).toEqual(
+      expect.objectContaining({ firstN: 1 }),
+    );
+  });
+
+  it('reapplies persisted test selection before resume evaluation', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: [{ description: 'first' }, { description: 'second' }],
+    } as UnifiedConfig;
+    const resumeEval = new Eval(config);
+    resumeEval.runtimeOptions = { testFilter: { firstN: 1 } };
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: config as TestSuite,
+      basePath: '/suite',
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0]).toEqual(expect.objectContaining({ description: 'first' }));
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval(
+        { resume: 'eval-123', write: true } as Parameters<typeof doEval>[0],
+        config,
+        defaultConfigPath,
+        {},
+      );
+    } finally {
+      findByIdSpy.mockRestore();
+    }
+  });
+
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [
@@ -1740,6 +2029,7 @@ describe('evalCommand', () => {
       maxConcurrency: 2,
       delay: 0,
       providerFilter: 'selected-target',
+      configBasePath: '/suite/configs',
     };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1777,7 +2067,48 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        { basePath: '/suite/configs' },
       );
+    } finally {
+      findByIdSpy.mockRestore();
+    }
+  });
+
+  it('should pass the stored matrix fingerprint into resume evaluation', async () => {
+    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+    resumeEval.runtimeOptions = {
+      configBasePath: '/suite/configs',
+      matrixValuesFingerprint: 'original-fingerprint',
+    };
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: { prompts: [], providers: [] },
+      basePath: '/suite/configs',
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord, options) => {
+      expect(options).toEqual(
+        expect.objectContaining({
+          expectedMatrixValuesFingerprint: 'original-fingerprint',
+          matrixValuesFingerprintError: expect.stringContaining(
+            'The $values files used by evaluation',
+          ),
+          varValuesBasePath: path.resolve('/suite/configs'),
+        }),
+      );
+      return evalRecord as Eval;
+    });
+
+    try {
+      await expect(
+        doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
+      ).resolves.toBe(resumeEval);
     } finally {
       findByIdSpy.mockRestore();
     }

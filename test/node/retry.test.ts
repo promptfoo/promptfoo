@@ -523,6 +523,8 @@ describe('retryCommand', () => {
         eventSource: 'cli',
         maxConcurrency: 4,
         showProgressBar: true,
+        varValuesBasePath: '/workspace',
+        varValuesFileCache: expect.any(Map),
       });
       return retriedEval;
     });
@@ -566,6 +568,8 @@ describe('retryCommand', () => {
         eventSource: 'cli',
         maxConcurrency: 1,
         showProgressBar: false,
+        varValuesBasePath: '/workspace',
+        varValuesFileCache: expect.any(Map),
       });
       return retriedEval;
     });
@@ -601,6 +605,84 @@ describe('retryCommand', () => {
     );
 
     expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
+  it('resolves a saved evaluation relative to its persisted config base path', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        providerFilter: 'selected-target',
+        configBasePath: '/workspace/configs',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(createEval());
+
+    await retryCommand(originalEval.id, {});
+
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { filterProviders: 'selected-target' },
+      originalEval.config,
+      undefined,
+      { basePath: '/workspace/configs' },
+    );
+  });
+
+  it('preserves error results when file-backed matrix values changed', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        configBasePath: '/workspace/configs',
+        matrixValuesFingerprint: 'original-fingerprint',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, _evalRecord, options) => {
+      expect(options).toEqual(
+        expect.objectContaining({
+          expectedMatrixValuesFingerprint: 'original-fingerprint',
+          varValuesBasePath: '/workspace/configs',
+        }),
+      );
+      throw new Error(options.matrixValuesFingerprintError);
+    });
+
+    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
+      'The $values files used by evaluation eval-123 have changed',
+    );
+
+    expect(evaluate).toHaveBeenCalledOnce();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
+  it('validates file-backed matrix values when retrying with an explicit config', async () => {
+    const originalEval = createEval({
+      runtimeOptions: {
+        configBasePath: '/workspace/original',
+        matrixValuesFingerprint: 'original-fingerprint',
+      },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, _evalRecord, options) => {
+      expect(options).toEqual(
+        expect.objectContaining({
+          expectedMatrixValuesFingerprint: 'original-fingerprint',
+          varValuesBasePath: '/workspace',
+        }),
+      );
+      throw new Error(options.matrixValuesFingerprintError);
+    });
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'The $values files used by evaluation eval-123 have changed',
+    );
+
+    expect(evaluate).toHaveBeenCalledOnce();
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 

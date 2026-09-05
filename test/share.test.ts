@@ -444,6 +444,35 @@ describe('createShareableUrl', () => {
     expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
+  it('does not include the local config base path in shared eval data', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+    const mockEval = buildMockEval();
+    mockEval.runtimeOptions = {
+      providerFilter: 'selected-target',
+      configBasePath: '/home/alice/private-project/configs',
+    };
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.runtimeOptions).toEqual({ providerFilter: 'selected-target' });
+    expect(mockFetch.mock.calls[0][1].body).not.toContain('/home/alice/private-project');
+  });
+
   it('preserves the runtime team from a server-issued unified config', async () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');

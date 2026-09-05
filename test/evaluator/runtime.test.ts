@@ -1,6 +1,9 @@
 import './setup';
 
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -9,9 +12,11 @@ import {
   type InMemoryEvaluation,
   InMemoryEvaluationStore,
 } from '../../src/evaluator/inMemoryStore';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { getVarValuesFingerprint } from '../../src/node/evaluatorRuntime';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -36,6 +41,10 @@ function createRuntime(resultWriters = [createResultWriter()]): EvaluatorRuntime
 
 function createEvalRecord(): Eval {
   return new Eval({ outputPath: 'results.jsonl' }, { id: randomUUID(), persisted: false });
+}
+
+function createMatrixEvalRecord(): Eval {
+  return new Eval({}, { id: randomUUID(), persisted: false });
 }
 
 function createInMemoryRuntime(
@@ -63,6 +72,159 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it('snapshots only range-selected scenario rows', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-runtime-'));
+    try {
+      fs.writeFileSync(path.join(tempDir, 'used.yaml'), '- English\n');
+      const evalRecord = createMatrixEvalRecord();
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Language: {{language}}')],
+        scenarios: [
+          {
+            config: [
+              { vars: { language: { $values: 'file://used.yaml' } } },
+              { vars: { language: { $values: 'file://missing.yaml' } } },
+            ],
+            tests: [{}],
+          },
+        ],
+      };
+
+      await evaluate(testSuite, evalRecord, {
+        filterRange: '0:1',
+        varValuesBasePath: tempDir,
+      });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+      expect(evalRecord.runtimeOptions?.matrixValuesFingerprint).toBeDefined();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('snapshots effective variables after default and scenario overrides', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-runtime-'));
+    try {
+      fs.writeFileSync(path.join(tempDir, 'used.yaml'), '- English\n');
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Language: {{language}}')],
+        defaultTest: {
+          vars: { language: { $values: 'file://missing-default.yaml' } },
+        },
+        tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
+        scenarios: [
+          {
+            config: [{ vars: { language: { $values: 'file://missing-scenario.yaml' } } }],
+            tests: [{ vars: { language: { $values: 'file://used.yaml' } } }],
+          },
+        ],
+      };
+
+      await evaluate(testSuite, createMatrixEvalRecord(), { varValuesBasePath: tempDir });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('snapshots the suite returned by beforeAll extensions', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-runtime-'));
+    try {
+      fs.writeFileSync(path.join(tempDir, 'created-by-hook.yaml'), '- English\n');
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+        if (hookName !== 'beforeAll') {
+          return context;
+        }
+        return {
+          ...context,
+          suite: {
+            ...(context as { suite: TestSuite }).suite,
+            tests: [{ vars: { language: { $values: 'file://created-by-hook.yaml' } } }],
+          },
+        };
+      });
+      const evalRecord = createMatrixEvalRecord();
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Language: {{language}}')],
+        tests: [{ vars: { language: { $values: 'file://missing-before-hook.yaml' } } }],
+        extensions: ['file://hook.js'],
+      };
+
+      await evaluate(testSuite, evalRecord, { varValuesBasePath: tempDir });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+      expect(evalRecord.runtimeOptions?.matrixValuesFingerprint).toBeDefined();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects replay when matrix directive order changes', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-runtime-'));
+    try {
+      fs.writeFileSync(path.join(tempDir, 'a.yaml'), '- A\n');
+      fs.writeFileSync(path.join(tempDir, 'b.yaml'), '- B\n');
+      const originalTests = [
+        {
+          vars: {
+            value: [{ $values: 'file://a.yaml' }, { $values: 'file://b.yaml' }],
+          },
+        },
+      ];
+      const expectedMatrixValuesFingerprint = getVarValuesFingerprint(originalTests, tempDir);
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{value}}')],
+        tests: [
+          {
+            vars: {
+              value: [{ $values: 'file://b.yaml' }, { $values: 'file://a.yaml' }],
+            },
+          },
+        ],
+      };
+
+      await expect(
+        evaluate(testSuite, createMatrixEvalRecord(), {
+          expectedMatrixValuesFingerprint,
+          matrixValuesFingerprintError: 'matrix order changed',
+          varValuesBasePath: tempDir,
+        }),
+      ).rejects.toThrow('matrix order changed');
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not snapshot literal values when expansion is disabled', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-runtime-'));
+    try {
+      const evalRecord = createMatrixEvalRecord();
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{language}}')],
+        tests: [
+          {
+            vars: { language: { $values: 'file://missing.yaml' } },
+            options: { disableVarExpansion: true },
+          },
+        ],
+      };
+
+      await evaluate(testSuite, evalRecord, { varValuesBasePath: tempDir });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+      expect(evalRecord.runtimeOptions?.matrixValuesFingerprint).toBeUndefined();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('evaluates with an in-memory store and preserves evaluation identity', async () => {
     const evaluation = createInMemoryEvaluation();
     const store = new InMemoryEvaluationStore(evaluation);
