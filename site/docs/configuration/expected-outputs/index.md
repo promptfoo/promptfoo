@@ -311,6 +311,8 @@ The `value` of an assertion can be loaded directly from a file using the `file:/
       value: file://gettysburg_address.txt
 ```
 
+For deterministic assertions such as `equals` and `contains`, loaded file contents are compared as literal text. For model-graded assertions such as `llm-rubric`, `factuality`, and `model-graded-closedqa`, loaded string values support the same Nunjucks variables as inline values.
+
 #### Javascript
 
 If the file ends in `.js`, the Javascript is executed:
