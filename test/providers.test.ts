@@ -513,14 +513,9 @@ describe('loadApiProvider', () => {
   );
 
   it.each([
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -528,8 +523,6 @@ describe('loadApiProvider', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
   ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
     const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
       '../src/providers/openai/chat',

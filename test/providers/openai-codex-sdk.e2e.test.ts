@@ -7,14 +7,14 @@ import { mockProcessEnv } from '../util/utils';
  * Requirements:
  * - @openai/codex-sdk package installed
  * - CODEX_API_KEY, CODEX_E2E_API_KEY, or OPENAI_API_KEY environment variable
- * - Access to Codex-compatible models (gpt-5.2, gpt-5.1-codex, etc.)
+ * - Access to Codex-compatible models (gpt-5.2, gpt-5.3-codex, etc.)
  *
  * Run with:
  *   CODEX_API_KEY=... npx vitest run openai-codex-sdk.e2e
  *
  * Model configuration:
  *   Set CODEX_E2E_MODEL to override the default model (gpt-5.2).
- *   Example: CODEX_E2E_MODEL=gpt-5.1-codex npx vitest run openai-codex-sdk.e2e
+ *   Example: CODEX_E2E_MODEL=gpt-5.3-codex npx vitest run openai-codex-sdk.e2e
  *
  * Note: These models may require specific API access tiers or partnerships.
  * Tests will be skipped automatically if prerequisites are not met.

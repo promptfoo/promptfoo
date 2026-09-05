@@ -7,7 +7,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.2-codex
+      model: gpt-5.3-codex
       model_reasoning_effort: high
       cli_config:
         model_verbosity: medium

@@ -62,7 +62,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-5.3-codex
       working_dir: ./test-codebase
       output_schema:
         type: object

@@ -213,16 +213,14 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
-    it('should not warn about gpt-5.1-codex models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+    it.each([
+      'gpt-5-codex',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+      'gpt-5.1-codex-mini',
+      'gpt-5.2-codex',
+    ])('does not advertise retired Codex model %s', (model) => {
+      expect(OpenAICodexSDKProvider.OPENAI_MODELS).not.toContain(model);
     });
 
     it('should not warn about provider-specific model ids when routing through a custom model_provider', () => {
@@ -3366,7 +3364,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.24, 6);
       });
 
-      it('should recognize gpt-5.2-codex as a known model', () => {
+      it('should allow an explicitly configured model outside the advertised catalog', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.2-codex' },
           env: { OPENAI_API_KEY: 'test-api-key' },
