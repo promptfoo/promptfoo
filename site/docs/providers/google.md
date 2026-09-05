@@ -271,6 +271,114 @@ providers:
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
+## Interactions API
+
+The [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview) went GA in June 2026 and is Google's primary interface for Gemini models and agents. `generateContent` is now the legacy path, and Google ships new models, modalities, tools, and agentic features on Interactions first.
+
+**Promptfoo uses Interactions by default for `google:` chat models.** An `Interaction` holds the whole turn as a chronological list of `steps` — thoughts, tool calls, tool results, and the final output — and can optionally be stored server-side so follow-up turns reference it by id instead of resending history.
+
+Nothing changes in your config. Prompts, tools, `responseSchema`, `systemInstruction`, `service_tier`, and generation options are written exactly as they were; promptfoo translates them to the Interactions wire format.
+
+```yaml
+providers:
+  # Uses the Interactions API
+  - id: google:gemini-3.6-flash
+```
+
+Responses are cached like any other provider — the cache key is keyed on a hash of your credentials, never the key itself — so `--no-cache` works as usual.
+
+### When promptfoo falls back to generateContent
+
+Interactions is not a strict superset of `generateContent`, so the default falls back automatically rather than silently changing behavior. You get the legacy transport when:
+
+| Condition                                                         | Why                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `safetySettings` is configured                                    | The Gemini API rejects `safety_settings` on the Interactions endpoint.                                                                                                                                                                                                                                                        |
+| A `-tts` model, or an `AUDIO`/`IMAGE` response modality           | Interactions returns text for these instead of audio or image output.                                                                                                                                                                                                                                                         |
+| A tool mode that requires a call (`ANY`, `VALIDATED`, `required`) | Interactions has no `tool_choice` field, so the mode cannot be enforced. `NONE` **is** honored.                                                                                                                                                                                                                               |
+| The legacy `palm:` prefix, or a PaLM model like `chat-bison`      | Predates Interactions entirely.                                                                                                                                                                                                                                                                                               |
+| A script-like provider id such as `google:custom-model.ts`        | A pseudo model name rather than a model Interactions serves.                                                                                                                                                                                                                                                                  |
+| A `generationConfig` option Interactions does not accept          | Only `temperature`, `topP`, `topK`, `maxOutputTokens`, `stopSequences`, `seed` and `thinkingLevel` are accepted; `responseMimeType` (JSON mode without a schema), `thinkingBudget`, `candidateCount`, `presencePenalty`, `frequencyPenalty`, `logprobs`, `mediaResolution` and `audioTimestamp` are rejected by the endpoint. |
+| A `vertex:` provider without an explicit opt-in                   | See [Vertex AI differences](#vertex-ai-differences).                                                                                                                                                                                                                                                                          |
+
+Set `interactions` explicitly to override the decision in either direction:
+
+```yaml
+providers:
+  # Force the legacy transport
+  - id: google:gemini-3.6-flash
+    config:
+      interactions: false
+
+  # Force Interactions, including on Vertex
+  - id: vertex:gemini-3-flash-preview
+    config:
+      interactions: true
+```
+
+`google:interactions:<model>` and `vertex:interactions:<model>` also force Interactions, and additionally pin the service — `google:interactions:` always uses AI Studio even when `VERTEX_*` variables are set in your environment. They change the provider id, so prefer the config flag if you want eval history to stay comparable.
+
+Like `interactions: true`, both prefixes bypass the fallback table above: if you name a model or option Interactions cannot serve, the request fails rather than quietly switching transports.
+
+### Server-side history and retention
+
+Google stores interactions by default (55 days on the paid tier, 1 day on the free tier). **On Google AI Studio, promptfoo sends `store: false`**, so eval and red-team payloads are not retained. Function calling still works: promptfoo resolves the tool loop by resending the timeline inline rather than relying on stored state.
+
+Set `store: true` to opt into server-side history, then pass the returned id — available as `metadata.interactionId` — to continue that thread:
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      store: true
+      previousInteractionId: v1_ChcxcEtUYXJpRExMZThqTWNQc0tQdW1RSRIX...
+```
+
+`previousInteractionId` requires storage; combining it with `store: false` is rejected before any request is made. The same applies to `store` and `previous_interaction_id` set through `passthrough`, so they cannot bypass the retention check.
+
+### Tools
+
+Gemini-format tools are converted to the Interactions typed form, so `functionDeclarations`, `googleSearch`, `codeExecution`, and `urlContext` all carry over (the endpoint's own tool vocabulary is `function`, `google_search`, `code_execution`, `url_context`, `google_maps`, `file_search`, `filesystem`, `bash`, `computer_use`, `mcp_server`, and `tool_search`). With `functionToolCallbacks` configured, promptfoo executes the tool and feeds the result back, looping until the model produces an answer (up to 8 rounds):
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: file://callbacks.js:get_weather
+```
+
+Without a matching callback the pending call is returned in the same array shape the other Google providers use, so `is-valid-function-call` and similar assertions keep working. Search queries are reported as `metadata.webSearchQueries`, matching the grounding metadata `generateContent` returns.
+
+The Interactions API has no `tool_choice` field, so a disabled tool policy (`tool_choice: none`, or `functionCallingConfig.mode: NONE`) is honored by withholding the function declarations entirely. Server-side tools such as `googleSearch` are unaffected.
+
+### Vertex AI differences
+
+Vertex serves Interactions, but its surface is narrow enough that promptfoo keeps `vertex:` on `generateContent` unless you opt in with `interactions: true` or the `vertex:interactions:` prefix:
+
+| Behavior     | Vertex AI                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Models       | A smaller set than AI Studio. `gemini-3-flash-preview` works; `gemini-3.6-flash` and `gemini-2.5-flash` return `Unsupported model interaction`.   |
+| Locations    | Only `global`, `us`, and `eu`, all served from `aiplatform.googleapis.com`. A regional value like `us-central1` is rejected.                      |
+| `store`      | Must be `true` — Vertex rejects `store: false`. Promptfoo defaults it to `true` here, so **interactions are retained on the Vertex route**.       |
+| Server state | `previousInteractionId` is rejected up front. Vertex answers with HTTP 200 but silently ignores the stored history, so promptfoo does not use it. |
+| Auth         | OAuth only; API keys are refused. Use `gcloud auth application-default login` or a service account.                                               |
+
+Because Vertex ignores stored history, promptfoo always resolves the Vertex tool loop by resending the timeline inline. Multi-turn conversations should be passed as chat-formatted prompts rather than through `previousInteractionId`.
+
+### Differences from `generateContent`
+
+| Behavior          | Notes                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `safetySettings`  | Rejected by the endpoint. Configuring it falls back to `generateContent`.                          |
+| Guardrails        | Interactions does not return `safetyRatings`, so responses carry no `guardrails` field.            |
+| Structured output | `responseSchema` (top-level or under `generationConfig`) maps to `response_format`, a JSON Schema. |
+| Streaming         | Not yet wired up; requests are sent with `stream: false`.                                          |
+| MCP               | MCP tools are advertised to the model but not auto-executed, matching the other Google providers.  |
+
+See the [Google Interactions example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-interactions) for runnable configurations.
+
 ## Available Models
 
 ### Chat and Multimodal Models
@@ -455,7 +563,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Video Generation Models (Gemini Omni Flash)
 
-Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools, and `safetySettings` is dropped because the Interactions endpoint rejects it (see [Interactions API](#interactions-api)).
 
 ```yaml
 providers:
