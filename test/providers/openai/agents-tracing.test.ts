@@ -380,6 +380,262 @@ describe('OTLPTracingExporter', () => {
     expect(span.parentSpanId).toBe(Buffer.from('fedcba9876543210', 'hex').toString('base64'));
   });
 
+  it.each(['json', 'protobuf'] as const)(
+    'redacts credentials from tool data, metadata, and error messages in %s exports',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const apiKey = 'sk-abcdefghijklmnopqrstuvwxyz';
+      const sessionToken = 'agent-session-token-value-123456789012345';
+      const metadataSecret = 'customer-credential-without-a-known-prefix';
+      const accessToken = 'opaque.value/with+arbitrary=chars';
+      const clientSecret = 'tiny';
+      const refreshToken = 'renew?credential/value';
+      const credentials = 'opaque-credential-bundle';
+      const clientCredentials = 'oauth-client-bundle';
+      const secrets = 'opaque-secret-bundle';
+      const tokens = 'opaque-token-bundle';
+      const authorization = 'Bearer opaque/container-value';
+      const cookie = 'opaque-cookie-session';
+      const callback = `https://host/callback?access_token=${accessToken}&token_count=12`;
+      const colonToken = 'colon-opaque/value';
+      const colonCookie = 'colon-cookie-session';
+      const headerCredential = 'header-opaque.value/with+arbitrary=chars';
+      const encodedCredential = 'encoded-query-opaque/value';
+      const secondaryCookie = 'csrf-cookie-opaque/value';
+      const equalsCredential = 'equals-header-opaque/value';
+      const digestCredential = 'digest-response-opaque/value';
+      const negotiateCredential = 'negotiate-opaque/value';
+      const awsCredential = 'aws-signature-opaque/value';
+      const encodedCallback = `https://host/callback?%61ccess_token=${encodedCredential}`;
+      const logDetails =
+        `access_token: ${colonToken}; Cookie: session=${colonCookie}; csrf=${secondaryCookie}; ` +
+        `Authorization: Bearer ${headerCredential}; Authorization=Basic ${equalsCredential}; ` +
+        `Authorization: Digest realm="accounts;production", response="${digestCredential}"; ` +
+        `Authorization=Negotiate ${negotiateCredential}; ` +
+        `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, ` +
+        `Signature=${awsCredential}`;
+      const evaluationId = 'a'.repeat(64);
+      const testCaseId = 'b'.repeat(64);
+      const span = {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        spanData: {
+          type: 'function',
+          name: 'lookup_account',
+          input: JSON.stringify({
+            apiKey,
+            accountId: 'account-123',
+            access_token: accessToken,
+            callback,
+            encodedCallback,
+            credentials,
+            clientCredentials,
+            authorization: [authorization],
+            token_count: 12,
+            token_type: 'Bearer',
+            token_ids: [101, 102],
+            token_endpoint: 'https://issuer.example.com/oauth/token',
+            token_url: 'https://issuer.example.com/token',
+            secretary: 'Alice',
+            logDetails,
+            nested: [{ refreshToken }],
+          }),
+          output: JSON.stringify({
+            token: sessionToken,
+            client_secret: clientSecret,
+            secrets,
+            tokens,
+            cookie: { session: cookie },
+          }),
+        },
+        traceMetadata: {
+          customerApiKey: metadataSecret,
+          clientCredentials,
+          'evaluation.id': evaluationId,
+          'test.case.id': testCaseId,
+          'promptfoo.otlp_format': format,
+        },
+        error: new Error(
+          `Authentication failed for ${apiKey}: ${JSON.stringify({
+            client_secret: clientSecret,
+            access_token: accessToken,
+          })}; ${callback}; ${logDetails}`,
+        ),
+      };
+
+      await exporter.export([span as any]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const serializedPayload = JSON.stringify(payload);
+      expect(serializedPayload).not.toContain(apiKey);
+      expect(serializedPayload).not.toContain(sessionToken);
+      expect(serializedPayload).not.toContain(metadataSecret);
+      expect(serializedPayload).not.toContain(accessToken);
+      expect(serializedPayload).not.toContain(clientSecret);
+      expect(serializedPayload).not.toContain(refreshToken);
+      expect(serializedPayload).not.toContain(credentials);
+      expect(serializedPayload).not.toContain(clientCredentials);
+      expect(serializedPayload).not.toContain(secrets);
+      expect(serializedPayload).not.toContain(tokens);
+      expect(serializedPayload).not.toContain(authorization);
+      expect(serializedPayload).not.toContain(cookie);
+      expect(serializedPayload).not.toContain(colonToken);
+      expect(serializedPayload).not.toContain(colonCookie);
+      expect(serializedPayload).not.toContain(headerCredential);
+      expect(serializedPayload).not.toContain(encodedCredential);
+      expect(serializedPayload).not.toContain(secondaryCookie);
+      expect(serializedPayload).not.toContain(equalsCredential);
+      expect(serializedPayload).not.toContain(digestCredential);
+      expect(serializedPayload).not.toContain(negotiateCredential);
+      expect(serializedPayload).not.toContain(awsCredential);
+
+      const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      const attributes = getAttributes(exportedSpan);
+      expect(JSON.parse(attributes['tool.arguments'] as string)).toEqual({
+        apiKey: '<redacted>',
+        accountId: 'account-123',
+        access_token: '<redacted>',
+        callback: 'https://host/callback?access_token=<redacted>&token_count=12',
+        encodedCallback: 'https://host/callback?%61ccess_token=<redacted>',
+        credentials: '<redacted>',
+        clientCredentials: '<redacted>',
+        authorization: '<redacted>',
+        token_count: 12,
+        token_type: 'Bearer',
+        token_ids: [101, 102],
+        token_endpoint: 'https://issuer.example.com/oauth/token',
+        token_url: 'https://issuer.example.com/token',
+        secretary: 'Alice',
+        logDetails:
+          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
+          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
+          'Authorization: <redacted>',
+        nested: [{ refreshToken: '<redacted>' }],
+      });
+      expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
+        token: '<redacted>',
+        client_secret: '<redacted>',
+        secrets: '<redacted>',
+        tokens: '<redacted>',
+        cookie: '<redacted>',
+      });
+      expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
+      expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
+      expect(attributes['evaluation.id']).toBe(evaluationId);
+      expect(attributes['test.case.id']).toBe(testCaseId);
+      expect(exportedSpan.status.message).toBe(
+        'Authentication failed for <REDACTED_API_KEY>: ' +
+          '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
+          'https://host/callback?access_token=<redacted>&token_count=12; ' +
+          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
+          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
+          'Authorization: <redacted>',
+      );
+    },
+  );
+
+  it.each([
+    { format: 'json', includesCredential: false },
+    { format: 'protobuf', includesCredential: false },
+    { format: 'json', includesCredential: true },
+    { format: 'protobuf', includesCredential: true },
+  ] as const)(
+    'preserves large integer identifiers in $format tool arguments when credential redaction is $includesCredential',
+    async ({ format, includesCredential }) => {
+      const exporter = new OTLPTracingExporter();
+      const input = includesCredential
+        ? '{"access_token":"tiny","order_id":9223372036854775807}'
+        : '{"order_id":9223372036854775807,"token_count":12}';
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'function', name: 'lookup_order', input },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+      ]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(exportedSpan)['tool.arguments']).toBe(
+        includesCredential ? '{"access_token":"<redacted>","order_id":9223372036854775807}' : input,
+      );
+    },
+  );
+
+  it.each([
+    { format: 'json', shape: 'deeply nested' },
+    { format: 'protobuf', shape: 'deeply nested' },
+    { format: 'json', shape: 'oversized' },
+    { format: 'protobuf', shape: 'oversized' },
+  ] as const)(
+    'keeps $format span batches exportable when tool data is $shape',
+    async ({ format, shape }) => {
+      const exporter = new OTLPTracingExporter();
+      const deeplyNestedSecret = 'deeply-nested-credential';
+      const oversizedInput = `[${'0,'.repeat(50_000)}${JSON.stringify({
+        access_token: deeplyNestedSecret,
+      })}]`;
+      const unsafeInput =
+        shape === 'oversized'
+          ? oversizedInput
+          : '['.repeat(5000) +
+            JSON.stringify({ access_token: deeplyNestedSecret }) +
+            ']'.repeat(5000);
+      const spans = [
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde0',
+          spanData: { type: 'function', name: 'nested_tool', input: unsafeInput },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        },
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde1',
+          spanData: { type: 'function', name: 'healthy_tool', input: '{"accountId":"123"}' },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        },
+      ];
+
+      const parseSpy = shape === 'oversized' ? vi.spyOn(JSON, 'parse') : undefined;
+      try {
+        await exporter.export(spans as any);
+        if (parseSpy) {
+          expect(parseSpy).not.toHaveBeenCalledWith(unsafeInput);
+        }
+      } finally {
+        parseSpy?.mockRestore();
+      }
+
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const exportedSpans = payload.resourceSpans[0].scopeSpans[0].spans;
+      expect(exportedSpans).toHaveLength(2);
+      expect(JSON.stringify(exportedSpans)).not.toContain(deeplyNestedSecret);
+      expect(getAttributes(exportedSpans[0])['tool.arguments']).toContain('<redacted>');
+      expect(getAttributes(exportedSpans[1])['tool.arguments']).toBe('{"accountId":"123"}');
+    },
+  );
+
   it('turns sandbox custom spans into command-aware spans', () => {
     const exporter = new OTLPTracingExporter() as any;
     const payload = exporter.transformToOTLP([

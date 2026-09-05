@@ -22,6 +22,7 @@ export {
   GenAIAttributes,
   type GenAISpanContext,
   getGenAITracer,
+  sanitizeBody,
   withGenAISpan,
   withGenAIToolSpan,
 } from '../tracing/genaiTracer';
