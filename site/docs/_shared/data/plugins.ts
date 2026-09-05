@@ -1385,6 +1385,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests if an agent can be induced to adopt a substitute persona that bypasses safety guardrails',
+    label: 'technical',
+    link: '/docs/red-team/plugins/persona-injection/',
+    name: 'Persona Injection',
+    pluginId: 'persona-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
     category: 'Custom',
     description: 'Probes the model with specific inputs',
     label: 'technical',
@@ -1679,6 +1695,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'misinformation and misuse',
     isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests if a pipeline sub-agent accepts a false orchestrator authority claim and acts on restricted resources without verifying the token',
+    label: 'technical',
+    link: '/docs/red-team/plugins/orchestrator-trust-injection/',
+    name: 'Orchestrator Trust Injection',
+    pluginId: 'orchestrator-trust-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
   },
   {
     category: 'Brand',
