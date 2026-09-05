@@ -144,6 +144,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         error: formatOpenAiError(data),
       };
     }
+    if (!data.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
+      };
+    }
     try {
       return {
         output: data.choices[0].text,

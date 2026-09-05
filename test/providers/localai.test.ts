@@ -117,3 +117,27 @@ describe('LocalAI temperature handling', () => {
     expect(callBody.temperature).toBe(0.7);
   });
 });
+
+describe('LocalAI empty choices handling', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns a clean malformed-response error on empty choices (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on empty choices (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+});
