@@ -57,6 +57,8 @@ assert:
     value: output[0].function.name === 'get_current_weather'
 ```
 
+This applies when `value` is a string, whether it's an inline expression or a `file://` script. Function values (see [Inline assertions](#inline-assertions)) always receive a string, with objects JSON-stringified. Either way, `output` is the value that reaches the assertion, so any [transform](/docs/configuration/guide#transforming-outputs) on the provider, the test, or the assertion itself has already been applied.
+
 ## Return type
 
 The return value of your Javascript function can be a boolean, number, or a `GradingResult`:
@@ -266,7 +268,7 @@ async function evaluate(modelResponse) {
 
 async function main(output, context) {
   const success = await evaluate(output);
-  console.log(`success: ${testResult}`);
+  console.log(`success: ${success}`);
   return success;
 }
 
@@ -335,7 +337,7 @@ If you are using promptfoo as a JS package, you can build your assertion inline:
 }
 ```
 
-Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
+Here `output` is always a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, use `JSON.parse(output)` to convert it back.
 
 ## Using trace data
 
