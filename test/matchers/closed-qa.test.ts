@@ -74,6 +74,64 @@ describe('matchesClosedQa', () => {
     });
   });
 
+  it('should mark provider errors as grader failures', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'grader provider unavailable',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grader provider unavailable',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should mark missing grader output as a grader failure', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: '',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should mark malformed grader output as a grader failure', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'the grader did not answer with yes or no',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason:
+        'Model grader produced a malformed response:\nthe grader did not answer with yes or no',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should throw an error when an error occurs', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
