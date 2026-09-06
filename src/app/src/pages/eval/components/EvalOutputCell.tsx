@@ -78,6 +78,43 @@ function stringifyOutputText(text: unknown): string {
   return JSON.stringify(text) ?? String(text);
 }
 
+const RATING_FEEDBACK_PLACEHOLDER_PATTERN = /\{\{(evalId|resultId|testCaseId|rating)\}\}/g;
+const RATING_FEEDBACK_ANY_PLACEHOLDER_PATTERN = /\{\{([^{}]+)\}\}/g;
+const RATING_FEEDBACK_PLACEHOLDER_NAMES = new Set(['evalId', 'resultId', 'testCaseId', 'rating']);
+
+export function buildRatingFeedbackUrl(
+  template: string | undefined,
+  values: {
+    evalId?: string;
+    resultId: string;
+    testCaseId?: string;
+    rating: 'pass' | 'fail';
+  },
+): string | undefined {
+  if (!template) {
+    return undefined;
+  }
+  if (
+    Array.from(template.matchAll(RATING_FEEDBACK_ANY_PLACEHOLDER_PATTERN)).some(
+      (placeholder) => !placeholder[1] || !RATING_FEEDBACK_PLACEHOLDER_NAMES.has(placeholder[1]),
+    )
+  ) {
+    return undefined;
+  }
+
+  const urlString = template.replace(
+    RATING_FEEDBACK_PLACEHOLDER_PATTERN,
+    (_, name: keyof typeof values) => encodeURIComponent(values[name] ?? ''),
+  );
+
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Detects if the provider is an image generation provider.
  * Image providers follow patterns like:
@@ -1460,6 +1497,18 @@ function EvalOutputCell({
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
+    const feedbackUrl =
+      newRating === null
+        ? undefined
+        : buildRatingFeedbackUrl(output.testCase.feedback?.[isPass ? 'pass' : 'fail'], {
+            evalId: evaluationId,
+            resultId: output.id,
+            testCaseId,
+            rating: isPass ? 'pass' : 'fail',
+          });
+    if (feedbackUrl) {
+      window.open(feedbackUrl, '_blank', 'noopener,noreferrer');
+    }
     // Defer the API call to allow the UI to update first
     queueMicrotask(() => {
       onRating(newRating, undefined, commentText);

@@ -2595,6 +2595,7 @@ async function prepareTestCaseForEval(
   testCase.assertScoringFunction =
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
   testCase.providers = testCase.providers ?? defaultTest?.providers;
+  testCase.feedback = testCase.feedback ?? defaultTest?.feedback;
 
   if (typeof testCase.assertScoringFunction === 'string') {
     const { filePath: resolvedPath, functionName } = parseFileUrl(testCase.assertScoringFunction);
