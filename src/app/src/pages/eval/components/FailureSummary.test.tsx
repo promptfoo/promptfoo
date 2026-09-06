@@ -1,15 +1,16 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FailureSummary } from './FailureSummary';
 
 const addFilter = vi.fn();
 const removeFilter = vi.fn();
 let filterValues: Record<string, unknown> = {};
 
-vi.mock('@app/utils/api');
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 vi.mock('./store', () => ({
   useTableStore: () => ({
     addFilter,
@@ -23,20 +24,11 @@ describe('FailureSummary', () => {
     addFilter.mockReset();
     removeFilter.mockReset();
     filterValues = {};
-    vi.mocked(callApi).mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
+    resetCallApiMock();
   });
 
   it('groups failures and adds an exact error filter when selected', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        failures: [{ error: 'Request timed out', count: 2 }],
-      }),
-    } as unknown as Response);
+    mockCallApiResponse({ failures: [{ error: 'Request timed out', count: 2 }] });
 
     render(
       <TooltipProvider>
@@ -66,12 +58,7 @@ describe('FailureSummary', () => {
         value: 'Request timed out',
       },
     };
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        failures: [{ error: 'Request timed out', count: 1 }],
-      }),
-    } as unknown as Response);
+    mockCallApiResponse({ failures: [{ error: 'Request timed out', count: 1 }] });
 
     render(
       <TooltipProvider>

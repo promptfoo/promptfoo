@@ -5,15 +5,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { callApi } from '@app/utils/api';
 import { AlertCircle } from 'lucide-react';
 import { useTableStore } from './store';
-import type { GetFailureSummaryResponse } from '@promptfoo/types/api/eval';
 
 interface FailureSummaryProps {
   evalId: string;
 }
 
+type FailureSummaryResponse = {
+  failures: Array<{ error: string; count: number }>;
+};
+
 export function FailureSummary({ evalId }: FailureSummaryProps) {
   const { addFilter, filters, removeFilter } = useTableStore();
-  const [failures, setFailures] = useState<GetFailureSummaryResponse['failures']>([]);
+  const [failures, setFailures] = useState<FailureSummaryResponse['failures']>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -27,7 +30,7 @@ export function FailureSummary({ evalId }: FailureSummaryProps) {
           setFailures([]);
           return;
         }
-        const data = (await response.json()) as GetFailureSummaryResponse;
+        const data = (await response.json()) as FailureSummaryResponse;
         setFailures(data.failures);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
