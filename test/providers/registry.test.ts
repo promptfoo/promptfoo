@@ -2,6 +2,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { MCPProvider } from '../../src/providers/mcp';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -82,6 +83,26 @@ describe('Provider Registry', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    it('enables MCP when optional configuration omits enabled', async () => {
+      const factory = providerMap.find((entry) => entry.test('mcp'));
+      expect(factory).toBeDefined();
+
+      const configured = await factory!.create(
+        'mcp:docs',
+        { config: { verbose: false } },
+        mockContext,
+      );
+      expect(configured).toBeInstanceOf(MCPProvider);
+      expect((configured as MCPProvider).config).toMatchObject({
+        enabled: true,
+        verbose: false,
+        serverName: 'docs',
+      });
+
+      const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
+      expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
     });
 
     describe('getProviderFactories boundary contract', () => {

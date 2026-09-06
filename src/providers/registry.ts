@@ -1522,7 +1522,7 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      let config = providerOptions.config || { enabled: true };
+      let config = { enabled: true, ...providerOptions.config };
 
       // Handle mcp:<server_name> format for server-specific configs
       if (splits.length > 1) {
