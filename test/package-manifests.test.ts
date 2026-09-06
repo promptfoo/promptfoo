@@ -495,6 +495,22 @@ describe('package manifests', () => {
     expect(packageLock.packages[''].optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 
+  it('keeps the Slack SDK optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const sdkName = '@slack/web-api';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+
+    expect(sdkRange).toBe('^8.1.0');
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(packageLock.packages[`node_modules/${sdkName}`].optional).toBe(true);
+    expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
+      true,
+    );
+  });
+
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
