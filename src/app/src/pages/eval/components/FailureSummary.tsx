@@ -30,8 +30,8 @@ export function FailureSummary({ evalId }: FailureSummaryProps) {
           setFailures([]);
           return;
         }
-        const data = (await response.json()) as FailureSummaryResponse;
-        setFailures(data.failures);
+        const data = (await response.json()) as Partial<FailureSummaryResponse> | null;
+        setFailures(Array.isArray(data?.failures) ? data.failures : []);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           setFailures([]);

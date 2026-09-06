@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FailureSummary } from './FailureSummary';
@@ -69,5 +69,20 @@ describe('FailureSummary', () => {
     await userEvent.click(await screen.findByRole('button', { name: '1 failure' }));
 
     expect(removeFilter).toHaveBeenCalledWith('existing');
+  });
+
+  it('does not render a group for an invalid summary response', async () => {
+    mockCallApiResponse({});
+
+    render(
+      <TooltipProvider>
+        <FailureSummary evalId="eval-123" />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText('Failure groups:')).not.toBeInTheDocument();
   });
 });
