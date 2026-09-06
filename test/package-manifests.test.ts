@@ -12,7 +12,7 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-type PackageLockManifest<T = PackageManifest & { version?: string }> = {
+type PackageLockManifest<T = PackageManifest & { version?: string; optional?: boolean }> = {
   packages: Record<string, T>;
 };
 
