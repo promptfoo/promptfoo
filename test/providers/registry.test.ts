@@ -103,6 +103,9 @@ describe('Provider Registry', () => {
 
       const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
       expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
+
+      const nullish = await factory!.create('mcp', { config: { enabled: null } }, mockContext);
+      expect((nullish as MCPProvider).config).toMatchObject({ enabled: true });
     });
 
     describe('getProviderFactories boundary contract', () => {
