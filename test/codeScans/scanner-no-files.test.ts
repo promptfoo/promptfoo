@@ -350,7 +350,7 @@ describe('Scanner machine-readable output', () => {
     expect(mcp.constructorArgs()).toEqual([mcp.mcpProcess, socket, 'test-session-id']);
     expect(socketEmit).toHaveBeenCalledWith('runner:hello', {
       session_id: 'test-session-id',
-      repo_root: expect.stringMatching(/test[/\\\\]repo$/),
+      repo_root: expect.stringMatching(/test[/\\]repo$/),
     });
     expect(mcp.stop).toHaveBeenCalledOnce();
   });
