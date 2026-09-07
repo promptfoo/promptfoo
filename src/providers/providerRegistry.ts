@@ -19,6 +19,7 @@ interface ProviderRegistration {
 class ProviderRegistry {
   private providers = new Map<object, ProviderRegistration>();
   private scopeStorage = new AsyncLocalStorage<ProviderScope>();
+  private scopesByProvider = new WeakMap<object, Set<ProviderScope>>();
   private shutdownRegistered = false;
   private shutdownPromise: Promise<void> | null = null;
 
@@ -27,6 +28,9 @@ class ProviderRegistry {
     if (!registration) {
       registration = { provider, scopes: new Set() };
       this.providers.set(provider, registration);
+    }
+    for (const owner of this.scopesByProvider.get(provider) ?? []) {
+      this.claim(registration, owner);
     }
     const scope = this.scopeStorage.getStore();
     if (scope && !scope.closed) {
@@ -55,9 +59,16 @@ class ProviderRegistry {
 
   async withScope<T>(providers: Iterable<object>, run: () => Promise<T>): Promise<T> {
     const scope: ProviderScope = { registrations: new Set(), closed: false };
-    // Providers may be constructed before evaluation begins. Claim known instances now;
-    // register() also claims resources initialized lazily anywhere inside this async scope.
-    for (const provider of providers) {
+    const scopeProviders = new Set(providers);
+    // Retain ownership even before lazy initialization registers a resource. Another
+    // evaluation may already be waiting for the same provider's startup promise.
+    for (const provider of scopeProviders) {
+      let owners = this.scopesByProvider.get(provider);
+      if (!owners) {
+        owners = new Set();
+        this.scopesByProvider.set(provider, owners);
+      }
+      owners.add(scope);
       const registration = this.providers.get(provider);
       if (registration) {
         this.claim(registration, scope);
@@ -68,6 +79,13 @@ class ProviderRegistry {
         return await run();
       } finally {
         scope.closed = true;
+        for (const provider of scopeProviders) {
+          const owners = this.scopesByProvider.get(provider);
+          owners?.delete(scope);
+          if (owners?.size === 0) {
+            this.scopesByProvider.delete(provider);
+          }
+        }
         const registrations = [...scope.registrations];
         scope.registrations.clear();
         await Promise.all(

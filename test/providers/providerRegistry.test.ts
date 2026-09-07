@@ -92,6 +92,22 @@ describe('providerRegistry', () => {
     expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
+  it('retains providers that initialize after multiple evaluations start', async () => {
+    const provider = { cleanup: vi.fn() };
+    const firstDone = createDeferred<void>();
+    const secondDone = createDeferred<void>();
+    const first = providerRegistry.withScope([provider], () => firstDone.promise);
+    const second = providerRegistry.withScope([provider], () => secondDone.promise);
+    // Startup may finish in either evaluation's async scope, or outside both scopes.
+    providerRegistry.register(provider);
+    firstDone.resolve();
+    await first;
+    expect(provider.cleanup).not.toHaveBeenCalled();
+    secondDone.resolve();
+    await second;
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
   it('owns lazy resources and cleans them when evaluation throws', async () => {
     const provider = { cleanup: vi.fn() };
     await expect(
