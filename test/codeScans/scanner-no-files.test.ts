@@ -79,14 +79,18 @@ describe('Scanner machine-readable output', () => {
     initialLogLevel = 'info',
     loadConfigError,
     processDiffError,
+    configApiHost,
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
+    configApiHost?: string;
   } = {}) {
     let currentLogLevel = initialLogLevel;
 
     const disconnect = vi.fn();
+    const socketEmit = vi.fn();
+    const socket = { emit: socketEmit, on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
 
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
@@ -96,22 +100,24 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
     }));
-    vi.doMock('../../src/codeScan/config/loader', () => ({
-      loadConfigOrDefault: loadConfigError
-        ? vi.fn().mockImplementation(() => {
-            throw loadConfigError;
-          })
-        : vi.fn().mockReturnValue({
-            minimumSeverity: 'medium',
-            diffsOnly: true,
-          }),
-      mergeConfigWithOptions: vi.fn().mockImplementation((config, options) => ({
-        ...config,
-        diffsOnly: options.diffsOnly ?? config.diffsOnly,
-      })),
-      resolveGuidance: vi.fn().mockReturnValue(undefined),
-      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
-    }));
+    vi.doMock('../../src/codeScan/config/loader', async () => {
+      const actual = await vi.importActual<typeof import('../../src/codeScan/config/loader')>(
+        '../../src/codeScan/config/loader',
+      );
+      return {
+        ...actual,
+        loadConfigOrDefault: loadConfigError
+          ? vi.fn().mockImplementation(() => {
+              throw loadConfigError;
+            })
+          : vi.fn().mockReturnValue({
+              minimumSeverity: 'medium',
+              diffsOnly: true,
+              apiHost: configApiHost,
+            }),
+        resolveGuidance: vi.fn().mockReturnValue(undefined),
+      };
+    });
     vi.doMock('simple-git', () => ({
       default: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
@@ -128,7 +134,7 @@ describe('Scanner machine-readable output', () => {
         on: vi.fn(),
         emit: vi.fn(),
         disconnect,
-        socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() },
+        socket,
       }),
     }));
     vi.doMock('../../src/codeScan/util/auth', () => ({
@@ -152,7 +158,53 @@ describe('Scanner machine-readable output', () => {
       displayScanResults: vi.fn(),
     }));
 
-    return { disconnect };
+    return { disconnect, socket, socketEmit };
+  }
+
+  function mockMcpLifecycle(connectError?: Error) {
+    const events: string[] = [];
+    const mcpProcess = { pid: 1234 };
+    let constructorArgs: unknown[] = [];
+
+    const connect = vi.fn(async () => {
+      events.push('connect');
+      if (connectError) {
+        throw connectError;
+      }
+    });
+    const bridgeDisconnect = vi.fn(async () => {
+      events.push('bridge-disconnect');
+    });
+
+    class MockSocketIoMcpBridge {
+      constructor(...args: unknown[]) {
+        constructorArgs = args;
+        events.push('construct');
+      }
+
+      connect = connect;
+      disconnect = bridgeDisconnect;
+    }
+
+    const stop = vi.fn(async () => {
+      events.push('stop');
+    });
+
+    vi.doMock('../../src/codeScan/mcp/filesystem', () => ({
+      startFilesystemMcpServer: vi.fn(() => {
+        events.push('start');
+        return mcpProcess;
+      }),
+      stopFilesystemMcpServer: stop,
+      waitForFilesystemMcpServerReady: vi.fn(async () => {
+        events.push('ready');
+      }),
+    }));
+    vi.doMock('../../src/codeScan/mcp/transport', () => ({
+      SocketIoMcpBridge: MockSocketIoMcpBridge,
+    }));
+
+    return { bridgeDisconnect, constructorArgs: () => constructorArgs, events, mcpProcess, stop };
   }
 
   beforeEach(() => {
@@ -192,6 +244,25 @@ describe('Scanner machine-readable output', () => {
       expect(getLogLevel()).toBe('info');
     },
   );
+
+  it.each([
+    ['CLI option', 'https://cli.example', 'https://config.example', 'https://cli.example'],
+    ['selected config', undefined, 'https://config.example', 'https://config.example'],
+    ['hosted default', undefined, undefined, 'https://api.promptfoo.app'],
+  ])('uses the %s API host', async (_source, apiHost, configApiHost, expectedHost) => {
+    mockScanner({ configApiHost });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { createAgentClient } = await import('../../src/util/agent/agentClient');
+
+    await executeScan('/test/repo', {
+      json: true,
+      diffsOnly: true,
+      apiHost,
+    });
+
+    expect(createAgentClient).toHaveBeenCalledWith(expect.objectContaining({ host: expectedHost }));
+  });
 
   it('restores the original log level when structured config loading fails early', async () => {
     mockScanner({ loadConfigError: new Error('missing config') });
@@ -248,5 +319,65 @@ describe('Scanner machine-readable output', () => {
       setLogLevelMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
     );
     expect(getLogLevel()).toBe('debug');
+  });
+
+  it('preserves MCP setup and successful cleanup order without the facade', async () => {
+    const { disconnect, socket, socketEmit } = mockScanner();
+    const mcp = mockMcpLifecycle();
+    socketEmit.mockImplementation((event: string) => {
+      if (event === 'runner:hello') {
+        mcp.events.push('announce');
+      }
+    });
+    disconnect.mockImplementation(() => {
+      mcp.events.push('client-disconnect');
+    });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
+
+    expect(mcp.events).toEqual([
+      'start',
+      'ready',
+      'construct',
+      'connect',
+      'announce',
+      'bridge-disconnect',
+      'stop',
+      'client-disconnect',
+    ]);
+    expect(mcp.constructorArgs()).toEqual([mcp.mcpProcess, socket, 'test-session-id']);
+    expect(socketEmit).toHaveBeenCalledWith('runner:hello', {
+      session_id: 'test-session-id',
+      repo_root: expect.stringMatching(/test[/\\\\]repo$/),
+    });
+    expect(mcp.stop).toHaveBeenCalledOnce();
+  });
+
+  it('stops a failed MCP setup exactly once without announcing or disconnecting the bridge', async () => {
+    const { disconnect, socketEmit } = mockScanner();
+    const mcp = mockMcpLifecycle(new Error('bridge failed'));
+    disconnect.mockImplementation(() => {
+      mcp.events.push('client-disconnect');
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
+
+    expect(mcp.events).toEqual([
+      'start',
+      'ready',
+      'construct',
+      'connect',
+      'stop',
+      'client-disconnect',
+    ]);
+    expect(mcp.stop).toHaveBeenCalledOnce();
+    expect(mcp.bridgeDisconnect).not.toHaveBeenCalled();
+    expect(socketEmit).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: bridge failed');
   });
 });

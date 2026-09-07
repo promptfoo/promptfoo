@@ -4,44 +4,23 @@
  * Manages graceful shutdown and resource cleanup for scan operations.
  */
 
-import type { ChildProcess } from 'child_process';
-
 import logger from '../../logger';
-import type ora from 'ora';
-import type { Socket } from 'socket.io-client';
-
-import type { SocketIoMcpBridge } from '../mcp/transport';
-
-/**
- * Mutable references for cleanup handlers
- * Allows signal handlers to access updated MCP resources
- */
-export interface CleanupRefs {
-  repoPath: string;
-  socket: Socket | null;
-  mcpBridge: SocketIoMcpBridge | null;
-  mcpProcess: ChildProcess | null;
-  spinner: ReturnType<typeof ora> | null;
-  abortController: AbortController | null;
-}
 
 /**
  * Register cleanup handlers for process signals
  *
- * Handles SIGINT (Ctrl+C), SIGTERM, and SIGQUIT signals to ensure
- * graceful shutdown of resources (socket, MCP bridge, spinner).
+ * Handles SIGINT (Ctrl+C), SIGTERM, and SIGQUIT signals by aborting the scan.
+ * The scanner's catch/finally blocks perform resource cleanup.
  *
- * @param refs - Mutable references to resources that need cleanup
+ * @param abortController - Controller for the in-flight scan
  */
-export function registerCleanupHandlers(refs: CleanupRefs): void {
+export function registerCleanupHandlers(abortController: AbortController): void {
   const cleanup = (signal: string) => {
     logger.debug(`Received ${signal}, cleaning up...`);
 
     // Abort the scan Promise - this will trigger the catch/finally blocks
     // which handle all the actual resource cleanup
-    if (refs.abortController) {
-      refs.abortController.abort();
-    }
+    abortController.abort();
 
     // Exit code will be set in the catch block after output is flushed
     // This prevents output from appearing after the shell prompt
