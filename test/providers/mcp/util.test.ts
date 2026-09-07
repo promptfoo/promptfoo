@@ -360,6 +360,34 @@ describe('discoverTokenEndpoint', () => {
       /Failed to discover OAuth token endpoint/,
     );
   });
+
+  it('stops discovery on cancellation and retries without caching the aborted endpoint', async () => {
+    const controller = new AbortController();
+    const serverUrl = 'https://cancel-discovery.example.com/path';
+    mockFetch.mockImplementationOnce(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          expect(options.signal).toBe(controller.signal);
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+
+    const pending = discoverTokenEndpoint(serverUrl, controller.signal);
+    controller.abort(new Error('discovery cancelled'));
+    await expect(pending).rejects.toThrow('discovery cancelled');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/retry-token' }),
+    });
+    await expect(discoverTokenEndpoint(serverUrl)).resolves.toBe(
+      'https://auth.example.com/retry-token',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('getOAuthTokenWithExpiry', () => {
@@ -420,5 +448,39 @@ describe('getOAuthTokenWithExpiry', () => {
         .map(([url]) => String(url))
         .filter((url) => url.includes('/oauth/token')),
     ).toEqual(['https://auth-a.example.com/oauth/token', 'https://auth-b.example.com/oauth/token']);
+  });
+
+  it('cancels a pending token request and does not cache its result', async () => {
+    const controller = new AbortController();
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'cancelled-client',
+      clientSecret: 'fixture-secret',
+      tokenUrl: 'https://auth.example.com/cancel-token',
+    };
+    mockFetch.mockImplementationOnce(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          expect(options.signal).toBe(controller.signal);
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+
+    const pending = getOAuthTokenWithExpiry(auth, undefined, controller.signal);
+    controller.abort(new Error('token cancelled'));
+    await expect(pending).rejects.toThrow('token cancelled');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'retry-token', expires_in: 3600 }),
+    });
+    await expect(getOAuthTokenWithExpiry(auth)).resolves.toMatchObject({
+      accessToken: 'retry-token',
+    });
+    await getOAuthTokenWithExpiry(auth);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

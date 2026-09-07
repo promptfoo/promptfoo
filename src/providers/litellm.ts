@@ -165,14 +165,8 @@ export function createLiteLLMProvider(
   // Merge configs, with explicit config values taking precedence
   const mergedConfig: OpenAiCompletionOptions = {
     ...litellmConfigDefaults,
+    ...Object.fromEntries(Object.entries(config).filter(([, value]) => value != null)),
   };
-
-  // Only override properties that are actually defined and not null in config
-  Object.keys(config).forEach((key) => {
-    if (config[key] !== undefined && config[key] !== null) {
-      Object.assign(mergedConfig, { [key]: config[key] });
-    }
-  });
 
   // Construct the provider options
   const litellmConfig: ProviderOptions = {

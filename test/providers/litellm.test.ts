@@ -149,6 +149,19 @@ describe('LiteLLM Provider', () => {
       expect(provider.config.max_tokens).toBe(100);
     });
 
+    it('keeps reserved config keys as own properties without changing prototypes', () => {
+      const config = JSON.parse('{"__proto__":{"polluted":true},"temperature":0.4}');
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', { config: { config } });
+
+      expect(Object.getPrototypeOf(provider.config)).toBe(Object.prototype);
+      expect(Object.hasOwn(provider.config, '__proto__')).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(provider.config, '__proto__')?.value).toEqual({
+        polluted: true,
+      });
+      expect(provider.config.temperature).toBe(0.4);
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
     describe('Provider Identity', () => {
       it('should return LiteLLM identity for chat provider', () => {
         const provider = createLiteLLMProvider('litellm:gpt-4', {});

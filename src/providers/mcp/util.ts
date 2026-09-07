@@ -99,7 +99,11 @@ function isValidTokenEndpoint(tokenEndpoint: string): boolean {
  * Follows RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * Only requires token_endpoint from the response (unlike SDK which requires authorization_endpoint).
  */
-export async function discoverTokenEndpoint(serverUrl: string): Promise<string> {
+export async function discoverTokenEndpoint(
+  serverUrl: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
@@ -128,7 +132,10 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl);
+      const response = await (signal
+        ? fetchWithProxy(discoveryUrl, { signal })
+        : fetchWithProxy(discoveryUrl));
+      signal?.throwIfAborted();
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -136,6 +143,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
+      signal?.throwIfAborted();
       if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
@@ -144,6 +152,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 
       logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
+      signal?.throwIfAborted();
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }
   }
@@ -162,15 +171,18 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
+  signal?: AbortSignal,
 ): Promise<OAuthTokenResult> {
+  signal?.throwIfAborted();
   // Use configured tokenUrl or discover it
   let tokenUrl = auth.tokenUrl;
   if (!tokenUrl) {
     if (!serverUrl) {
       throw new Error('Either tokenUrl or serverUrl is required for OAuth token fetching');
     }
-    tokenUrl = await discoverTokenEndpoint(serverUrl);
+    tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
   }
+  signal?.throwIfAborted();
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
@@ -182,15 +194,19 @@ export async function getOAuthTokenWithExpiry(
   }
 
   // Use shared OAuth token fetch logic
-  const result = await fetchOAuthToken({
-    tokenUrl,
-    grantType: auth.grantType,
-    clientId: auth.clientId,
-    clientSecret: auth.clientSecret,
-    username: 'username' in auth ? auth.username : undefined,
-    password: 'password' in auth ? auth.password : undefined,
-    scopes: auth.scopes,
-  });
+  const result = await fetchOAuthToken(
+    {
+      tokenUrl,
+      grantType: auth.grantType,
+      clientId: auth.clientId,
+      clientSecret: auth.clientSecret,
+      username: 'username' in auth ? auth.username : undefined,
+      password: 'password' in auth ? auth.password : undefined,
+      scopes: auth.scopes,
+    },
+    signal,
+  );
+  signal?.throwIfAborted();
 
   // Cache the token
   oauthTokenCache.set(cacheKey, {
