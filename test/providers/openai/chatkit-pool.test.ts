@@ -360,6 +360,21 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('shutdown', () => {
+    it('creates a fresh singleton while the previous pool is closing', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      await instance.acquirePage(TEST_TEMPLATE_KEY);
+      const close = createDeferred<void>();
+      mockContext.close.mockImplementationOnce(() => close.promise);
+
+      const shutdown = instance.shutdown();
+      const next = ChatKitBrowserPool.getInstance();
+      expect(next).not.toBe(instance);
+      close.resolve();
+      await shutdown;
+      expect(ChatKitBrowserPool.getInstance()).toBe(next);
+    });
+
     it('should close all contexts and browser', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);

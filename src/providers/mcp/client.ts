@@ -242,7 +242,11 @@ export class MCPClient {
           // Fetch token using configured tokenUrl or OAuth discovery
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(
+            oauthAuth,
+            server.url,
+            signal,
+          );
           signal?.throwIfAborted();
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
