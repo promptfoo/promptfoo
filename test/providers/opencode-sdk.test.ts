@@ -1899,6 +1899,38 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionCreate).not.toHaveBeenCalled();
     });
 
+    it('waits for an old fixed-port startup before starting its replacement', async () => {
+      const creation = createDeferred<{
+        client: any;
+        server: { url: string; close: typeof mockServerClose };
+      }>();
+      mockCreateOpencode.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({
+        config: { port: 4096 },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const first = provider.callApi('first');
+      await vi.waitFor(() => expect(mockCreateOpencode).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      const second = provider.callApi('second');
+      await new Promise<void>(setImmediate);
+      expect(mockCreateOpencode).toHaveBeenCalledOnce();
+
+      creation.resolve({
+        client: { session: { create: mockSessionCreate } },
+        server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+      });
+      await expect(first).resolves.toMatchObject({ error: expect.stringContaining('cleanup') });
+      await expect(second).resolves.toMatchObject({ output: expect.any(String) });
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      expect(mockServerClose.mock.invocationCallOrder[0]).toBeLessThan(
+        mockCreateOpencode.mock.invocationCallOrder[1],
+      );
+      await provider.cleanup();
+    });
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
