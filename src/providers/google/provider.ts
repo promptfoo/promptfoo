@@ -311,9 +311,7 @@ export class GoogleProvider extends GoogleGenericProvider {
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP();
 
     // Require API key for AI Studio mode
     if (!this.isVertexMode) {

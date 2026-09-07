@@ -20,7 +20,7 @@ interface MCPProviderOptions {
 }
 
 export class MCPProvider implements ApiProvider {
-  private mcpClient: MCPClient;
+  private mcpClient: MCPClient | null = null;
   private mcpSession: McpClientSession;
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
@@ -38,7 +38,6 @@ export class MCPProvider implements ApiProvider {
     this.defaultArgs = options.defaultArgs || {};
 
     this.mcpSession = new McpClientSession(this.config, this);
-    this.mcpClient = this.mcpSession.client;
     this.initializationPromise = this.initialize();
     // Initialization starts eagerly, so mark the rejection as observed until callers await it.
     void this.initializationPromise.catch(() => undefined);
@@ -61,10 +60,12 @@ export class MCPProvider implements ApiProvider {
   }
 
   private async initialize(): Promise<void> {
-    await this.mcpSession.ready;
+    const client = await this.mcpSession.initialize();
+    const changed = this.mcpClient !== client;
+    this.mcpClient = client;
 
-    if (this.config.verbose) {
-      const tools = this.mcpClient.getAllTools();
+    if (this.config.verbose && changed) {
+      const tools = this.mcpClient!.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
         tools.map((t) => t.name),
@@ -79,7 +80,7 @@ export class MCPProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initializationPromise;
+      await this.initialize();
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -130,7 +131,7 @@ export class MCPProvider implements ApiProvider {
       logger.debug(`MCP Provider calling tool ${toolName} with args: ${JSON.stringify(finalArgs)}`);
 
       // Call the MCP tool
-      const result = await this.mcpClient.callTool(toolName, finalArgs);
+      const result = await this.mcpClient!.callTool(toolName, finalArgs);
 
       if (result.error) {
         return {
@@ -166,9 +167,9 @@ export class MCPProvider implements ApiProvider {
   // Method to call specific MCP tools directly
   async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
     try {
-      await this.initializationPromise;
+      await this.initialize();
 
-      const result = await this.mcpClient.callTool(toolName, args);
+      const result = await this.mcpClient!.callTool(toolName, args);
 
       if (result.error) {
         return {
@@ -190,9 +191,9 @@ export class MCPProvider implements ApiProvider {
 
   // Get all available tools
   async getAvailableTools() {
-    await this.initializationPromise;
+    await this.initialize();
 
-    return this.mcpClient.getAllTools();
+    return this.mcpClient!.getAllTools();
   }
 
   private async transformToolResult(
@@ -221,6 +222,6 @@ export class MCPProvider implements ApiProvider {
 
   // Get connected servers
   getConnectedServers() {
-    return this.mcpClient.connectedServers;
+    return this.mcpSession.client?.connectedServers ?? [];
   }
 }

@@ -210,12 +210,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Initialize the MCP client for tool integration.
    */
   protected async initializeMCP(): Promise<void> {
-    if (!this.config.mcp) {
+    if (!this.config.mcp?.enabled) {
       return;
     }
-    this.mcpSession = new McpClientSession(this.config.mcp, this);
-    this.mcpClient = this.mcpSession.client;
-    await this.mcpSession.ready;
+    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
+    this.mcpClient = await this.mcpSession.initialize();
   }
 
   /**
@@ -228,6 +227,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     context?: CallApiContextParams,
     options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
+    await this.initializeMCP();
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -353,7 +353,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     try {
       await this.mcpSession?.cleanup();
     } finally {
-      this.mcpClient = null;
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 

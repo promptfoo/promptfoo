@@ -124,16 +124,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   private async initializeMCP(): Promise<void> {
-    this.mcpSession = new McpClientSession(this.config.mcp!, this);
-    this.mcpClient = this.mcpSession.client;
-    await this.mcpSession.ready;
+    if (!this.config.mcp?.enabled) {
+      return;
+    }
+    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
+    this.mcpClient = await this.mcpSession.initialize();
   }
 
   async cleanup(): Promise<void> {
     try {
       await this.mcpSession?.cleanup();
     } finally {
-      this.mcpClient = null;
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 
@@ -365,9 +367,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP();
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }

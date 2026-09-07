@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
@@ -8,11 +9,16 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createDeferred } from '../util/utils';
 
-const mcp = vi.hoisted(() => ({ initialize: vi.fn(), cleanup: vi.fn() }));
+const mcp = vi.hoisted(() => ({ initialize: vi.fn(), cleanup: vi.fn(), callTool: vi.fn() }));
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
 vi.mock('../../src/providers/mcp/client', () => ({
   MCPClient: class {
     initialize = mcp.initialize;
     cleanup = mcp.cleanup;
+    callTool = mcp.callTool;
     getAllTools() {
       return [];
     }
@@ -24,6 +30,16 @@ beforeEach(() => {
   vi.useFakeTimers();
   mcp.initialize.mockReset().mockResolvedValue(undefined);
   mcp.cleanup.mockReset().mockResolvedValue(undefined);
+  mcp.callTool.mockReset().mockResolvedValue({ content: [{ type: 'text', text: 'hello' }] });
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: {
+      choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
+      candidates: [{ content: { parts: [{ text: 'hello' }] }, finishReason: 'STOP' }],
+    },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
 });
 
 afterEach(async () => {
@@ -41,7 +57,7 @@ const providers = [
 ] as const;
 
 describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
-  it('releases connections through evaluator shutdown, exactly once', async () => {
+  it('releases connections through process shutdown, exactly once', async () => {
     const provider = createProvider();
     await providerRegistry.shutdownAll();
     await provider.cleanup();
@@ -72,6 +88,33 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     await providerRegistry.shutdownAll();
     await provider.cleanup();
     expect(mcp.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('reconnects and registers again when reused in a later evaluation', async () => {
+    const provider = createProvider();
+    const prompt = provider instanceof MCPProvider ? '{"tool":"hello"}' : 'hello';
+    for (let run = 0; run < 2; run++) {
+      const response = await providerRegistry.withScope([provider], () => provider.callApi(prompt));
+      expect(response.error).toBeUndefined();
+    }
+    expect(mcp.initialize).toHaveBeenCalledTimes(2);
+    expect(mcp.cleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for pending cleanup before reconnecting on reuse', async () => {
+    const provider = createProvider();
+    const pending = createDeferred<void>();
+    mcp.cleanup.mockReturnValueOnce(pending.promise);
+    const cleanup = provider.cleanup();
+    const prompt = provider instanceof MCPProvider ? '{"tool":"hello"}' : 'hello';
+    const call = providerRegistry.withScope([provider], () => provider.callApi(prompt));
+    await vi.runAllTimersAsync();
+    expect(mcp.initialize).toHaveBeenCalledOnce();
+    pending.resolve();
+    await cleanup;
+    expect((await call).error).toBeUndefined();
+    expect(mcp.initialize).toHaveBeenCalledTimes(2);
+    expect(mcp.cleanup).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces initialization failures to callers', async () => {

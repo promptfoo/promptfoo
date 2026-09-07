@@ -3,32 +3,62 @@ import { MCPClient } from './client';
 
 import type { MCPConfig } from './types';
 
-/** Owns an eager MCP connection, including resources created before initialization fails. */
+/** Owns restartable MCP connections and resources created before initialization fails. */
 export class McpClientSession {
-  readonly client: MCPClient;
-  readonly ready: Promise<void>;
+  private currentClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
   private cleanupPromise?: Promise<void>;
 
   constructor(
-    config: MCPConfig,
+    private readonly config: MCPConfig,
     private readonly owner: { cleanup(): Promise<void> },
   ) {
-    this.client = new MCPClient(config);
-    providerRegistry.register(owner);
-    this.ready = this.client.initialize();
-    // Construction may be followed by validation only. Retain the rejection for callers,
-    // but observe it immediately so eager initialization cannot cause an unhandled rejection.
-    void this.ready.catch(() => undefined);
+    this.start();
+  }
+
+  get client(): MCPClient | null {
+    return this.currentClient;
+  }
+
+  private start(): void {
+    this.currentClient = new MCPClient(this.config);
+    providerRegistry.register(this.owner);
+    this.initializationPromise = this.currentClient.initialize();
+    // Eager construction can be followed by validation only. Preserve the error for callers.
+    void this.initializationPromise.catch(() => undefined);
+  }
+
+  async initialize(): Promise<MCPClient> {
+    if (this.cleanupPromise) {
+      await this.cleanupPromise;
+    }
+    if (!this.currentClient) {
+      this.start();
+    }
+    // Repeated use claims the connection for the calling evaluation, including shared instances.
+    providerRegistry.register(this.owner);
+    const client = this.currentClient!;
+    await this.initializationPromise;
+    return client;
   }
 
   cleanup(): Promise<void> {
-    this.cleanupPromise ??= (async () => {
+    if (this.cleanupPromise) {
+      return this.cleanupPromise;
+    }
+    const client = this.currentClient;
+    if (!client) {
+      return Promise.resolve();
+    }
+    this.cleanupPromise = (async () => {
       try {
-        // A failed initialization can still have connected some of the configured servers.
-        await this.ready.catch(() => undefined);
-        await this.client.cleanup();
+        await this.initializationPromise?.catch(() => undefined);
+        await client.cleanup();
       } finally {
+        this.currentClient = null;
+        this.initializationPromise = null;
         providerRegistry.unregister(this.owner);
+        this.cleanupPromise = undefined;
       }
     })();
     return this.cleanupPromise;

@@ -61,23 +61,25 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   private async initializeMCP(): Promise<void> {
-    this.mcpSession = new McpClientSession(this.config.mcp!, this);
-    this.mcpClient = this.mcpSession.client;
-    await this.mcpSession.ready;
+    if (!this.config.mcp?.enabled) {
+      return;
+    }
+    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
+    this.mcpClient = await this.mcpSession.initialize();
 
     // Initialize callback handler with MCP client
     this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async ensureInitialized(): Promise<void> {
-    await Promise.all([super.ensureInitialized(), this.initializationPromise]);
+    await Promise.all([super.ensureInitialized(), this.initializeMCP()]);
   }
 
   async cleanup(): Promise<void> {
     try {
       await this.mcpSession?.cleanup();
     } finally {
-      this.mcpClient = null;
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 
