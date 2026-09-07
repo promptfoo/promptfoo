@@ -41,6 +41,12 @@ const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
   'audioCost',
   'audioInputCost',
   'audioOutputCost',
+  'mcp',
+  'functionToolCallbacks',
+  'showThinking',
+  'omitDefaults',
+  'basePath',
+  'linkedTargetId',
 ]);
 
 export function createNscaleProvider(
