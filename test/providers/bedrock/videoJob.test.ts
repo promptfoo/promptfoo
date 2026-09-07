@@ -243,4 +243,27 @@ describe('Bedrock video storage', () => {
     expect(mocks.storeBlob).not.toHaveBeenCalled();
     expect(mocks.s3Destroy).toHaveBeenCalledOnce();
   });
+
+  it('stops waiting for pending blob storage and releases the S3 client', async () => {
+    const controller = new AbortController();
+    const writing = createDeferred<void>();
+    mocks.s3Send.mockResolvedValue({
+      Body: { transformToByteArray: async () => new Uint8Array([1]) },
+    });
+    mocks.storeBlob.mockImplementation(() => {
+      writing.resolve();
+      return new Promise(() => {});
+    });
+    const pending = storeBedrockVideo(
+      provider,
+      'Fixture',
+      's3://bucket/output',
+      undefined,
+      controller.signal,
+    );
+    await writing.promise;
+    controller.abort(new Error('cancelled blob storage'));
+    await expect(pending).rejects.toThrow('cancelled blob storage');
+    expect(mocks.s3Destroy).toHaveBeenCalledOnce();
+  });
 });

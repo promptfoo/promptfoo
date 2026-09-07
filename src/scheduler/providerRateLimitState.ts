@@ -175,6 +175,7 @@ export class ProviderRateLimitState extends EventEmitter {
       try {
         options.abortSignal?.throwIfAborted();
         const result = await callFn();
+        options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 

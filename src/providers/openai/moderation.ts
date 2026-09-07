@@ -237,6 +237,7 @@ export class OpenAiModerationProvider
   extends OpenAiGenericProvider
   implements ApiModerationProvider
 {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callModerationApi'] as const;
 
   static MODERATION_MODELS = OPENAI_MODERATION_MODELS;

@@ -240,6 +240,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
 }
 
 export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   modelName: string;

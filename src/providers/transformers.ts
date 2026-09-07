@@ -321,6 +321,7 @@ function ensureCleanupRegistered(): void {
  * ```
  */
 export class TransformersEmbeddingProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   modelName: string;

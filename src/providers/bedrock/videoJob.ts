@@ -153,13 +153,17 @@ export async function storeBedrockVideo(
       await awaitProviderOperation(response.Body.transformToByteArray(), signal),
     );
     signal?.throwIfAborted();
-    const { ref } = await storeBlob(buffer, 'video/mp4', {
-      evalId: context?.evaluationId,
-      kind: 'video',
-      location: 'response.video',
-      promptIdx: context?.promptIdx,
-      testIdx: context?.testIdx,
-    });
+    const { ref } = await awaitProviderOperation(
+      storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
+        kind: 'video',
+        location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
+      }),
+      signal,
+    );
+    signal?.throwIfAborted();
     logger.debug(`[${label}] Stored video to blob storage`, { uri: ref.uri, hash: ref.hash });
     return { blobRef: ref };
   } catch (error) {

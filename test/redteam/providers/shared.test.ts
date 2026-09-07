@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -196,6 +197,25 @@ describe('shared redteam provider utilities', () => {
 
   describe('RedteamProviderManager', () => {
     const mockApiProvider = createMockProvider({ response: { output: 'test output' } });
+
+    it('releases a cached provider claimed during an evaluation', async () => {
+      const cleanup = vi.fn();
+      const cached = { ...mockApiProvider, cleanup };
+      mockedLoadApiProviders.mockResolvedValue([cached]);
+      await redteamProviderManager.setProvider('cached-provider');
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      redteamProviderManager.setRateLimitRegistry(registry);
+      try {
+        const wrapped = await providerRegistry.withScope([], () =>
+          redteamProviderManager.getProvider({}),
+        );
+        expect(isRateLimitWrapped(wrapped)).toBe(true);
+        expect(cleanup).toHaveBeenCalledOnce();
+      } finally {
+        registry.dispose();
+        redteamProviderManager.setRateLimitRegistry(undefined);
+      }
+    });
 
     it('creates default OpenAI provider when no provider specified', async () => {
       const result = await redteamProviderManager.getProvider({});

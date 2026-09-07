@@ -1,3 +1,5 @@
+import { createServer } from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
@@ -72,6 +74,26 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('getInstance', () => {
+    it('waits for the old fixed port to close before initializing a replacement', async () => {
+      const closing = createDeferred<void>();
+      const first = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      await first.initialize();
+      mockBrowser.close.mockReturnValueOnce(closing.promise);
+
+      const shutdown = first.shutdown();
+      const replacement = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      const initialization = replacement.initialize();
+      await Promise.resolve();
+      const server = vi.mocked(createServer).mock.results[0].value;
+      expect(server.listen).toHaveBeenCalledOnce();
+
+      closing.resolve();
+      await shutdown;
+      await initialization;
+      expect(server.close).toHaveBeenCalledOnce();
+      expect(server.listen).toHaveBeenCalledTimes(2);
+    });
+
     it('keeps a reused pool alive until both evaluation scopes finish', async () => {
       const firstDone = createDeferred<void>();
       const secondDone = createDeferred<void>();
