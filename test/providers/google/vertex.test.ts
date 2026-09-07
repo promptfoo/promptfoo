@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -199,24 +200,28 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not start authentication after cancellation during a cache lookup', async () => {
-    let finishCacheLookup!: (value: null) => void;
-    mockCacheGet.mockImplementationOnce(
-      () =>
-        new Promise<null>((resolve) => {
-          finishCacheLookup = resolve;
-        }),
-    );
-    const auth = vi.spyOn(provider, 'getClientWithCredentials');
-    const controller = new AbortController();
-    const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
-    await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
-    controller.abort(new Error('cancelled'));
-    finishCacheLookup(null);
-
-    await call;
-    expect(auth).not.toHaveBeenCalled();
-  });
+  it.each([null, JSON.stringify({ output: 'cached' })])(
+    'does not accept a cache lookup result after cancellation: %s',
+    async (cachedValue) => {
+      let finishCacheLookup!: (value: string | null) => void;
+      mockCacheGet.mockImplementationOnce(
+        () =>
+          new Promise<string | null>((resolve) => {
+            finishCacheLookup = resolve;
+          }),
+      );
+      const auth = vi.spyOn(provider, 'getClientWithCredentials');
+      const controller = new AbortController();
+      const reason = new Error('cancelled while reading cache');
+      const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
+      const rejection = expect(call).rejects.toBe(reason);
+      await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
+      controller.abort(reason);
+      finishCacheLookup(cachedValue);
+      await rejection;
+      expect(auth).not.toHaveBeenCalled();
+    },
+  );
 
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
@@ -412,23 +417,45 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it.each([
-    { usageMetadata: { totalTokenCount: 3 } },
+    { data: [] },
+    { data: [{ usageMetadata: { totalTokenCount: 3 } }] },
     {
-      promptFeedback: {
-        safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' }],
-      },
+      data: [
+        {
+          promptFeedback: {
+            safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' }],
+          },
+        },
+      ],
     },
-  ])('retains the Vertex error contract for candidate-free stream %j', async (chunk) => {
-    const data = [chunk];
+  ])('retains the Vertex error contract for candidate-free stream %j', async ({ data }) => {
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: { request: vi.fn().mockResolvedValue({ data }) } as unknown as JSONClient,
       projectId: 'test-project',
     });
     const response = await provider.callGeminiApi('hello');
-    expect(response.error).toContain(
-      'Gemini API response error: Error: No candidates returned in API response.',
-    );
+    const details = data.length
+      ? 'No candidates returned in API response.'
+      : 'No response data found';
+    expect(response.error).toContain(`Gemini API response error: Error: ${details}`);
     expect(response.error).toContain(`Response data: ${JSON.stringify(data)}`);
+  });
+
+  it('records cached tokens on the Vertex response span', async () => {
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ output: 'cached response', tokenUsage: { prompt: 6, total: 10 } }),
+    );
+    const setAttribute = vi.fn();
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
+    } as any);
+    try {
+      await provider.callApi('test prompt');
+      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 
   it('should handle API call errors', async () => {

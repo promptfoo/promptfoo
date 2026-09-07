@@ -3653,7 +3653,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     for (const row of rows) {
-      if (shouldSkipStaleRows?.()) {
+      if (
+        shouldSkipStaleRows?.() ||
+        (this.store.persisted && context.options.abortSignal?.aborted && !row.response)
+      ) {
         return;
       }
 
