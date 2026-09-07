@@ -97,8 +97,10 @@ describe('MCP startup cancellation', () => {
       },
     });
     const entered = createDeferred<void>();
+    let discoverySignal: AbortSignal | undefined;
     mockFetch.mockImplementation((_url, options) => {
-      expect(options.signal).toBe(controller.signal);
+      discoverySignal = options.signal;
+      expect(discoverySignal).toBeInstanceOf(AbortSignal);
       entered.resolve();
       return new Promise((_resolve, reject) => {
         options.signal.addEventListener('abort', () => reject(options.signal.reason), {
@@ -111,6 +113,7 @@ describe('MCP startup cancellation', () => {
     const rejection = expect(pending).rejects.toThrow('cancel OAuth startup');
     await entered.promise;
     controller.abort(new Error('cancel OAuth startup'));
+    expect(discoverySignal?.aborted).toBe(true);
     await rejection;
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(sdk.connect).not.toHaveBeenCalled();

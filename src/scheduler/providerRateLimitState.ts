@@ -231,8 +231,9 @@ export class ProviderRateLimitState extends EventEmitter {
           throw error;
         }
 
-        const latencyMs = Date.now() - startTime;
-        this.latencies.push(latencyMs);
+        if (slotHeld) {
+          this.latencies.push(Date.now() - startTime);
+        }
 
         lastError = error as Error;
 
