@@ -4,13 +4,15 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestSignal } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
@@ -206,7 +208,10 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
+    options?.abortSignal?.throwIfAborted();
     await this.ensureInitialized();
 
     const apiKey =
@@ -270,17 +275,12 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         ...(this.configWithHeaders.passthrough || {}),
       };
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), getRequestTimeoutMs());
-
       const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: getRequestSignal(options?.abortSignal),
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();

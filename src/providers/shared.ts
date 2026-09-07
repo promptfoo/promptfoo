@@ -10,6 +10,12 @@ export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 }
 
+/** Preserve the transport deadline while also honoring caller cancellation. */
+export function getRequestSignal(abortSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(getRequestTimeoutMs());
+  return abortSignal ? AbortSignal.any([abortSignal, timeoutSignal]) : timeoutSignal;
+}
+
 /**
  * Extended timeout for long-running models (deep research, gpt-5-pro, etc.) in milliseconds.
  * These models can take significantly longer to respond due to their complex reasoning.

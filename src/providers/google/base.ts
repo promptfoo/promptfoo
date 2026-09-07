@@ -30,7 +30,12 @@ import { GoogleAuthManager } from './auth';
 import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
 
 /**
@@ -154,7 +159,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Make an API call with the given prompt.
    * Must be implemented by subclasses.
    */
-  abstract callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse>;
+  abstract callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
 
   /**
    * Get the API key for this provider.

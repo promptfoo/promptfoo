@@ -8,6 +8,8 @@ import { appendOpenAiApiPath } from './util';
 
 import type {
   ApiModerationProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
@@ -93,7 +95,12 @@ function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
 function fetchOpenAIModerationWithDedupe(
   inflightCacheKey: string,
   fetcher: () => Promise<OpenAIModerationFetchResult>,
+  abortSignal?: AbortSignal,
 ): Promise<OpenAIModerationFetchResult> {
+  // Independent cancellation scopes must not share the same underlying request.
+  if (abortSignal) {
+    return fetcher();
+  }
   let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
@@ -239,7 +246,10 @@ export class OpenAiModerationProvider
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
+    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       return handleApiError(this.getMissingApiKeyErrorMessage());
@@ -286,6 +296,7 @@ export class OpenAiModerationProvider
             appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
             {
               method: 'POST',
+              signal: options?.abortSignal,
               headers,
               body: requestBody,
             },
@@ -294,6 +305,7 @@ export class OpenAiModerationProvider
             true,
             this.config.maxRetries,
           ),
+        options?.abortSignal,
       );
 
       if (status < 200 || status >= 300) {

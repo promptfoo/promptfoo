@@ -361,6 +361,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
@@ -455,6 +456,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
         {
           method: 'POST',
+          signal: callApiOptions?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),

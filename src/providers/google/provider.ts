@@ -20,7 +20,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestSignal, getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -45,6 +45,7 @@ import {
 
 import type {
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderResponse,
   TokenUsage,
@@ -309,7 +310,12 @@ export class GoogleProvider extends GoogleGenericProvider {
   /**
    * Call the API with the given prompt.
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Wait for MCP initialization if pending
     if (this.initializationPromise != null) {
       await this.initializationPromise;
@@ -325,7 +331,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
     }
 
-    return this.callGeminiApi(prompt, context);
+    return this.callGeminiApi(prompt, context, options);
   }
 
   /**
@@ -334,6 +340,7 @@ export class GoogleProvider extends GoogleGenericProvider {
   private async callGeminiApi(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config = mergeGoogleCompletionOptions(
@@ -457,6 +464,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         const res = await client.request({
           url,
           method: 'POST',
+          signal: options?.abortSignal,
           data: body,
           timeout: getRequestTimeoutMs(),
         });
@@ -470,7 +478,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           method: 'POST',
           headers: await this.getAuthHeaders(),
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(getRequestTimeoutMs()),
+          signal: getRequestSignal(options?.abortSignal),
         });
 
         if (!res.ok) {
@@ -491,6 +499,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           endpoint,
           {
             method: 'POST',
+            signal: options?.abortSignal,
             headers,
             body: JSON.stringify(body),
             // Include auth discriminator in cache key to prevent cross-tenant cache sharing

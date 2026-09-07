@@ -9,6 +9,7 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -187,10 +188,15 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     return this.chatProvider;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Delegate to chat provider if using chat completion format
     if (this.useChatCompletionFormat()) {
-      return this.getChatProvider().callApi(prompt, context);
+      return this.getChatProvider().callApi(prompt, context, options);
     }
 
     // Set up tracing context for Inference API
@@ -213,14 +219,21 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       return {};
     };
 
-    return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callInferenceApi(prompt, options),
+      resultExtractor,
+    );
   }
 
   async cleanup(): Promise<void> {
     await this.chatProvider?.cleanup();
   }
 
-  private async callInferenceApi(prompt: string): Promise<ProviderResponse> {
+  private async callInferenceApi(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const url = this.config.apiEndpoint
       ? this.config.apiEndpoint
       : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
@@ -247,6 +260,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         url,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
@@ -309,7 +323,12 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
     return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
-  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+  async callClassificationApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
+    options?.abortSignal?.throwIfAborted();
     const params = {
       inputs: prompt,
       parameters: {},
@@ -329,6 +348,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
         url,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -364,8 +384,12 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
     }
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const ret = await this.callClassificationApi(prompt, context, options);
     return {
       error: ret.error,
       output: JSON.stringify(ret.classification),
@@ -408,7 +432,12 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
     throw new Error('Cannot use a feature extraction provider for text generation');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
@@ -432,6 +461,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         url,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -498,7 +528,13 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
     throw new Error('Cannot use a sentence similarity provider for text generation');
   }
 
-  async callSimilarityApi(expected: string, input: string): Promise<ProviderSimilarityResponse> {
+  async callSimilarityApi(
+    expected: string,
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderSimilarityResponse> {
+    options?.abortSignal?.throwIfAborted();
     // https://huggingface.co/docs/api-inference/detailed_parameters#sentence-similarity-task
     const params = {
       inputs: {
@@ -527,6 +563,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
         url,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -586,7 +623,12 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
-  async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {
+  async callClassificationApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
+    options?.abortSignal?.throwIfAborted();
     const params = {
       inputs: input,
       parameters: {
@@ -617,6 +659,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         url,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -652,8 +695,12 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     }
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const ret = await this.callClassificationApi(prompt);
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const ret = await this.callClassificationApi(prompt, context, options);
     return {
       error: ret.error,
       output: JSON.stringify(ret.classification),

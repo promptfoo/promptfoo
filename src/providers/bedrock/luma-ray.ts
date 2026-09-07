@@ -11,12 +11,17 @@ import * as path from 'path';
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 import type {
   LumaRayInvocationResponse,
   LumaRayKeyframe,
@@ -214,6 +219,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
   private async startVideoGeneration(
     modelInput: object,
     s3OutputUri: string,
+    options?: CallApiOptionsParams,
   ): Promise<{ invocationArn?: string; error?: string }> {
     try {
       const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await import(
@@ -238,7 +244,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         },
       });
 
-      const response = await client.send(command);
+      const response = await client.send(command, { abortSignal: options?.abortSignal });
 
       return { invocationArn: response.invocationArn };
     } catch (err) {
@@ -255,6 +261,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     invocationArn: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    options?: CallApiOptionsParams,
   ): Promise<{ response?: LumaRayInvocationResponse; error?: string }> {
     const startTime = Date.now();
 
@@ -271,8 +278,9 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       });
 
       while (Date.now() - startTime < maxPollTimeMs) {
+        options?.abortSignal?.throwIfAborted();
         const command = new GetAsyncInvokeCommand({ invocationArn });
-        const invocation = await client.send(command);
+        const invocation = await client.send(command, { abortSignal: options?.abortSignal });
 
         logger.debug(`[Luma Ray] Job status: ${invocation.status}`, {
           invocationArn,
@@ -297,7 +305,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         }
 
         // Still in progress
-        await sleep(pollIntervalMs);
+        if (options?.abortSignal) {
+          await sleepWithAbort(pollIntervalMs, options.abortSignal);
+        } else {
+          await sleep(pollIntervalMs);
+        }
       }
 
       return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
@@ -314,6 +326,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
   private async downloadAndStoreVideo(
     s3Uri: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       // Parse S3 URI
@@ -345,6 +358,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
           Bucket: bucket,
           Key: videoKey,
         }),
+        { abortSignal: options?.abortSignal },
       );
 
       if (!response.Body) {
@@ -352,6 +366,8 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       }
 
       const buffer = Buffer.from(await response.Body.transformToByteArray());
+
+      options?.abortSignal?.throwIfAborted();
 
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
@@ -397,7 +413,12 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     return duration === '9s' ? 9 : 5;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate S3 output URI
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {
@@ -446,6 +467,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     const { invocationArn, error: startError } = await this.startVideoGeneration(
       modelInput,
       s3OutputUri,
+      options,
     );
 
     if (startError || !invocationArn) {
@@ -462,11 +484,14 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       invocationArn,
       pollIntervalMs,
       maxPollTimeMs,
+      options,
     );
 
     if (pollError || !response) {
       return { error: pollError || 'Polling failed' };
     }
+
+    options?.abortSignal?.throwIfAborted();
 
     // Get S3 output location
     const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
@@ -482,7 +507,9 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
         outputS3Uri,
         context,
+        options,
       );
+      options?.abortSignal?.throwIfAborted();
       if (downloadError) {
         logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
       } else {

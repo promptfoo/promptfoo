@@ -25,7 +25,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { getRequestSignal, getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -51,6 +51,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -252,7 +253,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return client;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Determine the system based on model name
     const system = this.modelName.includes('claude')
       ? 'vertex:anthropic'
@@ -290,24 +296,34 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
-      return this.callClaudeApi(prompt, context);
+      return this.callClaudeApi(prompt, context, options);
     } else if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt, context, options);
     } else if (this.modelName.includes('llama')) {
-      return this.callLlamaApi(prompt, context);
+      return this.callLlamaApi(prompt, context, options);
     }
-    return this.callPalm2Api(prompt);
+    return this.callPalm2Api(prompt, options);
   }
 
-  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Support YAML chat prompts (legacy format used by parseChatPrompt)
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
@@ -435,6 +451,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -542,7 +559,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
@@ -706,7 +728,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(getRequestTimeoutMs()),
+            signal: getRequestSignal(options?.abortSignal),
           });
 
           if (!res.ok) {
@@ -728,6 +750,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const res = await client.request({
             url,
             method: 'POST',
+            signal: options?.abortSignal,
             data: body,
             timeout: getRequestTimeoutMs(),
           });
@@ -965,7 +988,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return response;
   }
 
-  async callPalm2Api(prompt: string): Promise<ProviderResponse> {
+  async callPalm2Api(prompt: string, options?: CallApiOptionsParams): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     const instances = parseChatPrompt(prompt, [
       {
         messages: [
@@ -1022,6 +1046,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1066,7 +1091,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
   }
 
-  async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callLlamaApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
     if (region !== 'us-central1') {
@@ -1179,6 +1209,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -1305,7 +1336,12 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Vertex API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
     const body = {
       instances: [{ content: input }],
@@ -1324,6 +1360,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         data: body,
       });
       data = res.data as VertexEmbeddingPredictResponse;
