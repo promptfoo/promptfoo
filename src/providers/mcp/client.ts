@@ -162,11 +162,12 @@ export class MCPClient {
     const serverKey = server.name || server.url || server.path || 'default';
     const { Client } = await loadMcpClientSdk();
     signal?.throwIfAborted();
-    const client = new Client({
+    const clientInfo = {
       name: 'promptfoo-MCP',
       version: '1.0.0',
       description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
-    });
+    };
+    let client = new Client(clientInfo);
 
     let transport:
       | StdioClientTransport
@@ -299,7 +300,12 @@ export class MCPClient {
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
           await closePendingConnection();
+          signal?.throwIfAborted();
+          this.pendingConnections.delete(client);
+          client = new Client(clientInfo);
+          closePromise = undefined;
           transport = undefined;
+          this.pendingConnections.set(client, closePendingConnection);
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           signal?.throwIfAborted();
           transport = new SSEClientTransport(
