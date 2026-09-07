@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
@@ -175,6 +176,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheGet.mockReset();
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
+    vi.mocked(getCache).mockClear();
     mockImportModule.mockReset();
 
     provider = new VertexChatProvider('gemini-pro', {
@@ -344,6 +346,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(response.output).toBe('fresh output');
       expect(response.cached).toBe(false);
       expect(request).toHaveBeenCalledOnce();
+      expect(getCache).not.toHaveBeenCalled();
       expect(mockCacheGet).not.toHaveBeenCalled();
       expect(mockCacheSet).not.toHaveBeenCalled();
     },

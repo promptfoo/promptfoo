@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { createDeferred } from '../../util/utils';
 
 // Create hoisted mocks to access them in tests
 const mockPage = vi.hoisted(() => ({
@@ -70,6 +72,34 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('getInstance', () => {
+    it('keeps a reused pool alive until both evaluation scopes finish', async () => {
+      const firstDone = createDeferred<void>();
+      const secondDone = createDeferred<void>();
+      const first = providerRegistry.withScope([], async () => {
+        const pool = ChatKitBrowserPool.getInstance();
+        await firstDone.promise;
+        return pool;
+      });
+      const pool = ChatKitBrowserPool.getInstance();
+      const shutdown = vi.spyOn(pool, 'shutdown');
+      const second = providerRegistry.withScope([], async () => {
+        expect(ChatKitBrowserPool.getInstance()).toBe(pool);
+        await secondDone.promise;
+      });
+      try {
+        firstDone.resolve();
+        await first;
+        expect(shutdown).not.toHaveBeenCalled();
+        secondDone.resolve();
+        await second;
+        expect(shutdown).toHaveBeenCalledOnce();
+      } finally {
+        firstDone.resolve();
+        secondDone.resolve();
+        await Promise.allSettled([first, second]);
+      }
+    });
+
     it('should return singleton instance', () => {
       const instance1 = ChatKitBrowserPool.getInstance();
       const instance2 = ChatKitBrowserPool.getInstance();

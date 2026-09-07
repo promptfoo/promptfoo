@@ -376,13 +376,12 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         logger.debug('[ElevenLabs Agents] Ephemeral agent deleted', {
           agentId: this.ephemeralAgentId,
         });
+        this.ephemeralAgentId = null;
+        this.agentCreationPromise = null;
       } catch (error) {
         logger.warn('[ElevenLabs Agents] Failed to delete ephemeral agent', {
           error: error instanceof Error ? error.message : String(error),
         });
-      } finally {
-        this.ephemeralAgentId = null;
-        this.agentCreationPromise = null;
       }
     }
   }

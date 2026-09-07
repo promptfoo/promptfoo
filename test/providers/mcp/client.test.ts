@@ -439,6 +439,27 @@ describe('MCPClient', () => {
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
+    it('uses a fresh client after the Streamable HTTP client closes', async () => {
+      const first = createMockClient();
+      first.connect.mockRejectedValueOnce(new Error('Streamable HTTP failed'));
+      const fallback = createMockClient();
+      mcpMocks.MockClient.mockImplementationOnce(function FirstClient() {
+        return first;
+      }).mockImplementationOnce(function FallbackClient() {
+        return fallback;
+      });
+
+      mcpClient = new MCPClient({ enabled: true, server: { url: 'http://localhost:3000' } });
+      await mcpClient.initialize();
+
+      expect(first.close).toHaveBeenCalledOnce();
+      expect(first.connect).toHaveBeenCalledOnce();
+      expect(fallback.connect).toHaveBeenCalledWith(mockSSETransport, undefined);
+      expect(fallback.listTools).toHaveBeenCalledOnce();
+      await mcpClient.cleanup();
+      expect(fallback.close).toHaveBeenCalledOnce();
+    });
+
     it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
       // Reset mocks for this test
       mockClient.connect
