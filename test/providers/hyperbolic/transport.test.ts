@@ -73,6 +73,17 @@ describe.each([
     await expect(pending).rejects.toThrow('cancelled transport');
   });
 
+  it('rejects a cached response when cancellation happens during cache lookup', async () => {
+    const controller = new AbortController();
+    const cached = createDeferred<Awaited<ReturnType<typeof fetchWithCache>>>();
+    vi.mocked(fetchWithCache).mockReturnValueOnce(cached.promise);
+    const pending = create().callApi('hello', undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(fetchWithCache).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled cache lookup'));
+    cached.resolve({ data, cached: true, status: 200, statusText: 'OK' });
+    await expect(pending).rejects.toThrow('cancelled cache lookup');
+  });
+
   it.each([null, 'invalid'])('reports a malformed JSON payload: %j', async (data) => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data,

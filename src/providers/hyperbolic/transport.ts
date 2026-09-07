@@ -30,6 +30,7 @@ export async function requestHyperbolicJson<T>(
       'json',
       shouldBustProviderCache(context),
     );
+    signal?.throwIfAborted();
     if (status < 200 || status >= 300) {
       return {
         ok: false,
