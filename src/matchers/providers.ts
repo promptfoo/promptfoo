@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -227,6 +228,7 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
+  providerRegistry.adopt(finalProvider);
   return finalProvider;
 }
 

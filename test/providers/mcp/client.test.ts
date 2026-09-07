@@ -1145,6 +1145,29 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it('closes a pending handshake and rejects a late connection', async () => {
+      const entered = createDeferred<void>();
+      const handshake = createDeferred<void>();
+      mockClient.connect.mockImplementationOnce(() => {
+        entered.resolve();
+        return handshake.promise;
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'node', args: ['fixture-server.js'] },
+      });
+
+      const initialization = mcpClient.initialize();
+      const rejection = expect(initialization).rejects.toThrow('MCP connection closed');
+      await entered.promise;
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      handshake.resolve();
+      await rejection;
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
     it('waits for a pending token refresh without reopening a closed connection', async () => {
       const closeStarted = createDeferred<void>();
       const closeContinue = createDeferred<void>();

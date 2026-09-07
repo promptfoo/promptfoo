@@ -80,17 +80,18 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     expect(mcp.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('waits for startup before cleanup and coalesces overlapping cleanup calls', async () => {
+  it('closes pending startup without waiting for it and coalesces cleanup calls', async () => {
     const startup = createDeferred<void>();
     mcp.initialize.mockReturnValue(startup.promise);
     const provider = createProvider();
     const first = provider.cleanup();
     const second = providerRegistry.shutdownAll();
     await vi.runAllTimersAsync();
-    expect(mcp.cleanup).not.toHaveBeenCalled();
-    startup.resolve();
     await Promise.all([first, second]);
     expect(mcp.cleanup).toHaveBeenCalledOnce();
+    startup.resolve();
+    await vi.runAllTimersAsync();
+    expect(mcp.cleanup).toHaveBeenCalledTimes(2);
   });
 
   it('cleans up partial connections when eager startup fails', async () => {

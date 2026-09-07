@@ -101,6 +101,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
+  private pendingConnections = new Set<() => Promise<void>>();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
   private transports: Map<
@@ -141,6 +142,12 @@ export class MCPClient {
     this.config = config;
   }
 
+  private assertActive(): void {
+    if (this.shuttingDown) {
+      throw new Error('MCP client is shutting down');
+    }
+  }
+
   async initialize(): Promise<void> {
     this.shuttingDown = false;
     if (!this.config.enabled) {
@@ -156,8 +163,10 @@ export class MCPClient {
   }
 
   private async connectToServer(server: MCPServerConfig): Promise<void> {
+    this.assertActive();
     const serverKey = server.name || server.url || server.path || 'default';
     const { Client } = await loadMcpClientSdk();
+    this.assertActive();
     const clientInfo = {
       name: 'promptfoo-MCP',
       version: '1.0.0',
@@ -170,11 +179,24 @@ export class MCPClient {
       | SSEClientTransport
       | StreamableHTTPClientTransport
       | undefined;
+    let closingClient: Client | undefined;
+    let closingTransport: typeof transport;
+    let closePromise: Promise<void> | undefined;
+    const closePendingConnection = () => {
+      if (!closePromise || closingClient !== client || closingTransport !== transport) {
+        closingClient = client;
+        closingTransport = transport;
+        closePromise = this.closeConnection(client, transport);
+      }
+      return closePromise;
+    };
+    this.pendingConnections.add(closePendingConnection);
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
       if (server.command && server.args) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        this.assertActive();
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
@@ -200,6 +222,7 @@ export class MCPClient {
           : server.path;
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        this.assertActive();
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
@@ -222,6 +245,7 @@ export class MCPClient {
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
           const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          this.assertActive();
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
           // Store config and expiration for proactive token refresh
@@ -261,6 +285,7 @@ export class MCPClient {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
+          this.assertActive();
           transport = new StreamableHTTPClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -271,7 +296,10 @@ export class MCPClient {
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
-          await this.closeConnection(client, transport);
+          await closePendingConnection();
+          if (this.shuttingDown) {
+            throw error;
+          }
           client = new Client(clientInfo);
           transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
@@ -321,6 +349,9 @@ export class MCPClient {
         );
       }
 
+      if (this.shuttingDown) {
+        throw new Error('MCP connection closed during initialization');
+      }
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
@@ -333,12 +364,14 @@ export class MCPClient {
       }
     } catch (error) {
       // Failed handshakes/tool discovery have not entered the connection maps yet.
-      await this.closeConnection(client, transport);
+      await closePendingConnection();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+    } finally {
+      this.pendingConnections.delete(closePendingConnection);
     }
   }
 
@@ -588,6 +621,7 @@ export class MCPClient {
 
   async cleanup(): Promise<void> {
     this.shuttingDown = true;
+    await Promise.all([...this.pendingConnections].map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
       await this.closeConnection(client, this.transports.get(serverKey));
