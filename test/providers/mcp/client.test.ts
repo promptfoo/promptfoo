@@ -1145,6 +1145,52 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it('waits for a pending token refresh without reopening a closed connection', async () => {
+      const closeStarted = createDeferred<void>();
+      const closeContinue = createDeferred<void>();
+      const oldClient = createMockClient();
+      oldClient.close.mockImplementationOnce(() => {
+        closeStarted.resolve();
+        return closeContinue.promise;
+      });
+      vi.mocked(Client).mockImplementationOnce(function () {
+        return oldClient as unknown as Client;
+      });
+      mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+        accessToken: 'expiring-token',
+        expiresAt: Date.now() + 30_000,
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+
+      const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
+      await closeStarted.promise;
+      const completed = vi.fn();
+      const cleanup = mcpClient.cleanup().then(completed);
+      await Promise.resolve();
+      expect(completed).not.toHaveBeenCalled();
+      closeContinue.resolve();
+      await Promise.all([call, cleanup]);
+      expect(vi.mocked(Client)).toHaveBeenCalledTimes(1);
+      expect(mcpClient.connectedServers).toEqual([]);
+
+      await mcpClient.initialize();
+      expect(mcpClient.connectedServers).toEqual(['http://localhost:3000']);
+      await mcpClient.cleanup();
+    });
+
     it('closes a connection whose tool discovery failed before registration', async () => {
       mockClient.listTools.mockRejectedValueOnce(new Error('tool discovery failed'));
       mcpClient = new MCPClient({
