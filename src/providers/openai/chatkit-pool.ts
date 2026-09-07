@@ -58,6 +58,7 @@ export class ChatKitBrowserPool {
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
   private shutdownPromise: Promise<void> | null = null;
+  private shutdownGeneration = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(config: ChatKitPoolConfig) {
@@ -181,13 +182,21 @@ export class ChatKitBrowserPool {
       return this.initPromise;
     }
 
-    this.initPromise = this.doInitialize();
-    await this.initPromise;
-    this.initPromise = null;
+    const initialization = this.doInitialize();
+    this.initPromise = initialization;
+    try {
+      await initialization;
+    } finally {
+      this.initPromise = null;
+    }
   }
 
   private async doInitialize(): Promise<void> {
+    const generation = this.shutdownGeneration;
     await ChatKitBrowserPool.pendingShutdown;
+    if (generation !== this.shutdownGeneration) {
+      throw new Error('ChatKit pool initialization cancelled during shutdown');
+    }
     logger.debug('[ChatKitPool] Initializing browser pool', {
       maxConcurrency: this.config.maxConcurrency,
     });
@@ -225,6 +234,9 @@ export class ChatKitBrowserPool {
         resolve();
       });
     });
+    if (generation !== this.shutdownGeneration) {
+      throw new Error('ChatKit pool initialization cancelled during shutdown');
+    }
 
     // Launch single browser
     try {
@@ -237,6 +249,9 @@ export class ChatKitBrowserPool {
         throw new Error('Playwright browser not installed. Run: npx playwright install chromium');
       }
       throw error;
+    }
+    if (generation !== this.shutdownGeneration) {
+      throw new Error('ChatKit pool initialization cancelled during shutdown');
     }
 
     this.initialized = true;
@@ -530,6 +545,7 @@ export class ChatKitBrowserPool {
     if (this.shutdownPromise) {
       return this.shutdownPromise;
     }
+    this.shutdownGeneration++;
     const work = this.doShutdown();
     const previous = ChatKitBrowserPool.pendingShutdown;
     const completed = Promise.allSettled(previous ? [previous, work] : [work]).then(() => {});
@@ -559,6 +575,9 @@ export class ChatKitBrowserPool {
       this.waitQueue = [];
     }
 
+    // Initialization may still be opening a server or browser when shutdown begins.
+    await this.initPromise?.catch(() => {});
+
     // Close all contexts
     for (const pooledPage of this.pages) {
       try {
@@ -581,7 +600,8 @@ export class ChatKitBrowserPool {
 
     // Close server
     if (this.server) {
-      this.server.close();
+      const server = this.server;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       this.server = null;
     }
 
