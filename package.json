@@ -213,7 +213,7 @@
       ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.109.2",
+    "webpack": "5.110.1",
     "dompurify": "3.4.14",
     "monaco-editor": {
       ".": "0.56.0",
@@ -301,7 +301,7 @@
     "@opencode-ai/sdk": "^1.18.21",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.63.0",
-    "@slack/web-api": "^8.0.0",
+    "@slack/web-api": "^8.1.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.16.1",
     "@swc/core-darwin-arm64": "^1.16.1",
@@ -373,7 +373,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "5.3.0",
+    "js-yaml": "5.4.1",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
