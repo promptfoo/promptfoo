@@ -160,3 +160,9 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
+
+## Gemini maintenance
+
+The AI Studio, unified Google, and Vertex classes share `google/gemini.ts` for request preparation, streamed candidate parsing, and usage extraction. Keep endpoint/authentication, cache transport, pricing, and final facade response shaping in the existing classes. Add shared pipeline tests when changing Gemini tool merging or stream parsing.
+
+The facade policy preserves AI Studio's loaded-schema handling, Vertex's context/examples and Model Armor fields, the system-instruction wire names, and legacy unknown-usage/error shapes. Do not silently unify those compatibility choices while editing shared logic. Vertex non-Gemini paths remain independent.
