@@ -18,7 +18,8 @@ The evaluator (`src/evaluator.ts`) manages provider lifecycle with `providerRegi
 **If your provider allocates resources** (Python workers, connections, child processes):
 
 - Implement a `cleanup()` method on your provider
-- Register with `providerRegistry` when acquiring resources and on reuse to claim the current evaluation scope
+- Evaluation targets exposing `cleanup()` or legacy `shutdown()` are adopted automatically
+- Register dynamically created resources with `providerRegistry` before initialization and on reuse to claim the current evaluation scope
 - Allow initialization after cleanup when the same provider instance is reused
 - Resources are released in the evaluator's `finally` block
 

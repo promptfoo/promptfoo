@@ -61,6 +61,24 @@ describe('providerRegistry', () => {
     expect(provider.cleanup).not.toHaveBeenCalled();
   });
 
+  it.each(['cleanup', 'shutdown'] as const)(
+    'adopts an evaluation provider with a %s hook',
+    async (hook) => {
+      const cleanup = vi.fn();
+      await providerRegistry.withScope([{ [hook]: cleanup }], async () => undefined);
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('keeps adoption in a nested evaluation scoped to that evaluation', async () => {
+    const cleanup = vi.fn();
+    await providerRegistry.withScope([], async () => {
+      await providerRegistry.withScope([{ cleanup }], async () => undefined);
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it('keeps independent evaluations and unscoped resources isolated', async () => {
     const first = { cleanup: vi.fn() };
     const second = { cleanup: vi.fn() };
@@ -93,13 +111,15 @@ describe('providerRegistry', () => {
   });
 
   it('retains providers that initialize after multiple evaluations start', async () => {
-    const provider = { cleanup: vi.fn() };
+    const provider: { cleanup?: () => void } = {};
+    const cleanup = vi.fn();
     const firstDone = createDeferred<void>();
     const secondDone = createDeferred<void>();
     const first = providerRegistry.withScope([provider], () => firstDone.promise);
     const second = providerRegistry.withScope([provider], () => secondDone.promise);
     // Startup may finish in either evaluation's async scope, or outside both scopes.
-    providerRegistry.register(provider);
+    const initialized = Object.assign(provider, { cleanup });
+    providerRegistry.register(initialized);
     firstDone.resolve();
     await first;
     expect(provider.cleanup).not.toHaveBeenCalled();

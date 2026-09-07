@@ -4,6 +4,13 @@ import logger from '../logger';
 
 type CleanupProvider = { cleanup(): void | Promise<void> } | { shutdown(): void | Promise<void> };
 
+function hasCleanupHook(provider: object): provider is CleanupProvider {
+  return (
+    ('cleanup' in provider && typeof provider.cleanup === 'function') ||
+    ('shutdown' in provider && typeof provider.shutdown === 'function')
+  );
+}
+
 interface ProviderScope {
   registrations: Set<ProviderRegistration>;
   closed: boolean;
@@ -69,6 +76,9 @@ class ProviderRegistry {
         this.scopesByProvider.set(provider, owners);
       }
       owners.add(scope);
+      if (hasCleanupHook(provider)) {
+        this.scopeStorage.run(scope, () => this.register(provider));
+      }
       const registration = this.providers.get(provider);
       if (registration) {
         this.claim(registration, scope);

@@ -778,6 +778,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
+    // Another evaluation still owns this provider when the timed-out run finishes.
+    const otherDone = createDeferred<void>();
+    const otherEvaluation = providerRegistry.withScope([slowApiProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
@@ -801,6 +804,8 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
+      otherDone.resolve();
+      await otherEvaluation;
       if (longTimer) {
         clearTimeout(longTimer);
       }
@@ -855,6 +860,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
+    // Another evaluation still owns this provider when the timed-out run finishes.
+    const otherDone = createDeferred<void>();
+    const otherEvaluation = providerRegistry.withScope([hangingProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
@@ -869,6 +877,8 @@ describeEvaluator('evaluator execution control', () => {
         }),
       );
     } finally {
+      otherDone.resolve();
+      await otherEvaluation;
       vi.useRealTimers();
     }
   });
