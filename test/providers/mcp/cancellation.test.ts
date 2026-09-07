@@ -10,6 +10,8 @@ const sdk = vi.hoisted(() => ({
   listTools: vi.fn(),
   transportClose: vi.fn(),
 }));
+const mockFetch = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: mockFetch }));
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: class {
     callTool = sdk.callTool;
@@ -31,6 +33,7 @@ beforeEach(() => {
   sdk.close.mockReset().mockResolvedValue(undefined);
   sdk.listTools.mockReset().mockResolvedValue({ tools: [] });
   sdk.transportClose.mockReset().mockResolvedValue(undefined);
+  mockFetch.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -77,6 +80,41 @@ describe('MCP startup cancellation', () => {
     const client = new MCPClient({ enabled: true, server: { command: 'fixture', args: [] } });
     await expect(client.initialize(controller.signal)).rejects.toThrow('already cancelled');
     expect(sdk.connect).not.toHaveBeenCalled();
+  });
+
+  it('cancels OAuth discovery before starting a connection', async () => {
+    const controller = new AbortController();
+    const client = new MCPClient({
+      enabled: true,
+      server: {
+        url: 'https://cancel-oauth.example.com/mcp',
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          clientId: 'fixture',
+          clientSecret: 'fixture-secret',
+        },
+      },
+    });
+    const entered = createDeferred<void>();
+    mockFetch.mockImplementation((_url, options) => {
+      expect(options.signal).toBe(controller.signal);
+      entered.resolve();
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+          once: true,
+        });
+      });
+    });
+
+    const pending = client.initialize(controller.signal);
+    const rejection = expect(pending).rejects.toThrow('cancel OAuth startup');
+    await entered.promise;
+    controller.abort(new Error('cancel OAuth startup'));
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(sdk.connect).not.toHaveBeenCalled();
+    await client.cleanup();
   });
 });
 
