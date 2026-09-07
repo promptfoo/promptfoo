@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -88,6 +89,29 @@ describe('AzureChatCompletionProvider', () => {
         },
       });
       setAuthHeaders(provider);
+    });
+
+    it('cancels a pending tool factory before dispatch', async () => {
+      const loader = vi
+        .spyOn(util, 'maybeLoadToolsFromExternalFile')
+        .mockImplementationOnce(() => new Promise(() => {}));
+      const controller = new AbortController();
+      try {
+        const body = provider.getOpenAiBody(
+          'hello',
+          {
+            prompt: { raw: 'hello', label: 'hello', config: { tools: [] } },
+            vars: {},
+          },
+          { abortSignal: controller.signal },
+        );
+        await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+        controller.abort(new Error('cancelled tool factory'));
+        await expect(body).rejects.toThrow('cancelled tool factory');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        loader.mockRestore();
+      }
     });
 
     it('should use provider config when no prompt config exists', async () => {
