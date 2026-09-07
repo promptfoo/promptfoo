@@ -1748,7 +1748,10 @@ async function runEvalInternal({
 
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
-            abortSignal,
+            // Completed target rows still drain grouped grading after the target
+            // time budget expires. An explicit user cancellation stops both.
+            abortSignal:
+              deferGrading && evaluateOptions ? evaluateOptions.abortSignal : abortSignal,
             deferGrading,
             evalId,
             isRedteam,

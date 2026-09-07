@@ -3,6 +3,7 @@ import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
 const sdk = vi.hoisted(() => ({
+  callTool: vi.fn(),
   connect: vi.fn(),
   close: vi.fn(),
   listTools: vi.fn(),
@@ -10,6 +11,7 @@ const sdk = vi.hoisted(() => ({
 }));
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: class {
+    callTool = sdk.callTool;
     connect = sdk.connect;
     close = sdk.close;
     listTools = sdk.listTools;
@@ -24,6 +26,7 @@ vi.mock('../../../src/logger');
 
 beforeEach(() => {
   sdk.connect.mockReset();
+  sdk.callTool.mockReset();
   sdk.close.mockReset().mockResolvedValue(undefined);
   sdk.listTools.mockReset().mockResolvedValue({ tools: [] });
   sdk.transportClose.mockReset().mockResolvedValue(undefined);
@@ -69,4 +72,27 @@ describe('MCP startup cancellation', () => {
     await expect(client.initialize(controller.signal)).rejects.toThrow('already cancelled');
     expect(sdk.connect).not.toHaveBeenCalled();
   });
+});
+
+it('forwards tool cancellation and stops waiting for a stalled MCP request', async () => {
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  const result = createDeferred<any>();
+  sdk.connect.mockResolvedValue(undefined);
+  sdk.listTools.mockResolvedValue({
+    tools: [{ name: 'fixture', inputSchema: { type: 'object' } }],
+  });
+  sdk.callTool.mockImplementation((_input, _schema, options) => {
+    expect(options.signal).toBe(controller.signal);
+    started.resolve();
+    return result.promise;
+  });
+  const client = new MCPClient({ enabled: true, server: { command: 'fixture', args: [] } });
+  await client.initialize();
+  const pending = client.callTool('fixture', {}, controller.signal);
+  await started.promise;
+  controller.abort(new Error('cancelled tool'));
+  await expect(pending).rejects.toThrow('cancelled tool');
+  result.resolve({ content: [] });
+  await client.cleanup();
 });

@@ -25,7 +25,12 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { getRequestSignal, getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import {
+  awaitProviderOperation,
+  getRequestSignal,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+} from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -444,8 +449,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: ClaudeResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
@@ -740,8 +748,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
           data = (await res.json()) as GeminiApiResponse;
         } else {
           // Standard mode: use OAuth and full endpoint
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
+          const client = await awaitProviderOperation(
+            this.getClientWithCredentials(),
+            options?.abortSignal,
+          );
+          const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
@@ -964,9 +975,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
                 ),
                 config,
                 structured_output.functionCall.id,
+                options?.abortSignal,
               );
               results.push(functionResult);
             } catch (error) {
+              options?.abortSignal?.throwIfAborted();
               logger.error(`Error executing function ${functionName}: ${error}`);
             }
           }
@@ -1036,8 +1049,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: Palm2ApiResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
@@ -1199,8 +1215,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: LlamaResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       // Llama models use a different endpoint format
       const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
@@ -1350,8 +1369,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;

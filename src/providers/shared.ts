@@ -491,3 +491,31 @@ export function transformTools(tools: unknown, format: ToolFormat): unknown {
       return tools;
   }
 }
+
+/** Stop waiting for provider work without cancelling another caller's shared work.
+ * Also pass the signal to transports that support native cancellation. */
+export function awaitProviderOperation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return operation;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
