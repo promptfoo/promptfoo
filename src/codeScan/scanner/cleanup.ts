@@ -16,7 +16,7 @@ import logger from '../../logger';
  */
 export function registerCleanupHandlers(abortController: AbortController): void {
   const cleanup = (signal: string) => {
-    logger.debug(`Received ${signal}, cleaning up...`);
+    logger.debug(`Received ${signal}, aborting scan...`);
 
     // Abort the scan Promise - this will trigger the catch/finally blocks
     // which handle all the actual resource cleanup
