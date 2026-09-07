@@ -705,6 +705,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let cachedResponse;
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;

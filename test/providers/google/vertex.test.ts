@@ -197,24 +197,28 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not start authentication after cancellation during a cache lookup', async () => {
-    let finishCacheLookup!: (value: null) => void;
-    mockCacheGet.mockImplementationOnce(
-      () =>
-        new Promise<null>((resolve) => {
-          finishCacheLookup = resolve;
-        }),
-    );
-    const auth = vi.spyOn(provider, 'getClientWithCredentials');
-    const controller = new AbortController();
-    const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
-    await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
-    controller.abort(new Error('cancelled'));
-    finishCacheLookup(null);
-
-    await call;
-    expect(auth).not.toHaveBeenCalled();
-  });
+  it.each([null, JSON.stringify({ output: 'cached' })])(
+    'does not accept a cache lookup result after cancellation: %s',
+    async (cachedValue) => {
+      let finishCacheLookup!: (value: string | null) => void;
+      mockCacheGet.mockImplementationOnce(
+        () =>
+          new Promise<string | null>((resolve) => {
+            finishCacheLookup = resolve;
+          }),
+      );
+      const auth = vi.spyOn(provider, 'getClientWithCredentials');
+      const controller = new AbortController();
+      const reason = new Error('cancelled while reading cache');
+      const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
+      const rejection = expect(call).rejects.toBe(reason);
+      await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
+      controller.abort(reason);
+      finishCacheLookup(cachedValue);
+      await rejection;
+      expect(auth).not.toHaveBeenCalled();
+    },
+  );
 
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
