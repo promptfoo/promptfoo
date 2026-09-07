@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -240,6 +241,7 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
+  providerRegistry.adopt(finalProvider);
   return finalProvider;
 }
 
@@ -256,10 +258,9 @@ export async function getAndCheckProvider(
         checkName,
         type,
       });
-      return defaultProvider;
-    } else {
-      throw new Error(`No provider of type ${type} found for '${checkName}'`);
+      return getAndCheckProvider(type, defaultProvider, null, checkName);
     }
+    throw new Error(`No provider of type ${type} found for '${checkName}'`);
   }
 
   let isValidProviderType = hasProviderCapability(matchedProvider, 'callApi');
@@ -277,18 +278,13 @@ export async function getAndCheckProvider(
     // If the user explicitly configured a provider that doesn't match the
     // required type, throw rather than silently falling back to a different
     // provider, which could produce results from an unintended model.
-    if (provider) {
-      throw new Error(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
-      );
-    }
-    if (defaultProvider) {
+    if (!provider && defaultProvider && defaultProvider !== matchedProvider) {
       logger.warn('[Grading] Falling back to default provider after type check failed', {
         checkName,
         providerId: matchedProvider.id(),
         type,
       });
-      return defaultProvider;
+      return getAndCheckProvider(type, defaultProvider, null, checkName);
     }
     throw new Error(
       `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
