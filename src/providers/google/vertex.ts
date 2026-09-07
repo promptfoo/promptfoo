@@ -594,6 +594,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
+      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {

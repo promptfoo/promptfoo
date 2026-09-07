@@ -59,7 +59,9 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      const result = await withFetchRetryContext(providerMaxRetries, callFn);
+      options?.abortSignal?.throwIfAborted();
+      return result;
     }
 
     const rateLimitKey = getRateLimitKey(provider);
