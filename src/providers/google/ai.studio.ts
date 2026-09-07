@@ -601,7 +601,7 @@ export class AIStudioEmbeddingProvider
 
   async callEmbeddingApi(
     text: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     options?.abortSignal?.throwIfAborted();
@@ -651,6 +651,7 @@ export class AIStudioEmbeddingProvider
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
+        shouldBustProviderCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
