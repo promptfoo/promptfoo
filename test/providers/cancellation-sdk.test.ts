@@ -38,12 +38,26 @@ vi.mock('@aws-sdk/client-s3', () => ({
   GetObjectCommand: class {},
 }));
 vi.mock('../../src/logger');
+vi.mock('google-auth-library', () => ({
+  GoogleAuth: class {
+    constructor() {
+      throw new Error('Cancellation tests must not initialize real Google credentials');
+    }
+  },
+}));
 
 beforeEach(() => {
   mocks.request.mockReset();
   mocks.bedrockSend.mockReset();
   mocks.s3Send.mockReset();
   vi.mocked(fetchWithProxy).mockReset();
+  // GoogleGenericProvider resolves project IDs through the auth manager directly,
+  // while transport setup also uses the compatibility exports in google/util.
+  vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+    client: { request: mocks.request },
+    projectId: 'fixture-project',
+  });
+  vi.spyOn(GoogleAuthManager, 'resolveProjectId').mockResolvedValue('fixture-project');
   vi.spyOn(AwsBedrockGenericProvider.prototype, 'getCredentials').mockResolvedValue(undefined);
 });
 afterEach(() => {
