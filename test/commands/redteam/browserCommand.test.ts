@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { redteamReportCommand } from '../../../src/commands/redteam/report';
 import { redteamSetupCommand } from '../../../src/commands/redteam/setup';
 import { getDefaultPort } from '../../../src/constants';
@@ -71,7 +71,7 @@ function expectCallOrder(...mocks: OrderedMock[]) {
 
 function createProgram(commandCase: (typeof commandCases)[number]) {
   const program = new Command();
-  commandCase.register(program);
+  expect(commandCase.register(program)).toBeUndefined();
   return program;
 }
 
@@ -81,10 +81,6 @@ async function runCommand(commandCase: (typeof commandCases)[number], args: stri
 }
 
 describe('redteam browser commands', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   afterEach(() => {
     vi.resetAllMocks();
   });

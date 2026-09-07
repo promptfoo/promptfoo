@@ -28,11 +28,10 @@ export function registerRedteamBrowserCommand(
       async (
         directory: string | undefined,
         cmdObj: {
-          port: number;
-          apiBaseUrl?: string;
+          port: string;
           envPath?: string;
           filterDescription?: string;
-        } & Command,
+        },
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record(config.telemetryEvent, {});
@@ -50,7 +49,7 @@ export function registerRedteamBrowserCommand(
         if (isRunning) {
           await openBrowser(config.browserBehavior);
         } else {
-          await startServer(cmdObj.port, config.browserBehavior);
+          await startServer(cmdObj.port as unknown as number, config.browserBehavior);
         }
       },
     );
