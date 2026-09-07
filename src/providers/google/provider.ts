@@ -20,7 +20,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getRequestSignal, getRequestTimeoutMs } from '../shared';
+import { getRequestSignal, getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -505,7 +505,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           } as RequestInit,
           getRequestTimeoutMs(),
           'json',
-          false,
+          shouldBustProviderCache(context),
         );
         data = result.data as GeminiApiResponse;
         cached = result.cached;

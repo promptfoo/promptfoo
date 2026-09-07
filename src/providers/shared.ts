@@ -1,7 +1,42 @@
 import { getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
 
-import type { ApiProvider } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
+
+/** An explicit bustCache setting takes precedence over the legacy debug fallback. */
+export function shouldBustProviderCache(
+  context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,
+): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
+
+/**
+ * Attach response-cache provenance after normalizing a fetch or SDK response.
+ * Preserve reported usage and pricing; the evaluator derives incurred usage/cost
+ * from the cache marker. Missing token counts remain unknown, including on replay.
+ */
+export function withResponseCacheMetadata<T extends ProviderResponse | ProviderEmbeddingResponse>(
+  response: T,
+  cached: boolean,
+): Omit<T, 'cached' | 'tokenUsage'> & Pick<ProviderResponse, 'tokenUsage'> & { cached: boolean } {
+  return {
+    ...response,
+    cached,
+    ...(cached &&
+      response.tokenUsage && {
+        tokenUsage: {
+          ...response.tokenUsage,
+          ...(response.tokenUsage.total !== undefined && { cached: response.tokenUsage.total }),
+          numRequests: 0,
+        },
+      }),
+  };
+}
 
 /**
  * The default timeout for API requests in milliseconds.

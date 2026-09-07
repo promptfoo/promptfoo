@@ -4,7 +4,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt, shouldBustProviderCache } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
@@ -43,10 +43,6 @@ const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'palige
 
 function usesGenerateContentApi(modelName: string): boolean {
   return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
-}
-
-function shouldBustCache(context?: CallApiContextParams): boolean {
-  return context?.bustCache ?? context?.debug ?? false;
 }
 
 /**
@@ -225,7 +221,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustCache(context),
+        shouldBustProviderCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -433,7 +429,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustCache(context),
+        shouldBustProviderCache(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;

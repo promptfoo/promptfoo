@@ -25,7 +25,13 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { getRequestSignal, getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import {
+  getRequestSignal,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
+} from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -688,24 +694,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const cache = await getCache();
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
     const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
 
     let response;
     let cachedResponse;
-    if (isCacheEnabled()) {
+    if (useCache) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
           cacheKey,
         });
-        response = { ...parsedCachedResponse, cached: true };
+        response = withResponseCacheMetadata(parsedCachedResponse as ProviderResponse, true);
       }
     }
     if (response === undefined) {
@@ -937,7 +940,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           response.metadata = { ...grounding };
         }
 
-        if (isCacheEnabled()) {
+        if (useCache) {
           await cache.set(cacheKey, JSON.stringify(response));
         }
       } catch (err) {

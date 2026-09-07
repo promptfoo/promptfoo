@@ -41,6 +41,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -60,6 +61,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
     });
   });
@@ -132,6 +134,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
       tokenUsage: {
         prompt: 26,
@@ -156,6 +159,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -175,6 +179,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 26,
@@ -199,6 +204,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 0,
@@ -239,6 +245,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -258,6 +265,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
     });
   });
@@ -452,6 +460,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
       tokenUsage: {
         prompt: 26,
@@ -476,6 +485,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -495,6 +505,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 26,
@@ -519,6 +530,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 0,
@@ -771,6 +783,7 @@ describe('OllamaEmbeddingProvider', () => {
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result).toEqual({
+      cached: false,
       embedding: [0.1, 0.2, 0.3],
     });
   });
