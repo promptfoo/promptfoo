@@ -6,7 +6,6 @@
 
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { ElevenLabsCache } from '../cache';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { buildSimulationRequest, parseConversation } from './conversation';
@@ -26,11 +25,11 @@ import type { AgentSimulationResponse, ElevenLabsAgentsConfig } from './types';
  */
 export class ElevenLabsAgentsProvider implements ApiProvider {
   private client: ElevenLabsClient;
-  private cache: ElevenLabsCache;
   private costTracker: CostTracker;
   config: ElevenLabsAgentsConfig;
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
+  private agentCreationPromise: Promise<string> | null = null;
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -58,11 +57,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       baseUrl: this.config.baseUrl,
       timeout: this.config.timeout || 180000, // 3 minutes for agents
       retries: this.config.retries,
-    });
-
-    this.cache = new ElevenLabsCache({
-      enabled: this.config.cache !== false,
-      ttl: this.config.cacheTTL,
     });
 
     this.costTracker = new CostTracker();
@@ -187,18 +181,20 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       return this.config.agentId;
     }
 
-    // Check cache for ephemeral agent
-    const cacheKey = this.cache.generateKey('agent', this.config.agentConfig);
-    const cachedAgentId = await this.cache.get<string>(cacheKey);
-
-    if (cachedAgentId) {
-      logger.debug('[ElevenLabs Agents] Using cached ephemeral agent', {
-        agentId: cachedAgentId,
-      });
-      this.ephemeralAgentId = cachedAgentId;
-      return cachedAgentId;
+    // Ephemeral agents belong to this provider's lifecycle, not the shared
+    // response cache. Sharing a remote ID would let one evaluation delete
+    // another evaluation's agent, or reuse an ID after it was deleted.
+    if (this.ephemeralAgentId) {
+      return this.ephemeralAgentId;
     }
+    this.agentCreationPromise ??= this.createEphemeralAgent().catch((error) => {
+      this.agentCreationPromise = null;
+      throw error;
+    });
+    return this.agentCreationPromise;
+  }
 
+  private async createEphemeralAgent(): Promise<string> {
     // Create new ephemeral agent
     logger.debug('[ElevenLabs Agents] Creating ephemeral agent');
 
@@ -228,7 +224,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     );
 
     this.ephemeralAgentId = response.agent_id;
-    await this.cache.set(cacheKey, this.ephemeralAgentId);
 
     logger.debug('[ElevenLabs Agents] Ephemeral agent created', {
       agentId: this.ephemeralAgentId,
@@ -373,7 +368,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Clean up resources
    */
   async cleanup(): Promise<void> {
-    // Delete ephemeral agent if created
+    await this.agentCreationPromise?.catch(() => undefined);
+    // Delete only the ephemeral agent created by this instance.
     if (this.ephemeralAgentId) {
       try {
         await this.client.delete(`/convai/agents/${this.ephemeralAgentId}`);
@@ -384,6 +380,9 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         logger.warn('[ElevenLabs Agents] Failed to delete ephemeral agent', {
           error: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        this.ephemeralAgentId = null;
+        this.agentCreationPromise = null;
       }
     }
   }

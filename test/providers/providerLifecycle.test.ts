@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
@@ -13,6 +14,7 @@ const mcp = vi.hoisted(() => ({ initialize: vi.fn(), cleanup: vi.fn(), callTool:
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
+  isCacheEnabled: () => false,
 }));
 vi.mock('../../src/providers/mcp/client', () => ({
   MCPClient: class {
@@ -50,6 +52,18 @@ afterEach(async () => {
 
 const options = { config: { apiKey: 'test-key', mcp: { enabled: true } } };
 const providers = [
+  [
+    'Anthropic',
+    () => {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5', options);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'hello' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+        stop_reason: 'end_turn',
+      } as never);
+      return provider;
+    },
+  ],
   ['OpenAI', () => new OpenAiChatCompletionProvider('gpt-4o-mini', options)],
   ['Azure chat', () => new AzureChatCompletionProvider('test-deployment', options)],
   ['Google', () => new AIStudioChatProvider('gemini-2.5-flash', options)],
