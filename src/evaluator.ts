@@ -81,6 +81,7 @@ import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -2391,6 +2392,49 @@ function resolveRuntimeGradingProviderReferences(
 
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
+}
+
+function getScopedProviders(testSuite: TestSuite): Set<ApiProvider> {
+  const providers = new Set(testSuite.providers);
+  const addProvider = (candidate: unknown) => {
+    if (isApiProvider(candidate)) {
+      providers.add(candidate);
+    } else if (candidate && typeof candidate === 'object') {
+      for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+        const nested = (candidate as Record<string, unknown>)[type];
+        if (isApiProvider(nested)) {
+          providers.add(nested);
+        }
+      }
+    }
+  };
+  const addAssertions = (assertions: AssertionOrSet[] | undefined) => {
+    for (const assertion of assertions ?? []) {
+      if (assertion.type === 'assert-set') {
+        addAssertions(assertion.assert);
+      } else {
+        addProvider(assertion.provider);
+      }
+    }
+  };
+  const addTest = (test: AtomicTestCase) => {
+    addProvider(test.provider);
+    addProvider(test.options?.provider);
+    addAssertions(test.assert);
+  };
+  const defaultTest = getDefaultTest(testSuite);
+  if (defaultTest) {
+    addTest(defaultTest as AtomicTestCase);
+  }
+  for (const test of testSuite.tests ?? []) {
+    addTest(test as AtomicTestCase);
+  }
+  for (const scenario of testSuite.scenarios ?? []) {
+    for (const test of [...(scenario.tests ?? []), ...scenario.config]) {
+      addTest(test as AtomicTestCase);
+    }
+  }
+  return providers;
 }
 
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
@@ -5010,7 +5054,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
-    return providerRegistry.withScope(this.testSuite.providers, () => this.evaluateWithCleanup());
+    return providerRegistry.withScope(getScopedProviders(this.testSuite), () =>
+      this.evaluateWithCleanup(),
+    );
   }
 
   private async evaluateWithCleanup(): Promise<TEvaluation> {

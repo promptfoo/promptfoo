@@ -82,4 +82,18 @@ describe('ephemeral agent lifecycle', () => {
     ).toBeUndefined();
     expect(client.delete).toHaveBeenCalledOnce();
   });
+
+  it('retries deletion of the same ephemeral agent after a failed cleanup', async () => {
+    client.delete.mockRejectedValueOnce(new Error('temporary failure'));
+    const provider = createProvider();
+    await provider.callApi('hello');
+    await provider.cleanup();
+    expect((await provider.callApi('again')).metadata?.agentId).toBe('owned-1');
+    await provider.cleanup();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(1);
+    expect(client.delete.mock.calls).toEqual([
+      ['/convai/agents/owned-1'],
+      ['/convai/agents/owned-1'],
+    ]);
+  });
 });
