@@ -168,7 +168,7 @@ export class MCPClient {
     for (const server of servers) {
       logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
       startupSignal.throwIfAborted();
-      await awaitProviderOperation(this.connectToServer(server, signal), startupSignal);
+      await awaitProviderOperation(this.connectToServer(server, startupSignal), startupSignal);
     }
   }
 
@@ -208,8 +208,10 @@ export class MCPClient {
     };
     operationSignal.addEventListener('abort', onAbort, { once: true });
     try {
-      const configuredOptions = getEffectiveRequestOptions(this.config);
-      const requestOptions = signal ? { ...configuredOptions, signal } : configuredOptions;
+      const requestOptions = {
+        ...getEffectiveRequestOptions(this.config),
+        signal: operationSignal,
+      };
 
       if (server.command && server.args) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');

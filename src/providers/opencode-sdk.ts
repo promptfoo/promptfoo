@@ -1409,7 +1409,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       };
     }
 
-    const createResult = await this.client.session.create(
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const createResult = await client.session.create(
       this.buildCreateSessionParameters(config, sessionQuery),
     );
     const createData = unwrapOpenCodeResult(createResult);
@@ -1425,6 +1427,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
       id: sessionId,
       query: sessionQuery,
     };
+
+    if (generation !== this.clientGeneration) {
+      try {
+        await client.session.delete?.(this.buildDeleteSessionParameters(session));
+      } catch (err) {
+        logger.debug(`Failed to delete late OpenCode session ${session.id}: ${err}`);
+      }
+      throw new Error('OpenCode session creation cancelled during cleanup');
+    }
 
     if (config.persist_sessions) {
       this.addSession(sessionCacheKey, session);
