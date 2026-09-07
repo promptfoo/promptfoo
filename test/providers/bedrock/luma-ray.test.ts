@@ -239,6 +239,22 @@ describe('LumaRayVideoProvider', () => {
   });
 
   describe('Text-to-Video Generation', () => {
+    it('stops waiting for a blob write after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockStoreBlob.mockImplementationOnce(() => {
+        started();
+        return new Promise(() => {});
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await writing;
+      controller.abort(new Error('cancelled blob write'));
+      await expect(call).rejects.toThrow('cancelled blob write');
+    });
+
     it('should successfully generate video from text prompt', async () => {
       const result = await provider.callApi('A red panda climbing a tree');
 

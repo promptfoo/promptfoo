@@ -1758,6 +1758,10 @@ describe('MCPClient', () => {
 
       // Should have called getOAuthTokenWithExpiry twice (initial + refresh)
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(mockClient.connect).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should call the reconnected client after a proactive token refresh', async () => {
