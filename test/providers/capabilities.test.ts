@@ -136,6 +136,23 @@ it('honors explicit capability restrictions even if a method exists', () => {
   expect(hasProviderCapability(provider, 'callApi')).toBe(false);
 });
 
+it('recognizes added LiteLLM subclass operations without overriding explicit exclusions', async () => {
+  class ExtendedLiteLLMProvider extends LiteLLMProvider {
+    async callEmbeddingApi() {
+      return { embedding: [1] };
+    }
+  }
+  class RestrictedLiteLLMProvider extends ExtendedLiteLLMProvider {
+    override readonly promptfooCapabilities = ['callApi'] as const;
+  }
+  const provider = new ExtendedLiteLLMProvider('fixture', {});
+  expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(true);
+  expect(await getAndCheckProvider('embedding', provider, null, 'similarity')).toBe(provider);
+  expect(
+    hasProviderCapability(new RestrictedLiteLLMProvider('fixture', {}), 'callEmbeddingApi'),
+  ).toBe(false);
+});
+
 describe.each(['chat', 'completion', 'embedding'] as const)('LiteLLM %s forwarding', (kind) => {
   it('retains custom identifiers and provider environment overrides', () => {
     const provider = createLiteLLMProvider(`litellm:${kind}:fixture`, {

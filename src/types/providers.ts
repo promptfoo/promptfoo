@@ -168,10 +168,13 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
       prototype.constructor &&
       Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities')
     ) {
+      const declared = prototype.constructor.declaredProviderCapabilities;
+      const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
         overridden &&
-        (provider as ProviderIdentity).promptfooCapabilities ===
-          prototype.constructor.declaredProviderCapabilities
+        (Array.isArray(declared)
+          ? capabilities === declared
+          : Object.values(declared).includes(capabilities))
       );
     }
     if (Object.prototype.hasOwnProperty.call(prototype, capability)) {
