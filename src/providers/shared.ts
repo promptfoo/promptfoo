@@ -33,6 +33,7 @@ export function withResponseCacheMetadata<T extends ProviderResponse | ProviderE
           ...response.tokenUsage,
           ...(response.tokenUsage.total !== undefined && { cached: response.tokenUsage.total }),
           numRequests: 0,
+          incurredTokenUsage: {},
         },
       }),
   };
