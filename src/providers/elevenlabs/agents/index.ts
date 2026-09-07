@@ -30,6 +30,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
   private agentCreationPromise: Promise<string> | null = null;
+  private agentCreationController = new AbortController();
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -187,6 +188,9 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     if (this.ephemeralAgentId) {
       return this.ephemeralAgentId;
     }
+    if (this.agentCreationController.signal.aborted) {
+      this.agentCreationController = new AbortController();
+    }
     this.agentCreationPromise ??= this.createEphemeralAgent().catch((error) => {
       this.agentCreationPromise = null;
       throw error;
@@ -221,6 +225,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const response = await this.client.post<{ agent_id: string }>(
       '/convai/agents/create',
       agentCreationRequest,
+      { signal: this.agentCreationController.signal },
     );
 
     this.ephemeralAgentId = response.agent_id;
@@ -368,6 +373,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Clean up resources
    */
   async cleanup(): Promise<void> {
+    this.agentCreationController.abort();
     await this.agentCreationPromise?.catch(() => undefined);
     // Delete only the ephemeral agent created by this instance.
     if (this.ephemeralAgentId) {

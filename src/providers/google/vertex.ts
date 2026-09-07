@@ -434,6 +434,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: ClaudeResponse;
     try {
+      options?.abortSignal?.throwIfAborted();
       const client = await awaitProviderOperation(
         this.getClientWithCredentials(),
         options?.abortSignal,
@@ -622,6 +623,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           data = (await res.json()) as GeminiApiResponse;
         } else {
           // Standard mode: use OAuth and full endpoint
+          options?.abortSignal?.throwIfAborted();
           const client = await awaitProviderOperation(
             this.getClientWithCredentials(),
             options?.abortSignal,
@@ -803,6 +805,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: Palm2ApiResponse;
     try {
+      options?.abortSignal?.throwIfAborted();
       const client = await awaitProviderOperation(
         this.getClientWithCredentials(),
         options?.abortSignal,
@@ -969,6 +972,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: LlamaResponse;
     try {
+      options?.abortSignal?.throwIfAborted();
       const client = await awaitProviderOperation(
         this.getClientWithCredentials(),
         options?.abortSignal,
@@ -1125,6 +1129,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
+      options?.abortSignal?.throwIfAborted();
       const client = await awaitProviderOperation(
         this.getClientWithCredentials(),
         options?.abortSignal,
