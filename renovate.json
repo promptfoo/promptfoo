@@ -30,6 +30,14 @@
       "enabled": false
     },
     {
+      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/main.yml"],
+      "matchPackageNames": ["node"],
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "enabled": false
+    },
+    {
       "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
       "matchFileNames": ["renovate.json"],
       "matchPackageNames": ["npm"],
@@ -237,6 +245,11 @@
       "groupName": "jsdom"
     },
     {
+      "description": "Keep jsdom's CSS color parser below 7 while promptfoo supports Node 22.22.0. @asamuzakjp/css-color 7 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, so engine-strict clean installs fail on the minimum supported Node version even though jsdom itself remains below 30. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
+      "matchPackageNames": ["@asamuzakjp/css-color"],
+      "allowedVersions": "<7"
+    },
+    {
       "description": "Chevrotain ships as one lockstep release train: chevrotain@X declares @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast, @chevrotain/utils and @chevrotain/cst-dts-gen at exactly X, and all six reach npm within about a minute of each other. Renovate bumps one of them at a time and rewrites package.json overrides without regenerating package-lock.json, so the resulting PRs fail at `npm ci` with EUSAGE (see the closed #10293, #10294 and #10297) or leave a mixed tree (#10345 pulled @chevrotain/cst-dts-gen to 13.1.0 under chevrotain 11.2.0, which asks for 11.2.0 exactly). The family stays frozen until langium, chevrotain-allstar and every @chevrotain/* pin move together in one PR that also regenerates the lockfile; langium@4.3.1 declares chevrotain ~12.0.0, so 12.x is the next coherent target, not 13.x. test/package-manifests.test.ts asserts this rule keeps the whole family disabled and that the grammar pins equal the pinned parser version.",
       "matchPackageNames": [
         "chevrotain",
@@ -340,8 +353,8 @@
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "framer-motion: monthly updates (animation library, low urgency)",
-      "matchPackageNames": ["framer-motion"],
+      "description": "motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["motion"],
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "10 days"
     },

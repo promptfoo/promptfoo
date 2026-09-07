@@ -216,6 +216,42 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('routes Codex Security provider IDs without treating them as OpenAI API models', async () => {
+      const provider = await registry.create('openai:codex-security', {
+        ...mockContext,
+        options: {
+          config: { operation: 'security-scan', model: 'gpt-5.6-terra' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security');
+      expect(provider.config).toMatchObject({
+        operation: 'security-scan',
+        model: 'gpt-5.6-terra',
+      });
+    });
+
+    it('supports inline Codex Security model selection and preserves provider environment metadata', async () => {
+      const provider = await registry.create('openai:codex-security:gpt-5.6-sol', {
+        ...mockContext,
+        env: { OPENAI_API_KEY: 'context-key' },
+        options: {
+          config: { operation: 'deep-security-scan' },
+          env: { CODEX_API_KEY: 'provider-key' },
+        },
+      });
+
+      expect(provider.id()).toBe('openai:codex-security:gpt-5.6-sol');
+      expect(provider.config).toMatchObject({
+        operation: 'deep-security-scan',
+        model: 'gpt-5.6-sol',
+      });
+      expect((provider as any).env).toEqual({
+        OPENAI_API_KEY: 'context-key',
+        CODEX_API_KEY: 'provider-key',
+      });
+    });
+
     it('fails fast for xAI embedding aliases since xAI has no public embeddings API', async () => {
       const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
       expect(factory).toBeDefined();
@@ -276,55 +312,58 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
-    it('should handle meta providers correctly', async () => {
-      const factory = providerMap.find((f) => f.test('meta:muse-spark-1.1'));
+    describe.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
+      'Meta model %s',
+      (modelName) => {
+        it('defaults to Responses and preserves provider options', async () => {
+          const factory = providerMap.find((f) => f.test(`meta:${modelName}`));
+          expect(factory).toBeDefined();
+
+          const metaOptions: ProviderOptions = {
+            ...mockProviderOptions,
+            id: undefined,
+            config: { temperature: 0.42, apiKey: 'meta-test-key' },
+          };
+          const provider = await factory!.create(`meta:${modelName}`, metaOptions, mockContext);
+          expect(provider.id()).toBe(`meta:responses:${modelName}`);
+          expect((provider as any).config).toMatchObject({
+            temperature: 0.42,
+            apiKey: 'meta-test-key',
+            apiBaseUrl: 'https://api.meta.ai/v1',
+            apiKeyEnvar: 'MODEL_API_KEY',
+          });
+        });
+
+        it.each(['chat', 'responses', 'messages'])('routes %s requests', async (surface) => {
+          const id = `meta:${surface}:${modelName}`;
+          const factory = providerMap.find((f) => f.test(id));
+          expect(factory).toBeDefined();
+
+          const provider = await factory!.create(
+            id,
+            { ...mockProviderOptions, id: undefined },
+            mockContext,
+          );
+          expect(provider.id()).toBe(id);
+        });
+      },
+    );
+
+    it('keeps the default Meta model at muse-spark-1.1', async () => {
+      const factory = providerMap.find((f) => f.test('meta:'));
       expect(factory).toBeDefined();
 
-      const metaOptions: ProviderOptions = {
-        ...mockProviderOptions,
-        id: undefined,
-        config: { temperature: 0.42, apiKey: 'meta-test-key' },
-      };
-      // Bare meta:<model> defaults to the Responses API surface.
-      const provider = await factory!.create('meta:muse-spark-1.1', metaOptions, mockContext);
-      expect(provider).toBeDefined();
-      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
-      const config = (provider as any).config;
-      expect(config.temperature).toBe(0.42);
-      expect(config.apiKey).toBe('meta-test-key');
-      expect(config.apiBaseUrl).toBe('https://api.meta.ai/v1');
-      expect(config.apiKeyEnvar).toBe('MODEL_API_KEY');
-    });
-
-    it('should route meta sub-types correctly', async () => {
-      const factory = providerMap.find((f) => f.test('meta:chat:muse-spark-1.1'));
-      expect(factory).toBeDefined();
-
-      const chatProvider = await factory!.create(
-        'meta:chat:muse-spark-1.1',
-        { ...mockProviderOptions, id: undefined },
-        mockContext,
-      );
-      const defaultProvider = await factory!.create(
+      const provider = await factory!.create(
         'meta:',
         { ...mockProviderOptions, id: undefined },
         mockContext,
       );
-      const responsesProvider = await factory!.create(
-        'meta:responses:muse-spark-1.1',
-        { ...mockProviderOptions, id: undefined },
-        mockContext,
-      );
-      const messagesProvider = await factory!.create(
-        'meta:messages:muse-spark-1.1',
-        { ...mockProviderOptions, id: undefined },
-        mockContext,
-      );
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
+    });
 
-      expect(chatProvider.id()).toBe('meta:chat:muse-spark-1.1');
-      expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
-      expect(responsesProvider.id()).toBe('meta:responses:muse-spark-1.1');
-      expect(messagesProvider.id()).toBe('meta:messages:muse-spark-1.1');
+    it('rejects unsupported Meta API sub-types', async () => {
+      const factory = providerMap.find((f) => f.test('meta:embedding:foo'));
+      expect(factory).toBeDefined();
 
       await expect(
         factory!.create(
@@ -500,6 +539,8 @@ describe('Provider Registry', () => {
       for (const model of [
         'claude-fable-5',
         'claude-mythos-5',
+        'claude-fable-5-1',
+        'claude-mythos-5-1',
         'claude-opus-5',
         'claude-sonnet-5',
       ]) {
@@ -520,6 +561,29 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('anthropic:non-existent-model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Anthropic model type or model name');
+    });
+
+    it('resolves the anthropic shorthand for models not yet in the catalog', async () => {
+      // The shorthand used to require an exact ANTHROPIC_MODELS entry, so every new Claude
+      // release broke `anthropic:<model>` until promptfoo shipped a catalog update — while
+      // `anthropic:messages:<model>` worked fine for the same id.
+      const factory = providerMap.find((f) => f.test('anthropic:claude-haiku-5'));
+      const options = { ...mockProviderOptions, id: undefined };
+      for (const model of ['claude-haiku-5', 'claude-some-future-model-9']) {
+        const provider = await factory!.create(`anthropic:${model}`, options, mockContext);
+        expect(provider.id()).toBe(`anthropic:${model}`);
+      }
+    });
+
+    it('still rejects an anthropic shorthand that is not shaped like a Claude id', async () => {
+      // The shape check is what keeps a typo failing at config load rather than as a
+      // request-time 404.
+      const factory = providerMap.find((f) => f.test('anthropic:sonnet-5'));
+      for (const bad of ['sonnet-5', 'gpt-4', 'claude']) {
+        await expect(
+          factory!.create(`anthropic:${bad}`, mockProviderOptions, mockContext),
+        ).rejects.toThrow('Unknown Anthropic model type or model name');
+      }
     });
 
     it('should handle azure providers correctly', async () => {
@@ -1339,12 +1403,44 @@ describe('Provider Registry', () => {
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
+        'google:gemini-3.8-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.7-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:gemini-3.8-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.7-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
         'vertex:chat:gemini-2.5-flash',

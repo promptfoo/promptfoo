@@ -277,7 +277,11 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
+- `google:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
+- `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
@@ -290,8 +294,43 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
 - `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
+
+Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
+Beginning January 1, 2027, their published rates increase to $1.50 per million input
+tokens and $7.50 per million output tokens. These models support a 1,048,576-token
+input context and up to 65,536 output tokens.
+
+Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite ignore the deprecated `temperature`,
+`topP`, and `topK` sampling controls. Promptfoo removes these parameters automatically.
+Use `thinkingLevel` to configure reasoning instead:
+
+```yaml
+providers:
+  - id: google:gemini-3.8-flash
+    config:
+      generationConfig:
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+
+  - id: google:gemini-3.5-flash-lite
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: LOW
+```
+
+Gemini 3.8 Flash and 3.7 Flash support `LOW`, `MEDIUM` (default), and `HIGH`
+thinking levels. They do not support `MINIMAL` or the legacy `thinkingBudget`
+setting; promptfoo rejects those settings before sending a request.
+
+:::note Gemini 3.8 Flash Cyber
+
+Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://deepmind.google/fairwind-program/). Its public model catalog does not list a Cyber API model ID or pricing. Use the model ID, endpoint, and access instructions supplied by Google; the regular Flash model does not grant Cyber access.
+
+:::
 
 ### Embedding Models
 

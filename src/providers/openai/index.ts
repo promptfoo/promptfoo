@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { isGpt6AstraModel } from './gpt6';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -149,13 +150,13 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.modelName;
   }
 
-  protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
-  protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
     return (
       model.startsWith('o1') ||
       model.startsWith('o3') ||
@@ -163,12 +164,13 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o1') ||
       model.includes('/o3') ||
       model.includes('/o4') ||
-      this.isGPT5Model()
+      this.isGPT5Model(model) ||
+      isGpt6AstraModel(model)
     );
   }
 
-  protected supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
+    return !this.isReasoningModel(modelName);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {

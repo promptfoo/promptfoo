@@ -157,7 +157,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments               |
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order            |
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern          |
-| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content            |
+| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal  |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.

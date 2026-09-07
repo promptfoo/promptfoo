@@ -189,32 +189,22 @@ Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) ar
 
 ### Return Format
 
-Your function must return a hash with these fields:
+Your function must return a hash containing `output` or `error`, plus any optional fields:
 
 ```ruby
 def call_api(prompt, options, context)
-  # Required field
-  result = {
-    'output' => 'Your response here'
-  }
-
-  # Optional fields
-  result['tokenUsage'] = {
-    'total' => 150,
-    'prompt' => 50,
-    'completion' => 100
-  }
-
-  result['cost'] = 0.0025  # in dollars
-  result['cached'] = false
-  result['logProbs'] = [-0.5, -0.3, -0.1]
-
-  # Error handling
   if something_went_wrong
-    result['error'] = 'Description of what went wrong'
+    return { 'error' => 'Description of what went wrong' }
   end
 
-  result
+  {
+    'output' => 'Your response here',
+    'tokenUsage' => { 'total' => 150, 'prompt' => 50, 'completion' => 100 },
+    'cost' => 0.0025, # in dollars
+    'cached' => false,
+    'logProbs' => [-0.5, -0.3, -0.1],
+    'guardrails' => { 'flagged' => false }
+  }
 end
 ```
 
@@ -238,9 +228,18 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 
 # TokenUsage
 {
-  'total' => Integer,
-  'prompt' => Integer,
-  'completion' => Integer
+  'total' => Integer (optional),
+  'prompt' => Integer (optional),
+  'completion' => Integer (optional),
+  'numRequests' => Integer (optional)
+}
+
+# GuardrailResponse
+{
+  'flagged' => Boolean (optional),
+  'flaggedInput' => Boolean (optional),
+  'flaggedOutput' => Boolean (optional),
+  'reason' => String (optional)
 }
 
 # ProviderResponse
@@ -251,6 +250,7 @@ The types passed into the Ruby script function and the `ProviderResponse` return
   'cost' => Float (optional),
   'cached' => Boolean (optional),
   'logProbs' => Array[Float] (optional),
+  'guardrails' => GuardrailResponse (optional),
   'metadata' => Hash (optional)
 }
 
@@ -271,7 +271,7 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 
 :::tip
 
-Always include the `output` field in your response, even if it's an empty string when an error occurs.
+Return at least one of `output` or `error`. Represent an expected safety block as a non-empty `output` plus `guardrails`; use `error` for provider or guardrail execution failures.
 
 :::
 
@@ -545,6 +545,8 @@ def call_api(prompt, options, context)
         'output' => 'I cannot process this request.',
         'guardrails' => {
           'flagged' => true,
+          'flaggedInput' => true,
+          'flaggedOutput' => false,
           'reason' => 'Prohibited content detected'
         }
       }
@@ -556,15 +558,25 @@ def call_api(prompt, options, context)
 
   # Post-process checks
   if check_output_safety(result)
-    { 'output' => result }
+    {
+      'output' => result,
+      'guardrails' => { 'flagged' => false }
+    }
   else
     {
       'output' => '[Content filtered]',
-      'guardrails' => { 'flagged' => true }
+      'guardrails' => {
+        'flagged' => true,
+        'flaggedInput' => false,
+        'flaggedOutput' => true,
+        'reason' => 'Generated content failed output safety checks'
+      }
     }
   end
 end
 ```
+
+Set the aggregate `flagged` field explicitly; the directional fields do not control the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) by themselves. Return guardrail service failures through `error` rather than treating them as unflagged.
 
 ## Troubleshooting
 

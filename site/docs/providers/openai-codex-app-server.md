@@ -15,6 +15,7 @@ For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./
 ```yaml
 providers:
   - openai:codex-app-server
+  - openai:codex-app-server:gpt-6-astra
   - openai:codex-app-server:gpt-5.6-sol
   - openai:codex-desktop
   - openai:codex-desktop:gpt-5.6-sol
@@ -22,33 +23,36 @@ providers:
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
 
+For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. Reasoning levels depend on the runtime's model catalog. Codex `ultra` is a multi-agent mode, not a direct Responses API reasoning value.
+
 ## Codex SDK vs App Server vs Desktop App
 
 Keep this provider separate from the Codex SDK provider. They share Codex concepts, but they expose different runtime contracts.
 
-| Surface           | Best for                                      | Runtime                                              | Promptfoo provider                                 |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
-| Codex SDK         | CI, automation, simple agentic coding evals   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)        |
-| Codex app-server  | Rich-client protocol behavior and event evals | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop` |
-| Codex Desktop app | Interactive human work in the desktop product | Native app process and UI                            | Not attached directly                              |
+| Surface            | Best for                                                      | Runtime                                              | Promptfoo provider                                    |
+| ------------------ | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| Codex SDK          | CI, automation, simple agentic coding evals                   | `@openai/codex-sdk` library                          | [`openai:codex-sdk`](./openai-codex-sdk.md)           |
+| Codex Security SDK | Repository scans, validated findings, scan cost, and coverage | `@openai/codex-security` library                     | [`openai:codex-security`](./openai-codex-security.md) |
+| Codex app-server   | Rich-client protocol behavior and event evals                 | Local `codex app-server` child process over JSON-RPC | `openai:codex-app-server` / `openai:codex-desktop`    |
+| Codex Desktop app  | Interactive human work in the desktop product                 | Native app process and UI                            | Not attached directly                                 |
 
 Use this provider when the thing being tested depends on app-server-only behavior such as approval request payloads, streamed item notifications, app connector events, plugin/skill metadata, or thread lifecycle operations. Use the SDK provider when you only need final Codex output, thread reuse, structured output, and traced shell/MCP/search/file steps.
 
 ## What Promptfoo Can and Can't Evaluate
 
-| Eval surface                                    | Supported? | Notes                                                                                                                                       |
-| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                  |
-| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                        |
-| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                     |
-| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; GPT-5.6 cost stays undefined because the protocol does not report cache-write tokens. |
-| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                  |
-| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                            |
-| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                            |
-| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.                                                      |
-| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                                                                    |
-| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                                                                         |
-| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                                                           |
+| Eval surface                                    | Supported? | Notes                                                                                                                                                                            |
+| ----------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                                                       |
+| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                                                             |
+| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                                                          |
+| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`. Known models, including GPT-6 Astra, receive Standard API cost estimates. Missing cache-write counts can understate costs. |
+| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                                                       |
+| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                                                                 |
+| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                                                                 |
+| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.                                                                                           |
+| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                                                                                                         |
+| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                                                                                                              |
+| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                                                                                                |
 
 When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
 

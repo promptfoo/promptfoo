@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isSecretEnvVarName,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -170,7 +171,103 @@ describe('sanitizeTracingConfigForPersistence', () => {
   });
 });
 
+describe('isSecretEnvVarName', () => {
+  it.each([
+    'GITHUB_TOKEN',
+    'STRIPE_SECRET_KEY',
+    'PGPASSWORD',
+    'MY_SERVICE_SECRET',
+    'DB_PASSWD',
+    'OPENAI_API_KEY',
+    'AWS_SECRETKEY',
+    'SIGNING_PASSPHRASE',
+  ])('treats %s as credential-bearing', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(true);
+  });
+
+  it.each([
+    // Plurals: words are matched by suffix, and TOKENS does not end with TOKEN.
+    'MAX_TOKENS',
+    'RETRY_KEYS',
+    'LOG_LEVEL',
+    'AWS_REGION',
+    'SERVICE_URL',
+    'NODE_ENV',
+    // Ordinary config fields keep the exact-name behavior; the env-var rule is
+    // SCREAMING_SNAKE_CASE only, so it can never widen them.
+    'maxTokens',
+    'tokenCount',
+    'keyName',
+    'max_tokens',
+  ])('leaves %s alone', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(false);
+  });
+});
+
 describe('sanitizeObject', () => {
+  describe('environment variable maps', () => {
+    it('redacts credential-named variables inside an env map', () => {
+      // Regression: `env` is handed verbatim to a subprocess, so it is where a config
+      // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES
+      // caught only `API_KEY`, leaving project-specific names in cleartext in the
+      // provider config persisted with every eval result.
+      const result = sanitizeObject({
+        env: {
+          API_KEY: 'sk-value',
+          GITHUB_TOKEN: 'ghp_value',
+          MY_SERVICE_SECRET: 'plainvalue123',
+          PGPASSWORD: 'hunter2',
+          LOG_LEVEL: 'debug',
+          MAX_TOKENS: '4096',
+          AWS_REGION: 'us-east-1',
+        },
+      });
+
+      expect(result.env).toEqual({
+        API_KEY: '[REDACTED]',
+        GITHUB_TOKEN: '[REDACTED]',
+        MY_SERVICE_SECRET: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        // Non-credential variables stay readable - they are what makes a failed run
+        // debuggable from the persisted config.
+        LOG_LEVEL: 'debug',
+        MAX_TOKENS: '4096',
+        AWS_REGION: 'us-east-1',
+      });
+    });
+
+    it('reaches an env map nested in a provider config', () => {
+      const result = sanitizeObject(
+        {
+          config: {
+            mcp: { servers: [{ command: 'node', env: { GITHUB_TOKEN: 'ghp_value' } }] },
+          },
+        },
+        // Match the persistence boundary, which lifts the default depth cap so nested
+        // provider configs are walked in full.
+        { maxDepth: Number.POSITIVE_INFINITY },
+      );
+
+      expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
+    });
+
+    it('does not widen redaction outside env maps', () => {
+      const result = sanitizeObject({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+
+      expect(result).toEqual({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+    });
+  });
+
   describe('primitives and basic types', () => {
     it('should handle null', () => {
       expect(sanitizeObject(null)).toBeNull();
@@ -568,6 +665,52 @@ describe('sanitizeObject', () => {
       it('should redact AWS_BEARER_TOKEN_BEDROCK', () => {
         expect(sanitizeObject({ AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token' })).toEqual({
           AWS_BEARER_TOKEN_BEDROCK: '[REDACTED]',
+        });
+      });
+
+      // AWS SigV4 credentials are documented Bedrock provider config fields and env
+      // vars. Before this coverage they reached logs and shared configs in clear text,
+      // even though bedrock/knowledgeBase.ts already treated them as sensitive locally.
+      it.each([
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_SESSION_TOKEN',
+        'AWS_ACCESS_KEY_ID',
+        'secretAccessKey',
+        'sessionToken',
+        'accessKeyId',
+      ])('should redact %s', (field) => {
+        expect(sanitizeObject({ [field]: 'aws-credential-value' })).toEqual({
+          [field]: '[REDACTED]',
+        });
+      });
+
+      it('should redact AWS credentials nested in a Bedrock provider config', () => {
+        expect(
+          sanitizeObject({
+            providers: [
+              {
+                id: 'bedrock:anthropic.claude-sonnet-5',
+                config: {
+                  region: 'us-east-1',
+                  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+                  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                  sessionToken: 'FwoGZXIvYXdzEExampleSessionToken',
+                },
+              },
+            ],
+          }),
+        ).toEqual({
+          providers: [
+            {
+              id: 'bedrock:anthropic.claude-sonnet-5',
+              config: {
+                region: 'us-east-1',
+                accessKeyId: '[REDACTED]',
+                secretAccessKey: '[REDACTED]',
+                sessionToken: '[REDACTED]',
+              },
+            },
+          ],
         });
       });
 
@@ -1236,8 +1379,10 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      // Previously asserted to pass through in clear text, which contradicted this
+      // test's own name: secretAccessKey and sessionToken are the actual secrets.
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {

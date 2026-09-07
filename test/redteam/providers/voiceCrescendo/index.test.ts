@@ -270,7 +270,13 @@ describe('VoiceCrescendoProvider', () => {
       total: 30,
       numRequests: 1,
       attacker: { total: 15, numRequests: 1 },
-      assertions: { total: 0, prompt: 0, completion: 0, cached: 19, numRequests: 0 },
+      assertions: { total: 19, prompt: 12, completion: 7, cached: 19, numRequests: 1 },
+      incurredTokenUsage: {
+        total: 30,
+        numRequests: 1,
+        attacker: { total: 15, numRequests: 1 },
+        assertions: { total: 0, numRequests: 0 },
+      },
     });
   });
 

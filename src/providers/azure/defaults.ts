@@ -916,6 +916,14 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // Anthropic Claude Models (via Azure AI Foundry)
   // =============================================================================
   {
+    id: 'claude-fable-5-1',
+    cost: { input: 10 / 1000000, output: 50 / 1000000, cacheRead: 0.25 / 1000000 },
+  },
+  {
+    id: 'claude-mythos-5-1',
+    cost: { input: 10 / 1000000, output: 50 / 1000000, cacheRead: 0.25 / 1000000 },
+  },
+  {
     id: 'claude-fable-5',
     cost: { input: 10 / 1000000, output: 50 / 1000000 },
   },

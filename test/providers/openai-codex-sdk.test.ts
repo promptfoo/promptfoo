@@ -64,6 +64,7 @@ const createMockResponse = (
   usage?: {
     input_tokens?: number;
     cached_input_tokens?: number;
+    cache_write_input_tokens?: number;
     output_tokens?: number;
     reasoning_output_tokens?: number;
   },
@@ -74,6 +75,9 @@ const createMockResponse = (
     ? {
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
+        ...(usage.cache_write_input_tokens === undefined
+          ? {}
+          : { cache_write_input_tokens: usage.cache_write_input_tokens }),
         output_tokens: usage.output_tokens ?? 0,
         ...(usage.reasoning_output_tokens === undefined
           ? {}
@@ -202,6 +206,7 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -1484,6 +1489,55 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 
+      it('should serialize the same explicit thread across Codex instance changes', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'existing-thread-123',
+          run: vi.fn().mockResolvedValue(createMockResponse('Second response')),
+          runStreamed: mockRunStreamed,
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'existing-thread-123' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', {
+          prompt: { config: { cli_config: { profile: 'first' } } },
+        } as any);
+        await vi.waitFor(() => expect(firstThread.run).toHaveBeenCalledTimes(1));
+
+        const secondCall = provider.callApi('Second', {
+          prompt: { config: { cli_config: { profile: 'second' } } },
+        } as any);
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(secondThread.run).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response' }),
+        );
+        expect(secondThread.run).toHaveBeenCalledTimes(1);
+      });
+
       it('should reuse cached thread when resuming same thread_id', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1503,6 +1557,92 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt 2');
         expect(mockResumeThread).toHaveBeenCalledTimes(1); // Still 1
         expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
+      });
+
+      it('should not reuse an explicit thread cache entry across authority changes', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+
+        expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'danger-full-access',
+          approvalPolicy: 'never',
+        });
+        expect(mockResumeThread).toHaveBeenNthCalledWith(2, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'read-only',
+          approvalPolicy: 'on-request',
+        });
+      });
+
+      it('should evict stale explicit thread cache entries when options change', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+        await provider.callApi('Broad prompt again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+      });
+
+      it('should keep delimiter-like explicit thread IDs in separate cache families', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { thread_id: 'thread:a', persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Nested ID');
+        await provider.callApi('Short ID', {
+          prompt: { config: { thread_id: 'thread' } },
+        } as any);
+        await provider.callApi('Short ID changed', {
+          prompt: { config: { thread_id: 'thread', sandbox_mode: 'read-only' } },
+        } as any);
+        await provider.callApi('Nested ID again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+        expect(mockRun).toHaveBeenCalledTimes(4);
       });
 
       it('should enforce thread pool size limits', async () => {
@@ -1651,6 +1791,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
+        ['gpt-6-astra', 'max'],
+        ['gpt-6-astra', 'ultra'],
         ['gpt-5.6-sol', 'max'],
         ['gpt-5.6-sol', 'ultra'],
         ['gpt-5.6-terra', 'max'],
@@ -2947,7 +3089,28 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2 through GPT-5.6 models', () => {
+    describe('GPT-5.2 through GPT-6 Astra models', () => {
+      it('includes SDK cache-write tokens in Astra usage and cost', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+            reasoning_output_tokens: 200,
+          }),
+        );
+        const provider = new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toEqual({
+          reasoning: 200,
+          cacheCreationInputTokens: 250,
+        });
+        expect(result.cost).toBeCloseTo(0.066125, 10);
+      });
+
       it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
         'should recognize %s as a known model',
         (model) => {
@@ -2960,6 +3123,7 @@ describe('OpenAICodexSDKProvider', () => {
       );
 
       it.each([
+        ['gpt-6-astra', 10, 1, 50],
         ['gpt-5.6-sol', 5, 0.5, 30],
         ['gpt-5.6-terra', 2, 0.2, 12],
         ['gpt-5.6-luna', 0.2, 0.02, 1.2],
@@ -3628,7 +3792,7 @@ describe('OpenAICodexSDKProvider', () => {
         spy.mockRestore();
       });
 
-      it('carries cached and reasoning token usage onto the turn span', async () => {
+      it('carries cache reads, cache writes, and reasoning usage onto the turn span', async () => {
         const { emitted, spy } = await installTurnSpanTracerSpy();
         mockRunStreamed.mockResolvedValue({
           events: (async function* () {
@@ -3639,6 +3803,7 @@ describe('OpenAICodexSDKProvider', () => {
                 input_tokens: 100,
                 output_tokens: 40,
                 cached_input_tokens: 25,
+                cache_write_input_tokens: 10,
                 reasoning_output_tokens: 12,
               },
             };
@@ -3655,6 +3820,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
         expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_creation.input_tokens']).toBe(10);
         expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });

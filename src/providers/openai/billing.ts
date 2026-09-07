@@ -1,3 +1,4 @@
+import { isGpt6AstraModel } from './gpt6';
 import { getOpenAICacheWriteInputTokens, OPENAI_BILLING_MODELS } from './util';
 
 import type { ProviderConfig } from '../shared';
@@ -61,6 +62,7 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 }
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-6-astra'], rates: perMillion(1) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
@@ -184,6 +186,7 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 ]);
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-6-astra'], rates: perMillion(2) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
@@ -192,6 +195,7 @@ const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
 ]);
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
+  'gpt-6-astra',
   'gpt-5.6',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
@@ -230,6 +234,15 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
 ]);
 
 const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['gpt-6-astra'],
+    rates: {
+      input: perMillion(20),
+      cachedInput: perMillion(2),
+      cacheWriteInput: perMillion(25),
+      output: perMillion(100),
+    },
+  },
   {
     models: ['gpt-5.6', 'gpt-5.6-sol'],
     rates: {
@@ -498,8 +511,14 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
 
 const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
 
-const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
-const OPENAI_REGIONAL_PROCESSING_MODEL = /^gpt-5\.[456](?:-|$)/;
+const CACHE_WRITE_MODELS = new Set([
+  'gpt-6-astra',
+  'gpt-5.6',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+]);
+const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-astra)(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
 
@@ -585,6 +604,10 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   }
 
   const billingModelName = modelName.replace(/^openai\./, '');
+  // Bedrock has not published Astra pricing; do not infer it from direct OpenAI rates.
+  if (modelName.startsWith('openai.') && isGpt6AstraModel(billingModelName)) {
+    return undefined;
+  }
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
 
   const cost = calculateOpenAIUsageCost(
@@ -637,7 +660,7 @@ function getBaseTextRates(
     cachedInput:
       (longContext ? LONG_CONTEXT_CACHED_INPUT_RATES[modelName] : undefined) ??
       STANDARD_CACHED_INPUT_RATES[modelName],
-    ...(GPT_5_6_MODELS.has(modelName)
+    ...(CACHE_WRITE_MODELS.has(modelName)
       ? { cacheWriteInput: (longContext?.input ?? model.cost.input) * 1.25 }
       : {}),
     output: longContext?.output ?? model.cost.output,
@@ -679,7 +702,7 @@ function getPriorityTextRates(
     return rates;
   }
 
-  if (!GPT_5_6_MODELS.has(modelName)) {
+  if (!CACHE_WRITE_MODELS.has(modelName)) {
     return undefined;
   }
 
@@ -1021,6 +1044,7 @@ function isReasoningModel(modelName: string): boolean {
   const capabilityModelName = modelName.replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
+    isGpt6AstraModel(capabilityModelName) ||
     capabilityModelName.startsWith('o1') ||
     capabilityModelName.startsWith('o3') ||
     capabilityModelName.startsWith('o4') ||

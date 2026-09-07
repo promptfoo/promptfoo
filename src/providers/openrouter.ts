@@ -3,7 +3,12 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  appendOpenAiApiPath,
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+} from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -146,7 +151,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     try {
       ({ data, cached, status, statusText } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
           {
             method: 'POST',
             headers: {

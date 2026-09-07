@@ -128,6 +128,7 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
+      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -195,6 +196,35 @@ describe('RedteamIterativeProvider', () => {
           completionDetails: { reasoning: 4 },
         },
       });
+    });
+
+    it('keeps cached judge usage in the scan footprint but out of incurred provider totals', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+        tokenUsage: { total: 19, prompt: 11, completion: 8, numRequests: 1 },
+      });
+      const tokenUsage = createEmptyTokenUsage();
+
+      await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Target response',
+        'Previous response',
+        false,
+        tokenUsage,
+      );
+
+      expect(tokenUsage).toMatchObject({
+        assertions: { total: 19, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 0, cached: 19, numRequests: 0 });
     });
 
     it('should apply penalty for penalized phrases', async () => {
@@ -326,6 +356,25 @@ describe('RedteamIterativeProvider', () => {
       ).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
     });
 
+    it('keeps cached attacker usage in the scan footprint but out of incurred provider totals', async () => {
+      const usage = createEmptyTokenUsage();
+      mockRedteamProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({ improvement: 'Improved aspect', prompt: 'New prompt' }),
+        tokenUsage: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      await getNewPrompt(mockRedteamProvider, [], undefined, usage);
+
+      expect(usage).toMatchObject({
+        attacker: { total: 23, numRequests: 1 },
+        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+      });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 0, cached: 23, numRequests: 0 });
+    });
+
     it('returns accumulated attacker usage when the tree provider fails', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         error: 'tree attacker failed after inference',
@@ -365,6 +414,38 @@ describe('RedteamIterativeProvider', () => {
           },
         });
         expect(targetProvider.callApi).not.toHaveBeenCalled();
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
+    it('counts the final target probe even when the target reports no token usage', async () => {
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi.mockResolvedValue({ output: 'final response' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal', maxDepth: 1 });
+        (provider as unknown as { treeParams: { maxDepth: number } }).treeParams.maxDepth = 0;
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(targetProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.tokenUsage?.numRequests).toBe(1);
       } finally {
         remoteGenerationSpy.mockRestore();
         attackerProviderSpy.mockRestore();

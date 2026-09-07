@@ -8,6 +8,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AIML_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().optional(),
+  ANTHROPIC_CUSTOM_HEADERS: z.string().optional(),
   ATLASCLOUD_API_KEY: z.string().optional(),
   AWS_BEARER_TOKEN_BEDROCK: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),

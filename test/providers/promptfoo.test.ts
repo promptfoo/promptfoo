@@ -604,6 +604,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain('Remote generation is disabled');
     expect(result.error).toContain('SimulatedUser requires');
     expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
@@ -648,6 +649,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
@@ -665,6 +667,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
