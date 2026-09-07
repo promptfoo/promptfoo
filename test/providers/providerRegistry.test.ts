@@ -178,4 +178,28 @@ describe('providerRegistry', () => {
     await first;
     expect(provider.cleanup).toHaveBeenCalledTimes(2);
   });
+
+  it('waits for cleanup before adopting a reused provider into an active scope', async () => {
+    const enteredCleanup = createDeferred<void>();
+    const finishCleanup = createDeferred<void>();
+    const provider = {
+      cleanup: vi.fn().mockImplementationOnce(() => {
+        enteredCleanup.resolve();
+        return finishCleanup.promise;
+      }),
+    };
+    const first = providerRegistry.withScope([provider], async () => undefined);
+    await enteredCleanup.promise;
+    const used = vi.fn();
+    const second = providerRegistry.withScope([], async () => {
+      await providerRegistry.adopt(provider);
+      used();
+    });
+    await Promise.resolve();
+    expect(used).not.toHaveBeenCalled();
+    finishCleanup.resolve();
+    await Promise.all([first, second]);
+    expect(used).toHaveBeenCalledOnce();
+    expect(provider.cleanup).toHaveBeenCalledTimes(2);
+  });
 });

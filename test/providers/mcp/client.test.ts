@@ -208,7 +208,10 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStdioTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -239,7 +242,10 @@ describe('MCPClient', () => {
           CUSTOM_MCP_VAR: 'custom_value',
         },
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStdioTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       await mcpClient.cleanup();
     });
 
@@ -374,8 +380,16 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStreamableHTTPTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
@@ -408,7 +422,10 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStreamableHTTPTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
@@ -432,10 +449,20 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
       expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
       expect(mockClient.close).toHaveBeenCalledOnce();
-      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(SSEClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
@@ -454,7 +481,10 @@ describe('MCPClient', () => {
 
       expect(first.close).toHaveBeenCalledOnce();
       expect(first.connect).toHaveBeenCalledOnce();
-      expect(fallback.connect).toHaveBeenCalledWith(mockSSETransport, undefined);
+      expect(fallback.connect).toHaveBeenCalledWith(
+        mockSSETransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       expect(fallback.listTools).toHaveBeenCalledOnce();
       await mcpClient.cleanup();
       expect(fallback.close).toHaveBeenCalledOnce();
@@ -629,7 +659,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
+      expect(mockClient.listTools).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ timeout: 900000, signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should pass timeout options to connect()', async () => {
@@ -650,7 +683,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ timeout: 300000, signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should ping server when pingOnConnect is true', async () => {
@@ -1201,7 +1237,10 @@ describe('MCPClient', () => {
       const initialization = mcpClient.initialize();
       const rejection = expect(initialization).rejects.toThrow(/aborted/i);
       await entered.promise;
+      const startupSignal = mockClient.connect.mock.calls[0][1]?.signal;
+      expect(startupSignal).toBeInstanceOf(AbortSignal);
       await mcpClient.cleanup();
+      expect(startupSignal?.aborted).toBe(true);
       expect(mockStdioTransport.close).toHaveBeenCalledOnce();
       expect(mockClient.close).toHaveBeenCalledOnce();
       handshake.resolve();

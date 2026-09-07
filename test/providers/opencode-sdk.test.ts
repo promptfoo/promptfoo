@@ -1860,6 +1860,24 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('deletes a persistent remote session created after cleanup', async () => {
+      const creation = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+      mockSessionCreate.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://127.0.0.1:4096', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const call = provider.callApi('hello');
+      await vi.waitFor(() => expect(mockSessionCreate).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      creation.resolve(createMockSessionResponse('late-session'));
+      await expect(call).resolves.toMatchObject({ error: expect.stringContaining('cleanup') });
+      expect(mockSessionDelete).toHaveBeenCalledWith({ sessionID: 'late-session' });
+      expect(mockSessionPrompt).not.toHaveBeenCalled();
+      expect((provider as any).sessions.size).toBe(0);
+    });
+
     it('does not wait for startup and closes a late server', async () => {
       const creation = createDeferred<{
         client: any;
