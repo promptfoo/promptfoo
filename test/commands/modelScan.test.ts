@@ -32,7 +32,6 @@ vi.mock('../../src/models/modelAudit', () => ({
   default: {
     create: vi.fn().mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' }),
     findByRevision: vi.fn().mockResolvedValue(null),
-    findLatestByModelId: vi.fn().mockResolvedValue(null),
   },
 }));
 vi.mock('../../src/updates', async (importOriginal) => {
@@ -131,8 +130,6 @@ async function resetModelScanTestMocks() {
   const ModelAudit = (await import('../../src/models/modelAudit')).default;
   vi.mocked(ModelAudit.findByRevision).mockReset();
   vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-  vi.mocked(ModelAudit.findLatestByModelId).mockReset();
-  vi.mocked(ModelAudit.findLatestByModelId).mockResolvedValue(null);
   vi.mocked(ModelAudit.create).mockReset();
   vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
 
@@ -868,7 +865,6 @@ describe('Re-scan on version change behavior', () => {
     await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
 
     expect(ModelAudit.findByRevision).toHaveBeenCalledWith('test-owner/test-model', 'abc123');
-    expect(ModelAudit.findLatestByModelId).not.toHaveBeenCalled();
     expect(ModelAudit.create).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: 'test-owner/test-model',
