@@ -10,7 +10,9 @@ vi.mock('../../src/cache', async (importOriginal) => ({
   fetchWithCache: vi.fn(),
 }));
 
+let restoreEnvironment: () => void;
 beforeEach(() => {
+  restoreEnvironment = mockProcessEnv();
   vi.mocked(fetchWithCache)
     .mockReset()
     .mockResolvedValue({
@@ -26,7 +28,10 @@ beforeEach(() => {
       statusText: 'OK',
     });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  restoreEnvironment();
+  vi.restoreAllMocks();
+});
 
 describe.each(['chat', 'completion', 'embedding'])('TogetherAI %s connection policy', (type) => {
   it('keeps connection and runtime settings out of the model body', async () => {

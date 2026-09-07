@@ -32,6 +32,7 @@ const localOptions = {
   linkedTargetId: true,
 } satisfies Record<keyof OpenAiSharedOptions, boolean> &
   Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
+const localOptionNames = new Set(Object.keys(localOptions));
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -51,7 +52,7 @@ export function createTogetherAiProvider(
 
   const config = options.config?.config || {};
   const modelParameters = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !Object.hasOwn(localOptions, key)),
+    Object.entries(config).filter(([key]) => !localOptionNames.has(key)),
   );
   const togetherAiConfig = {
     ...options.config,

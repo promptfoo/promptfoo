@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveProviderApiKey } from '../../src/providers/credentials';
 import { mockProcessEnv } from '../util/utils';
 
 const defaults = ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'];
 
-afterEach(() => vi.restoreAllMocks());
+let restoreEnvironment: () => void;
+beforeEach(() => {
+  restoreEnvironment = mockProcessEnv();
+});
+afterEach(() => {
+  restoreEnvironment();
+  vi.restoreAllMocks();
+});
 
 describe('provider credential policy', () => {
   it('prefers explicit keys over provider and process environments', () => {

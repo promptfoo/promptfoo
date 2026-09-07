@@ -1,7 +1,6 @@
 import { getEnvString } from '../envars';
 
 import type { EnvVarKey } from '../envars';
-import type { EnvOverrides } from '../types/env';
 
 interface CredentialOptions {
   apiKey?: string;
@@ -11,7 +10,7 @@ interface CredentialOptions {
 /** A named credential selects its own namespace, rather than falling back to another vendor. */
 export function resolveProviderApiKey(
   config: CredentialOptions | undefined,
-  env: EnvOverrides | undefined,
+  env: Readonly<Record<string, string | undefined>> | undefined,
   defaultEnvars: readonly string[],
 ): string | undefined {
   if (config?.apiKey) {
@@ -19,7 +18,7 @@ export function resolveProviderApiKey(
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
   for (const envar of envars) {
-    const value = env?.[envar as keyof EnvOverrides];
+    const value = env?.[envar];
     if (value) {
       return value;
     }
