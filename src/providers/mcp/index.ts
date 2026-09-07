@@ -24,7 +24,6 @@ export class MCPProvider implements ApiProvider {
   private mcpSession: McpClientSession;
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
-  private initializationPromise: Promise<void>;
   private transformResponse: Promise<
     (
       result: unknown,
@@ -38,9 +37,8 @@ export class MCPProvider implements ApiProvider {
     this.defaultArgs = options.defaultArgs || {};
 
     this.mcpSession = new McpClientSession(this.config, this);
-    this.initializationPromise = this.initialize();
     // Initialization starts eagerly, so mark the rejection as observed until callers await it.
-    void this.initializationPromise.catch(() => undefined);
+    void this.initialize().catch(() => undefined);
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
     ).then(createTransformResponse);
