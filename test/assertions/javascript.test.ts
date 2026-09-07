@@ -904,7 +904,8 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      // Inverted failure keeps the caller's reason, not the generic outcome string.
+      'Custom reason',
     ],
   ];
 
@@ -968,7 +969,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 
