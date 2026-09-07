@@ -105,18 +105,6 @@ export class ChatKitBrowserPool {
         serverPort: config?.serverPort ?? 0,
       });
       ChatKitBrowserPool.registerCleanupHandlers();
-
-      // Register with providerRegistry for cleanup at end of evaluation
-      // This is cleaner than relying only on process exit handlers
-      const instance = ChatKitBrowserPool.instance;
-      providerRegistry.register({
-        async shutdown() {
-          if (instance) {
-            await instance.shutdown();
-            ChatKitBrowserPool.instance = null;
-          }
-        },
-      });
     } else if (config) {
       // Warn if different config is requested for existing instance
       const existing = ChatKitBrowserPool.instance.config;
@@ -134,6 +122,7 @@ export class ChatKitBrowserPool {
         );
       }
     }
+    providerRegistry.register(ChatKitBrowserPool.instance);
     return ChatKitBrowserPool.instance;
   }
 
@@ -574,6 +563,9 @@ export class ChatKitBrowserPool {
 
     this.initialized = false;
     this.templates.clear();
+    if (ChatKitBrowserPool.instance === this) {
+      ChatKitBrowserPool.instance = null;
+    }
     logger.debug('[ChatKitPool] Shutdown complete');
   }
 }
