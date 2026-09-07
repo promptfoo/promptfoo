@@ -268,6 +268,7 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    combinedSignal?.throwIfAborted();
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
@@ -275,7 +276,7 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleep(backoffMs);
+      await sleepWithAbort(backoffMs, combinedSignal);
       continue;
     }
 

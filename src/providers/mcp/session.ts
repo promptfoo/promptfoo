@@ -1,4 +1,5 @@
 import { providerRegistry } from '../providerRegistry';
+import { waitForMcpOperation } from './abort';
 import { MCPClient } from './client';
 
 import type { MCPConfig } from './types';
@@ -8,6 +9,7 @@ export class McpClientSession {
   private currentClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private cleanupPromise?: Promise<void>;
+  private startupController = new AbortController();
 
   constructor(
     private readonly config: MCPConfig,
@@ -21,16 +23,18 @@ export class McpClientSession {
   }
 
   private start(): void {
+    this.startupController = new AbortController();
     this.currentClient = new MCPClient(this.config);
     providerRegistry.register(this.owner);
-    this.initializationPromise = this.currentClient.initialize();
+    this.initializationPromise = this.currentClient.initialize(this.startupController.signal);
     // Eager construction can be followed by validation only. Preserve the error for callers.
     void this.initializationPromise.catch(() => undefined);
   }
 
-  async initialize(): Promise<MCPClient> {
+  async initialize(signal?: AbortSignal): Promise<MCPClient> {
+    signal?.throwIfAborted();
     if (this.cleanupPromise) {
-      await this.cleanupPromise;
+      await waitForMcpOperation(this.cleanupPromise, signal);
     }
     if (!this.currentClient) {
       this.start();
@@ -38,7 +42,11 @@ export class McpClientSession {
     // Repeated use claims the connection for the calling evaluation, including shared instances.
     providerRegistry.register(this.owner);
     const client = this.currentClient!;
-    await this.initializationPromise;
+    const startupSignal = this.startupController.signal;
+    await waitForMcpOperation(
+      this.initializationPromise!,
+      signal ? AbortSignal.any([signal, startupSignal]) : startupSignal,
+    );
     return client;
   }
 
@@ -50,9 +58,12 @@ export class McpClientSession {
     if (!client) {
       return Promise.resolve();
     }
+    this.startupController.abort();
     this.cleanupPromise = (async () => {
       try {
-        await this.initializationPromise?.catch(() => undefined);
+        await waitForMcpOperation(this.initializationPromise!, this.startupController.signal).catch(
+          () => undefined,
+        );
         await client.cleanup();
       } finally {
         this.currentClient = null;

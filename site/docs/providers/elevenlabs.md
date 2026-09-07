@@ -209,6 +209,8 @@ All providers support these common parameters:
 
 ### Agent-Specific Parameters
 
+When `agentId` is omitted, the provider creates an ephemeral agent and reuses it within the evaluation. The evaluator deletes that agent during cleanup. Later evaluations create a new agent; ephemeral agent IDs are not stored in the response cache. A configured `agentId` remains caller-owned and is never deleted by cleanup.
+
 | Parameter            | Description                               |
 | -------------------- | ----------------------------------------- |
 | `agentId`            | Use existing agent ID                     |

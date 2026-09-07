@@ -59,8 +59,8 @@ export class MCPProvider implements ApiProvider {
     return `[MCP Provider]`;
   }
 
-  private async initialize(): Promise<void> {
-    const client = await this.mcpSession.initialize();
+  private async initialize(signal?: AbortSignal): Promise<void> {
+    const client = await this.mcpSession.initialize(signal);
     const changed = this.mcpClient !== client;
     this.mcpClient = client;
 
@@ -76,11 +76,11 @@ export class MCPProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initialize();
+      await this.initialize(options?.abortSignal);
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
