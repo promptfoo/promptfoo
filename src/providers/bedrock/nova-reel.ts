@@ -12,6 +12,7 @@ import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { sleep, sleepWithAbort } from '../../util/time';
+import { awaitProviderOperation } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
@@ -348,17 +349,22 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       options?.abortSignal?.throwIfAborted();
 
       // Store to blob storage
-      const { ref } = await storeBlob(buffer, 'video/mp4', {
-        evalId: context?.evaluationId,
-        kind: 'video',
-        location: 'response.video',
-        promptIdx: context?.promptIdx,
-        testIdx: context?.testIdx,
-      });
+      const { ref } = await awaitProviderOperation(
+        storeBlob(buffer, 'video/mp4', {
+          evalId: context?.evaluationId,
+          kind: 'video',
+          location: 'response.video',
+          promptIdx: context?.promptIdx,
+          testIdx: context?.testIdx,
+        }),
+        options?.abortSignal,
+      );
+      options?.abortSignal?.throwIfAborted();
 
       logger.debug(`[Nova Reel] Stored video to blob storage`, { uri: ref.uri, hash: ref.hash });
       return { blobRef: ref };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       const error = err as { message?: string; name?: string };
       logger.error('[Nova Reel] S3 download error', { error, s3Uri });
 
