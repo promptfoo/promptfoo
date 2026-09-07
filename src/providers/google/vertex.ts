@@ -706,6 +706,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let cachedResponse;
     if (cache && cacheKey) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         logger.debug('Returning cached Vertex Gemini response', {
