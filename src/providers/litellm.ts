@@ -1,9 +1,9 @@
 import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -12,13 +12,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiCompletionOptions } from './openai/types';
-
-interface LiteLLMProviderOptions {
-  config?: ProviderOptions;
-  id?: string;
-  env?: EnvOverrides;
-}
 
 /**
  * Base class for LiteLLM providers that maintains LiteLLM identity
@@ -133,9 +128,13 @@ export class LiteLLMProvider extends LiteLLMChatProvider {}
  */
 export function createLiteLLMProvider(
   providerPath: string,
-  options: LiteLLMProviderOptions = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const splits = providerPath.split(':');
+  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, {
+    ...options,
+    id: options.config?.id ?? options.id,
+  });
+  const splits = parsedPath.segments;
   const providerType = splits[1];
 
   // Extract model name based on provider type
@@ -144,13 +143,12 @@ export function createLiteLLMProvider(
     : splits.slice(1).join(':');
 
   // Prepare LiteLLM-specific configuration
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
 
   // Resolve apiBaseUrl: config > provider env > context env > process env > default
   const resolvedApiBaseUrl =
     config.apiBaseUrl ||
-    options.config?.env?.LITELLM_API_BASE ||
-    options.env?.LITELLM_API_BASE ||
+    providerOptions.env?.LITELLM_API_BASE ||
     getEnvString('LITELLM_API_BASE') ||
     'http://0.0.0.0:4000';
 
@@ -178,12 +176,7 @@ export function createLiteLLMProvider(
 
   // Construct the provider options
   const litellmConfig: ProviderOptions = {
-    id: options.config?.id ?? options.id,
-    label: options.config?.label,
-    prompts: options.config?.prompts,
-    transform: options.config?.transform,
-    delay: options.config?.delay,
-    env: { ...options.env, ...options.config?.env },
+    ...providerOptions,
     config: mergedConfig,
   };
 
