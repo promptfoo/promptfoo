@@ -178,3 +178,9 @@ The optional interface preserves compatibility: third-party providers and legacy
 Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, cancellation, and traced execution. Keep file-export policy and wire conversion in each adapter. Pass `transformOutput` when serialization is part of the tool execution so failures are recorded before the span closes. The execution record retains tool name, arguments, call ID, raw output, and the original error.
 
 Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep each provider's tool-result envelope and error policy local.
+
+## Media jobs
+
+Bedrock Nova Reel and Luma Ray share `bedrock/videoJob.ts` for asynchronous submission, polling, and S3-to-blob storage. Each job owns and releases its SDK clients. Forward the caller signal through credential waits, SDK calls, poll delays, and body reads. Keep model validation, request fields, pricing, and output shaping in the provider classes.
+
+Hyperbolic audio and image share `hyperbolic/transport.ts` for JSON transport, cache bypass, status errors, and cancellation. Keep modality-specific response parsing and costs in each provider.

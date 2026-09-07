@@ -21,10 +21,12 @@ const {
 
   class MockBedrockRuntimeClient {
     send = mockBedrockSend;
+    destroy = vi.fn();
   }
 
   class MockS3Client {
     send = mockS3Send;
+    destroy = vi.fn();
   }
 
   class MockStartAsyncInvokeCommand {

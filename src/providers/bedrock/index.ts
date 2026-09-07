@@ -530,18 +530,6 @@ export interface NovaReelVideoOptions extends BedrockOptions {
 /**
  * Nova Reel async invoke response
  */
-export interface NovaReelInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig: {
-      s3Uri: string;
-    };
-  };
-  failureMessage?: string;
-}
 
 // =============================================================================
 // Luma Ray 2 Video Generation Types
@@ -594,19 +582,6 @@ export interface LumaRayVideoOptions extends BedrockOptions {
 
   /** Whether to download video from S3 to blob storage (default: true) */
   downloadFromS3?: boolean;
-}
-
-export interface LumaRayInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  failureMessage?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig?: {
-      s3Uri: string;
-    };
-  };
 }
 
 export interface IBedrockModel {

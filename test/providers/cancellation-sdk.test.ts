@@ -35,6 +35,7 @@ vi.mock('../../src/util/fetch', async (importOriginal) => ({
 vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntimeClient: class {
     send = mocks.bedrockSend;
+    destroy = vi.fn();
   },
   StartAsyncInvokeCommand: class {},
   GetAsyncInvokeCommand: class {},
@@ -42,6 +43,7 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: class {
     send = mocks.s3Send;
+    destroy = vi.fn();
   },
   GetObjectCommand: class {},
 }));
