@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
+import {
+  executeProviderFunctionCallback,
+  FunctionCallbackHandler,
+} from '../../src/providers/functionCallbackUtils';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -23,6 +26,36 @@ vi.mock('../../src/logger', () => ({
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
+
+it('records the actual fallback sent for an unserializable direct-provider callback', async () => {
+  mockLogger.warn.mockClear();
+  const span = {
+    setAttribute: vi.fn(),
+    setStatus: vi.fn(),
+    end: vi.fn(),
+    recordException: vi.fn(),
+  };
+  const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+  const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startActiveSpan: vi.fn((_name, _options, callback) => callback(span)),
+  } as any);
+
+  try {
+    const output = await executeProviderFunctionCallback({
+      functionName: 'lookup',
+      args: '{}',
+      callbacks: { lookup: () => ({ value: 1n }) },
+      cache: {},
+    });
+    expect(output).toBe('[object Object]');
+    expect(span.setAttribute).toHaveBeenCalledWith('tool.output', output);
+    expect(span.end).toHaveBeenCalledOnce();
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('BigInt'));
+  } finally {
+    activeSpanSpy.mockRestore();
+    tracerSpy.mockRestore();
+  }
+});
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;

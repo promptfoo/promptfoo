@@ -1625,6 +1625,7 @@ async function runEvalInternal({
   registers,
   isRedteam,
   abortSignal,
+  gradingAbortSignal,
   deferGrading,
   evalId,
   providerCallQueue,
@@ -1753,10 +1754,11 @@ async function runEvalInternal({
 
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
-            // Completed target rows still drain grouped grading after the target
-            // time budget expires. An explicit user cancellation stops both.
+            // Row timeouts do not cancel deferred grading; the evaluation deadline does.
             abortSignal:
-              deferGrading && evaluateOptions ? evaluateOptions.abortSignal : abortSignal,
+              deferGrading && evaluateOptions
+                ? (gradingAbortSignal ?? evaluateOptions.abortSignal)
+                : abortSignal,
             deferGrading,
             evalId,
             isRedteam,
@@ -2930,6 +2932,7 @@ function createRunEvalOption({
     isRedteam: testSuite.redteam != null,
     concurrency,
     abortSignal: providerAbortSignal,
+    gradingAbortSignal: providerAbortSignal,
     evalId,
     rateLimitRegistry,
   };
