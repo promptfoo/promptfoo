@@ -86,6 +86,7 @@ describe('Version Route', () => {
 
   it.each([
     ['does not offer an update to a lower version', '1.0.0', '0.9.0', false, 1],
+    ['does not offer an update to an equal version', '1.0.0', '1.0.0', false, 9],
     ['offers a stable release to a beta build', '1.0.0-beta.1', '1.0.0', true, 2],
     [
       'does not offer a lower stable release to a newer release candidate',
