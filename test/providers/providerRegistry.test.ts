@@ -152,4 +152,24 @@ describe('providerRegistry', () => {
     await providerRegistry.withScope([provider], async () => undefined);
     expect(provider.cleanup).toHaveBeenCalledTimes(2);
   });
+  it('awaits the previous evaluation teardown before admitting a new owner', async () => {
+    const enteredCleanup = createDeferred<void>();
+    const finishCleanup = createDeferred<void>();
+    const provider = {
+      cleanup: vi.fn().mockImplementationOnce(() => {
+        enteredCleanup.resolve();
+        return finishCleanup.promise;
+      }),
+    };
+    const first = providerRegistry.withScope([provider], async () => undefined);
+    await enteredCleanup.promise;
+    const useProvider = vi.fn().mockResolvedValue('reused');
+    const second = providerRegistry.withScope([provider], useProvider);
+    await Promise.resolve();
+    expect(useProvider).not.toHaveBeenCalled();
+    finishCleanup.resolve();
+    await expect(second).resolves.toBe('reused');
+    await first;
+    expect(provider.cleanup).toHaveBeenCalledTimes(2);
+  });
 });
