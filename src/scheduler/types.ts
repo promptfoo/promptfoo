@@ -11,6 +11,7 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
