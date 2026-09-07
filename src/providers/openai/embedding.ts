@@ -18,7 +18,7 @@ type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
-  readonly capabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   declare config: OpenAiEmbeddingOptions;
 
@@ -112,7 +112,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         {
           embedding,
           latencyMs,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getTokenUsage(data, false),
           cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage),
         },
         cached,

@@ -1,9 +1,10 @@
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 // These are consumed by promptfoo or its transport, not TogetherAI's model endpoint.
@@ -42,22 +43,17 @@ const localOptionNames = new Set(Object.keys(localOptions));
  */
 export function createTogetherAiProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const splits = providerPath.split(':');
+  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
+  const splits = parsedPath.segments;
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const modelParameters = Object.fromEntries(
     Object.entries(config).filter(([key]) => !localOptionNames.has(key)),
   );
   const togetherAiConfig = {
-    ...options.config,
-    id: options.id ?? options.config?.id,
-    env: options.config?.env ?? options.env,
+    ...providerOptions,
     config: {
       ...config,
       apiBaseUrl: config.apiBaseUrl || 'https://api.together.xyz/v1',

@@ -35,7 +35,7 @@ See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 ## Operation Capabilities and Wrappers
 
-`ProviderIdentity<TConfig>` describes identity, typed configuration, and cleanup independently of a text operation. `ProviderOperations` supplies operation signatures; use `hasProviderCapability(provider, method)` before dispatching. The public `ApiProvider` keeps its legacy `callApi` shape for compatibility. Providers with inherited or explicit throwing text stubs must declare `capabilities` so they cannot be selected as text graders. Legacy providers without a declaration are detected by callable methods.
+`ProviderIdentity<TConfig>` describes identity, typed configuration, and cleanup independently of a text operation. `ProviderOperations` supplies operation signatures; use `hasProviderCapability(provider, method)` before dispatching. The public `ApiProvider` keeps its legacy `callApi` shape for compatibility. Providers with inherited or explicit throwing text stubs must declare `promptfooCapabilities` so they cannot be selected as text graders. Legacy providers without a declaration are detected by callable methods.
 
 Wrappers must preserve custom IDs, configuration, supported operations, context and options, cleanup, and function/tool validators. Bind delegated hooks to their owner. See `litellm.ts` and `test/providers/capabilities.test.ts`.
 
@@ -184,3 +184,9 @@ Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep ea
 Bedrock Nova Reel and Luma Ray share `bedrock/videoJob.ts` for asynchronous submission, polling, and S3-to-blob storage. Each job owns and releases its SDK clients. Forward the caller signal through credential waits, SDK calls, poll delays, and body reads. Keep model validation, request fields, pricing, and output shaping in the provider classes.
 
 Hyperbolic audio and image share `hyperbolic/transport.ts` for JSON transport, cache bypass, status errors, and cancellation. Keep modality-specific response parsing and costs in each provider.
+
+## Creator inputs
+
+The loader normalizes configuration and environment once; factories receive that `ProviderOptions` and a context containing the same merged environment. New creator adapters should accept `providerOptions` directly rather than nesting it under another `config`. `creator.ts` adapts the legacy nested input only at existing public creator boundaries and preserves parsed identifiers.
+
+`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand. These family factories run before the generic file fallback, including when a model name ends in `.js`. Keep alias/default-subtype rules inside each creator, and preserve the distinction between family load gates and factory dispatch predicates.

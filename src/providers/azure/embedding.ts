@@ -11,7 +11,7 @@ import type {
 } from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
-  readonly capabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   async callEmbeddingApi(
     text: string,

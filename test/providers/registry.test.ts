@@ -1244,7 +1244,9 @@ describe('Provider Registry', () => {
     });
 
     it('should route novita sub-types and reject unknown ones', async () => {
-      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      const factory = (await getProviderFactories('novita:meta/llama-3.1-8b-instruct')).find((f) =>
+        f.test('novita:meta/llama-3.1-8b-instruct'),
+      );
       expect(factory).toBeDefined();
 
       const novitaOptions = { ...mockProviderOptions, id: undefined };

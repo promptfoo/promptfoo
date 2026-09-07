@@ -1,11 +1,12 @@
 import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints
@@ -44,15 +45,12 @@ const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
 
 export function createNscaleProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const splits = providerPath.split(':');
+  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
+  const splits = parsedPath.segments;
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
 
   // Split the user's config into settings promptfoo handles (auth, routing,
   // headers, cost overrides) and genuine model parameters, so only the latter
@@ -72,15 +70,15 @@ export function createNscaleProvider(
   const getApiKey = () => {
     return (
       config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
+      providerOptions.env?.NSCALE_SERVICE_TOKEN ||
       getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
+      providerOptions.env?.NSCALE_API_KEY ||
       getEnvString('NSCALE_API_KEY')
     );
   };
 
   const nscaleConfig = {
-    ...options,
+    ...providerOptions,
     config: {
       ...providerLevelOptions,
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
@@ -105,9 +103,9 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config as any, // Allow flexible config type for Nscale image options
-      id: options.id,
-      env: options.env,
+      config: providerOptions.config,
+      id: providerOptions.id,
+      env: providerOptions.env,
     });
   } else {
     // If no specific type is provided, default to chat

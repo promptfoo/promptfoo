@@ -78,7 +78,7 @@ it('preserves legacy text capability detection', async () => {
 });
 
 it('honors explicit capability restrictions even if a method exists', () => {
-  const provider = { id: () => 'stub', capabilities: [], callApi: async () => ({}) };
+  const provider = { id: () => 'stub', promptfooCapabilities: [], callApi: async () => ({}) };
   expect(hasProviderCapability(provider, 'callApi')).toBe(false);
 });
 
@@ -155,3 +155,15 @@ it('retains MCP tools and cleanup ownership when a LiteLLM wrapper is reused', a
   expect(mcp.initialize).toHaveBeenCalledTimes(2);
   expect(mcp.cleanup).toHaveBeenCalledTimes(2);
 });
+
+it.each([{ streaming: true }, ['vision'], []])(
+  'retains legacy custom capabilities metadata %j',
+  (capabilities) => {
+    const provider = {
+      id: () => 'legacy-metadata',
+      capabilities,
+      callApi: async () => ({ output: 'hello' }),
+    };
+    expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+  },
+);
