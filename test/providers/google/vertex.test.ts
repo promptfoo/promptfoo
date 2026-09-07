@@ -384,6 +384,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
         numRequests: 0,
+        incurredTokenUsage: {},
       },
     });
   });
@@ -965,6 +966,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       completion: 5,
       cached: 15,
       numRequests: 0,
+      incurredTokenUsage: {},
     });
     expect(result.cost).toBe(0.00045);
     expect(result.metadata).toEqual({
@@ -1092,6 +1094,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       completion: 3,
       cached: 5,
       numRequests: 0,
+      incurredTokenUsage: {},
     });
   });
 
@@ -1165,6 +1168,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         completion: 5,
         cached: 15,
         numRequests: 0,
+        incurredTokenUsage: {},
       });
     });
 
