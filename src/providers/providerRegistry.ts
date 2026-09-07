@@ -50,6 +50,12 @@ class ProviderRegistry {
     }
   }
 
+  adopt(provider: object | null): void {
+    if (provider && hasCleanupHook(provider)) {
+      this.register(provider);
+    }
+  }
+
   unregister(provider: CleanupProvider): void {
     const registration = this.providers.get(provider);
     if (registration) {

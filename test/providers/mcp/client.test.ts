@@ -1145,6 +1145,70 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it('aborts a stalled OAuth refresh before waiting for it', async () => {
+      const refreshStarted = createDeferred<void>();
+      mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+        accessToken: 'expiring-token',
+        expiresAt: Date.now() + 30_000,
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(async (...args: unknown[]) => {
+        const signal = args[2] as AbortSignal;
+        refreshStarted.resolve();
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+        throw new Error('refresh unexpectedly completed');
+      });
+
+      const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
+      await refreshStarted.promise;
+      await mcpClient.cleanup();
+      await call;
+      expect(mcpClient.connectedServers).toEqual([]);
+      expect(vi.mocked(Client)).toHaveBeenCalledTimes(2);
+
+      await mcpClient.initialize();
+      expect(mcpClient.connectedServers).toEqual(['http://localhost:3000']);
+      await mcpClient.cleanup();
+    });
+
+    it('closes a pending handshake and rejects a late connection', async () => {
+      const entered = createDeferred<void>();
+      const handshake = createDeferred<void>();
+      mockClient.connect.mockImplementationOnce(() => {
+        entered.resolve();
+        return handshake.promise;
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'node', args: ['fixture-server.js'] },
+      });
+
+      const initialization = mcpClient.initialize();
+      const rejection = expect(initialization).rejects.toThrow('This operation was aborted');
+      await entered.promise;
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      handshake.resolve();
+      await rejection;
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
     it('waits for a pending token refresh without reopening a closed connection', async () => {
       const closeStarted = createDeferred<void>();
       const closeContinue = createDeferred<void>();

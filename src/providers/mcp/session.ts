@@ -8,6 +8,7 @@ import type { MCPConfig } from './types';
 export class McpClientSession {
   private currentClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private startupPending = false;
   private cleanupPromise?: Promise<void>;
   private startupController = new AbortController();
 
@@ -26,7 +27,15 @@ export class McpClientSession {
     this.startupController = new AbortController();
     this.currentClient = new MCPClient(this.config);
     providerRegistry.register(this.owner);
-    this.initializationPromise = this.currentClient.initialize(this.startupController.signal);
+    const initialization = this.currentClient.initialize(this.startupController.signal);
+    this.initializationPromise = initialization;
+    this.startupPending = true;
+    const markSettled = () => {
+      if (this.initializationPromise === initialization) {
+        this.startupPending = false;
+      }
+    };
+    void initialization.then(markSettled, markSettled);
     // Eager construction can be followed by validation only. Preserve the error for callers.
     void this.initializationPromise.catch(() => undefined);
   }
@@ -61,11 +70,15 @@ export class McpClientSession {
     this.startupController.abort();
     this.cleanupPromise = (async () => {
       try {
-        await awaitProviderOperation(
-          this.initializationPromise!,
-          this.startupController.signal,
-        ).catch(() => undefined);
         await client.cleanup();
+        if (this.startupPending) {
+          void this.initializationPromise
+            ?.then(
+              () => client.cleanup(),
+              () => undefined,
+            )
+            .catch(() => undefined);
+        }
       } finally {
         this.currentClient = null;
         this.initializationPromise = null;
