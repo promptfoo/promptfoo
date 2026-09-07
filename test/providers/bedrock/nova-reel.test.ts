@@ -464,6 +464,29 @@ describe('NovaReelVideoProvider', () => {
   });
 
   describe('callApi - error handling', () => {
+    it.each([
+      [
+        "Cannot find package '@aws-sdk/client-bedrock-runtime' imported from /app/videoJob.js",
+        true,
+      ],
+      [
+        "Cannot find package 'smithy-client' imported from /app/node_modules/@aws-sdk/client-bedrock-runtime/index.js",
+        false,
+      ],
+    ])('reports the correct missing package for %s', async (message, missingRuntime) => {
+      mockBedrockSend.mockRejectedValueOnce(
+        Object.assign(new Error(message), { code: 'ERR_MODULE_NOT_FOUND' }),
+      );
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' } as NovaReelVideoOptions,
+      });
+
+      const result = await provider.callApi('Generate a video');
+      expect(
+        result.error?.includes('Install it with: npm install @aws-sdk/client-bedrock-runtime'),
+      ).toBe(missingRuntime);
+    });
+
     it('should handle Bedrock API errors', async () => {
       mockBedrockSend.mockRejectedValueOnce(new Error('AccessDeniedException'));
 

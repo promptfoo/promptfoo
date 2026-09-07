@@ -110,6 +110,11 @@ export async function runBedrockVideoJob(
     return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
   } catch (error) {
     logger.error(`[${label}] ${phase}`, { error, invocationArn });
+    if (isMissingPackageImportError(error, '@aws-sdk/client-bedrock-runtime')) {
+      return {
+        error: `The @aws-sdk/client-bedrock-runtime package is required for ${label} video generation. Install it with: npm install @aws-sdk/client-bedrock-runtime`,
+      };
+    }
     return { error: `${phase}: ${error instanceof Error ? error.message : String(error)}` };
   } finally {
     client?.destroy();
