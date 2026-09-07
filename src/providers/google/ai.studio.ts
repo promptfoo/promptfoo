@@ -176,9 +176,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     // Wait for MCP initialization if pending
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP();
 
     const apiKey = this.getApiKey();
     if (!apiKey) {

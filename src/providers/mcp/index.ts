@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import { loadTransformModule } from '../transformUtils';
-import { MCPClient } from './client';
+import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
 
 import type {
@@ -9,6 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { MCPClient } from './client';
 import type { MCPConfig } from './types';
 
 interface MCPProviderOptions {
@@ -19,7 +20,8 @@ interface MCPProviderOptions {
 }
 
 export class MCPProvider implements ApiProvider {
-  private mcpClient: MCPClient;
+  private mcpClient: MCPClient | null = null;
+  private mcpSession: McpClientSession;
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
@@ -35,7 +37,7 @@ export class MCPProvider implements ApiProvider {
     this.config = options.config || { enabled: true };
     this.defaultArgs = options.defaultArgs || {};
 
-    this.mcpClient = new MCPClient(this.config);
+    this.mcpSession = new McpClientSession(this.config, this);
     this.initializationPromise = this.initialize();
     // Initialization starts eagerly, so mark the rejection as observed until callers await it.
     void this.initializationPromise.catch(() => undefined);
@@ -58,10 +60,12 @@ export class MCPProvider implements ApiProvider {
   }
 
   private async initialize(): Promise<void> {
-    await this.mcpClient.initialize();
+    const client = await this.mcpSession.initialize();
+    const changed = this.mcpClient !== client;
+    this.mcpClient = client;
 
-    if (this.config.verbose) {
-      const tools = this.mcpClient.getAllTools();
+    if (this.config.verbose && changed) {
+      const tools = this.mcpClient!.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
         tools.map((t) => t.name),
@@ -76,7 +80,7 @@ export class MCPProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initializationPromise;
+      await this.initialize();
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -127,7 +131,7 @@ export class MCPProvider implements ApiProvider {
       logger.debug(`MCP Provider calling tool ${toolName} with args: ${JSON.stringify(finalArgs)}`);
 
       // Call the MCP tool
-      const result = await this.mcpClient.callTool(toolName, finalArgs);
+      const result = await this.mcpClient!.callTool(toolName, finalArgs);
 
       if (result.error) {
         return {
@@ -152,7 +156,7 @@ export class MCPProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     try {
-      await this.mcpClient.cleanup();
+      await this.mcpSession.cleanup();
     } catch (error) {
       logger.error(
         `Error during MCP provider cleanup: ${error instanceof Error ? error.message : String(error)}`,
@@ -163,9 +167,9 @@ export class MCPProvider implements ApiProvider {
   // Method to call specific MCP tools directly
   async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
     try {
-      await this.initializationPromise;
+      await this.initialize();
 
-      const result = await this.mcpClient.callTool(toolName, args);
+      const result = await this.mcpClient!.callTool(toolName, args);
 
       if (result.error) {
         return {
@@ -187,9 +191,9 @@ export class MCPProvider implements ApiProvider {
 
   // Get all available tools
   async getAvailableTools() {
-    await this.initializationPromise;
+    await this.initialize();
 
-    return this.mcpClient.getAllTools();
+    return this.mcpClient!.getAllTools();
   }
 
   private async transformToolResult(
@@ -218,6 +222,6 @@ export class MCPProvider implements ApiProvider {
 
   // Get connected servers
   getConnectedServers() {
-    return this.mcpClient.connectedServers;
+    return this.mcpSession.client?.connectedServers ?? [];
   }
 }

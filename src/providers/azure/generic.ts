@@ -1,9 +1,9 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -23,7 +23,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   authHeaders?: Record<string, string>;
 
-  protected initializationPromise: Promise<void> | null = null;
+  private readonly authInitializationPromise: Promise<void>;
 
   /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
   private cachedCredential?: TokenCredential;
@@ -57,7 +57,8 @@ export class AzureGenericProvider implements ApiProvider {
     this.config = config || {};
     this.id = id ? () => id : this.id;
 
-    this.initializationPromise = this.initialize();
+    this.authInitializationPromise = this.initialize();
+    void this.authInitializationPromise.catch(() => undefined);
   }
 
   async initialize() {
@@ -65,9 +66,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async ensureInitialized() {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.authInitializationPromise;
     await this.refreshAuthTokenIfNeeded();
   }
 
@@ -92,17 +91,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.AZURE_API_KEY ||
-      getEnvString('AZURE_API_KEY') ||
-      this.env?.AZURE_OPENAI_API_KEY ||
-      getEnvString('AZURE_OPENAI_API_KEY')
-    );
+    return resolveProviderApiKey(this.config, this.env, ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']);
   }
 
   getApiKeyOrThrow(): string {

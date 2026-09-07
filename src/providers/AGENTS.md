@@ -13,12 +13,14 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation completes, it calls `providerRegistry.shutdownAll()` to clean up resources.
+The evaluator (`src/evaluator.ts`) manages provider lifecycle with `providerRegistry.withScope()`. Each evaluation releases only resources it owns, and shared providers remain open until all owning evaluations finish. `shutdownAll()` is reserved for process shutdown or explicit caller cleanup.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
 - Implement a `cleanup()` method on your provider
-- Register with `providerRegistry` for automatic cleanup
+- Evaluation targets exposing `cleanup()` or legacy `shutdown()` are adopted automatically
+- Register dynamically created resources with `providerRegistry` before initialization and on reuse to claim the current evaluation scope
+- Allow initialization after cleanup when the same provider instance is reused
 - Resources are released in the evaluator's `finally` block
 
 **Reference implementations:**

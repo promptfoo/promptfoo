@@ -162,7 +162,11 @@ export class MCPClient {
       description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
     });
 
-    let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
+    let transport:
+      | StdioClientTransport
+      | SSEClientTransport
+      | StreamableHTTPClientTransport
+      | undefined;
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
@@ -264,6 +268,8 @@ export class MCPClient {
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
+          await this.closeConnection(client, transport);
+          transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(
             new URL(serverUrl),
@@ -322,6 +328,8 @@ export class MCPClient {
         );
       }
     } catch (error) {
+      // Failed handshakes/tool discovery have not entered the connection maps yet.
+      await this.closeConnection(client, transport);
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
@@ -550,14 +558,14 @@ export class MCPClient {
     throw new Error(`Tool ${name} not found in any connected MCP server`);
   }
 
-  async cleanup(): Promise<void> {
-    for (const [serverKey, client] of this.clients.entries()) {
+  private async closeConnection(
+    client: Client,
+    transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
+  ): Promise<void> {
+    // Always attempt both closes, even if transport teardown fails.
+    for (const resource of [transport, client]) {
       try {
-        const transport = this.transports.get(serverKey);
-        if (transport) {
-          await transport.close();
-        }
-        await client.close();
+        await resource?.close();
       } catch (error) {
         if (this.isDebugEnabled) {
           logger.error(
@@ -565,6 +573,12 @@ export class MCPClient {
           );
         }
       }
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    for (const [serverKey, client] of this.clients.entries()) {
+      await this.closeConnection(client, this.transports.get(serverKey));
     }
     this.clients.clear();
     this.transports.clear();

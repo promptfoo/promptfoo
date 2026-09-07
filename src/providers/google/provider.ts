@@ -317,9 +317,7 @@ export class GoogleProvider extends GoogleGenericProvider {
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     // Wait for MCP initialization if pending
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP();
 
     // Require API key for AI Studio mode
     if (!this.isVertexMode) {

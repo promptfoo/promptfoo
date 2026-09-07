@@ -400,6 +400,8 @@ describe('AzureResponsesProvider', () => {
 
     it('should provide clear error for missing authentication', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
+      // Finish eager authentication before replacing readiness with a mock.
+      await provider.initialize();
 
       // Mock initialization to set empty auth headers
       vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {

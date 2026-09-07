@@ -20,7 +20,7 @@ import {
   isSamplingParamsDeprecatedClaudeModel,
 } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { MCPClient } from '../mcp/client';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
@@ -33,12 +33,15 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { MCPClient } from '../mcp/client';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   declare config: AzureChatResponsesOptions;
 
   private mcpClient: MCPClient | null = null;
+  private mcpSession?: McpClientSession;
+  private initializationPromise: Promise<void> | null = null;
   private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(
@@ -53,22 +56,30 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
+      void this.initializationPromise.catch(() => undefined);
     }
   }
 
   private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
+    if (!this.config.mcp?.enabled) {
+      return;
+    }
+    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
+    this.mcpClient = await this.mcpSession.initialize();
 
     // Initialize callback handler with MCP client
     this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
+  async ensureInitialized(): Promise<void> {
+    await Promise.all([super.ensureInitialized(), this.initializeMCP()]);
+  }
+
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 
@@ -324,9 +335,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 
