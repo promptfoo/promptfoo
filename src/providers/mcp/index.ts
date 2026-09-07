@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import { loadTransformModule } from '../transformUtils';
-import { MCPClient } from './client';
+import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
 
 import type {
@@ -9,6 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { MCPClient } from './client';
 import type { MCPConfig } from './types';
 
 interface MCPProviderOptions {
@@ -20,6 +21,7 @@ interface MCPProviderOptions {
 
 export class MCPProvider implements ApiProvider {
   private mcpClient: MCPClient;
+  private mcpSession: McpClientSession;
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
@@ -35,7 +37,8 @@ export class MCPProvider implements ApiProvider {
     this.config = options.config || { enabled: true };
     this.defaultArgs = options.defaultArgs || {};
 
-    this.mcpClient = new MCPClient(this.config);
+    this.mcpSession = new McpClientSession(this.config, this);
+    this.mcpClient = this.mcpSession.client;
     this.initializationPromise = this.initialize();
     // Initialization starts eagerly, so mark the rejection as observed until callers await it.
     void this.initializationPromise.catch(() => undefined);
@@ -58,7 +61,7 @@ export class MCPProvider implements ApiProvider {
   }
 
   private async initialize(): Promise<void> {
-    await this.mcpClient.initialize();
+    await this.mcpSession.ready;
 
     if (this.config.verbose) {
       const tools = this.mcpClient.getAllTools();
@@ -152,7 +155,7 @@ export class MCPProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     try {
-      await this.mcpClient.cleanup();
+      await this.mcpSession.cleanup();
     } catch (error) {
       logger.error(
         `Error during MCP provider cleanup: ${error instanceof Error ? error.message : String(error)}`,

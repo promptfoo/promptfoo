@@ -23,7 +23,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   authHeaders?: Record<string, string>;
 
-  protected initializationPromise: Promise<void> | null = null;
+  private readonly authInitializationPromise: Promise<void>;
 
   /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
   private cachedCredential?: TokenCredential;
@@ -57,7 +57,8 @@ export class AzureGenericProvider implements ApiProvider {
     this.config = config || {};
     this.id = id ? () => id : this.id;
 
-    this.initializationPromise = this.initialize();
+    this.authInitializationPromise = this.initialize();
+    void this.authInitializationPromise.catch(() => undefined);
   }
 
   async initialize() {
@@ -65,9 +66,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async ensureInitialized() {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.authInitializationPromise;
     await this.refreshAuthTokenIfNeeded();
   }
 

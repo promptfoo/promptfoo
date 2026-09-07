@@ -1,23 +1,15 @@
 import logger from '../logger';
 
-/**
- * Interface for providers that need cleanup on process exit.
- */
-interface CleanupProvider {
-  shutdown(): Promise<void>;
-}
+type CleanupProvider = { cleanup(): void | Promise<void> } | { shutdown(): void | Promise<void> };
 
-/**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
- */
+/** Tracks resource-owning providers until evaluation or process shutdown. */
 class ProviderRegistry {
-  private providers: Set<CleanupProvider> = new Set();
-  private shutdownRegistered: boolean = false;
+  private providers = new Set<CleanupProvider>();
+  private shutdownRegistered = false;
+  private shutdownPromise: Promise<void> | null = null;
 
   register(provider: CleanupProvider): void {
     this.providers.add(provider);
-
     if (!this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
@@ -29,44 +21,46 @@ class ProviderRegistry {
   }
 
   private registerShutdownHandlers(): void {
-    let shuttingDown = false;
-
-    const shutdown = async (signal: string) => {
-      if (shuttingDown) {
-        return; // Prevent duplicate shutdown
-      }
-      shuttingDown = true;
-
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
-
-      await Promise.all(
-        Array.from(this.providers).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
-        ),
-      );
-
-      logger.debug('Python provider shutdown complete');
+    const shutdown = (signal: string) => {
+      logger.debug(`Received ${signal}, shutting down providers...`);
+      void this.shutdownAll();
     };
 
-    process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    // Use beforeExit for async cleanup (exit event cannot await)
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    process.once('SIGINT', () => shutdown('SIGINT'));
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    // The exit event cannot await asynchronous cleanup.
+    process.once('beforeExit', () => shutdown('beforeExit'));
   }
 
-  async shutdownAll(): Promise<void> {
-    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
-
-    // Log any failures but don't throw - cleanup should be defensive
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.warn(`Error shutting down provider: ${result.reason}`);
-      }
+  shutdownAll(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
     }
 
+    const providers = [...this.providers];
+    // Detach this batch before awaiting; newly registered resources belong to the next batch.
     this.providers.clear();
+    this.shutdownPromise = Promise.allSettled(
+      providers.map(async (provider) => {
+        // Keep the legacy hook for providers whose shutdown does more than cleanup.
+        if ('shutdown' in provider) {
+          await provider.shutdown();
+        } else {
+          await provider.cleanup();
+        }
+      }),
+    )
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            logger.warn(`Error shutting down provider: ${result.reason}`);
+          }
+        }
+      })
+      .finally(() => {
+        this.shutdownPromise = null;
+      });
+    return this.shutdownPromise;
   }
 }
 

@@ -1122,6 +1122,32 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it('closes a connection whose tool discovery failed before registration', async () => {
+      mockClient.listTools.mockRejectedValueOnce(new Error('tool discovery failed'));
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'node', args: ['fixture-server.js'] },
+      });
+
+      await expect(mcpClient.initialize()).rejects.toThrow('tool discovery failed');
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
+    it('closes the client even when its transport fails to close', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'node', args: ['fixture-server.js'] },
+      });
+      await mcpClient.initialize();
+      mockStdioTransport.close.mockRejectedValueOnce(new Error('transport close failed'));
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
     it('should cleanup all clients', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);

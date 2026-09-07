@@ -13,7 +13,7 @@ import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
-import { MCPClient } from '../mcp/client';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import {
@@ -45,6 +45,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { MCPClient } from '../mcp/client';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -98,6 +99,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
+  private mcpSession?: McpClientSession;
   private initializationPromise: Promise<void> | null = null;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
@@ -113,6 +115,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
+      void this.initializationPromise.catch(() => undefined);
     }
   }
 
@@ -121,14 +124,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
+    this.mcpSession = new McpClientSession(this.config.mcp!, this);
+    this.mcpClient = this.mcpSession.client;
+    await this.mcpSession.ready;
   }
 
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
       this.mcpClient = null;
     }
   }
