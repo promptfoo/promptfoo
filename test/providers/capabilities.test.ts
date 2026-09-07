@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { getAndCheckProvider } from '../../src/matchers/providers';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
@@ -58,6 +59,27 @@ it('does not treat the OpenAI embedding text stub as an implemented capability',
   await expect(getAndCheckProvider('text', provider, null, 'rubric')).rejects.toThrow(
     'not a valid text provider',
   );
+});
+
+it('rejects an embedding-only default when a text grader is required', async () => {
+  const embeddingDefault = new OpenAiEmbeddingProvider('fixture');
+  await expect(getAndCheckProvider('text', undefined, embeddingDefault, 'rubric')).rejects.toThrow(
+    'not a valid text provider',
+  );
+});
+
+it('rechecks a distinct default after an implicit grader fails its capability check', async () => {
+  const previousConfig = cliState.config;
+  const implicitGrader = new OpenAiEmbeddingProvider('implicit');
+  const defaultGrader = new OpenAiEmbeddingProvider('default');
+  try {
+    cliState.config = { defaultTest: { provider: implicitGrader } };
+    await expect(getAndCheckProvider('text', undefined, defaultGrader, 'rubric')).rejects.toThrow(
+      'not a valid text provider',
+    );
+  } finally {
+    cliState.config = previousConfig;
+  }
 });
 
 it('rejects explicitly configured undefined embedding methods before invocation', async () => {
