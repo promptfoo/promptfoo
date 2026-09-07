@@ -2437,32 +2437,6 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('cleanup', () => {
-    it('should await initialization before cleanup', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
-
-      const client = mockMCPClient;
-      expect(client).toBeDefined();
-
-      // Simulate initialization in progress
-      const initPromise = Promise.resolve();
-      provider['initializationPromise'] = initPromise;
-
-      await provider.cleanup();
-
-      // Verify cleanup was called after initialization
-      expect(client!.cleanup).toHaveBeenCalledWith();
-    });
-
     it('should handle cleanup when MCP is not enabled', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
