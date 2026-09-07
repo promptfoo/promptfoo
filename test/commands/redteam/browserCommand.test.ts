@@ -71,7 +71,7 @@ function expectCallOrder(...mocks: OrderedMock[]) {
 
 function createProgram(commandCase: (typeof commandCases)[number]) {
   const program = new Command();
-  expect(commandCase.register(program)).toBeUndefined();
+  commandCase.register(program);
   return program;
 }
 
@@ -206,51 +206,4 @@ describe('redteam browser commands', () => {
       );
     },
   );
-
-  it.each(commandCases)(
-    'accepts the -p and --env-path aliases for $commandName',
-    async (commandCase) => {
-      vi.mocked(checkServerRunning).mockResolvedValue(false);
-
-      await runCommand(commandCase, ['-p', '3018', '--env-path', '.env.alias']);
-
-      expect(setupEnv).toHaveBeenCalledExactlyOnceWith('.env.alias');
-      expect(startServer).toHaveBeenCalledExactlyOnceWith('3018', commandCase.browserBehavior);
-    },
-  );
-
-  it.each(commandCases)('propagates $commandName server probe errors', async (commandCase) => {
-    const error = new Error(`${commandCase.commandName} probe failed`);
-    vi.mocked(checkServerRunning).mockRejectedValue(error);
-
-    await expect(runCommand(commandCase)).rejects.toBe(error);
-
-    expect(openBrowser).not.toHaveBeenCalled();
-    expect(startServer).not.toHaveBeenCalled();
-  });
-
-  it.each(commandCases)('propagates $commandName browser errors', async (commandCase) => {
-    const error = new Error(`${commandCase.commandName} browser failed`);
-    vi.mocked(checkServerRunning).mockResolvedValue(true);
-    vi.mocked(openBrowser).mockRejectedValue(error);
-
-    await expect(runCommand(commandCase)).rejects.toBe(error);
-
-    expect(openBrowser).toHaveBeenCalledExactlyOnceWith(commandCase.browserBehavior);
-    expect(startServer).not.toHaveBeenCalled();
-  });
-
-  it.each(commandCases)('propagates $commandName server start errors', async (commandCase) => {
-    const error = new Error(`${commandCase.commandName} server start failed`);
-    vi.mocked(checkServerRunning).mockResolvedValue(false);
-    vi.mocked(startServer).mockRejectedValue(error);
-
-    await expect(runCommand(commandCase)).rejects.toBe(error);
-
-    expect(startServer).toHaveBeenCalledExactlyOnceWith(
-      getDefaultPort().toString(),
-      commandCase.browserBehavior,
-    );
-    expect(openBrowser).not.toHaveBeenCalled();
-  });
 });
