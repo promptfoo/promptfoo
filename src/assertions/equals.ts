@@ -26,8 +26,9 @@ export const handleEquals = async ({
     renderedValue = JSON.stringify(renderedValue);
   } else {
     // Opt-in Unicode normalization. Off by default so existing assertions are
-    // unchanged; when enabled it folds NFC/NFD, ligatures and non-breaking
-    // spaces, which are false negatives rather than real mismatches.
+    // unchanged. `true` is NFC, which folds only canonical differences such as
+    // NFC/NFD accents; the compatibility forms must be named, because NFKC
+    // would score "x2" as equal to "x²".
     const normalize = assertion.normalizeUnicode;
     pass =
       (normalizeForComparison(String(renderedValue), normalize) ===

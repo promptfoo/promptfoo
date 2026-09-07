@@ -748,11 +748,12 @@ export const AssertionSchema = z.object({
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
 
-  // Apply Unicode NFKC normalization before string comparison. Off by default.
-  // Folds forms that are visually identical but differ in codepoints — NFC vs
-  // NFD accents, ligatures such as U+FB01, non-breaking spaces — which cause
-  // false negatives on correct output. Normalizes form only, never wording.
-  normalizeUnicode: z.boolean().optional(),
+  // Apply Unicode normalization before string comparison. Off by default, so
+  // existing assertions are byte-for-byte unchanged.
+  // `true` means NFC — canonical, meaning-preserving. The compatibility
+  // forms fold distinctions that can be the answer (NFKC turns `x²` into
+  // `x2`), so they must be named explicitly. See src/assertions/normalize.ts.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
