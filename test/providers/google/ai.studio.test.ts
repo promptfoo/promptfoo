@@ -701,6 +701,29 @@ describe('AIStudioChatProvider', () => {
       expect(response.error).toContain('Model not found');
     });
 
+    it('preserves usage without charging a replayed legacy response', async () => {
+      const provider = new AIStudioChatProvider('palm2', { config: { apiKey: 'test-key' } });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: 'cached legacy response' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: true,
+      } as any);
+
+      const response = await provider.callApi('test prompt');
+      expect(response).toMatchObject({
+        cached: true,
+        tokenUsage: {
+          prompt: 10,
+          completion: 5,
+          cached: 15,
+          numRequests: 0,
+          incurredTokenUsage: {},
+        },
+      });
+    });
+
     it('should call the correct API endpoint for non-Gemini models', async () => {
       const provider = new AIStudioChatProvider('palm2', {
         config: {
@@ -1055,12 +1078,13 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
 
-      expect(response).toEqual({
+      expect(response).toMatchObject({
         output: 'cached response',
         tokenUsage: {
           cached: 15,
           total: 15,
-          numRequests: 1,
+          numRequests: 0,
+          incurredTokenUsage: {},
         },
         raw: mockResponse.data,
         cached: true,
@@ -2552,8 +2576,11 @@ describe('AIStudioChatProvider', () => {
 
         expect(response.tokenUsage).toEqual({
           cached: 80,
+          prompt: 10,
+          completion: 20,
           total: 80,
-          numRequests: 1,
+          numRequests: 0,
+          incurredTokenUsage: {},
           completionDetails: {
             reasoning: 50,
             acceptedPrediction: 0,
@@ -2647,7 +2674,7 @@ describe('AIStudioChatProvider', () => {
         expect(requestBody.service_tier).toBeUndefined();
       });
 
-      it('should not include thinking tokens in cost when response is cached', async () => {
+      it('preserves the estimated cost for a cached thinking response', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
           config: {
             apiKey: 'test-key',
@@ -2678,7 +2705,8 @@ describe('AIStudioChatProvider', () => {
 
         const response = await provider.callGemini('test prompt');
 
-        expect(response.cost).toBeUndefined();
+        expect(response.cost).toBeCloseTo(0.0007655);
+        expect(response.tokenUsage).toMatchObject({ numRequests: 0, incurredTokenUsage: {} });
       });
 
       it('should calculate cost correctly when thoughtsTokenCount is absent', async () => {
@@ -2778,7 +2806,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.cost).toBeCloseTo(0.002, 10);
   });
 
-  it('omits cost for cached embedding responses', async () => {
+  it('preserves estimated cost for cached embedding responses', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         embedding: { values: [0.1, 0.2] },
@@ -2791,7 +2819,8 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cached).toBe(true);
-    expect(response.cost).toBeUndefined();
+    expect(response.cost).toBeCloseTo(0.002, 10);
+    expect(response.tokenUsage).toMatchObject({ numRequests: 0, incurredTokenUsage: {} });
   });
 
   it('omits cost when the response has no usage metadata', async () => {
@@ -2866,7 +2895,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('No embedding found');
   });
 
-  it('marks responses as cached and records one logical request', async () => {
+  it('marks responses as cached without a new request', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       ...(embeddingResponse([0.1, 0.2], 3) as any),
       cached: true,
@@ -2876,7 +2905,12 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
 
     expect(response.cached).toBe(true);
-    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 1 });
+    expect(response.tokenUsage).toEqual({
+      cached: 3,
+      total: 3,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   it('does not support text inference via callApi', async () => {
