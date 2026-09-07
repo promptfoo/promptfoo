@@ -6,6 +6,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -332,7 +333,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
     text: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  ): Promise<ProviderEmbeddingResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
