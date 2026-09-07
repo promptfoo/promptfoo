@@ -53,6 +53,22 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - success path', () => {
+    it('records one latency sample when a response retry is cancelled during backoff', async () => {
+      const controller = new AbortController();
+      vi.spyOn(state as any, 'sleep').mockImplementationOnce(async () => {
+        controller.abort(new Error('cancelled during backoff'));
+        controller.signal.throwIfAborted();
+      });
+      await expect(
+        state.executeWithRetry('retry-cancelled', async () => ({ status: 429 }), {
+          abortSignal: controller.signal,
+          isRateLimited: (result) => result?.status === 429,
+        }),
+      ).rejects.toThrow('cancelled during backoff');
+      expect((state as any).latencies.toSortedArray()).toHaveLength(1);
+      expect(state.getMetrics().failedRequests).toBe(1);
+    });
+
     it('counts an aborted normalized response as a failure', async () => {
       const controller = new AbortController();
       await expect(

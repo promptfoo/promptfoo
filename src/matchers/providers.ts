@@ -240,7 +240,7 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
-  providerRegistry.adopt(finalProvider);
+  await providerRegistry.adopt(finalProvider);
   return finalProvider;
 }
 
