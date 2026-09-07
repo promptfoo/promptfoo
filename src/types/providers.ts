@@ -166,11 +166,11 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
   while (prototype && prototype !== Object.prototype) {
     if (
       prototype.constructor &&
-      Object.hasOwn(prototype.constructor, 'declaredProviderCapabilities')
+      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities')
     ) {
       return overridden;
     }
-    if (Object.hasOwn(prototype, capability)) {
+    if (Object.prototype.hasOwnProperty.call(prototype, capability)) {
       overridden = true;
     }
     prototype = Object.getPrototypeOf(prototype);
