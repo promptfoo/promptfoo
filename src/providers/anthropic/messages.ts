@@ -19,7 +19,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { awaitProviderOperation, transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -174,38 +174,6 @@ function getMcpContinuationParams(
   }
 
   return { ...params, messages };
-}
-
-function normalizeMcpToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data: unknown }).data);
-          }
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
 }
 
 function coerceMcpToolInput(input: unknown): Record<string, unknown> {

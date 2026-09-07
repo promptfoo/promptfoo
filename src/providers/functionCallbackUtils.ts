@@ -4,9 +4,8 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
-import { awaitProviderOperation } from './shared';
-import { withGenAIToolSpan } from './tracing';
+import { executeCallback } from './functionCallbackExecutor';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 
 import type {
   FunctionCall,
@@ -45,9 +44,9 @@ export async function loadProviderCallbackFromFileUrl(
  * path-traversal guard is a worked example of a fix that reached one copy of this logic
  * and not the others.
  *
- * The remaining providers with a `loadedFunctionCallbacks` cache (Azure Foundry, Google
- * base and live) have genuinely different loading and caching behaviour — Azure preloads,
- * Google Live gates on a shared-cache flag — so they deliberately keep their own.
+ * Loading and invocation use the same executor as Google and FunctionCallbackHandler.
+ * This adapter retains string conversion and strict file exports; Google returns raw
+ * values, while FunctionCallbackHandler preserves its lenient export policy.
  */
 export async function executeProviderFunctionCallback({
   functionName,
@@ -71,35 +70,20 @@ export async function executeProviderFunctionCallback({
   signal?.throwIfAborted();
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
-    let callback = cache[functionName];
-
-    if (!callback) {
-      const callbackRef = callbacks?.[functionName];
-
-      if (callbackRef && typeof callbackRef === 'string') {
-        callback = callbackRef.startsWith('file://')
-          ? await awaitProviderOperation(
-              loadProviderCallbackFromFileUrl(callbackRef, logPrefix),
-              signal,
-            )
-          : new Function('return ' + callbackRef)();
-        cache[functionName] = callback;
-      } else if (typeof callbackRef === 'function') {
-        callback = callbackRef;
-        cache[functionName] = callback;
-      }
-    }
-
-    if (!callback) {
-      throw new Error(`No callback found for function '${functionName}'`);
-    }
-
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    signal?.throwIfAborted();
-    const result = await awaitProviderOperation(
-      withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
+    const execution = await executeCallback({
+      name: functionName,
+      args,
+      callId,
+      reference: callbacks?.[functionName],
+      cache,
       signal,
-    );
+      loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
+    });
+    if (execution.isError) {
+      throw execution.error;
+    }
+    const result = execution.output;
 
     if (result === undefined || result === null) {
       return '';
@@ -305,39 +289,22 @@ export class FunctionCallbackHandler {
     callId?: string,
     signal?: AbortSignal,
   ): Promise<string> {
-    signal?.throwIfAborted();
-    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
-      // Get or load the callback
-      let callback = this.loadedCallbacks[functionName];
-
-      if (!callback) {
-        const callbackConfig = callbacks[functionName];
-
-        if (typeof callbackConfig === 'string') {
-          // String callback - either file reference or inline code
-          if (callbackConfig.startsWith('file://')) {
-            callback = await awaitProviderOperation(
-              this.loadExternalFunction(callbackConfig),
-              signal,
-            );
-          } else {
-            // Inline function string
-            callback = new Function('return ' + callbackConfig)() as FunctionCallback;
-          }
-        } else if (typeof callbackConfig === 'function') {
-          callback = callbackConfig;
-        } else {
-          throw new Error(`Invalid callback configuration for ${functionName}`);
-        }
-
-        // Cache for future use
-        this.loadedCallbacks[functionName] = callback;
-      }
-
-      signal?.throwIfAborted();
-      const result = await awaitProviderOperation(Promise.resolve(callback(args, context)), signal);
-      return typeof result === 'string' ? result : JSON.stringify(result);
+    const execution = await executeCallback({
+      name: functionName,
+      args,
+      callId,
+      reference: callbacks[functionName],
+      cache: this.loadedCallbacks,
+      signal,
+      context,
+      passContext: true,
+      transformOutput: (output) => (typeof output === 'string' ? output : JSON.stringify(output)),
+      loadFile: (reference) => this.loadExternalFunction(reference),
     });
+    if (execution.isError) {
+      throw execution.error;
+    }
+    return execution.output as string;
   }
 
   /**
@@ -389,40 +356,7 @@ export class FunctionCallbackHandler {
         };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
+      const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       signal?.throwIfAborted();

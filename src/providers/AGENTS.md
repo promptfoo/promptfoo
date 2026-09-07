@@ -172,3 +172,9 @@ The facade policy preserves AI Studio's loaded-schema handling, Vertex's context
 All operation interfaces accept optional request options with `abortSignal`. Implementations should check it before dispatch and pass it to their fetch or SDK transport, retry waits, and polling. Authentication and callback waits can use `awaitProviderOperation` from `shared.ts`; this stops waiting but cannot undo a callback already started or cancel a vendor job already accepted.
 
 The optional interface preserves compatibility: third-party providers and legacy implementations can ignore it. Do not claim universal transport cancellation from the method signature alone. Native cancellation is covered for the migrated OpenAI, Anthropic Messages, MCP tools, Azure chat/embedding/moderation, Google, Ollama, Hugging Face, Cohere/Voyage/LocalAI embedding, and Bedrock embedding/video paths. Other implementations require their own transport-level tests before claiming support.
+
+## Tool callbacks
+
+Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, cancellation, and traced execution. Keep file-export policy and wire conversion in each adapter. Pass `transformOutput` when serialization is part of the tool execution so failures are recorded before the span closes. The execution record retains tool name, arguments, call ID, raw output, and the original error.
+
+Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep each provider's tool-result envelope and error policy local.
