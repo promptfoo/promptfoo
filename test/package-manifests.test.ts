@@ -511,6 +511,22 @@ describe('package manifests', () => {
     );
   });
 
+  it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const binaryName = '@rollup/rollup-linux-x64-gnu';
+    const binaryRange = packageJson.optionalDependencies?.[binaryName];
+    const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+    expect(binaryRange).toBeDefined();
+    expect(minVersion(binaryRange!)?.compare('4.63.1')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBe(binaryRange);
+    expect(binaryPackage.optional).toBe(true);
+    expect(satisfies(binaryPackage.version!, binaryRange!)).toBe(true);
+  });
+
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
