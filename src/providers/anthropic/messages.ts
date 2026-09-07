@@ -276,7 +276,6 @@ function getAnthropicCostFromMessage(
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
-  private initializationPromise: Promise<void> | null = null;
   private mcpSession?: McpClientSession;
   private samplingParamsDeprecationWarned = false;
   private manualThinkingConversionWarned = false;
@@ -316,11 +315,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const { id } = options;
     this.id = id ? () => id : this.id;
 
-    // Start initialization if MCP is enabled
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-      void this.initializationPromise.catch(() => undefined);
-    }
+    void this.initializeMCP().catch(() => undefined);
   }
 
   private async initializeMCP(): Promise<void> {
