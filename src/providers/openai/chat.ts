@@ -17,6 +17,7 @@ import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import {
+  awaitProviderOperation,
   getRequestTimeoutMs,
   parseChatPrompt,
   transformToolChoice,
@@ -410,7 +411,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await awaitProviderOperation(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    callApiOptions?.abortSignal?.throwIfAborted();
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
