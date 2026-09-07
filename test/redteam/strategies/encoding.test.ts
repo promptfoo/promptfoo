@@ -3,11 +3,7 @@ import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
 import { mapEncodingTestCases } from '../../../src/redteam/strategies/encoding';
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
 import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
-import {
-  addOtherEncodings,
-  EncodingType,
-  toEmojiEncoding,
-} from '../../../src/redteam/strategies/otherEncodings';
+import { addOtherEncodings, EncodingType } from '../../../src/redteam/strategies/otherEncodings';
 import { addRot13 } from '../../../src/redteam/strategies/rot13';
 
 import type { TestCase } from '../../../src/types/index';
@@ -130,13 +126,6 @@ const publicStrategies: PublicStrategyCase[] = [
     'CamelCase',
     { strategyId: 'camelcase', encodingType: 'camelcase' },
   ],
-  [
-    'emoji',
-    (cases, injectVar) => addOtherEncodings(cases, injectVar, EncodingType.EMOJI),
-    toEmojiEncoding(originalText),
-    'Emoji',
-    { strategyId: 'emoji', encodingType: 'emoji' },
-  ],
 ];
 
 describe('public encoding strategies', () => {
@@ -167,4 +156,41 @@ describe('public encoding strategies', () => {
       ]);
     },
   );
+
+  it('emoji uses valid variation selectors that round-trip complex UTF-8', () => {
+    const prompt = 'Hello, 世界! 👋\n café';
+    const result = addOtherEncodings(
+      [
+        {
+          vars: { prompt },
+          assert: [{ type: 'equals', value: 'expected', metric: 'Harmful' }],
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ],
+      'prompt',
+      EncodingType.EMOJI,
+    );
+    const chars = Array.from(result[0].vars?.prompt as string);
+
+    expect(chars[0]).toBe('😊');
+    expect(chars).toHaveLength(Buffer.byteLength(prompt, 'utf8') + 1);
+    const bytes = chars.slice(1).map((char) => {
+      const codePoint = char.codePointAt(0)!;
+      expect(
+        (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+          (codePoint >= 0xe0100 && codePoint <= 0xe01ef),
+      ).toBe(true);
+      return codePoint <= 0xfe0f ? codePoint - 0xfe00 : codePoint - 0xe0100 + 16;
+    });
+    expect(Buffer.from(bytes).toString('utf8')).toBe(prompt);
+    expect(result[0].assert).toStrictEqual([
+      { type: 'equals', value: 'expected', metric: 'Harmful/Emoji' },
+    ]);
+    expect(result[0].metadata).toStrictEqual({
+      pluginId: 'test-plugin',
+      strategyId: 'emoji',
+      encodingType: 'emoji',
+      originalText: prompt,
+    });
+  });
 });
