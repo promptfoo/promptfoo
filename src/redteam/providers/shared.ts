@@ -176,8 +176,8 @@ class RedteamProviderManager {
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
-  private wrapProvider(provider: ApiProvider): ApiProvider {
-    providerRegistry.adopt(provider);
+  private async wrapProvider(provider: ApiProvider): Promise<ApiProvider> {
+    await providerRegistry.adopt(provider);
     if (this.rateLimitRegistry) {
       return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
     }
