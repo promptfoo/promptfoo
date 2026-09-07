@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { OpenAiGenericProvider } from '../../src/providers/openai';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -116,4 +117,19 @@ it('preserves the normalized provider environment over the factory context', () 
     config: { env: { TOGETHER_API_KEY: 'provider-key' } },
   }) as OpenAiGenericProvider;
   expect(provider.getApiKey()).toBe('provider-key');
+});
+
+it('preserves Together credentials through provider config validation', async () => {
+  mockProcessEnv({ TOGETHER_API_KEY: 'process-key' });
+  const providerId = 'togetherai:chat:fixture-model';
+  const options = ProviderOptionsSchema.parse({
+    id: providerId,
+    config: { apiBaseUrl: 'http://fixture.invalid/v1' },
+    env: { TOGETHER_API_KEY: 'validated-provider-key' },
+  });
+  const provider = createTogetherAiProvider(providerId, { config: options });
+  expect((await provider.callApi('hello')).error).toBeUndefined();
+  expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).toMatchObject({
+    Authorization: 'Bearer validated-provider-key',
+  });
 });
