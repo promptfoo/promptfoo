@@ -113,9 +113,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           embedding,
           latencyMs,
           tokenUsage: getTokenUsage(data, cached),
-          cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
-            cachedResponse: cached,
-          }),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage),
         },
         cached,
       );

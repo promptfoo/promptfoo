@@ -5,6 +5,8 @@ import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiEmbeddingProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/index';
@@ -67,7 +69,12 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Voyage API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     if (!this.getApiKey()) {
       throw new Error('Voyage API key must be set for similarity comparison');
     }
@@ -87,6 +94,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,

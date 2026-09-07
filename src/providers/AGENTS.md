@@ -166,3 +166,9 @@ ls examples/myprovider/promptfooconfig.yaml
 The AI Studio, unified Google, and Vertex classes share `google/gemini.ts` for request preparation, streamed candidate parsing, and usage extraction. Keep endpoint/authentication, cache transport, pricing, and final facade response shaping in the existing classes. Add shared pipeline tests when changing Gemini tool merging or stream parsing.
 
 The facade policy preserves AI Studio's loaded-schema handling, Vertex's context/examples and Model Armor fields, the system-instruction wire names, and legacy unknown-usage/error shapes. Do not silently unify those compatibility choices while editing shared logic. Vertex non-Gemini paths remain independent.
+
+## Request cancellation
+
+All operation interfaces accept optional request options with `abortSignal`. Implementations should check it before dispatch and pass it to their fetch or SDK transport, retry waits, and polling. Authentication and callback waits can use `awaitProviderOperation` from `shared.ts`; this stops waiting but cannot undo a callback already started or cancel a vendor job already accepted.
+
+The optional interface preserves compatibility: third-party providers and legacy implementations can ignore it. Do not claim universal transport cancellation from the method signature alone. Native cancellation is covered for the migrated OpenAI, Anthropic Messages, MCP tools, Azure chat/embedding/moderation, Google, Ollama, Hugging Face, Cohere/Voyage/LocalAI embedding, and Bedrock embedding/video paths. Other implementations require their own transport-level tests before claiming support.

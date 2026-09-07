@@ -1,5 +1,5 @@
 import { providerRegistry } from '../providerRegistry';
-import { waitForMcpOperation } from './abort';
+import { awaitProviderOperation } from '../shared';
 import { MCPClient } from './client';
 
 import type { MCPConfig } from './types';
@@ -34,7 +34,7 @@ export class McpClientSession {
   async initialize(signal?: AbortSignal): Promise<MCPClient> {
     signal?.throwIfAborted();
     if (this.cleanupPromise) {
-      await waitForMcpOperation(this.cleanupPromise, signal);
+      await awaitProviderOperation(this.cleanupPromise, signal);
     }
     if (!this.currentClient) {
       this.start();
@@ -43,7 +43,7 @@ export class McpClientSession {
     providerRegistry.register(this.owner);
     const client = this.currentClient!;
     const startupSignal = this.startupController.signal;
-    await waitForMcpOperation(
+    await awaitProviderOperation(
       this.initializationPromise!,
       signal ? AbortSignal.any([signal, startupSignal]) : startupSignal,
     );
@@ -61,9 +61,10 @@ export class McpClientSession {
     this.startupController.abort();
     this.cleanupPromise = (async () => {
       try {
-        await waitForMcpOperation(this.initializationPromise!, this.startupController.signal).catch(
-          () => undefined,
-        );
+        await awaitProviderOperation(
+          this.initializationPromise!,
+          this.startupController.signal,
+        ).catch(() => undefined);
         await client.cleanup();
       } finally {
         this.currentClient = null;

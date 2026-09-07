@@ -9,6 +9,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -275,7 +276,12 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Cohere API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     if (!this.getApiKey()) {
       throw new Error('Cohere API key must be set for embedding');
     }
@@ -293,6 +299,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
         `${this.getApiUrl()}/embed`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
