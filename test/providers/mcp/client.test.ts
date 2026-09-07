@@ -433,6 +433,8 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
       expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });

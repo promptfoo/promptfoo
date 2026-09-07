@@ -268,6 +268,8 @@ export class MCPClient {
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
+          await this.closeConnection(client, transport);
+          transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(
             new URL(serverUrl),
