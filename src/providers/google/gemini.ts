@@ -179,6 +179,10 @@ export function parseGeminiContent(
     }
   }
   if (output === undefined || candidate === undefined) {
+    if (facade === 'vertex' && chunks.every((chunk) => !chunk.candidates?.length)) {
+      // Keep Vertex's facade catch responsible for the historical no-candidate error.
+      getCandidate(chunks[0]);
+    }
     const error = `No output found in response: ${JSON.stringify(data)}`;
     if (facade === 'ai-studio') {
       throw new Error(error);
