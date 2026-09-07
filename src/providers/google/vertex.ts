@@ -1063,6 +1063,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   modelName: string;

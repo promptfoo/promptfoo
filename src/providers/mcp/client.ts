@@ -513,7 +513,7 @@ export class MCPClient {
     if (this.shuttingDown) {
       return;
     }
-    await awaitProviderOperation(this.connectToServer(oauthConfig.serverConfig), signal);
+    await awaitProviderOperation(this.connectToServer(oauthConfig.serverConfig, signal), signal);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
