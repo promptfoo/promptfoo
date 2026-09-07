@@ -8,20 +8,21 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import {
-  type ApiProvider,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  type GradingConfig,
-  hasProviderCapability,
-  type ProviderOptions,
-  type ProviderResponse,
-  type ProviderType,
-  type ProviderTypeMap,
-  type TestCase,
-  type VarValue,
-} from '../types/index';
+import { hasProviderCapability } from '../types/providers';
 import invariant from '../util/invariant';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingConfig,
+  ProviderOptions,
+  ProviderResponse,
+  ProviderType,
+  ProviderTypeMap,
+  TestCase,
+  VarValue,
+} from '../types/index';
 
 // These wrappers keep src/matchers' imports of the redteam layer confined to this file.
 // Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and

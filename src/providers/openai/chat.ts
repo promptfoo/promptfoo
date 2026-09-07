@@ -100,7 +100,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private mcpSession?: McpClientSession;
-  private initializationPromise: Promise<void> | null = null;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
@@ -113,10 +112,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
 
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-      void this.initializationPromise.catch(() => undefined);
-    }
+    void this.initializeMCP().catch(() => undefined);
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {

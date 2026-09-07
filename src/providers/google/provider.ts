@@ -36,7 +36,6 @@ import {
   getLastPromptSafetyRatings,
   loadCredentials,
   normalizeGeminiAudio,
-  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -335,7 +334,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { body, config } = await prepareGeminiRequest(
+    const { body, config, toolsDisabled } = await prepareGeminiRequest(
       this.modelName,
       this.config,
       prompt,
@@ -425,7 +424,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context, options);
+    return this.parseGeminiResponse(data, cached, config, toolsDisabled, context, options);
   }
 
   /**
@@ -435,12 +434,11 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
+    toolsDisabled: boolean,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
-      const { toolsDisabled } = resolveGoogleToolConfig(config);
-
       const parsed = parseGeminiContent(
         data,
         'unified',

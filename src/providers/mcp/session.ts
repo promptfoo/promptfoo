@@ -13,7 +13,7 @@ export class McpClientSession {
 
   constructor(
     private readonly config: MCPConfig,
-    private readonly owner: { cleanup(): Promise<void> },
+    private readonly owner: { cleanup(): void | Promise<void> },
   ) {
     this.start();
   }
