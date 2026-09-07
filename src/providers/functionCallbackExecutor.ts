@@ -9,6 +9,7 @@ type Callback = (args: string, context?: unknown) => unknown;
 // prompt changes its configured function or file reference. Weak ownership lets
 // cleanup/replacement of a provider release this metadata too.
 const callbackReferences = new WeakMap<Record<string, Function>, Map<string, unknown>>();
+const callbackLoads = new WeakMap<Record<string, Function>, Map<string, symbol>>();
 
 /** Load and execute once, preserving the caller's loading and invocation policy. */
 export async function executeCallback({
@@ -45,12 +46,18 @@ export async function executeCallback({
         references = new Map();
         callbackReferences.set(cache, references);
       }
+      let loads = callbackLoads.get(cache);
+      if (!loads) {
+        loads = new Map();
+        callbackLoads.set(cache, loads);
+      }
+      const load = Symbol(name);
+      loads.set(name, load);
       let callback = cache[name];
       if (!callback || references.get(name) !== reference) {
-        const previousReference = references.get(name);
         if (typeof reference === 'function') {
           callback = reference;
-        } else if (typeof reference === 'string') {
+        } else if (typeof reference === 'string' && reference) {
           callback = reference.startsWith('file://')
             ? await awaitProviderOperation(loadFile(reference), signal)
             : loadInline
@@ -58,7 +65,7 @@ export async function executeCallback({
               : new Function('return ' + reference)();
         } else {
           throw new Error(
-            reference === undefined
+            reference == null || reference === ''
               ? `No callback found for function '${name}'`
               : `Invalid callback configuration for ${name}`,
           );
@@ -66,7 +73,7 @@ export async function executeCallback({
         if (typeof callback !== 'function') {
           throw new Error(`Callback '${name}' did not resolve to a function`);
         }
-        if (references.get(name) === previousReference) {
+        if (loads.get(name) === load) {
           cache[name] = callback;
           references.set(name, reference);
         }

@@ -25,7 +25,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { executeCallback } from '../functionCallbackExecutor';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 

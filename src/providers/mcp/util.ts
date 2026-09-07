@@ -332,6 +332,13 @@ export function requiresAsyncAuth(server: MCPServerConfig): boolean {
 }
 
 export function normalizeMcpToolContent(content: unknown): string {
+  const stringify = (value: unknown) => {
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  };
   if (content == null) {
     return '';
   }
@@ -349,16 +356,16 @@ export function normalizeMcpToolContent(content: unknown): string {
             return String((part as { text: unknown }).text);
           }
           if ('json' in part) {
-            return JSON.stringify((part as { json: unknown }).json);
+            return stringify((part as { json: unknown }).json);
           }
           if ('data' in part) {
-            return JSON.stringify((part as { data: unknown }).data);
+            return stringify((part as { data: unknown }).data);
           }
-          return JSON.stringify(part);
+          return stringify(part);
         }
         return String(part);
       })
       .join('\n');
   }
-  return JSON.stringify(content);
+  return stringify(content);
 }

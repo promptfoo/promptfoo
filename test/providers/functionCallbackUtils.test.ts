@@ -433,6 +433,14 @@ describe('FunctionCallbackHandler', () => {
   });
 
   describe('executeCallback', () => {
+    it('returns an empty string when a callback returns undefined', async () => {
+      const result = await handler.processCall(
+        { name: 'emptyFunction', arguments: '{}' },
+        { emptyFunction: (() => undefined) as unknown as FunctionCallbackConfig['emptyFunction'] },
+      );
+      expect(result).toEqual({ output: '', isError: false });
+    });
+
     it('should cache and reuse loaded callbacks', async () => {
       const mockCallback = vi.fn().mockResolvedValue('cached result');
       const callbacks: FunctionCallbackConfig = {
