@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
+import { awaitProviderOperation } from '../shared';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
@@ -65,9 +66,11 @@ export class AzureGenericProvider implements ApiProvider {
     this.authHeaders = await this.getAuthHeaders();
   }
 
-  async ensureInitialized() {
-    await this.authInitializationPromise;
-    await this.refreshAuthTokenIfNeeded();
+  async ensureInitialized(signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    await awaitProviderOperation(this.authInitializationPromise, signal);
+    signal?.throwIfAborted();
+    await awaitProviderOperation(this.refreshAuthTokenIfNeeded(), signal);
   }
 
   /**

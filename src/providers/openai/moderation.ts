@@ -92,21 +92,28 @@ function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
   return createHmac('sha256', apiKey).update(OPENAI_MODERATION_CACHE_HASH_KEY).digest('hex');
 }
 
+const scopedModerationRequests = new WeakMap<
+  AbortSignal,
+  Map<string, Promise<OpenAIModerationFetchResult>>
+>();
+
 function fetchOpenAIModerationWithDedupe(
   inflightCacheKey: string,
   fetcher: () => Promise<OpenAIModerationFetchResult>,
   abortSignal?: AbortSignal,
 ): Promise<OpenAIModerationFetchResult> {
-  // Independent cancellation scopes must not share the same underlying request.
+  // Requests share work only when their cancellation scope also matches.
+  let requests = OPENAI_MODERATION_INFLIGHT_REQUESTS;
   if (abortSignal) {
-    return fetcher();
+    requests = scopedModerationRequests.get(abortSignal) ?? new Map();
+    scopedModerationRequests.set(abortSignal, requests);
   }
-  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
+  let inflightRequest = requests.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(inflightCacheKey);
+      requests.delete(inflightCacheKey);
     });
-    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
+    requests.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }

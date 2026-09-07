@@ -178,3 +178,22 @@ describe.each([TrueFoundryEmbeddingProvider, DMREmbeddingProvider])(
     );
   },
 );
+
+it('preserves the reported embedding price when replaying a cached response', async () => {
+  const provider = new OpenAiEmbeddingProvider('text-embedding-3-small', {
+    config: { apiKey: 'fixture-key' },
+  });
+  const data = {
+    data: [{ embedding: [0.1, 0.2] }],
+    usage: { total_tokens: 1000, prompt_tokens: 1000 },
+  };
+  vi.mocked(fetchWithCache)
+    .mockResolvedValueOnce({ data, cached: false, status: 200, statusText: 'OK' })
+    .mockResolvedValueOnce({ data, cached: true, status: 200, statusText: 'OK' });
+  const fresh = await provider.callEmbeddingApi('fixture');
+  const replay = await provider.callEmbeddingApi('fixture');
+  expect(fresh.cost).toBeGreaterThan(0);
+  expect(replay.cost).toBe(fresh.cost);
+  expect(replay.cached).toBe(true);
+  expect(replay.tokenUsage?.numRequests).toBe(0);
+});
