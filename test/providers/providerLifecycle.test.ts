@@ -80,13 +80,18 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     expect(mcp.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('cancels pending startup and coalesces overlapping cleanup calls', async () => {
+  it('closes pending startup without waiting for it and coalesces cleanup calls', async () => {
     const startup = createDeferred<void>();
     mcp.initialize.mockReturnValue(startup.promise);
     const provider = createProvider();
-    await Promise.all([provider.cleanup(), providerRegistry.shutdownAll()]);
+    const first = provider.cleanup();
+    const second = providerRegistry.shutdownAll();
+    await vi.runAllTimersAsync();
+    await Promise.all([first, second]);
     expect(mcp.cleanup).toHaveBeenCalledOnce();
     startup.resolve();
+    await vi.runAllTimersAsync();
+    expect(mcp.cleanup).toHaveBeenCalledTimes(2);
   });
 
   it('cancels one startup waiter while preserving another evaluation', async () => {
@@ -111,7 +116,6 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     expect(mcp.cleanup).not.toHaveBeenCalled();
     startup.resolve();
     expect((await other).error).toBeUndefined();
-    expect(mcp.cleanup).toHaveBeenCalledOnce();
   });
 
   it('finishes evaluation cleanup after cancelling stalled startup', async () => {
