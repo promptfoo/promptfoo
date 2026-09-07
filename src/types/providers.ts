@@ -120,65 +120,92 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
-export interface ApiProvider extends MinimalApiProvider {
-  callApi: CallApiFunction;
-  callClassificationApi?: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
-  config?: any;
-  delay?: number;
-  getSessionId?: () => string;
-  inputs?: Inputs;
-  label?: ProviderLabel;
-  transform?: string | TransformFunction;
-  toJSON?: () => any;
-  /**
-   * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
-   * Request-scoped cancellation should be implemented with `abortSignal`.
-   */
+/** Identity and lifecycle shared by providers, independently of their operation. */
+export interface ProviderIdentity<TConfig = unknown> {
+  id(): string;
+  config?: TConfig;
+  /** Omit for legacy method-based detection; declare to exclude inherited stubs. */
+  capabilities?: readonly ProviderCapability[];
+  /** Release long-lived resources. Request cancellation uses abortSignal instead. */
   cleanup?: () => void | Promise<void>;
 }
 
-export interface ApiEmbeddingProvider extends ApiProvider {
+export interface ProviderOperations {
+  callApi: CallApiFunction;
   callEmbeddingApi: (
     input: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderEmbeddingResponse>;
-}
-
-export interface ApiSimilarityProvider extends ApiProvider {
+  callClassificationApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
   callSimilarityApi: (
     reference: string,
     input: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderSimilarityResponse>;
-}
-
-export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderClassificationResponse>;
-}
-
-export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (
     prompt: string,
     response: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderModerationResponse>;
+}
+
+export type ProviderCapability = keyof ProviderOperations;
+
+/** Check both the implementation and any explicit capability declaration. */
+export function hasProviderCapability<K extends ProviderCapability>(
+  provider: unknown,
+  capability: K,
+): provider is ProviderIdentity & Pick<ProviderOperations, K> {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'id' in provider &&
+    typeof provider.id === 'function' &&
+    capability in provider &&
+    typeof (provider as Record<string, unknown>)[capability] === 'function' &&
+    (!('capabilities' in provider) ||
+      provider.capabilities === undefined ||
+      (Array.isArray(provider.capabilities) && provider.capabilities.includes(capability)))
+  );
+}
+
+// Keep the legacy text-provider shape and permissive default config at the public
+// boundary. Internal adapters can specify TConfig and use operation guards.
+export interface ApiProvider<TConfig = any> extends MinimalApiProvider, ProviderIdentity<TConfig> {
+  callApi: ProviderOperations['callApi'];
+  callClassificationApi?: ProviderOperations['callClassificationApi'];
+  callEmbeddingApi?: ProviderOperations['callEmbeddingApi'];
+  callSimilarityApi?: ProviderOperations['callSimilarityApi'];
+  callModerationApi?: ProviderOperations['callModerationApi'];
+  delay?: number;
+  getSessionId?: () => string;
+  inputs?: Inputs;
+  label?: ProviderLabel;
+  transform?: string | TransformFunction;
+  toJSON?: () => any;
+}
+
+export interface ApiEmbeddingProvider extends ApiProvider {
+  callEmbeddingApi: ProviderOperations['callEmbeddingApi'];
+}
+
+export interface ApiSimilarityProvider extends ApiProvider {
+  callSimilarityApi: ProviderOperations['callSimilarityApi'];
+}
+
+export interface ApiClassificationProvider extends ApiProvider {
+  callClassificationApi: ProviderOperations['callClassificationApi'];
+}
+
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: ProviderOperations['callModerationApi'];
 }
 
 export type FilePath = string;
@@ -192,7 +219,7 @@ export type CallApiFunction = {
   label?: string;
 };
 
-export function isApiProvider(provider: any): provider is ApiProvider {
+export function isApiProvider(provider: unknown): provider is ApiProvider {
   return (
     typeof provider === 'object' &&
     provider != null &&

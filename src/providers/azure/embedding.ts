@@ -7,6 +7,8 @@ import { AzureGenericProvider } from './generic';
 import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
+  readonly capabilities = ['callEmbeddingApi'] as const;
+
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');

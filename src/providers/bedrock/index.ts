@@ -2960,6 +2960,8 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly capabilities = ['callEmbeddingApi'] as const;
+
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');
   }

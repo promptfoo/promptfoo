@@ -582,6 +582,8 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  readonly capabilities = ['callEmbeddingApi'] as const;
+
   id(): string {
     if (this.customId) {
       return this.customId();

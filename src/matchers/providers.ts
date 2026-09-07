@@ -8,19 +8,19 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import invariant from '../util/invariant';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  GradingConfig,
-  ProviderOptions,
-  ProviderResponse,
-  ProviderType,
-  ProviderTypeMap,
-  TestCase,
-  VarValue,
+import {
+  type ApiProvider,
+  type CallApiContextParams,
+  type GradingConfig,
+  hasProviderCapability,
+  type ProviderOptions,
+  type ProviderResponse,
+  type ProviderType,
+  type ProviderTypeMap,
+  type TestCase,
+  type VarValue,
 } from '../types/index';
+import invariant from '../util/invariant';
 
 // These wrappers keep src/matchers' imports of the redteam layer confined to this file.
 // Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
@@ -249,14 +249,15 @@ export async function getAndCheckProvider(
     }
   }
 
-  let isValidProviderType = true;
+  let isValidProviderType = hasProviderCapability(matchedProvider, 'callApi');
   if (type === 'embedding') {
     isValidProviderType =
-      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
+      hasProviderCapability(matchedProvider, 'callEmbeddingApi') ||
+      hasProviderCapability(matchedProvider, 'callSimilarityApi');
   } else if (type === 'classification') {
-    isValidProviderType = 'callClassificationApi' in matchedProvider;
+    isValidProviderType = hasProviderCapability(matchedProvider, 'callClassificationApi');
   } else if (type === 'moderation') {
-    isValidProviderType = 'callModerationApi' in matchedProvider;
+    isValidProviderType = hasProviderCapability(matchedProvider, 'callModerationApi');
   }
 
   if (!isValidProviderType) {

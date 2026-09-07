@@ -1289,6 +1289,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly capabilities = ['callEmbeddingApi'] as const;
+
   modelName: string;
   config: VertexEmbeddingProviderConfig;
   env?: EnvOverrides;

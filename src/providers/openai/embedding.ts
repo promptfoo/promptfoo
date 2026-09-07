@@ -18,6 +18,8 @@ type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  readonly capabilities = ['callEmbeddingApi'] as const;
+
   declare config: OpenAiEmbeddingOptions;
 
   constructor(
