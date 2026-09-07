@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
@@ -89,6 +90,30 @@ describe('OpenAI Provider', () => {
         } as any),
       ).rejects.toThrow('only available through openai:codex-sdk');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for external tools when the call is cancelled', async () => {
+      let resolveTools: (tools: never[]) => void = () => {};
+      const stalledTools = new Promise<never[]>((resolve) => {
+        resolveTools = resolve;
+      });
+      const loadTools = vi
+        .spyOn(util, 'maybeLoadToolsFromExternalFile')
+        .mockImplementationOnce(() => stalledTools);
+      const controller = new AbortController();
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { tools: [] },
+      });
+      try {
+        const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        await vi.waitFor(() => expect(loadTools).toHaveBeenCalledOnce());
+        controller.abort(new Error('cancelled while loading tools'));
+        await expect(call).rejects.toThrow('cancelled while loading tools');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        resolveTools([]);
+        loadTools.mockRestore();
+      }
     });
 
     it('should call API successfully', async () => {
