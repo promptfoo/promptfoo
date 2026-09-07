@@ -146,6 +146,19 @@ describe('docker model runner provider', () => {
       vi.clearAllMocks();
     });
 
+    it.each(['chat', 'completion'])('skips a cancelled %s model probe', async (type) => {
+      const controller = new AbortController();
+      controller.abort(new Error('cancelled before probe'));
+      const provider = createDockerProvider(`docker:${type}:fixture`) as
+        | DMRChatCompletionProvider
+        | DMRCompletionProvider;
+
+      await expect(
+        provider.callApi('fixture', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('cancelled before probe');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it.each([
       {
         providerType: 'chat',
@@ -331,6 +344,39 @@ describe('docker model runner provider', () => {
           "Model 'ai/missing-embedding-model' not found. Run 'docker model pull ai/missing-embedding-model'.",
         );
         expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
+      });
+
+      it('does not probe models for an already cancelled embedding request', async () => {
+        const controller = new AbortController();
+        controller.abort(new Error('cancelled before probe'));
+        const provider = createDockerProvider('docker:embedding:fixture') as DMREmbeddingProvider;
+
+        await expect(
+          provider.callEmbeddingApi('fixture', undefined, { abortSignal: controller.signal }),
+        ).rejects.toThrow('cancelled before probe');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      });
+
+      it('cancels a pending model probe before sending an embedding', async () => {
+        const controller = new AbortController();
+        vi.mocked(fetchWithCache).mockImplementationOnce((_url, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          return new Promise((_resolve, reject) => {
+            controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+              once: true,
+            });
+          });
+        });
+        const provider = createDockerProvider('docker:embedding:fixture') as DMREmbeddingProvider;
+        const pending = provider.callEmbeddingApi('fixture', undefined, {
+          abortSignal: controller.signal,
+        });
+        const rejection = expect(pending).rejects.toThrow('cancelled during probe');
+        controller.abort(new Error('cancelled during probe'));
+
+        await rejection;
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+        expect(logger.warn).not.toHaveBeenCalled();
       });
     });
   });

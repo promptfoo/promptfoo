@@ -47,6 +47,7 @@ export async function executeCallback({
       }
       let callback = cache[name];
       if (!callback || references.get(name) !== reference) {
+        const previousReference = references.get(name);
         if (typeof reference === 'function') {
           callback = reference;
         } else if (typeof reference === 'string') {
@@ -65,8 +66,10 @@ export async function executeCallback({
         if (typeof callback !== 'function') {
           throw new Error(`Callback '${name}' did not resolve to a function`);
         }
-        cache[name] = callback;
-        references.set(name, reference);
+        if (references.get(name) === previousReference) {
+          cache[name] = callback;
+          references.set(name, reference);
+        }
       }
       signal?.throwIfAborted();
       const result = await awaitProviderOperation(

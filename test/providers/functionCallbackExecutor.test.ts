@@ -86,6 +86,7 @@ describe('callback execution records', () => {
     first.resolve(() => 'first');
     expect((await a).output).toBe('first');
     expect((await call('file://second.js')).output).toBe('second');
+    expect(loadFile).toHaveBeenCalledTimes(2);
   });
 
   it('does not load an already-cancelled callback', async () => {
