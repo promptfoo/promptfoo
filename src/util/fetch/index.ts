@@ -276,7 +276,10 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleepWithAbort(backoffMs, combinedSignal);
+      await sleepWithAbort(backoffMs, combinedSignal).catch((error: unknown) => {
+        combinedSignal?.throwIfAborted();
+        throw error;
+      });
       continue;
     }
 

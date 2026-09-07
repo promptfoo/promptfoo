@@ -25,8 +25,8 @@ function formatVoyageApiError(status: number, statusText: string, data: any): st
 }
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = VoyageEmbeddingProvider.declaredProviderCapabilities;
 
   modelName: string;
   config: any;

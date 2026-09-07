@@ -182,10 +182,16 @@ export class ChatKitBrowserPool {
       return this.initPromise;
     }
 
+    const generation = this.shutdownGeneration;
     const initialization = this.doInitialize();
     this.initPromise = initialization;
     try {
       await initialization;
+    } catch (error) {
+      if (generation === this.shutdownGeneration) {
+        await this.shutdown();
+      }
+      throw error;
     } finally {
       this.initPromise = null;
     }
@@ -202,7 +208,7 @@ export class ChatKitBrowserPool {
     });
 
     // Create shared HTTP server with per-template routing
-    this.server = http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       // Extract template key from URL path: /template/<key>
       const url = new URL(req.url || '/', `http://localhost`);
       const pathParts = url.pathname.split('/').filter(Boolean);
@@ -223,12 +229,18 @@ export class ChatKitBrowserPool {
       res.end('Template not found');
     });
 
+    this.server = server;
     await new Promise<void>((resolve, reject) => {
-      this.server!.once('error', (err: NodeJS.ErrnoException) => {
+      server.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
-        const address = this.server!.address();
+      server.listen(this.config.serverPort, () => {
+        if (generation !== this.shutdownGeneration) {
+          server.close();
+          reject(new Error('ChatKit pool initialization cancelled during shutdown'));
+          return;
+        }
+        const address = server.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
         resolve();
@@ -240,9 +252,14 @@ export class ChatKitBrowserPool {
 
     // Launch single browser
     try {
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: this.config.headless,
       });
+      if (generation !== this.shutdownGeneration) {
+        await browser.close();
+        throw new Error('ChatKit pool initialization cancelled during shutdown');
+      }
+      this.browser = browser;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("Executable doesn't exist")) {
@@ -250,10 +267,6 @@ export class ChatKitBrowserPool {
       }
       throw error;
     }
-    if (generation !== this.shutdownGeneration) {
-      throw new Error('ChatKit pool initialization cancelled during shutdown');
-    }
-
     this.initialized = true;
     logger.debug('[ChatKitPool] Browser pool initialized');
   }
@@ -574,9 +587,6 @@ export class ChatKitBrowserPool {
       logger.debug('[ChatKitPool] Clearing pending waiters', { count: this.waitQueue.length });
       this.waitQueue = [];
     }
-
-    // Initialization may still be opening a server or browser when shutdown begins.
-    await this.initPromise?.catch(() => {});
 
     // Close all contexts
     for (const pooledPage of this.pages) {

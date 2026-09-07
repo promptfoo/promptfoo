@@ -6,6 +6,7 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+import * as util from '../../src/util/index';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -218,6 +219,23 @@ describe('OllamaCompletionProvider', () => {
 describe('OllamaChatProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('stops waiting when tool loading is cancelled', async () => {
+    const loader = vi
+      .spyOn(util, 'maybeLoadToolsFromExternalFile')
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const provider = new OllamaChatProvider('llama3.3', { config: { tools: [] } });
+    try {
+      const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled tool loader'));
+      await expect(call).rejects.toThrow('cancelled tool loader');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    } finally {
+      loader.mockRestore();
+    }
   });
 
   it('should construct with model name and options', () => {
@@ -706,6 +724,36 @@ describe('OllamaChatProvider', () => {
 describe('Ollama provider tracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it.each([
+    [
+      OllamaCompletionProvider,
+      '{"response":"cached","done":true,"prompt_eval_count":6,"eval_count":4}\n',
+    ],
+    [
+      OllamaChatProvider,
+      '{"message":{"content":"cached"},"done":true,"prompt_eval_count":6,"eval_count":4}\n',
+    ],
+  ])('records cached usage in %s spans', async (Provider, data) => {
+    const setAttribute = vi.fn();
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
+    } as any);
+    try {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      await new Provider('llama3.3').callApi('hello');
+      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 
   it.each([
