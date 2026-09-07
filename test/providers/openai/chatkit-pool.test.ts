@@ -360,6 +360,14 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('shutdown', () => {
+    it('unregisters a pool closed outside the registry', async () => {
+      const pool = ChatKitBrowserPool.getInstance();
+      const shutdown = vi.spyOn(pool, 'shutdown');
+      await pool.shutdown();
+      await providerRegistry.shutdownAll();
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
     it('creates a fresh singleton while the previous pool is closing', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
