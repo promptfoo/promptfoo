@@ -79,24 +79,25 @@ export async function executeProviderFunctionCallback({
       cache,
       signal,
       loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
+      transformOutput: (result) => {
+        if (result === undefined || result === null) {
+          return '';
+        }
+        if (typeof result === 'object') {
+          try {
+            return JSON.stringify(result);
+          } catch (error) {
+            logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+            return String(result);
+          }
+        }
+        return String(result);
+      },
     });
     if (execution.isError) {
       throw execution.error;
     }
-    const result = execution.output;
-
-    if (result === undefined || result === null) {
-      return '';
-    }
-    if (typeof result === 'object') {
-      try {
-        return JSON.stringify(result);
-      } catch (error) {
-        logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-        return String(result);
-      }
-    }
-    return String(result);
+    return execution.output as string;
   } catch (error: any) {
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
