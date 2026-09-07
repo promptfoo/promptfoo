@@ -7,6 +7,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { providerRegistry } from '../../providers/providerRegistry';
 import {
   getProviderCallTracingContext,
   type RateLimitRegistry,
@@ -176,6 +177,7 @@ class RedteamProviderManager {
    * Wrap a provider with rate limiting if a registry is configured.
    */
   private wrapProvider(provider: ApiProvider): ApiProvider {
+    providerRegistry.adopt(provider);
     if (this.rateLimitRegistry) {
       return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
     }

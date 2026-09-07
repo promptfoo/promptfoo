@@ -46,6 +46,7 @@ interface ChatKitPoolConfig {
 export class ChatKitBrowserPool {
   private static instance: ChatKitBrowserPool | null = null;
   private static cleanupRegistered: boolean = false;
+  private static pendingShutdown: Promise<void> | null = null;
 
   private browser: Browser | null = null;
   private server: http.Server | null = null;
@@ -56,6 +57,7 @@ export class ChatKitBrowserPool {
   private templates: Map<string, string> = new Map(); // templateKey -> HTML
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
+  private shutdownPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(config: ChatKitPoolConfig) {
@@ -185,6 +187,7 @@ export class ChatKitBrowserPool {
   }
 
   private async doInitialize(): Promise<void> {
+    await ChatKitBrowserPool.pendingShutdown;
     logger.debug('[ChatKitPool] Initializing browser pool', {
       maxConcurrency: this.config.maxConcurrency,
     });
@@ -523,7 +526,24 @@ export class ChatKitBrowserPool {
   /**
    * Shutdown the pool and release all resources
    */
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
+    const work = this.doShutdown();
+    const previous = ChatKitBrowserPool.pendingShutdown;
+    const completed = Promise.allSettled(previous ? [previous, work] : [work]).then(() => {});
+    ChatKitBrowserPool.pendingShutdown = completed;
+    this.shutdownPromise = work.finally(() => {
+      if (ChatKitBrowserPool.pendingShutdown === completed) {
+        ChatKitBrowserPool.pendingShutdown = null;
+      }
+      this.shutdownPromise = null;
+    });
+    return this.shutdownPromise;
+  }
+
+  private async doShutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
     providerRegistry.unregister(this);
     if (ChatKitBrowserPool.instance === this) {

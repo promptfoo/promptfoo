@@ -243,6 +243,34 @@ describe('NovaReelVideoProvider', () => {
   });
 
   describe('callApi - success flow', () => {
+    it('stops waiting for a blob write after cancellation', async () => {
+      const controller = new AbortController();
+      const { storeBlob } = await import('../../../src/blobs');
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(storeBlob).mockImplementationOnce(() => {
+        started();
+        return new Promise(() => {});
+      });
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'job-1' }).mockResolvedValueOnce({
+        invocationArn: 'job-1',
+        status: 'Completed',
+        outputDataConfig: { s3OutputDataConfig: { s3Uri: 's3://bucket/prefix' } },
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: { transformToByteArray: async () => new Uint8Array([1]) },
+      });
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await writing;
+      controller.abort(new Error('cancelled blob write'));
+      await expect(call).rejects.toThrow('cancelled blob write');
+    });
+
     it('should complete video generation successfully', async () => {
       const mockVideoData = Buffer.from('mock video content');
 

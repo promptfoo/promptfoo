@@ -53,6 +53,22 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - success path', () => {
+    it('counts an aborted normalized response as a failure', async () => {
+      const controller = new AbortController();
+      await expect(
+        state.executeWithRetry(
+          'cancelled-request',
+          async () => {
+            controller.abort(new Error('cancelled'));
+            return { error: 'transport converted cancellation' };
+          },
+          { abortSignal: controller.signal },
+        ),
+      ).rejects.toThrow('cancelled');
+      expect(state.getMetrics().completedRequests).toBe(0);
+      expect(state.getMetrics().failedRequests).toBe(1);
+    });
+
     it('should execute function and return result', async () => {
       const result = await state.executeWithRetry('req-1', async () => 'success', {});
 

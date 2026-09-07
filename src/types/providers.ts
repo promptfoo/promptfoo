@@ -159,6 +159,25 @@ export interface ProviderOperations {
 
 export type ProviderCapability = keyof ProviderOperations;
 
+/** A subclass may replace a built-in stub without inheriting its base exclusion. */
+function hasSubclassCapabilityOverride(provider: object, capability: ProviderCapability): boolean {
+  let prototype = Object.getPrototypeOf(provider);
+  let overridden = false;
+  while (prototype && prototype !== Object.prototype) {
+    if (
+      prototype.constructor &&
+      Object.hasOwn(prototype.constructor, 'declaredProviderCapabilities')
+    ) {
+      return overridden;
+    }
+    if (Object.hasOwn(prototype, capability)) {
+      overridden = true;
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return false;
+}
+
 /** Check both the implementation and any explicit capability declaration. */
 export function hasProviderCapability<K extends ProviderCapability>(
   provider: unknown,
@@ -174,7 +193,8 @@ export function hasProviderCapability<K extends ProviderCapability>(
     (!('promptfooCapabilities' in provider) ||
       provider.promptfooCapabilities === undefined ||
       (Array.isArray(provider.promptfooCapabilities) &&
-        provider.promptfooCapabilities.includes(capability)))
+        provider.promptfooCapabilities.includes(capability)) ||
+      hasSubclassCapabilityOverride(provider, capability))
   );
 }
 

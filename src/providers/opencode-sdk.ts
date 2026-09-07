@@ -838,6 +838,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
+  private clientGeneration = 0;
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
@@ -900,7 +901,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    await this.clientInitialization?.catch(() => undefined);
+    this.clientGeneration++;
     this.clientInitialization = undefined;
     for (const session of this.sessions.values()) {
       try {
@@ -1297,7 +1298,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+    const generation = this.clientGeneration;
     const opencodeModule = await this.ensureOpenCodeModule();
+    if (generation !== this.clientGeneration) {
+      throw new Error('OpenCode initialization cancelled during cleanup');
+    }
 
     this.validateSessionPolicyConfiguration(config);
 
@@ -1337,6 +1342,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
 
       const opencode = await createOpencode(serverOptions);
+      if (generation !== this.clientGeneration) {
+        opencode.server.close();
+        throw new Error('OpenCode initialization cancelled during cleanup');
+      }
       this.client = opencode.client;
       this.server = opencode.server;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
