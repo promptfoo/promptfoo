@@ -4,29 +4,53 @@ import { addHexEncoding } from '../../../src/redteam/strategies/hex';
 import type { TestCase } from '../../../src/types/index';
 
 describe('addHexEncoding', () => {
-  it('should encode variable value as hex and append /Hex to metrics', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: {
-          input: 'hello',
-        },
-        assert: [
-          {
-            type: 'contains',
-            metric: 'accuracy',
-          },
-        ],
+  it('should preserve exact test case mapping behavior', () => {
+    const testCase: TestCase = {
+      description: 'preserved',
+      vars: { prompt: true, untouched: 'value' },
+      providerOutput: { output: 'cached' },
+      assert: [
+        { type: 'equals', value: 'expected', metric: 'Harmful' },
+        { type: 'contains', value: 'empty metric', metric: '' },
+        { type: 'contains', value: 'undefined metric', metric: undefined },
+      ],
+      metadata: {
+        pluginId: 'test-plugin',
+        strategyId: 'existing-strategy',
+        encodingType: 'existing-encoding',
+        originalText: 'existing text',
+        custom: 'preserved',
       },
-    ];
+    };
+    const originalTestCase = structuredClone(testCase);
+    const result = addHexEncoding([testCase], 'prompt');
 
-    const result = addHexEncoding(testCases, 'input');
-
-    expect(result[0].vars!.input).toBe('68 65 6C 6C 6F');
-    expect(result[0].assert![0].metric).toBe('accuracy/Hex');
-    expect(result[0].metadata).toEqual({
-      strategyId: 'hex',
-      originalText: 'hello',
+    expect(result).toEqual([
+      {
+        description: 'preserved',
+        vars: { prompt: '74 72 75 65', untouched: 'value' },
+        providerOutput: { output: 'cached' },
+        assert: [
+          { type: 'equals', value: 'expected', metric: 'Harmful/Hex' },
+          { type: 'contains', value: 'empty metric', metric: '' },
+          { type: 'contains', value: 'undefined metric', metric: undefined },
+        ],
+        metadata: {
+          pluginId: 'test-plugin',
+          strategyId: 'hex',
+          encodingType: 'existing-encoding',
+          originalText: 'true',
+          custom: 'preserved',
+        },
+      },
+    ]);
+    expect(result[0].vars).not.toBe(testCase.vars);
+    expect(result[0].assert).not.toBe(testCase.assert);
+    result[0].assert?.forEach((assertion, index) => {
+      expect(assertion).not.toBe(testCase.assert?.[index]);
     });
+    expect(result[0].providerOutput).toBe(testCase.providerOutput);
+    expect(testCase).toEqual(originalTestCase);
   });
 
   it('should handle empty string', () => {
@@ -54,15 +78,6 @@ describe('addHexEncoding', () => {
     });
   });
 
-  it('should preserve an undefined metric', () => {
-    const result = addHexEncoding(
-      [{ vars: { input: 'hello' }, assert: [{ type: 'contains' }] }],
-      'input',
-    );
-
-    expect(result[0].assert![0].metric).toBeUndefined();
-  });
-
   it('should handle special characters', () => {
     const testCases: TestCase[] = [
       {
@@ -81,27 +96,6 @@ describe('addHexEncoding', () => {
     const result = addHexEncoding(testCases, 'input');
 
     expect(result[0].vars!.input).toBe('21 40 23 24');
-    expect(result[0].assert![0].metric).toBe('accuracy/Hex');
-  });
-
-  it('should handle numbers', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: {
-          input: 123,
-        },
-        assert: [
-          {
-            type: 'contains',
-            metric: 'accuracy',
-          },
-        ],
-      },
-    ];
-
-    const result = addHexEncoding(testCases, 'input');
-
-    expect(result[0].vars!.input).toBe('31 32 33');
     expect(result[0].assert![0].metric).toBe('accuracy/Hex');
   });
 

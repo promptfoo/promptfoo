@@ -28,20 +28,53 @@ describe('other encodings strategy', () => {
   ];
 
   describe('Morse code', () => {
-    it('should convert text to Morse code', () => {
-      const result = addOtherEncodings(testCases, 'prompt', EncodingType.MORSE);
-      expect(result[0].vars!.prompt).toBe(
-        '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
-      );
-      expect(result[0].assert?.[0].metric).toBe('original-metric/Morse');
+    it('should preserve exact test case mapping behavior', () => {
+      const testCase: TestCase = {
+        description: 'preserved',
+        vars: { prompt: true, untouched: 'value' },
+        providerOutput: { output: 'cached' },
+        assert: [
+          { type: 'equals', value: 'expected', metric: 'Harmful' },
+          { type: 'contains', value: 'empty metric', metric: '' },
+          { type: 'contains', value: 'undefined metric', metric: undefined },
+        ],
+        metadata: {
+          pluginId: 'test-plugin',
+          strategyId: 'existing-strategy',
+          encodingType: 'existing-encoding',
+          originalText: 'existing text',
+          custom: 'preserved',
+        },
+      };
+      const originalTestCase = structuredClone(testCase);
+      const result = addOtherEncodings([testCase], 'prompt', EncodingType.MORSE);
 
-      // Check that other vars are not affected
-      expect(result[0].vars!.expected).toBe('normal value');
-
-      // Check that metadata and assertion are updated correctly
-      expect(result[0].metadata?.strategyId).toBe('morse');
-      expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
-      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
+      expect(result).toEqual([
+        {
+          description: 'preserved',
+          vars: { prompt: '- .-. ..- .', untouched: 'value' },
+          providerOutput: { output: 'cached' },
+          assert: [
+            { type: 'equals', value: 'expected', metric: 'Harmful/Morse' },
+            { type: 'contains', value: 'empty metric', metric: '' },
+            { type: 'contains', value: 'undefined metric', metric: undefined },
+          ],
+          metadata: {
+            pluginId: 'test-plugin',
+            strategyId: 'morse',
+            encodingType: 'morse',
+            originalText: 'true',
+            custom: 'preserved',
+          },
+        },
+      ]);
+      expect(result[0].vars).not.toBe(testCase.vars);
+      expect(result[0].assert).not.toBe(testCase.assert);
+      result[0].assert?.forEach((assertion, index) => {
+        expect(assertion).not.toBe(testCase.assert?.[index]);
+      });
+      expect(result[0].providerOutput).toBe(testCase.providerOutput);
+      expect(testCase).toEqual(originalTestCase);
     });
 
     it('should handle empty string', () => {
@@ -197,11 +230,38 @@ describe('other encodings strategy', () => {
     });
 
     it('should handle invalid encoding type by defaulting to Morse', () => {
-      const result = addOtherEncodings(testCases, 'prompt', 'invalid' as EncodingType);
-      expect(result[0].vars!.prompt).toBe(
-        '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
-      );
-      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
+      const testCase: TestCase = {
+        vars: { prompt: 'SOS', untouched: 'value' },
+        providerOutput: 'cached output',
+        assert: [
+          { type: 'equals', value: 'expected', metric: 'Harmful' },
+          { type: 'contains', value: 'empty metric', metric: '' },
+        ],
+        metadata: {
+          pluginId: 'test-plugin',
+          strategyId: 'existing-strategy',
+          encodingType: 'existing-encoding',
+          originalText: 'existing text',
+        },
+      };
+      const result = addOtherEncodings([testCase], 'prompt', 'invalid' as EncodingType);
+
+      expect(result).toEqual([
+        {
+          vars: { prompt: '... --- ...', untouched: 'value' },
+          providerOutput: 'cached output',
+          assert: [
+            { type: 'equals', value: 'expected', metric: 'Harmful/invalid' },
+            { type: 'contains', value: 'empty metric', metric: '' },
+          ],
+          metadata: {
+            pluginId: 'test-plugin',
+            strategyId: 'invalid',
+            encodingType: 'invalid',
+            originalText: 'SOS',
+          },
+        },
+      ]);
     });
 
     it('should deliver an adversarial Pig Latin payload intact through the strategy', () => {
