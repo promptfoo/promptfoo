@@ -498,6 +498,7 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   public modelName: string;

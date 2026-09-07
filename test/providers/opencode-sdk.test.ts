@@ -1860,6 +1860,27 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('does not wait for startup and closes a late server', async () => {
+      const creation = createDeferred<{
+        client: any;
+        server: { url: string; close: typeof mockServerClose };
+      }>();
+      mockCreateOpencode.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      const call = provider.callApi('hello').catch(() => undefined);
+      await vi.waitFor(() => expect(mockCreateOpencode).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      expect(mockServerClose).not.toHaveBeenCalled();
+      creation.resolve({
+        client: { session: { create: mockSessionCreate } },
+        server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+      });
+      await call;
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockSessionCreate).not.toHaveBeenCalled();
+    });
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },

@@ -61,6 +61,18 @@ it('does not treat the OpenAI embedding text stub as an implemented capability',
   );
 });
 
+it('recognizes a subclass implementation that replaces an inherited text stub', async () => {
+  class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+    override async callApi() {
+      return { output: 'implemented by subclass' };
+    }
+  }
+  const provider = new TextEmbeddingProvider('fixture');
+  expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+  expect(await getAndCheckProvider('text', provider, null, 'rubric')).toBe(provider);
+  expect((await provider.callApi()).output).toBe('implemented by subclass');
+});
+
 it('rejects an embedding-only default when a text grader is required', async () => {
   const embeddingDefault = new OpenAiEmbeddingProvider('fixture');
   await expect(getAndCheckProvider('text', undefined, embeddingDefault, 'rubric')).rejects.toThrow(

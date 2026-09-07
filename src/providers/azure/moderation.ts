@@ -148,6 +148,7 @@ export function getModerationCacheKey(
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
+  static readonly declaredProviderCapabilities = true;
   readonly promptfooCapabilities = ['callModerationApi'] as const;
 
   static MODERATION_MODELS = AZURE_MODERATION_MODELS;
