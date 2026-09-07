@@ -4,6 +4,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import {
+  awaitProviderOperation,
   getRequestTimeoutMs,
   parseChatPrompt,
   shouldBustProviderCache,
@@ -187,11 +188,7 @@ export class OllamaCompletionProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -355,11 +352,7 @@ export class OllamaChatProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -394,7 +387,10 @@ export class OllamaChatProvider implements ApiProvider {
 
     // Handle tools if configured
     if (this.config.tools) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      const loadedTools = await awaitProviderOperation(
+        maybeLoadToolsFromExternalFile(this.config.tools, context?.vars),
+        options?.abortSignal,
+      );
       if (loadedTools !== undefined) {
         // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
         params.tools = transformTools(loadedTools, 'openai');

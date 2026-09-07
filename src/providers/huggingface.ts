@@ -403,8 +403,9 @@ type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities =
+    HuggingfaceFeatureExtractionProvider.declaredProviderCapabilities;
 
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
@@ -502,8 +503,9 @@ type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callSimilarityApi'] as const;
+  static readonly declaredProviderCapabilities = ['callSimilarityApi'] as const;
+  readonly promptfooCapabilities =
+    HuggingfaceSentenceSimilarityProvider.declaredProviderCapabilities;
 
   modelName: string;
   config: HuggingfaceSentenceSimilarityOptions;

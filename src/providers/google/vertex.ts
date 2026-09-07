@@ -277,11 +277,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -582,6 +578,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let cachedResponse;
     if (cache && cacheKey) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         logger.debug('Returning cached Vertex Gemini response', {
@@ -1063,8 +1060,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = VertexEmbeddingProvider.declaredProviderCapabilities;
 
   modelName: string;
   config: VertexEmbeddingProviderConfig;

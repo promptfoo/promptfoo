@@ -299,7 +299,8 @@ export class FunctionCallbackHandler {
       signal,
       context,
       passContext: true,
-      transformOutput: (output) => (typeof output === 'string' ? output : JSON.stringify(output)),
+      transformOutput: (output) =>
+        typeof output === 'string' ? output : (JSON.stringify(output) ?? ''),
       loadFile: (reference) => this.loadExternalFunction(reference),
     });
     if (execution.isError) {

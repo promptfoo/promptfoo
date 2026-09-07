@@ -25,7 +25,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { executeCallback } from '../functionCallbackExecutor';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 
@@ -234,9 +234,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   protected async getAllTools(
     context?: CallApiContextParams,
-    options: { skipExecutableToolFiles?: boolean } = {},
+    options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
   ): Promise<Tool[]> {
-    await this.initializeMCP();
+    await this.initializeMCP(options.abortSignal);
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -248,7 +248,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       ? stripExecutableToolFileReferences(configTools, context?.vars)
       : configTools;
     const loadedTools = requestTools
-      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
+      ? await awaitProviderOperation(
+          maybeLoadToolsFromExternalFile(requestTools, context?.vars),
+          options.abortSignal,
+        )
       : [];
 
     // Transform tools to Google format if needed

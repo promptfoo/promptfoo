@@ -737,7 +737,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    const loadedTools =
+      (await awaitProviderOperation(
+        maybeLoadToolsFromExternalFile(config.tools, context?.vars),
+        options?.abortSignal,
+      )) || [];
     // Transform tools to Anthropic format if needed
     const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
     const { processedTools: processedConfigTools, requiredBetaFeatures } =

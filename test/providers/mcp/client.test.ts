@@ -2075,6 +2075,41 @@ describe('MCPClient', () => {
       expect(refreshedClient.callTool).toHaveBeenCalledTimes(2);
     });
 
+    it('propagates cancellation during reactive OAuth refresh', async () => {
+      mockClient.callTool.mockRejectedValueOnce(new Error('401 Unauthorized'));
+      mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+        accessToken: 'initial-token',
+        expiresAt: Date.now() + 3_600_000,
+      });
+      const refreshStarted = createDeferred<void>();
+      const refreshToken = createDeferred<{ accessToken: string; expiresAt: number }>();
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(() => {
+        refreshStarted.resolve();
+        return refreshToken.promise;
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+
+      const controller = new AbortController();
+      const call = mcpClient.callTool('tool1', {}, controller.signal);
+      await refreshStarted.promise;
+      controller.abort(new Error('cancelled refresh'));
+      await expect(call).rejects.toThrow('cancelled refresh');
+      refreshToken.reject(new Error('refresh stopped'));
+    });
+
     it('should not refresh token if still valid', async () => {
       mockClient.connect.mockResolvedValue(undefined);
       mockClient.listTools.mockResolvedValue({

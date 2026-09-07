@@ -846,8 +846,8 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = SageMakerEmbeddingProvider.declaredProviderCapabilities;
 
   async callApi(): Promise<ProviderResponse> {
     throw new Error(

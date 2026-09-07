@@ -89,6 +89,58 @@ describe('callback execution records', () => {
     expect(loadFile).toHaveBeenCalledTimes(2);
   });
 
+  it('caches the newest overlapping reference even when the older load finishes first', async () => {
+    const cache = {};
+    const first = createDeferred<Function>();
+    const second = createDeferred<Function>();
+    const loadFile = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const call = (reference: string) =>
+      executeCallback({ ...identity, reference, cache, loadFile });
+    const oldCall = call('file://first.js');
+    const newCall = call('file://second.js');
+    first.resolve(() => 'first');
+    expect((await oldCall).output).toBe('first');
+    second.resolve(() => 'second');
+    expect((await newCall).output).toBe('second');
+    expect((await call('file://second.js')).output).toBe('second');
+    expect(loadFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let an older load overwrite a reference that changed back', async () => {
+    const cache = {};
+    const first = createDeferred<Function>();
+    const newer = createDeferred<Function>();
+    const loadFile = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(() => 'second')
+      .mockReturnValueOnce(newer.promise);
+    const call = (reference: string) =>
+      executeCallback({ ...identity, reference, cache, loadFile });
+    const oldCall = call('file://first.js');
+    expect((await call('file://second.js')).output).toBe('second');
+    const newCall = call('file://first.js');
+    newer.resolve(() => 'new first');
+    expect((await newCall).output).toBe('new first');
+    first.resolve(() => 'old first');
+    expect((await oldCall).output).toBe('old first');
+    expect((await call('file://first.js')).output).toBe('new first');
+    expect(loadFile).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([undefined, null, ''])(
+    'treats missing callback reference %s as absent',
+    async (reference) => {
+      const loadFile = vi.fn();
+      const result = await executeCallback({ ...identity, reference, cache: {}, loadFile });
+      expect(result).toMatchObject({
+        isError: true,
+        error: new Error("No callback found for function 'lookup'"),
+      });
+      expect(loadFile).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not load an already-cancelled callback', async () => {
     const loadFile = vi.fn();
     await expect(
@@ -136,4 +188,11 @@ it('normalizes mixed MCP result blocks consistently', () => {
   ).toBe('plain\ntext\n{"found":true}\n[1,2]\n{"extra":false}\n0\nnull');
   expect(normalizeMcpToolContent(undefined)).toBe('');
   expect(normalizeMcpToolContent('')).toBe('');
+});
+
+it('normalizes MCP content with BigInt and circular JSON blocks', () => {
+  const circular: { value: number; self?: unknown } = { value: 2 };
+  circular.self = circular;
+  expect(normalizeMcpToolContent([{ json: 1n }, { data: circular }])).toBe('1\n[object Object]');
+  expect(normalizeMcpToolContent(circular)).toBe('[object Object]');
 });
