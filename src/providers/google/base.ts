@@ -218,12 +218,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(): Promise<void> {
+  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
     this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   /**

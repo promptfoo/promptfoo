@@ -2320,6 +2320,36 @@ describe('fetchWithProxy transient error retries', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['caller', 'timeout'] as const)(
+    'interrupts transient backoff on %s cancellation',
+    async (kind) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const response = createMockResponse({ status: 503, statusText: 'Service Unavailable' });
+      const mockFetch = vi.fn().mockResolvedValue(response);
+      vi.stubGlobal('fetch', mockFetch);
+      try {
+        const request =
+          kind === 'caller'
+            ? fetchWithProxy('https://example.com', { signal: controller.signal })
+            : fetchWithTimeout('https://example.com', {}, 100);
+        const rejection = expect(request).rejects.toThrow();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockFetch).toHaveBeenCalledOnce();
+        if (kind === 'caller') {
+          controller.abort();
+        } else {
+          await vi.advanceTimersByTimeAsync(100);
+        }
+        await rejection;
+        expect(mockFetch).toHaveBeenCalledOnce();
+      } finally {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('should retry on 503 Service Unavailable', async () => {
     const transientResponse = createMockResponse({
       status: 503,

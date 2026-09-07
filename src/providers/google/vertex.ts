@@ -565,7 +565,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
-    await this.initializeMCP();
+    await this.initializeMCP(options?.abortSignal);
 
     // Merge configs from the provider and the prompt
     const config = mergeGoogleCompletionOptions(

@@ -84,7 +84,8 @@ export async function matchesAnswerRelevance(
   const inputEmbeddingResp = await callGradingProvider(
     embeddingProvider,
     'answer-relevance.embedding',
-    () => callEmbeddingApi(input),
+    (context, options) =>
+      options || context ? callEmbeddingApi(input, context, options) : callEmbeddingApi(input),
     { callContext: providerCallContext, operationName: 'embeddings' },
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
@@ -100,7 +101,10 @@ export async function matchesAnswerRelevance(
     const resp = await callGradingProvider(
       embeddingProvider,
       'answer-relevance.embedding',
-      () => callEmbeddingApi(question),
+      (context, options) =>
+        options || context
+          ? callEmbeddingApi(question, context, options)
+          : callEmbeddingApi(question),
       { callContext: providerCallContext, operationName: 'embeddings' },
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);

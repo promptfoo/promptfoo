@@ -109,8 +109,13 @@ async function calculateProviderSimilarity(
   tokensUsed: TokenUsage,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
-      finalProvider.callSimilarityApi(expected, output),
+    const similarityResp = await callGradingProvider(
+      finalProvider,
+      'similarity',
+      (context, options) =>
+        options || context
+          ? finalProvider.callSimilarityApi(expected, output, context, options)
+          : finalProvider.callSimilarityApi(expected, output),
     );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
@@ -141,13 +146,19 @@ async function calculateProviderSimilarity(
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, expected),
+      (context, options) =>
+        options || context
+          ? callEmbeddingApi.call(finalProvider, expected, context, options)
+          : callEmbeddingApi.call(finalProvider, expected),
       { operationName: 'embeddings' },
     ),
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, output),
+      (context, options) =>
+        options || context
+          ? callEmbeddingApi.call(finalProvider, output, context, options)
+          : callEmbeddingApi.call(finalProvider, output),
       { operationName: 'embeddings' },
     ),
   ]);

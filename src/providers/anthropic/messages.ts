@@ -50,7 +50,11 @@ import {
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../../types/env';
-import type { CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { MCPClient } from '../mcp/client';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort } from './types';
@@ -323,12 +327,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
   }
 
-  private async initializeMCP(): Promise<void> {
+  private async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
     this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   async cleanup(): Promise<void> {
@@ -528,8 +532,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     );
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    await this.initializeMCP();
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
+    await this.initializeMCP(options?.abortSignal);
 
     if (!this.apiKey && !this.usingClaudeCodeOAuth) {
       throw new Error(
