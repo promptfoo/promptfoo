@@ -21,6 +21,12 @@ describe('providerRegistry', () => {
     expect(shutdown).toHaveBeenCalledOnce();
   });
 
+  it.each([false, undefined])('uses cleanup when shutdown is %s', async (shutdown) => {
+    const cleanup = vi.fn();
+    await providerRegistry.withScope([{ shutdown, cleanup }], async () => undefined);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it('continues cleanup after synchronous and asynchronous failures', async () => {
     const cleanup = vi.fn();
     providerRegistry.register({

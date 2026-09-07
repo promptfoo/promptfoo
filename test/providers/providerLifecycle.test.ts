@@ -149,7 +149,7 @@ describe.each([
   ['chat', AzureChatCompletionProvider],
   ['responses', AzureResponsesProvider],
 ] as const)('Azure %s authentication lifecycle', (_name, Provider) => {
-  it('awaits authentication even when MCP initialization completes first', async () => {
+  it('awaits authentication during initialization', async () => {
     const authentication = createDeferred<Record<string, string>>();
     vi.spyOn(AzureGenericProvider.prototype, 'getAuthHeaders').mockReturnValue(
       authentication.promise,

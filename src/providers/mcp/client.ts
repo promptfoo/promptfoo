@@ -113,6 +113,7 @@ export class MCPClient {
   private tokenExpiresAt: Map<string, number> = new Map();
   // Lock mechanism to prevent concurrent token refresh per server
   private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
+  private shuttingDown = false;
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -141,6 +142,7 @@ export class MCPClient {
   }
 
   async initialize(): Promise<void> {
+    this.shuttingDown = false;
     if (!this.config.enabled) {
       return;
     }
@@ -373,6 +375,9 @@ export class MCPClient {
   ): Promise<void> {
     // If a refresh is already in progress, wait for it instead of starting a new one.
     while (true) {
+      if (this.shuttingDown) {
+        return;
+      }
       const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
       if (!existingRefreshPromise) {
         break;
@@ -435,6 +440,9 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
+    if (this.shuttingDown) {
+      return;
+    }
     await this.connectToServer(oauthConfig.serverConfig);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
@@ -579,6 +587,8 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
+    this.shuttingDown = true;
+    await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
       await this.closeConnection(client, this.transports.get(serverKey));
     }
