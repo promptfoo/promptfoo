@@ -60,19 +60,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     }
   }
 
-  private async initializeMCP(): Promise<void> {
+  private async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
     this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpClient = await this.mcpSession.initialize(signal);
 
     // Initialize callback handler with MCP client
     this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
-  async ensureInitialized(): Promise<void> {
-    await Promise.all([super.ensureInitialized(), this.initializeMCP()]);
+  async ensureInitialized(signal?: AbortSignal): Promise<void> {
+    await Promise.all([super.ensureInitialized(), this.initializeMCP(signal)]);
   }
 
   async cleanup(): Promise<void> {
@@ -335,7 +335,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    await this.ensureInitialized();
+    await this.ensureInitialized(callApiOptions?.abortSignal);
     invariant(this.authHeaders, 'auth headers are not initialized');
 
     if (!this.getApiBaseUrl()) {

@@ -157,12 +157,16 @@ export class DMRCompletionProvider extends OpenAiCompletionProvider {
 }
 
 export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
     }
-    return super.callEmbeddingApi(text);
+    return super.callEmbeddingApi(text, context, options);
   }
 }

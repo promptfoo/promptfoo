@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
@@ -13,6 +14,7 @@ const mcp = vi.hoisted(() => ({ initialize: vi.fn(), cleanup: vi.fn(), callTool:
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
+  isCacheEnabled: () => false,
 }));
 vi.mock('../../src/providers/mcp/client', () => ({
   MCPClient: class {
@@ -50,6 +52,18 @@ afterEach(async () => {
 
 const options = { config: { apiKey: 'test-key', mcp: { enabled: true } } };
 const providers = [
+  [
+    'Anthropic',
+    () => {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-5', options);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'hello' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+        stop_reason: 'end_turn',
+      } as never);
+      return provider;
+    },
+  ],
   ['OpenAI', () => new OpenAiChatCompletionProvider('gpt-4o-mini', options)],
   ['Azure chat', () => new AzureChatCompletionProvider('test-deployment', options)],
   ['Google', () => new AIStudioChatProvider('gemini-2.5-flash', options)],
@@ -66,17 +80,54 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     expect(mcp.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('waits for startup before cleanup and coalesces overlapping cleanup calls', async () => {
+  it('cancels pending startup and coalesces overlapping cleanup calls', async () => {
     const startup = createDeferred<void>();
     mcp.initialize.mockReturnValue(startup.promise);
     const provider = createProvider();
-    const first = provider.cleanup();
-    const second = providerRegistry.shutdownAll();
-    await vi.runAllTimersAsync();
+    await Promise.all([provider.cleanup(), providerRegistry.shutdownAll()]);
+    expect(mcp.cleanup).toHaveBeenCalledOnce();
+    startup.resolve();
+  });
+
+  it('cancels one startup waiter while preserving another evaluation', async () => {
+    const startup = createDeferred<void>();
+    const otherStarted = createDeferred<void>();
+    mcp.initialize.mockReturnValue(startup.promise);
+    const provider = createProvider();
+    const prompt = provider instanceof MCPProvider ? '{"tool":"hello"}' : 'hello';
+    const controller = new AbortController();
+    const cancelled = providerRegistry
+      .withScope([provider], () =>
+        provider.callApi(prompt, undefined, { abortSignal: controller.signal }),
+      )
+      .catch((error: Error) => ({ error: error.message }));
+    const other = providerRegistry.withScope([provider], () => {
+      otherStarted.resolve();
+      return provider.callApi(prompt);
+    });
+    await otherStarted.promise;
+    controller.abort(new Error('cancelled waiter'));
+    expect((await cancelled).error).toContain('cancelled waiter');
     expect(mcp.cleanup).not.toHaveBeenCalled();
     startup.resolve();
-    await Promise.all([first, second]);
+    expect((await other).error).toBeUndefined();
     expect(mcp.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('finishes evaluation cleanup after cancelling stalled startup', async () => {
+    const startup = createDeferred<void>();
+    mcp.initialize.mockReturnValue(startup.promise);
+    const provider = createProvider();
+    const controller = new AbortController();
+    const cancelled = providerRegistry
+      .withScope([provider], () =>
+        provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+      )
+      .catch((error: Error) => ({ error: error.message }));
+    controller.abort(new Error('cancelled startup'));
+    expect((await cancelled).error).toContain('cancelled startup');
+    expect(mcp.cleanup).toHaveBeenCalledOnce();
+    startup.resolve();
   });
 
   it('cleans up partial connections when eager startup fails', async () => {

@@ -27,6 +27,7 @@ class ProviderRegistry {
   private providers = new Map<object, ProviderRegistration>();
   private scopeStorage = new AsyncLocalStorage<ProviderScope>();
   private scopesByProvider = new WeakMap<object, Set<ProviderScope>>();
+  private cleanupsByProvider = new WeakMap<object, Promise<void>>();
   private shutdownRegistered = false;
   private shutdownPromise: Promise<void> | null = null;
 
@@ -70,6 +71,11 @@ class ProviderRegistry {
     // Retain ownership even before lazy initialization registers a resource. Another
     // evaluation may already be waiting for the same provider's startup promise.
     for (const provider of scopeProviders) {
+      // Teardown can outlive the previous scope's registration. Do not let a new
+      // evaluation use the same instance until that teardown has finished.
+      while (this.cleanupsByProvider.has(provider)) {
+        await this.cleanupsByProvider.get(provider);
+      }
       let owners = this.scopesByProvider.get(provider);
       if (!owners) {
         owners = new Set();
@@ -129,17 +135,24 @@ class ProviderRegistry {
     if (this.providers.get(provider) === registration) {
       this.providers.delete(provider);
     }
-    registration.cleanupPromise = (async () => {
-      try {
-        if ('shutdown' in provider) {
-          await provider.shutdown();
-        } else {
-          await provider.cleanup();
+    registration.cleanupPromise = Promise.resolve()
+      .then(async () => {
+        try {
+          if ('shutdown' in provider) {
+            await provider.shutdown();
+          } else {
+            await provider.cleanup();
+          }
+        } catch (error) {
+          logger.warn(`Error shutting down provider: ${error}`);
         }
-      } catch (error) {
-        logger.warn(`Error shutting down provider: ${error}`);
-      }
-    })();
+      })
+      .finally(() => {
+        if (this.cleanupsByProvider.get(provider) === registration.cleanupPromise) {
+          this.cleanupsByProvider.delete(provider);
+        }
+      });
+    this.cleanupsByProvider.set(provider, registration.cleanupPromise);
     return registration.cleanupPromise;
   }
 
