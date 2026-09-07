@@ -100,16 +100,20 @@ describe('Bedrock async video jobs', () => {
     },
   );
 
-  it('reports a terminal job failure without polling again', async () => {
-    mocks.send
-      .mockResolvedValueOnce({ invocationArn: 'job-1' })
-      .mockResolvedValueOnce({ status: 'Failed', failureMessage: 'invalid model input' });
-    expect((await runBedrockVideoJob(provider, config)).error).toBe(
-      'Video generation failed: invalid model input',
-    );
-    expect(mocks.send).toHaveBeenCalledTimes(2);
-    expect(mocks.destroy).toHaveBeenCalledOnce();
-  });
+  it.each([
+    ['invalid model input', 'Video generation failed: invalid model input'],
+    [undefined, 'Video generation failed: Unknown failure'],
+  ])(
+    'reports a terminal job failure without polling again: %s',
+    async (failureMessage, expected) => {
+      mocks.send
+        .mockResolvedValueOnce({ invocationArn: 'job-1' })
+        .mockResolvedValueOnce({ status: 'Failed', failureMessage });
+      expect((await runBedrockVideoJob(provider, config)).error).toBe(expected);
+      expect(mocks.send).toHaveBeenCalledTimes(2);
+      expect(mocks.destroy).toHaveBeenCalledOnce();
+    },
+  );
 
   it('caps its final sleep at the remaining polling budget', async () => {
     vi.useFakeTimers();

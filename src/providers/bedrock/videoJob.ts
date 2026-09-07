@@ -1,5 +1,6 @@
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
+import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { sleep, sleepWithAbort } from '../../util/time';
 import { awaitProviderOperation } from '../shared';
 import type {
@@ -95,7 +96,9 @@ export async function runBedrockVideoJob(
         };
       }
       if (invocation.status === 'Failed') {
-        return { error: `Video generation failed: ${invocation.failureMessage}` };
+        return {
+          error: `Video generation failed: ${invocation.failureMessage || 'Unknown failure'}`,
+        };
       }
       const delay = Math.max(0, Math.min(pollIntervalMs, maxPollTimeMs - (Date.now() - startTime)));
       if (signal) {
@@ -156,10 +159,7 @@ export async function storeBedrockVideo(
   } catch (error) {
     signal?.throwIfAborted();
     logger.error(`[${label}] S3 download error`, { error, s3Uri });
-    if (
-      (error instanceof Error && error.name === 'MODULE_NOT_FOUND') ||
-      String(error).includes('Cannot find module')
-    ) {
+    if (isMissingPackageImportError(error, '@aws-sdk/client-s3')) {
       return {
         error: `The @aws-sdk/client-s3 package is required for ${label} video downloads. Install it with: npm install @aws-sdk/client-s3`,
       };
