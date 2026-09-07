@@ -26,26 +26,33 @@ type ModelsReply = {
   data?: Model[];
 };
 
-export async function fetchLocalModels(apiBaseUrl: string): Promise<Model[]> {
+export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal): Promise<Model[]> {
+  signal?.throwIfAborted();
   try {
     const { data } = await fetchWithCache<ModelsReply>(
       `${apiBaseUrl}/models`,
-      undefined,
+      signal ? { signal } : undefined,
       undefined,
       'json',
       true,
       0,
     );
+    signal?.throwIfAborted();
     return data?.data ?? [];
   } catch (e: any) {
+    signal?.throwIfAborted();
     throw new Error(
       `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${e.message}`,
     );
   }
 }
 
-export async function hasLocalModel(modelId: string, apiBaseUrl: string): Promise<boolean> {
-  const localModels = await fetchLocalModels(apiBaseUrl);
+export async function hasLocalModel(
+  modelId: string,
+  apiBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const localModels = await fetchLocalModels(apiBaseUrl, signal);
   return localModels.some(
     (model) => model && model.id?.toLocaleLowerCase() === modelId?.toLocaleLowerCase(),
   );
@@ -128,7 +135,7 @@ export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), callApiOptions?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
@@ -147,7 +154,7 @@ export class DMRCompletionProvider extends OpenAiCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), callApiOptions?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
@@ -162,7 +169,7 @@ export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), options?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );

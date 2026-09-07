@@ -525,6 +525,9 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+    if (ChatKitBrowserPool.instance === this) {
+      ChatKitBrowserPool.instance = null;
+    }
 
     // Cancel any pending idle timer
     this.cancelIdleTimer();
@@ -563,9 +566,6 @@ export class ChatKitBrowserPool {
 
     this.initialized = false;
     this.templates.clear();
-    if (ChatKitBrowserPool.instance === this) {
-      ChatKitBrowserPool.instance = null;
-    }
     logger.debug('[ChatKitPool] Shutdown complete');
   }
 }
