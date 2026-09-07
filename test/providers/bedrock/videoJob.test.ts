@@ -148,7 +148,7 @@ describe('Bedrock async video jobs', () => {
     const pending = runBedrockVideoJob(provider, config, controller.signal);
     await entered.promise;
     controller.abort(new Error('cancelled credentials'));
-    expect((await pending).error).toContain('cancelled credentials');
+    await expect(pending).rejects.toThrow('cancelled credentials');
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -165,7 +165,7 @@ describe('Bedrock async video jobs', () => {
     const pending = runBedrockVideoJob(provider, config, controller.signal);
     await entered.promise;
     controller.abort(new Error('cancelled poll'));
-    expect((await pending).error).toContain('cancelled poll');
+    await expect(pending).rejects.toThrow('cancelled poll');
     expect(mocks.destroy).toHaveBeenCalledOnce();
   });
 });

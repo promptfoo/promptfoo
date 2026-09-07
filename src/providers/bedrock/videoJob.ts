@@ -109,6 +109,7 @@ export async function runBedrockVideoJob(
     }
     return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
   } catch (error) {
+    signal?.throwIfAborted();
     logger.error(`[${label}] ${phase}`, { error, invocationArn });
     if (isMissingPackageImportError(error, '@aws-sdk/client-bedrock-runtime')) {
       return {
