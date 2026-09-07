@@ -501,7 +501,7 @@ describe('package manifests', () => {
     const sdkName = '@slack/web-api';
     const sdkRange = packageJson.optionalDependencies?.[sdkName];
 
-    expect(sdkRange).toBe('^8.1.0');
+    expect(sdkRange).toBe('^8.1.1');
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
