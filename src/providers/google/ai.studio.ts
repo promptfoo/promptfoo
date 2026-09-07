@@ -582,7 +582,7 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
-  readonly capabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
 
   id(): string {
     if (this.customId) {
