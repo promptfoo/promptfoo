@@ -72,7 +72,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   async ensureInitialized(signal?: AbortSignal): Promise<void> {
-    await Promise.all([super.ensureInitialized(), this.initializeMCP(signal)]);
+    await Promise.all([super.ensureInitialized(signal), this.initializeMCP(signal)]);
   }
 
   async cleanup(): Promise<void> {
@@ -405,6 +405,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    callApiOptions?.abortSignal?.throwIfAborted();
 
     let data;
     let cached = false;
@@ -428,6 +429,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         url,
         {
           method: 'POST',
+          signal: callApiOptions?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
@@ -552,6 +554,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
+              undefined,
+              callApiOptions,
             );
           } else {
             // No callbacks configured, return raw tool/function calls

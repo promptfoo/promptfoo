@@ -20,7 +20,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
-import { transformToolChoice, transformTools } from '../shared';
+import { awaitProviderOperation, transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
@@ -349,12 +349,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     initialResponse,
     params,
     shouldStream,
+    signal,
   }: {
     config: AnthropicMessageOptions;
     headers: Record<string, string>;
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     shouldStream: boolean;
+    signal?: AbortSignal;
   }): Promise<{
     error?: string;
     response: Anthropic.Messages.Message;
@@ -388,6 +390,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
+      signal?.throwIfAborted();
       const responseToolUses = response.content.filter(
         (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
       );
@@ -414,7 +417,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       executedMcpToolCalls += toolUses.length;
       const toolResultBlocks = await Promise.all(
-        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
+        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse, signal)),
       );
 
       toolUses.forEach((toolUse, index) => {
@@ -445,11 +448,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          ...(signal && { signal }),
         });
-        response = await finalMessageWithStreamedStopDetails(stream);
+        response = await awaitProviderOperation(
+          finalMessageWithStreamedStopDetails(stream),
+          signal,
+        );
       } else {
         response = (await this.anthropic.messages.create(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          ...(signal && { signal }),
         })) as Anthropic.Messages.Message;
       }
 
@@ -476,11 +484,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async callMcpToolForAnthropic(
     toolUse: Anthropic.Messages.ToolUseBlock,
+    signal?: AbortSignal,
   ): Promise<Anthropic.Messages.ToolResultBlockParam> {
     try {
       const result = await this.mcpClient!.callTool(
         toolUse.name,
         coerceMcpToolInput(toolUse.input),
+        ...(signal ? ([signal] as const) : ([] as const)),
       );
 
       if (isMcpErrorResult(result)) {
@@ -618,7 +628,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     };
 
     // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   /**
@@ -743,6 +757,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
@@ -1052,14 +1067,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    const requestOptions =
-      Object.keys(headers).length > 0 ? ({ headers } as { headers: Record<string, string> }) : {};
+    options?.abortSignal?.throwIfAborted();
+    const requestOptions = {
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      ...(options?.abortSignal && { signal: options.abortSignal }),
+    };
 
     try {
       let initialMessage: Anthropic.Messages.Message;
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(params, requestOptions);
-        initialMessage = await finalMessageWithStreamedStopDetails(stream);
+        initialMessage = await awaitProviderOperation(
+          finalMessageWithStreamedStopDetails(stream),
+          options?.abortSignal,
+        );
         logger.debug(`Anthropic Messages API streaming complete`, {
           finalMessage: getMessagesResponseMetadata(initialMessage),
         });
@@ -1083,6 +1104,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         initialResponse: initialMessage,
         params,
         shouldStream,
+        signal: options?.abortSignal,
       });
 
       // Only attach the key when a tool actually ran: an always-present empty array

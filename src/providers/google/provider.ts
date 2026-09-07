@@ -20,7 +20,12 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getRequestSignal, getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
+import {
+  awaitProviderOperation,
+  getRequestSignal,
+  getRequestTimeoutMs,
+  shouldBustProviderCache,
+} from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -454,8 +459,11 @@ export class GoogleProvider extends GoogleGenericProvider {
     try {
       if (this.isVertexMode && !this.isExpressMode()) {
         // Vertex AI OAuth mode
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
+        const client = await awaitProviderOperation(
+          this.getClientWithCredentials(),
+          options?.abortSignal,
+        );
+        const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
         const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
@@ -525,7 +533,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context);
+    return this.parseGeminiResponse(data, cached, config, context, options);
   }
 
   /**
@@ -536,6 +544,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     cached: boolean,
     config: CompletionOptions,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
@@ -742,11 +751,13 @@ export class GoogleProvider extends GoogleGenericProvider {
                 ),
                 config,
                 parsed.functionCall.id,
+                options?.abortSignal,
               );
               response.output = functionResult;
             }
           }
         } catch {
+          options?.abortSignal?.throwIfAborted();
           // Not JSON or no function call, ignore
         }
       }
