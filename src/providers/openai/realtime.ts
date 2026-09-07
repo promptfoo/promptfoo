@@ -1273,7 +1273,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     const conversationId = context?.test?.metadata?.conversationId;
     const hasConversationId =
       (typeof conversationId === 'string' && conversationId !== '') ||
-      typeof conversationId === 'number';
+      (typeof conversationId === 'number' && Number.isFinite(conversationId));
     const maintainContext = this.config.maintainContext === true && hasConversationId;
 
     try {

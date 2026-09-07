@@ -128,6 +128,28 @@ it('uses a persistent session after a previous stateless call', async () => {
   expect(provider.config.maintainContext).toBe(true);
 });
 
+it.each([NaN, Infinity, -Infinity])(
+  'does not persist a nonfinite conversation ID: %s',
+  async (conversationId) => {
+    const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+      config: { apiKey: 'fixture-key' },
+    });
+    const direct = vi.spyOn(provider, 'directWebSocketRequest').mockResolvedValue({
+      output: 'ok',
+      metadata: {},
+      cached: false,
+      tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 1 },
+    });
+    const persistent = vi.spyOn(provider, 'persistentWebSocketRequest');
+    await provider.callApi('hello', {
+      ...context(),
+      test: { metadata: { conversationId } },
+    });
+    expect(direct).toHaveBeenCalledOnce();
+    expect(persistent).not.toHaveBeenCalled();
+  },
+);
+
 it('rotates persistent sessions when conversation identity changes', async () => {
   const provider = new OpenAiRealtimeProvider('gpt-realtime', {
     config: { apiKey: 'fixture-key' },
