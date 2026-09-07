@@ -369,6 +369,7 @@ export class MCPClient {
     } catch (error) {
       // Failed handshakes/tool discovery have not entered the connection maps yet.
       await closePendingConnection();
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
