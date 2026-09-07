@@ -628,6 +628,7 @@ export class MCPClient {
                   continue; // Retry with new token
                 }
               } catch (refreshError) {
+                signal?.throwIfAborted();
                 const refreshErrorMsg =
                   refreshError instanceof Error ? refreshError.message : String(refreshError);
                 logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);

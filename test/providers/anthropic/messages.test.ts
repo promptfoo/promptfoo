@@ -14,6 +14,7 @@ import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/mess
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
@@ -145,6 +146,22 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('stops waiting when tool loading is cancelled', async () => {
+      const loader = vi
+        .spyOn(util, 'maybeLoadToolsFromExternalFile')
+        .mockImplementationOnce(() => new Promise(() => {}));
+      const controller = new AbortController();
+      const provider = createProvider('claude-3-5-sonnet-20241022', { config: { tools: [] } });
+      try {
+        const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+        controller.abort(new Error('cancelled tool loader'));
+        await expect(call).rejects.toThrow('cancelled tool loader');
+      } finally {
+        loader.mockRestore();
+      }
+    });
+
     const tools: Anthropic.Tool[] = [
       {
         name: 'get_weather',

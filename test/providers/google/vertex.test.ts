@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -409,6 +410,23 @@ describe('VertexChatProvider.callGeminiApi', () => {
         incurredTokenUsage: {},
       },
     });
+  });
+
+  it('records cached tokens on the Vertex response span', async () => {
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ output: 'cached response', tokenUsage: { prompt: 6, total: 10 } }),
+    );
+    const setAttribute = vi.fn();
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
+    } as any);
+    try {
+      await provider.callApi('test prompt');
+      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 
   it('should handle API call errors', async () => {

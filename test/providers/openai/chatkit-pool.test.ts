@@ -423,7 +423,7 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('shutdown', () => {
-    it('closes a browser that launches after shutdown begins', async () => {
+    it('returns from shutdown before a stalled browser launch and closes it later', async () => {
       const launching = createDeferred<typeof mockBrowser>();
       mockChromium.launch.mockReturnValueOnce(launching.promise);
       const pool = ChatKitBrowserPool.getInstance();
@@ -432,12 +432,47 @@ describe('ChatKitBrowserPool', () => {
       await vi.waitFor(() => expect(mockChromium.launch).toHaveBeenCalledOnce());
 
       const shutdown = pool.shutdown();
+      await shutdown;
+      expect(mockBrowser.close).not.toHaveBeenCalled();
       launching.resolve(mockBrowser);
-      await Promise.all([shutdown, cancelled]);
+      await cancelled;
       expect(mockBrowser.close).toHaveBeenCalledOnce();
       const server = vi.mocked(createServer).mock.results[0].value;
       expect(server.close).toHaveBeenCalledOnce();
       expect((pool as any).initialized).toBe(false);
+    });
+
+    it('returns from shutdown before a stalled server listen completes', async () => {
+      const server = createServer();
+      vi.mocked(createServer).mockClear();
+      let finishListen: (() => void) | undefined;
+      vi.mocked(server.listen).mockImplementationOnce((_port, callback) => {
+        finishListen = callback;
+        return server;
+      });
+      const pool = ChatKitBrowserPool.getInstance();
+      const initialization = pool.initialize();
+      const cancelled = expect(initialization).rejects.toThrow('cancelled during shutdown');
+      await vi.waitFor(() => expect(finishListen).toBeDefined());
+
+      await pool.shutdown();
+      expect(server.close).toHaveBeenCalled();
+      finishListen?.();
+      await cancelled;
+      expect(mockChromium.launch).not.toHaveBeenCalled();
+    });
+
+    it('closes a partial server when browser startup fails before retry', async () => {
+      mockChromium.launch.mockRejectedValueOnce(new Error('browser failed to start'));
+      const pool = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      await expect(pool.initialize()).rejects.toThrow('browser failed to start');
+      const server = vi.mocked(createServer).mock.results[0].value;
+      expect(server.close).toHaveBeenCalledOnce();
+
+      const replacement = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      expect(replacement).not.toBe(pool);
+      await replacement.initialize();
+      expect(server.listen).toHaveBeenCalledTimes(2);
     });
 
     it('unregisters a pool closed outside the registry', async () => {

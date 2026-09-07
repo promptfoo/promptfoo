@@ -294,11 +294,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -596,6 +592,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
+      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
