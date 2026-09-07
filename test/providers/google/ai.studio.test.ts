@@ -2830,6 +2830,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cost).toBeUndefined();
+    expect(response.tokenUsage).toEqual({ numRequests: 1 });
   });
 
   it('forwards taskType, outputDimensionality, and title from config', async () => {

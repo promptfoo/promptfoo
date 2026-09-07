@@ -641,7 +641,10 @@ export class AIStudioEmbeddingProvider
     return withResponseCacheMetadata(
       {
         embedding: values,
-        tokenUsage: { total: promptTokens ?? 0, numRequests: 1 },
+        tokenUsage: {
+          ...(promptTokens === undefined ? {} : { total: promptTokens }),
+          numRequests: 1,
+        },
         cost:
           promptTokens === undefined
             ? undefined
