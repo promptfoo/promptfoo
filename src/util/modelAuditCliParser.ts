@@ -41,11 +41,6 @@ const ModelAuditCliOptionsSchema = z.object({
 
 type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
 
-interface ParsedModelAuditArgs {
-  args: string[];
-  unsupportedOptions: [];
-}
-
 /**
  * Configuration mapping from option keys to CLI arguments
  * Note: 'share' and 'noShare' are omitted as they are promptfoo-only options
@@ -81,7 +76,10 @@ const CLI_ARG_MAP: Partial<
 /**
  * Elegant, configuration-driven CLI argument parser
  */
-export function parseModelAuditArgs(paths: string[], options: unknown): ParsedModelAuditArgs {
+export function parseModelAuditArgs(
+  paths: string[],
+  options: unknown,
+): { args: string[]; unsupportedOptions: string[] } {
   const validatedOptions = ModelAuditCliOptionsSchema.parse(options);
   const args: string[] = ['scan', ...paths];
 
