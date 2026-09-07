@@ -378,7 +378,9 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     // Delete only the ephemeral agent created by this instance.
     if (this.ephemeralAgentId) {
       try {
-        await this.client.delete(`/convai/agents/${this.ephemeralAgentId}`);
+        await this.client.delete(`/convai/agents/${this.ephemeralAgentId}`, {
+          signal: AbortSignal.timeout(5000),
+        });
         logger.debug('[ElevenLabs Agents] Ephemeral agent deleted', {
           agentId: this.ephemeralAgentId,
         });
