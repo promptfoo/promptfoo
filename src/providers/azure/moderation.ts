@@ -148,7 +148,7 @@ export function getModerationCacheKey(
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
-  readonly capabilities = ['callModerationApi'] as const;
+  readonly promptfooCapabilities = ['callModerationApi'] as const;
 
   static MODERATION_MODELS = AZURE_MODERATION_MODELS;
   static MODERATION_MODEL_IDS = AZURE_MODERATION_MODELS.map((model) => model.id);

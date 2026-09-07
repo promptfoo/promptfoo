@@ -130,8 +130,9 @@ async function calculateProviderSimilarity(
     return similarityResp.similarity;
   }
 
-  const callEmbeddingApi =
-    'callEmbeddingApi' in finalProvider ? finalProvider.callEmbeddingApi : undefined;
+  const callEmbeddingApi = hasProviderCapability(finalProvider, 'callEmbeddingApi')
+    ? finalProvider.callEmbeddingApi
+    : undefined;
   if (typeof callEmbeddingApi !== 'function') {
     if (hasProviderCapability(finalProvider, 'callSimilarityApi')) {
       return fail(
