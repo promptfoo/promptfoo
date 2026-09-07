@@ -212,7 +212,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
     options?.abortSignal?.throwIfAborted();
-    await this.ensureInitialized();
+    await this.ensureInitialized(options?.abortSignal);
 
     const apiKey =
       this.configWithHeaders.apiKey || this.getContentSafetyApiKey() || this.getApiKeyOrThrow();

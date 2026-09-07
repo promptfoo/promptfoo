@@ -115,7 +115,8 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   /**
-   * Signal that can be used to abort any provider operation, including transport retries and polling
+   * Request-scoped cancellation, forwarded to supported transports, retries, and polling.
+   * Legacy/custom providers may ignore this optional option; it does not cancel an accepted remote job.
    */
   abortSignal?: AbortSignal;
 }

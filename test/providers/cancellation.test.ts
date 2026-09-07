@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
+import { CohereEmbeddingProvider } from '../../src/providers/cohere';
 import {
   AIStudioChatProvider,
   AIStudioEmbeddingProvider,
@@ -12,6 +15,7 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
+import { LocalAiEmbeddingProvider } from '../../src/providers/localai';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -21,6 +25,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
+import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -36,6 +41,13 @@ beforeEach(() => {
 
 const config = { config: { apiKey: 'fixture-key' } };
 const textProviders = [
+  [
+    'Azure chat',
+    () =>
+      new AzureChatCompletionProvider('fixture', {
+        config: { apiKey: 'fixture-key', apiBaseUrl: 'http://127.0.0.1' },
+      }),
+  ],
   ['Hugging Face generation', () => new HuggingfaceTextGenerationProvider('fixture-model', config)],
   [
     'Hugging Face classification via callApi',
@@ -55,6 +67,16 @@ const textProviders = [
   ],
 ] as const;
 const embeddingProviders = [
+  [
+    'Azure embeddings',
+    () =>
+      new AzureEmbeddingProvider('fixture', {
+        config: { apiKey: 'fixture-key', apiBaseUrl: 'http://127.0.0.1' },
+      }),
+  ],
+  ['Cohere embeddings', () => new CohereEmbeddingProvider('fixture', { apiKey: 'fixture-key' })],
+  ['Voyage embeddings', () => new VoyageEmbeddingProvider('fixture', { apiKey: 'fixture-key' })],
+  ['LocalAI embeddings', () => new LocalAiEmbeddingProvider('fixture')],
   [
     'Hugging Face embeddings',
     () => new HuggingfaceFeatureExtractionProvider('fixture-model', config),
@@ -124,7 +146,7 @@ describe.each(operations)('$name cancellation', ({ call }) => {
         });
       });
     });
-    const pending = call(controller.signal);
+    const pending = call(controller.signal).catch((error) => ({ error: String(error) }));
     void pending.catch(started.reject);
     await started.promise;
     controller.abort(new Error('fixture cancellation'));
@@ -166,4 +188,30 @@ it('keeps concurrent moderation calls in separate cancellation scopes', async ()
     cached: false,
   });
   expect((await b).error).toBeUndefined();
+});
+
+it('deduplicates identical moderation calls sharing a cancellation scope', async () => {
+  const controller = new AbortController();
+  const result = createDeferred<Awaited<ReturnType<typeof fetchWithCache>>>();
+  const started = createDeferred<void>();
+  vi.mocked(fetchWithCache).mockImplementation(() => {
+    started.resolve();
+    return result.promise;
+  });
+  const provider = new OpenAiModerationProvider('omni-moderation-latest', config);
+  const first = provider.callModerationApi('hello', 'hello', undefined, {
+    abortSignal: controller.signal,
+  });
+  const second = provider.callModerationApi('hello', 'hello', undefined, {
+    abortSignal: controller.signal,
+  });
+  await started.promise;
+  result.resolve({
+    data: { results: [{ categories: {}, category_scores: {} }] },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
+  expect(await first).toEqual(await second);
+  expect(fetchWithCache).toHaveBeenCalledOnce();
 });

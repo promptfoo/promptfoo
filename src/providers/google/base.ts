@@ -24,7 +24,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
@@ -295,7 +295,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     args: string,
     config: CompletionOptions,
     callId?: string,
+    signal?: AbortSignal,
   ): Promise<any> {
+    signal?.throwIfAborted();
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -307,7 +309,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await awaitProviderOperation(this.loadExternalFunction(callbackStr), signal);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -343,8 +345,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-        callback(args),
+      signal?.throwIfAborted();
+      const result = await awaitProviderOperation(
+        withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
+        signal,
       );
 
       return result;

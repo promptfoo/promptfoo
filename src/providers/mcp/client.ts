@@ -5,8 +5,8 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { awaitProviderOperation } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
-import { waitForMcpOperation } from './abort';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -153,7 +153,7 @@ export class MCPClient {
     for (const server of servers) {
       logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
       signal?.throwIfAborted();
-      await waitForMcpOperation(this.connectToServer(server, signal), signal);
+      await awaitProviderOperation(this.connectToServer(server, signal), signal);
     }
   }
 
@@ -473,17 +473,24 @@ export class MCPClient {
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<MCPToolResult> {
     return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args),
+      this.callToolInternal(name, args, signal),
     );
   }
 
   private async callToolInternal(
     name: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    const requestOptions = getEffectiveRequestOptions(this.config);
+    signal?.throwIfAborted();
+    const configuredOptions = getEffectiveRequestOptions(this.config);
+    const requestOptions = signal ? { ...configuredOptions, signal } : configuredOptions;
     const disconnectedServers: string[] = [];
 
     // Find which server has this tool
@@ -491,8 +498,9 @@ export class MCPClient {
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
         try {
-          await this.refreshOAuthTokenIfNeeded(serverKey);
+          await awaitProviderOperation(this.refreshOAuthTokenIfNeeded(serverKey), signal);
         } catch (error) {
+          signal?.throwIfAborted();
           const errorMessage = error instanceof Error ? error.message : String(error);
           logger.debug(
             `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
@@ -513,10 +521,14 @@ export class MCPClient {
 
         while (true) {
           try {
-            const result = await currentClient.callTool(
-              { name, arguments: args },
-              undefined, // use default result schema
-              requestOptions,
+            signal?.throwIfAborted();
+            const result = await awaitProviderOperation(
+              currentClient.callTool(
+                { name, arguments: args },
+                undefined, // use default result schema
+                requestOptions,
+              ),
+              signal,
             );
 
             // Handle different content types appropriately
@@ -543,6 +555,7 @@ export class MCPClient {
               raw: result,
             };
           } catch (error) {
+            signal?.throwIfAborted();
             const errorMessage = error instanceof Error ? error.message : String(error);
 
             // Check if this is an auth error and we have OAuth config for this server
@@ -558,7 +571,10 @@ export class MCPClient {
               logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
               retried = true;
               try {
-                await this.refreshOAuthToken(serverKey, oauthConfig, true);
+                await awaitProviderOperation(
+                  this.refreshOAuthToken(serverKey, oauthConfig, true),
+                  signal,
+                );
                 // Get the new client after reconnection
                 const newClient = this.clients.get(serverKey);
                 if (newClient) {

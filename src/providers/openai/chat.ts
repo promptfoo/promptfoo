@@ -156,6 +156,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     args: string,
     config: OpenAiCompletionOptions,
     callId?: string,
+    signal?: AbortSignal,
   ): Promise<string> {
     return executeProviderFunctionCallback({
       functionName,
@@ -163,6 +164,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       callId,
       callbacks: config.functionToolCallbacks,
       cache: this.loadedFunctionCallbacks,
+      signal,
     });
   }
 
@@ -661,7 +663,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               let parsedArgs: any;
               try {
                 parsedArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+                const mcpResult = await this.mcpClient.callTool(
+                  functionName,
+                  parsedArgs,
+                  ...(callApiOptions?.abortSignal
+                    ? ([callApiOptions?.abortSignal] as const)
+                    : ([] as const)),
+                );
 
                 if (isMcpErrorResult(mcpResult)) {
                   const errorMessage = getMcpErrorMessage(mcpResult);
@@ -720,6 +728,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
+                callApiOptions?.abortSignal?.throwIfAborted();
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
                 results.push(`MCP Tool Error (${functionName}): ${error}`);
                 mcpToolCalls.push({
@@ -745,10 +754,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 functionCall.arguments || functionCall.function?.arguments,
                 config,
                 functionCall.call_id ?? functionCall.id,
+                callApiOptions?.abortSignal,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;
             } catch (error) {
+              callApiOptions?.abortSignal?.throwIfAborted();
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,

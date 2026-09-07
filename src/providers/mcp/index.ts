@@ -131,7 +131,11 @@ export class MCPProvider implements ApiProvider {
       logger.debug(`MCP Provider calling tool ${toolName} with args: ${JSON.stringify(finalArgs)}`);
 
       // Call the MCP tool
-      const result = await this.mcpClient!.callTool(toolName, finalArgs);
+      const result = await this.mcpClient!.callTool(
+        toolName,
+        finalArgs,
+        ...(options?.abortSignal ? ([options?.abortSignal] as const) : ([] as const)),
+      );
 
       if (result.error) {
         return {

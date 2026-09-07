@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import { AwsBedrockGenericProvider } from '../../src/providers/bedrock/base';
+import { AwsBedrockEmbeddingProvider } from '../../src/providers/bedrock/index';
 import { LumaRayVideoProvider } from '../../src/providers/bedrock/luma-ray';
 import { NovaReelVideoProvider } from '../../src/providers/bedrock/nova-reel';
+import {
+  executeProviderFunctionCallback,
+  FunctionCallbackHandler,
+} from '../../src/providers/functionCallbackUtils';
 import { GoogleAuthManager } from '../../src/providers/google/auth';
 import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
@@ -273,3 +281,172 @@ describe.each([
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe.each([VertexChatProvider, GoogleProvider])('%s authentication waits', (Provider) => {
+  it('stops waiting for OAuth discovery without dispatching a request', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const discovery = createDeferred<any>();
+    const provider = new Provider('gemini-2.5-flash', {
+      config: { vertexai: true, projectId: 'fixture-project' },
+    });
+    vi.spyOn(provider as any, 'getClientWithCredentials').mockImplementation(() => {
+      started.resolve();
+      return discovery.promise;
+    });
+    const pending = provider
+      .callApi('hello', undefined, { abortSignal: controller.signal })
+      .catch((error) => ({ error: String(error) }));
+    await started.promise;
+    controller.abort(new Error('cancelled discovery'));
+    expect((await pending).error).toContain('cancelled discovery');
+    discovery.resolve({ client: { request: mocks.request } });
+    await Promise.resolve();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+});
+
+it('stops waiting for Azure authentication while leaving shared initialization usable', async () => {
+  const controller = new AbortController();
+  const authentication = createDeferred<Record<string, string>>();
+  vi.spyOn(AzureGenericProvider.prototype, 'getAuthHeaders').mockReturnValue(
+    authentication.promise,
+  );
+  const provider = new AzureChatCompletionProvider('fixture', {
+    config: { apiBaseUrl: 'http://127.0.0.1' },
+  });
+  const pending = provider.ensureInitialized(controller.signal);
+  controller.abort(new Error('cancelled authentication'));
+  await expect(pending).rejects.toThrow('cancelled authentication');
+  authentication.resolve({ 'api-key': 'fixture' });
+  await expect(provider.ensureInitialized()).resolves.toBeUndefined();
+  await provider.cleanup();
+});
+
+it('does not dispatch Bedrock embedding after cancelled client initialization', async () => {
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  const runtime = createDeferred<any>();
+  const invokeModel = vi.fn();
+  const provider = new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v2:0');
+  vi.spyOn(provider, 'getBedrockInstance').mockImplementation(() => {
+    started.resolve();
+    return runtime.promise;
+  });
+  const pending = provider.callEmbeddingApi('hello', undefined, { abortSignal: controller.signal });
+  await started.promise;
+  controller.abort(new Error('cancelled embedding'));
+  expect((await pending).error).toContain('cancelled embedding');
+  runtime.resolve({ invokeModel });
+  await Promise.resolve();
+  expect(invokeModel).not.toHaveBeenCalled();
+});
+
+it('forwards cancellation to Bedrock embedding transport', async () => {
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  const invokeModel = vi.fn((_input, options) => {
+    started.resolve();
+    return waitForAbort(options.abortSignal);
+  });
+  const provider = new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v2:0');
+  vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({ invokeModel } as any);
+  const pending = provider.callEmbeddingApi('hello', undefined, { abortSignal: controller.signal });
+  await started.promise;
+  controller.abort(new Error('cancelled embedding'));
+  expect((await pending).error).toContain('cancelled embedding');
+  expect(invokeModel.mock.calls[0][1].abortSignal).toBe(controller.signal);
+});
+
+it('does not dispatch a Google callback after cancellation', async () => {
+  const provider = new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
+  const callback = vi.fn();
+  await expect(
+    (provider as any).executeFunctionCallback(
+      'tool',
+      '{}',
+      { functionToolCallbacks: { tool: callback } },
+      undefined,
+      AbortSignal.abort(new Error('cancelled callback')),
+    ),
+  ).rejects.toThrow('cancelled callback');
+  expect(callback).not.toHaveBeenCalled();
+});
+
+it('stops waiting for a Google callback already in progress', async () => {
+  const provider = new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  const result = createDeferred<string>();
+  const callback = vi.fn(() => {
+    started.resolve();
+    return result.promise;
+  });
+  const pending = (provider as any).executeFunctionCallback(
+    'tool',
+    '{}',
+    { functionToolCallbacks: { tool: callback } },
+    undefined,
+    controller.signal,
+  );
+  await started.promise;
+  controller.abort(new Error('cancelled callback'));
+  await expect(pending).rejects.toThrow('cancelled callback');
+  result.resolve('late result');
+});
+
+it.each([false, true])('forwards Anthropic cancellation with streaming=%s', async (stream) => {
+  const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+    config: { apiKey: 'fixture', stream },
+  });
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  const messages = (provider as any).anthropic.messages;
+  const request = vi
+    .spyOn(messages, stream ? 'stream' : 'create')
+    .mockImplementation((_params, options: any) => {
+      expect(options.signal).toBe(controller.signal);
+      started.resolve();
+      return waitForAbort(options.signal);
+    });
+  const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+  await started.promise;
+  controller.abort(new Error('cancelled Anthropic'));
+  expect((await pending).error).toContain('cancelled Anthropic');
+  expect(request).toHaveBeenCalledOnce();
+  await provider.cleanup();
+});
+
+it.each(['direct', 'handler'])(
+  'cancels pending shared callbacks through the %s adapter',
+  async (adapter) => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const result = createDeferred<string>();
+    const callbacks = {
+      fixture: () => {
+        started.resolve();
+        return result.promise;
+      },
+    };
+    const pending =
+      adapter === 'direct'
+        ? executeProviderFunctionCallback({
+            functionName: 'fixture',
+            args: '{}',
+            callbacks,
+            cache: {},
+            signal: controller.signal,
+          })
+        : new FunctionCallbackHandler().processCalls(
+            { name: 'fixture', arguments: '{}' },
+            callbacks,
+            undefined,
+            { abortSignal: controller.signal },
+          );
+    await started.promise;
+    controller.abort(new Error('cancelled shared callback'));
+    await expect(pending).rejects.toThrow('cancelled shared callback');
+    result.resolve('late result');
+  },
+);
