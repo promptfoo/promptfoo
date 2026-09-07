@@ -126,7 +126,7 @@ export interface ProviderIdentity<TConfig = unknown> {
   id(): string;
   config?: TConfig;
   /** Omit for legacy method-based detection; declare to exclude inherited stubs. */
-  capabilities?: readonly ProviderCapability[];
+  promptfooCapabilities?: readonly ProviderCapability[];
   /** Release long-lived resources. Request cancellation uses abortSignal instead. */
   cleanup?: () => void | Promise<void>;
 }
@@ -171,9 +171,10 @@ export function hasProviderCapability<K extends ProviderCapability>(
     typeof provider.id === 'function' &&
     capability in provider &&
     typeof (provider as Record<string, unknown>)[capability] === 'function' &&
-    (!('capabilities' in provider) ||
-      provider.capabilities === undefined ||
-      (Array.isArray(provider.capabilities) && provider.capabilities.includes(capability)))
+    (!('promptfooCapabilities' in provider) ||
+      provider.promptfooCapabilities === undefined ||
+      (Array.isArray(provider.promptfooCapabilities) &&
+        provider.promptfooCapabilities.includes(capability)))
   );
 }
 

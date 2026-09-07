@@ -31,7 +31,7 @@ type LiteLLMDelegate =
 abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
   implements ApiProvider<OpenAiCompletionOptions>
 {
-  readonly capabilities: readonly ('callApi' | 'callEmbeddingApi')[];
+  readonly promptfooCapabilities: readonly ('callApi' | 'callEmbeddingApi')[];
   readonly getApiKey: () => string | undefined;
   readonly cleanup?: ApiProvider['cleanup'];
   readonly validateFunctionToolCall?: OpenAiChatCompletionProvider['validateFunctionToolCall'];
@@ -42,7 +42,7 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
     private readonly customId?: string,
   ) {
     this.getApiKey = provider.getApiKey.bind(provider);
-    this.capabilities = providerType === 'embedding' ? ['callEmbeddingApi'] : ['callApi'];
+    this.promptfooCapabilities = providerType === 'embedding' ? ['callEmbeddingApi'] : ['callApi'];
     if ('cleanup' in provider) {
       this.cleanup = provider.cleanup.bind(provider);
     }

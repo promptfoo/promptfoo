@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { DMREmbeddingProvider } from '../../src/providers/docker';
+import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -9,6 +10,7 @@ import {
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { shouldBustProviderCache, withResponseCacheMetadata } from '../../src/providers/shared';
 import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
+import { accumulateGradingTokenUsage, accumulateTokenUsage } from '../../src/util/tokenUsageUtils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -37,7 +39,7 @@ describe('response-cache metadata', () => {
     expect(withResponseCacheMetadata(response, true)).toEqual({
       ...response,
       cached: true,
-      tokenUsage: { ...response.tokenUsage, cached: 12, numRequests: 0 },
+      tokenUsage: { ...response.tokenUsage, cached: 12, numRequests: 0, incurredTokenUsage: {} },
     });
     expect(response.tokenUsage.cached).toBe(4);
     expect(response.tokenUsage.numRequests).toBe(1);
@@ -58,13 +60,17 @@ describe('response-cache metadata', () => {
     });
     expect(
       withResponseCacheMetadata({ output: 'partial usage', tokenUsage: { prompt: 5 } }, true),
-    ).toEqual({ output: 'partial usage', cached: true, tokenUsage: { prompt: 5, numRequests: 0 } });
+    ).toEqual({
+      output: 'partial usage',
+      cached: true,
+      tokenUsage: { prompt: 5, numRequests: 0, incurredTokenUsage: {} },
+    });
   });
 
   it('preserves known zero usage on replay', () => {
     expect(
       withResponseCacheMetadata({ output: '', tokenUsage: { total: 0 } }, true).tokenUsage,
-    ).toEqual({ total: 0, cached: 0, numRequests: 0 });
+    ).toEqual({ total: 0, cached: 0, numRequests: 0, incurredTokenUsage: {} });
   });
 });
 
@@ -82,6 +88,14 @@ describe('response-cache policy', () => {
 
 const prompt = { raw: 'fixture', label: 'fixture' };
 const cases = [
+  {
+    name: 'AI Studio embedding',
+    call: (context?: CallApiContextParams) =>
+      new AIStudioEmbeddingProvider('text-embedding-004', {
+        config: { apiKey: 'fixture-key' },
+      }).callEmbeddingApi('fixture', context),
+    data: { embedding: { values: [0.1, 0.2] } },
+  },
   {
     name: 'OpenAI embedding',
     call: (context?: CallApiContextParams) =>
@@ -121,8 +135,13 @@ describe.each(cases)('$name cache contract', ({ call, data, name }) => {
     const response = await call();
     expect(response.error).toBeUndefined();
     expect(response.cached).toBe(cached);
-    if (cached && name !== 'Ollama embedding') {
-      expect(response.tokenUsage).toMatchObject({ total: 12, cached: 12, numRequests: 0 });
+    if (cached && name !== 'Ollama embedding' && name !== 'AI Studio embedding') {
+      expect(response.tokenUsage).toMatchObject({
+        total: 12,
+        cached: 12,
+        numRequests: 0,
+        incurredTokenUsage: {},
+      });
     }
     if (name === 'Ollama embedding') {
       expect(response.tokenUsage).toBeUndefined();
@@ -196,4 +215,34 @@ it('preserves the reported embedding price when replaying a cached response', as
   expect(replay.cost).toBe(fresh.cost);
   expect(replay.cached).toBe(true);
   expect(replay.tokenUsage?.numRequests).toBe(0);
+  expect(replay.tokenUsage?.prompt).toBe(fresh.tokenUsage?.prompt);
 });
+
+// Similarity and RAG matchers combine token usage without the response envelope.
+it.each([true, false])(
+  'preserves incurred usage when cache metadata is aggregated (cached first=%s)',
+  (cachedFirst) => {
+    const cached = withResponseCacheMetadata(
+      { embedding: [1], tokenUsage: { total: 12, prompt: 12, numRequests: 1 } },
+      true,
+    ).tokenUsage;
+    const fresh = { total: 3, prompt: 3, numRequests: 1 };
+    const combined = {};
+    for (const usage of cachedFirst ? [cached, fresh] : [fresh, cached]) {
+      accumulateTokenUsage(combined, usage);
+    }
+    expect(combined).toMatchObject({
+      total: 15,
+      prompt: 15,
+      cached: 12,
+      numRequests: 1,
+      incurredTokenUsage: { total: 3, prompt: 3, numRequests: 1 },
+    });
+    const grading = {};
+    accumulateGradingTokenUsage(grading, combined);
+    expect(grading).toMatchObject({
+      assertions: { total: 15, prompt: 15 },
+      incurredTokenUsage: { assertions: { total: 3, prompt: 3 } },
+    });
+  },
+);
