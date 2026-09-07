@@ -268,6 +268,24 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('finishes a cancelled call while its response transform remains pending', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'response' });
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        transformResponse: 'async () => new Promise(() => {})',
+      },
+    });
+    const controller = new AbortController();
+    const call = provider.callApi('', createContext({ tool: 'slow' }), {
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(mcpClientMock.callTool).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled transform'));
+
+    await expect(call).rejects.toThrow('cancelled transform');
+  });
+
   it('should return the existing invalid prompt contract before calling tools', async () => {
     const provider = new MCPProvider({ config: { enabled: true } });
 
