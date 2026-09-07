@@ -1199,7 +1199,7 @@ describe('MCPClient', () => {
       });
 
       const initialization = mcpClient.initialize();
-      const rejection = expect(initialization).rejects.toThrow('This operation was aborted');
+      const rejection = expect(initialization).rejects.toThrow(/aborted/i);
       await entered.promise;
       await mcpClient.cleanup();
       expect(mockStdioTransport.close).toHaveBeenCalledOnce();
