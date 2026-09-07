@@ -37,8 +37,6 @@
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
         "@octokit/rest",
-        // Types for a dynamically-imported dependency.
-        "@types/pdf-parse",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
@@ -57,7 +55,6 @@
       "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
       "ignoreDependencies": [
         // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
-        "@kurkle/color",
         "lightningcss",
         "tailwindcss"
       ],
@@ -84,7 +81,6 @@
         "@generated/*",
         "@docusaurus/plugin-content-blog",
         "@swc/core",
-        "@swc/jest",
         // Transitive pins for the Docusaurus build; never imported directly.
         "dompurify",
         "langium"
