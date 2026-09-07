@@ -1,14 +1,7 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
-import {
-  type ApiEmbeddingProvider,
-  type ApiSimilarityProvider,
-  type GradingConfig,
-  type GradingResult,
-  hasProviderCapability,
-  type TokenUsage,
-} from '../types/index';
+import { hasProviderCapability } from '../types/providers';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
@@ -23,6 +16,14 @@ import {
   fail,
   normalizeMatcherTokenUsage,
 } from './shared';
+
+import type {
+  ApiEmbeddingProvider,
+  ApiSimilarityProvider,
+  GradingConfig,
+  GradingResult,
+  TokenUsage,
+} from '../types/index';
 
 type SimilarityMetric = 'cosine' | 'dot_product' | 'euclidean';
 
