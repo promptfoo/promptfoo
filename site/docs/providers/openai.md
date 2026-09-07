@@ -2162,6 +2162,8 @@ For compatibility with shared Chat Completions configs, promptfoo also accepts n
 
 When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. `toolCallTimeout` bounds each handler invocation, and `maxToolIterations` stops runaway tool-follow-up loops within a single turn. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
 
+A `functionCallHandler` supplied in prompt configuration applies only to that call. Later calls continue using the provider's configured handler.
+
 ### Complete Example
 
 For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
@@ -2226,6 +2228,8 @@ Use `input_image` only with Realtime models that support image input, such as th
 ### Multi-Turn Conversations
 
 The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
+
+Persistent context requires `maintainContext: true` (the default) and a nonempty string or numeric `conversationId`. A call without an ID uses its own connection and leaves the provider defaults unchanged. Consecutive calls with the same ID share context. Changing IDs starts a new session; returning to a previous ID also starts fresh. Use separate provider instances if you need to retain several conversations concurrently.
 
 > **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
 
