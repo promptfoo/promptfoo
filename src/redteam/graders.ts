@@ -118,6 +118,7 @@ import { TelecomFraudEnablementPluginGrader } from './plugins/telecom/fraudEnabl
 import { TelecomLawEnforcementRequestHandlingPluginGrader } from './plugins/telecom/lawEnforcementRequestHandling';
 import { TelecomLocationDisclosurePluginGrader } from './plugins/telecom/locationDisclosure';
 import { TelecomPortingMisinformationPluginGrader } from './plugins/telecom/portingMisinformation';
+import { TelecomTcpaConsentRevocationPluginGrader } from './plugins/telecom/tcpaConsentRevocation';
 import { TelecomTcpaViolationPluginGrader } from './plugins/telecom/tcpaViolation';
 import { TelecomUnauthorizedChangesPluginGrader } from './plugins/telecom/unauthorizedChanges';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
@@ -236,6 +237,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:telecom:account-takeover': new TelecomAccountTakeoverPluginGrader(),
   'promptfoo:redteam:telecom:e911-misinformation': new TelecomE911MisinformationPluginGrader(),
   'promptfoo:redteam:telecom:tcpa-violation': new TelecomTcpaViolationPluginGrader(),
+  'promptfoo:redteam:telecom:tcpa-consent-revocation':
+    new TelecomTcpaConsentRevocationPluginGrader(),
   'promptfoo:redteam:telecom:unauthorized-changes': new TelecomUnauthorizedChangesPluginGrader(),
   'promptfoo:redteam:telecom:fraud-enablement': new TelecomFraudEnablementPluginGrader(),
   'promptfoo:redteam:telecom:porting-misinformation':

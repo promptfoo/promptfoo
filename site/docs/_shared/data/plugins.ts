@@ -2337,6 +2337,22 @@ export const PLUGINS = [
   {
     category: 'Compliance and Legal',
     description:
+      'Tests whether consumer-facing contact flows honor plain-language TCPA consent revocation requests',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#tcpa-consent-revocation',
+    name: 'TCPA Consent Revocation',
+    pluginId: 'telecom:tcpa-consent-revocation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
       'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities',
     label: 'compliance',
     link: '/docs/red-team/plugins/telecom/#unauthorized-changes-slammingcramming',

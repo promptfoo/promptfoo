@@ -226,6 +226,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'telecom:account-takeover',
       'telecom:e911-misinformation',
       'telecom:tcpa-violation',
+      'telecom:tcpa-consent-revocation',
       'telecom:unauthorized-changes',
       'telecom:fraud-enablement',
       'telecom:porting-misinformation',
@@ -247,6 +248,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
         name: 'Regulatory Compliance',
         plugins: [
           'telecom:tcpa-violation',
+          'telecom:tcpa-consent-revocation',
           'telecom:unauthorized-changes',
           'telecom:e911-misinformation',
           'telecom:law-enforcement-request-handling',
