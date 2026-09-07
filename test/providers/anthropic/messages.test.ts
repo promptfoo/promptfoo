@@ -12,6 +12,7 @@ import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -121,8 +122,8 @@ describe('AnthropicMessagesProvider', () => {
     mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY }, { clear: true });
     mockMCPClient = undefined;
     mcpMocks.instances.length = 0;
-    mcpMocks.initialize.mockReset();
-    mcpMocks.cleanup.mockReset();
+    mcpMocks.initialize.mockReset().mockResolvedValue(undefined);
+    mcpMocks.cleanup.mockReset().mockResolvedValue(undefined);
     mcpMocks.callTool.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
@@ -130,6 +131,7 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   afterEach(async () => {
+    await providerRegistry.shutdownAll();
     vi.clearAllMocks();
     await clearCache();
     mockProcessEnv(originalEnv, { clear: true });

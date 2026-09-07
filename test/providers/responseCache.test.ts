@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { DMREmbeddingProvider } from '../../src/providers/docker';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -7,6 +8,7 @@ import {
 } from '../../src/providers/ollama';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { shouldBustProviderCache, withResponseCacheMetadata } from '../../src/providers/shared';
+import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -144,3 +146,35 @@ describe.each(cases)('$name cache contract', ({ call, data, name }) => {
     },
   );
 });
+
+describe.each([TrueFoundryEmbeddingProvider, DMREmbeddingProvider])(
+  '%s embedding forwarding',
+  (Provider) => {
+    it.each([{ bustCache: true }, { debug: true }, { bustCache: false, debug: true }])(
+      'preserves cache context %j and cancellation options',
+      async (cacheOptions) => {
+        vi.mocked(fetchWithCache).mockImplementation(async (url) => ({
+          data: String(url).endsWith('/models')
+            ? { data: [{ id: 'fixture' }] }
+            : { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 12 } },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        }));
+        const provider = new Provider('fixture', { config: { apiKey: 'fixture-key' } });
+        const controller = new AbortController();
+        const result = await provider.callEmbeddingApi(
+          'fixture',
+          { prompt, vars: {}, ...cacheOptions },
+          { abortSignal: controller.signal },
+        );
+        expect(result.error).toBeUndefined();
+        const call = vi
+          .mocked(fetchWithCache)
+          .mock.calls.find(([url]) => String(url).endsWith('/embeddings'))!;
+        expect(call[4]).toBe(shouldBustProviderCache(cacheOptions));
+        expect(call[1]?.signal).toBe(controller.signal);
+      },
+    );
+  },
+);
