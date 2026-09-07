@@ -138,9 +138,9 @@ class ProviderRegistry {
     registration.cleanupPromise = Promise.resolve()
       .then(async () => {
         try {
-          if ('shutdown' in provider) {
+          if ('shutdown' in provider && typeof provider.shutdown === 'function') {
             await provider.shutdown();
-          } else {
+          } else if ('cleanup' in provider && typeof provider.cleanup === 'function') {
             await provider.cleanup();
           }
         } catch (error) {

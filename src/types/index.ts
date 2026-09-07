@@ -244,6 +244,9 @@ export interface RunEvalOptions {
    */
   abortSignal?: AbortSignal;
 
+  /** Evaluation-level cancellation shared by deferred grading, excluding row timeouts. */
+  gradingAbortSignal?: AbortSignal;
+
   /**
    * Rate limit registry for adaptive concurrency control.
    * When provided, provider calls are wrapped with rate limiting and retry logic.
