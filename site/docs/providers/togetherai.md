@@ -23,7 +23,9 @@ providers:
       temperature: 0.7
 ```
 
-The provider requires an API key stored in the `TOGETHER_API_KEY` environment variable.
+Set `TOGETHER_API_KEY`, or configure `apiKey` directly. Use `apiKeyEnvar` to select a different credential variable; provider `env` overrides take precedence over the process environment.
+
+Connection options such as `apiBaseUrl`, `apiHost`, and `headers` configure the transport. Model parameters are sent to Together AI, and explicit `passthrough` fields override top-level model parameters.
 
 ## Key Features
 
