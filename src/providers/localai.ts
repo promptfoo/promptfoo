@@ -105,8 +105,8 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
-  static readonly declaredProviderCapabilities = true;
-  readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = LocalAiEmbeddingProvider.declaredProviderCapabilities;
 
   async callEmbeddingApi(
     text: string,

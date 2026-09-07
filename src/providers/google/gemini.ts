@@ -145,6 +145,9 @@ export function parseGeminiContent(
   const lastData = chunks[chunks.length - 1];
   const respond = (response: ProviderResponse): GeminiContent => ({ kind: 'response', response });
   if (!lastData) {
+    if (facade === 'vertex') {
+      throw new Error('No response data found');
+    }
     return respond({ error: `No response data found in response: ${JSON.stringify(data)}` });
   }
   if (facade !== 'ai-studio') {
@@ -218,6 +221,13 @@ export function getGeminiTokenUsage(
         };
   if (cached) {
     return {
+      ...(facade === 'ai-studio' && {
+        prompt:
+          usage?.promptTokenCount === undefined
+            ? undefined
+            : usage.promptTokenCount + (usage.toolUsePromptTokenCount ?? 0),
+        completion: usage?.candidatesTokenCount,
+      }),
       cached: usage?.totalTokenCount,
       total: usage?.totalTokenCount,
       numRequests: 1,

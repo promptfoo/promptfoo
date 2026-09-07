@@ -23,7 +23,12 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
-import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
+import {
+  awaitProviderOperation,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  transformTools,
+} from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -247,7 +252,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools = config.tools
-      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
+      ? (await awaitProviderOperation(
+          maybeLoadToolsFromExternalFile(config.tools, context?.vars),
+          callApiOptions?.abortSignal,
+        )) || []
       : [];
     // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
