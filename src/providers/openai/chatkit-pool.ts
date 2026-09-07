@@ -525,6 +525,7 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+    providerRegistry.unregister(this);
     if (ChatKitBrowserPool.instance === this) {
       ChatKitBrowserPool.instance = null;
     }
