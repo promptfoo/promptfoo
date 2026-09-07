@@ -697,14 +697,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    const cache = await getCache();
     const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
+    const cache = useCache ? await getCache() : undefined;
+    const cacheKey = cache
+      ? getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost)
+      : undefined;
 
     let response;
     let cachedResponse;
-    if (useCache) {
+    if (cache && cacheKey) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -947,7 +949,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           response.metadata = { ...grounding };
         }
 
-        if (useCache) {
+        if (cache && cacheKey) {
           await cache.set(cacheKey, JSON.stringify(response));
         }
       } catch (err) {
