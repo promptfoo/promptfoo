@@ -17,6 +17,42 @@ afterEach(() => {
 });
 
 describe('scheduler cancellation', () => {
+  it('does not count a cancelled slot wait as a queue timeout', async () => {
+    const state = new ProviderRateLimitState({
+      rateLimitKey: 'grader',
+      maxConcurrency: 1,
+      minConcurrency: 1,
+    });
+    const started = createDeferred<void>();
+    const finish = createDeferred<string>();
+    const timeout = vi.fn();
+    state.on('queue:timeout', timeout);
+    const owner = state.executeWithRetry(
+      'owner',
+      () => {
+        started.resolve();
+        return finish.promise;
+      },
+      {},
+    );
+    try {
+      await started.promise;
+      const controller = new AbortController();
+      const pending = state.executeWithRetry('cancelled', vi.fn(), {
+        abortSignal: controller.signal,
+      });
+      const rejected = expect(pending).rejects.toThrow('stop waiting');
+      controller.abort(new Error('stop waiting'));
+      await rejected;
+      expect(timeout).not.toHaveBeenCalled();
+      expect(state.getMetrics()).toMatchObject({ failedRequests: 0, activeRequests: 1 });
+    } finally {
+      finish.resolve('done');
+      await owner;
+      state.dispose();
+    }
+  });
+
   it('removes an aborted slot waiter without releasing the active owner', async () => {
     vi.useFakeTimers();
     const queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });

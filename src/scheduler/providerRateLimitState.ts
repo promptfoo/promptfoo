@@ -160,8 +160,8 @@ export class ProviderRateLimitState extends EventEmitter {
         slotHeld = true;
       } catch (acquireError) {
         // Queue timeout or other acquire failures
-        this.failedRequests++;
         options.abortSignal?.throwIfAborted();
+        this.failedRequests++;
         this.emit('queue:timeout', {
           rateLimitKey: this.rateLimitKey,
           requestId,

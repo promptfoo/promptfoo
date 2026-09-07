@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -47,7 +48,11 @@ describe('MCP startup cancellation', () => {
       handshake.reject(new Error('closed'));
     });
     const controller = new AbortController();
-    const client = new MCPClient({ enabled: true, server: { command: 'fixture', args: [] } });
+    const client = new MCPClient({
+      enabled: true,
+      debug: true,
+      server: { command: 'fixture', args: [] },
+    });
     const initialization = client.initialize(controller.signal);
     const rejection = expect(initialization).rejects.toThrow('cancel handshake');
     await entered.promise;
@@ -63,6 +68,7 @@ describe('MCP startup cancellation', () => {
     expect(sdk.transportClose).toHaveBeenCalled();
     expect(sdk.listTools).not.toHaveBeenCalled();
     expect(client.connectedServers).toEqual([]);
+    expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('Failed to connect'));
   });
 
   it('does not create a connection for an already cancelled startup', async () => {
