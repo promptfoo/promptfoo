@@ -33,6 +33,33 @@ const createProvider = () =>
   });
 
 describe('ephemeral agent lifecycle', () => {
+  it('aborts pending creation during cleanup and can create a new agent later', async () => {
+    let creationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      creationStarted = resolve;
+    });
+    client.post.mockImplementationOnce(
+      (_path: string, _body: unknown, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          creationStarted();
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const provider = createProvider();
+    const call = provider.callApi('hello');
+    await started;
+    await provider.cleanup();
+    expect((await call).error).toContain('aborted');
+    expect(client.delete).not.toHaveBeenCalled();
+
+    expect(
+      (await providerRegistry.withScope([provider], () => provider.callApi('again'))).error,
+    ).toBeUndefined();
+    expect(client.delete).toHaveBeenCalledOnce();
+  });
+
   it('creates a fresh agent after each evaluation, including with a new instance', async () => {
     const provider = createProvider();
     for (const current of [provider, provider, createProvider()]) {

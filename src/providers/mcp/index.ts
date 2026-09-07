@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { awaitProviderOperation } from '../shared';
 import { loadTransformModule } from '../transformUtils';
 import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -142,11 +143,15 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return this.transformToolResult(result, {
-        toolName,
-        toolArgs: finalArgs,
-        originalPayload: toolCallData,
-      });
+      return this.transformToolResult(
+        result,
+        {
+          toolName,
+          toolArgs: finalArgs,
+          originalPayload: toolCallData,
+        },
+        options?.abortSignal,
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`MCP Provider error: ${errorMessage}`);
@@ -201,11 +206,13 @@ export class MCPProvider implements ApiProvider {
   private async transformToolResult(
     result: Awaited<ReturnType<MCPClient['callTool']>>,
     context: MCPTransformResponseContext,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const transformedResponse = await (await this.transformResponse)(
-      result.raw ?? result,
-      result.content,
-      context,
+    const transform = await awaitProviderOperation(this.transformResponse, signal);
+    signal?.throwIfAborted();
+    const transformedResponse = await awaitProviderOperation(
+      transform(result.raw ?? result, result.content, context),
+      signal,
     );
 
     return {
