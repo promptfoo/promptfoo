@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
 import { mapEncodingTestCases } from '../../../src/redteam/strategies/encoding';
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
@@ -15,6 +15,30 @@ const helperOptions = {
 };
 
 describe('mapEncodingTestCases', () => {
+  it('accepts named interfaces without preserving overwritten field types', () => {
+    interface NarrowTestCase {
+      vars: { prompt: false };
+      assert: { type: 'equals'; metric: 'Original' }[];
+      metadata: { strategyId: 'original' };
+    }
+    const testCase: NarrowTestCase = {
+      vars: { prompt: false },
+      assert: [{ type: 'equals', metric: 'Original' }],
+      metadata: { strategyId: 'original' },
+    };
+
+    const result = mapEncodingTestCases([testCase], 'prompt', helperOptions);
+
+    expectTypeOf(result).toEqualTypeOf<TestCase[]>();
+    expect(result).toStrictEqual([
+      {
+        vars: { prompt: 'encoded:false' },
+        assert: [{ type: 'equals', metric: 'Original/Encoded' }],
+        metadata: { strategyId: 'encoding', originalText: 'false' },
+      },
+    ]);
+  });
+
   it('preserves the exact shared mapping contract', () => {
     const transform = vi.fn((text: string) => `encoded:${text}`);
     const testCase: TestCase = {

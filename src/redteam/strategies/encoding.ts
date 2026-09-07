@@ -1,4 +1,6 @@
-import type { TestCase } from '../../types/index';
+import type { Strategy } from './types';
+
+type StrategyTestCases = Awaited<ReturnType<Strategy['action']>>;
 
 interface EncodingOptions {
   transform: (text: string) => string;
@@ -7,10 +9,10 @@ interface EncodingOptions {
 }
 
 export function mapEncodingTestCases(
-  testCases: TestCase[],
+  testCases: StrategyTestCases,
   injectVar: string,
   { transform, metricSuffix, metadata }: EncodingOptions,
-): TestCase[] {
+): StrategyTestCases {
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
     return {
