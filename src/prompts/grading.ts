@@ -220,3 +220,17 @@ export const TRAJECTORY_GOAL_SUCCESS_PROMPT = JSON.stringify([
 </Output>`,
   },
 ]);
+
+// A chat array rather than a flat string, so chat-completion providers receive distinct
+// user and assistant turns. LlamaGuard checkpoints apply their own safety-taxonomy chat
+// template server-side and classify the final assistant turn in context, so collapsing
+// the exchange into a single user message would have the model grade the wrong side of
+// the conversation.
+//
+// `{{ prompt }}` is the user side. When the evaluated prompt is a serialized multi-turn
+// chat, handleLlamaGuard expands it into real turns before this template is rendered
+// (see buildLlamaGuardConversation), so earlier context is preserved.
+export const LLAMA_GUARD_PROMPT = JSON.stringify([
+  { role: 'user', content: '{{ prompt }}' },
+  { role: 'assistant', content: '{{ output }}' },
+]);

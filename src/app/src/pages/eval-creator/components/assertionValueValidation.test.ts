@@ -391,6 +391,40 @@ describe('moderation', () => {
   });
 });
 
+describe('llama-guard', () => {
+  it('accepts an undefined value (all categories)', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'llama-guard', value: undefined as any })),
+    ).toBeUndefined();
+  });
+
+  it('accepts a non-empty string array of hazard codes', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'llama-guard', value: ['S1', 'S10'] as any })),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-llama-guard', value: ['S1'] as any })),
+    ).toBeUndefined();
+  });
+
+  it('rejects non-string-array values', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'llama-guard', value: [1, 2] as any })),
+    ).toMatch(/comma-separated list/);
+  });
+
+  it('rejects an empty array, which is truthy and crashes the runtime invariant', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'llama-guard', value: [] as any }))).toMatch(
+      /comma-separated list/,
+    );
+  });
+
+  it('is recognized as a supported assertion type', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'llama-guard' }))).toBeUndefined();
+    expect(getRunnableAssertionValueError(make({ type: 'not-llama-guard' }))).toBeUndefined();
+  });
+});
+
 describe('named matcher assertions', () => {
   it('requires an expected traced tool name for trajectory:tool-used', () => {
     expect(
