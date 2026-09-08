@@ -18,8 +18,17 @@ describe('Bedrock agent-runtime SDK serialization', () => {
     vi.restoreAllMocks();
   });
 
-  function captureRequest() {
+  function captureRequest(responseBody?: Record<string, unknown>) {
     const handle = vi.fn(async (_request: { body?: unknown }) => {
+      if (responseBody) {
+        return {
+          response: {
+            statusCode: 200,
+            headers: { 'content-type': 'application/json' },
+            body: new TextEncoder().encode(JSON.stringify(responseBody)),
+          },
+        };
+      }
       throw new Error('Local serialization fixture');
     });
     const client = new BedrockAgentRuntimeClient({
@@ -210,6 +219,52 @@ describe('Bedrock agent-runtime SDK serialization', () => {
   );
 
   it.each([
+    ['cohere.command-r-v1:0', undefined, 0],
+    ['cohere.command-r-plus-v1:0', undefined, 20],
+    ['arn:aws:bedrock:us-east-1::foundation-model/cohere.command-r-v1:0', undefined, 20],
+    [
+      'amazon.nova-lite-v1:0',
+      'arn:aws:bedrock:us-west-2::foundation-model/cohere.command-r-plus-v1:0',
+      0,
+    ],
+  ] as const)(
+    'serializes Cohere top-k as k and preserves responses for %s / %s',
+    async (modelName, modelArn, top_k) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: {
+          knowledgeBaseId: 'KB12345678',
+          modelArn,
+          temperature: 0,
+          top_p: 0.75,
+          top_k,
+          max_tokens: 128,
+        },
+      });
+      const citations = [{ retrievedReferences: [{ content: { text: 'Garden fixture' } }] }];
+      const { client, handle } = captureRequest({
+        output: { text: 'A quiet garden' },
+        citations,
+      });
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('A quiet garden');
+      expect(result.metadata?.citations).toEqual(citations);
+      expect(result.tokenUsage?.numRequests).toBe(1);
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
+      ).toEqual({
+        inferenceConfig: { textInferenceConfig: { temperature: 0, topP: 0.75, maxTokens: 128 } },
+        additionalModelRequestFields: { k: top_k },
+      });
+    },
+  );
+
+  it.each([
     ['anthropic.claude-sonnet-4-5-20250929-v1:0', undefined],
     ['anthropic.claude-haiku-4-5-20251001-v1:0', undefined],
     ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', undefined],
@@ -221,8 +276,15 @@ describe('Bedrock agent-runtime SDK serialization', () => {
       'amazon.nova-lite-v1:0',
       'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0',
     ],
+    ['anthropic.claude-sonnet-4-6', undefined],
+    ['global.anthropic.claude-sonnet-4-6', undefined],
+    ['arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6', undefined],
+    [
+      'cohere.command-r-v1:0',
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6',
+    ],
   ] as const)(
-    'prefers top_p over temperature for Claude 4.5 %s / %s',
+    'prefers top_p over temperature for affected Claude model %s / %s',
     async (modelName, modelArn) => {
       const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
         config: {
@@ -252,17 +314,32 @@ describe('Bedrock agent-runtime SDK serialization', () => {
   );
 
   it.each([
-    { sampling: { temperature: 0 }, expected: { temperature: 0 } },
-    { sampling: { top_p: 0.75 }, expected: { topP: 0.75 } },
+    {
+      modelName: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+      sampling: { temperature: 0 },
+      expected: { temperature: 0 },
+    },
+    {
+      modelName: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+      sampling: { top_p: 0.75 },
+      expected: { topP: 0.75 },
+    },
+    {
+      modelName: 'anthropic.claude-sonnet-4-6',
+      sampling: { temperature: 0 },
+      expected: { temperature: 0 },
+    },
+    {
+      modelName: 'anthropic.claude-sonnet-4-6',
+      sampling: { top_p: 0.75 },
+      expected: { topP: 0.75 },
+    },
   ])(
-    'preserves individual Claude 4.5 sampling option $sampling',
-    async ({ sampling, expected }) => {
-      const provider = new AwsBedrockKnowledgeBaseProvider(
-        'anthropic.claude-sonnet-4-5-20250929-v1:0',
-        {
-          config: { knowledgeBaseId: 'KB12345678', ...sampling },
-        },
-      );
+    'preserves individual sampling option $sampling for $modelName',
+    async ({ modelName, sampling, expected }) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'KB12345678', ...sampling },
+      });
       const { client, handle } = captureRequest();
       vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
 
@@ -283,7 +360,10 @@ describe('Bedrock agent-runtime SDK serialization', () => {
     ['anthropic.claude-3-5-sonnet-20241022-v2:0', undefined],
     ['custom-model', undefined],
     ['custom-amazon.nova-model', undefined],
+    ['custom-cohere.command-r-v1:0', undefined],
+    ['cohere.command-r-custom', undefined],
     ['anthropic.claude-sonnet-4-50', undefined],
+    ['anthropic.claude-sonnet-4-60', undefined],
     [
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
       undefined,
@@ -293,6 +373,8 @@ describe('Bedrock agent-runtime SDK serialization', () => {
       'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',
     ],
     ['anthropic.claude-sonnet-4-5-20250929-v1:0', 'custom-model'],
+    ['anthropic.claude-sonnet-4-6', 'custom-model'],
+    ['cohere.command-r-v1:0', 'custom-model'],
   ] as const)(
     'preserves other model sampling and top-k shapes for %s / %s',
     async (modelName, modelArn) => {

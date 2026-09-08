@@ -139,10 +139,11 @@ export class AwsBedrockKnowledgeBaseProvider
     const { temperature, top_p, top_k } = isSamplingParamsDeprecatedClaudeModel(modelArn)
       ? {}
       : this.kbConfig;
-    // Sonnet/Haiku 4.5 accept either temperature or top_p. Prefer top_p, as
+    // Sonnet 4.5/4.6 and Haiku 4.5 accept either temperature or top_p. Prefer top_p, as
     // the Anthropic Messages provider does, without changing older models.
     const omitTemperature =
-      top_p !== undefined && /(^|[^a-z0-9])claude-(?:sonnet|haiku)-4-5(?![0-9])/i.test(modelArn);
+      top_p !== undefined &&
+      /(^|[^a-z0-9])claude-(?:sonnet-4-[56]|haiku-4-5)(?![0-9])/i.test(modelArn);
     const textInferenceConfig = {
       ...(temperature !== undefined && !omitTemperature && { temperature }),
       ...(max_tokens !== undefined && { maxTokens: max_tokens }),
@@ -156,7 +157,9 @@ export class AwsBedrockKnowledgeBaseProvider
         ...(top_k !== undefined && {
           additionalModelRequestFields: /(^|[/.])amazon\.nova-/.test(modelArn)
             ? { inferenceConfig: { topK: top_k } }
-            : { top_k },
+            : /(^|[/.])cohere\.command-r(?:-plus)?-v\d+(?::\d+)?$/.test(modelArn)
+              ? { k: top_k }
+              : { top_k },
         }),
       };
     }
