@@ -7,12 +7,15 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import {
   type ApiProvider,
   hasProviderCapability,
   type ProviderIdentity,
   type ProviderOperations,
 } from '../../src/types/providers';
+
+import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 
 const mcp = vi.hoisted(() => ({ initialize: vi.fn(), cleanup: vi.fn() }));
 vi.mock('../../src/providers/mcp/client', () => ({
@@ -80,6 +83,37 @@ it('recognizes an instance-owned implementation that replaces an inherited text 
   const provider = new TextEmbeddingProvider('fixture');
   expect(hasProviderCapability(provider, 'callApi')).toBe(true);
   expect(await getAndCheckProvider('text', provider, null, 'rubric')).toBe(provider);
+});
+
+it('preserves subclass text capability through a rate-limit object wrapper', async () => {
+  class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+    override async callApi() {
+      return { output: 'subclass text' };
+    }
+  }
+  class RestrictedProvider extends TextEmbeddingProvider {
+    override readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  }
+  const registry = {
+    execute: vi.fn(async (_provider: unknown, call: () => Promise<unknown>) => call()),
+  } as unknown as RateLimitRegistry;
+  const wrapped = wrapProviderWithRateLimiting(new TextEmbeddingProvider('fixture'), registry);
+  expect(await getAndCheckProvider('text', wrapped, null, 'rubric')).toBe(wrapped);
+  expect((await wrapped.callApi('hello')).output).toBe('subclass text');
+  wrapped.promptfooCapabilities = ['callEmbeddingApi'];
+  expect(hasProviderCapability(wrapped, 'callApi')).toBe(false);
+  expect(
+    hasProviderCapability(
+      wrapProviderWithRateLimiting(new RestrictedProvider('fixture'), registry),
+      'callApi',
+    ),
+  ).toBe(false);
+  expect(
+    hasProviderCapability(
+      wrapProviderWithRateLimiting(new OpenAiEmbeddingProvider('fixture'), registry),
+      'callApi',
+    ),
+  ).toBe(false);
 });
 
 it('honors a subclass capability exclusion even when it replaces a stub', () => {

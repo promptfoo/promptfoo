@@ -107,6 +107,7 @@ export function wrapProviderWithRateLimiting(
 
   const wrappedProvider: ApiProvider = {
     ...provider,
+    [Symbol.for('promptfoo.capabilityDelegate')]: provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
     callApi: async (

@@ -245,6 +245,36 @@ describe('NovaReelVideoProvider', () => {
   });
 
   describe('callApi - success flow', () => {
+    it('stops waiting for an S3 response body after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'job-1' }).mockResolvedValueOnce({
+        invocationArn: 'job-1',
+        status: 'Completed',
+        outputDataConfig: { s3OutputDataConfig: { s3Uri: 's3://bucket/prefix' } },
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: () => {
+            started();
+            return new Promise(() => {});
+          },
+        },
+      });
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await reading;
+      controller.abort(new Error('cancelled S3 body'));
+      await expect(call).rejects.toThrow('cancelled S3 body');
+      const { storeBlob } = await import('../../../src/blobs');
+      expect(storeBlob).not.toHaveBeenCalled();
+    });
+
     it('stops waiting for a blob write after cancellation', async () => {
       const controller = new AbortController();
       const { storeBlob } = await import('../../../src/blobs');
