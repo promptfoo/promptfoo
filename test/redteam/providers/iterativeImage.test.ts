@@ -143,13 +143,14 @@ describe('RedteamIterativeImageProvider', () => {
 
     const result = await provider.callApi('test', context);
 
-    // Verify token usage is accumulated from: redteam (25) + target (150) + vision (70) + judge (45) = 290
-    expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(200);
-    expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
-    expect(result.tokenUsage?.completion).toBeGreaterThan(0);
-    // Probe counting should only include target calls.
-    expect(result.tokenUsage?.numRequests).toBe(1);
+    expect(result.tokenUsage).toMatchObject({
+      total: 150,
+      prompt: 100,
+      completion: 50,
+      numRequests: 1,
+      attacker: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+      assertions: { total: 115, prompt: 80, completion: 35, numRequests: 2 },
+    });
   });
 
   it('should track token usage from vision provider calls', async () => {
@@ -205,11 +206,14 @@ describe('RedteamIterativeImageProvider', () => {
 
     const result = await provider.callApi('test', context);
 
-    // Vision provider (300) + target (75) + redteam (15) + judge (30) = 420 total
-    expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(300); // At least vision tokens
-    // Probe counting should only include target calls.
-    expect(result.tokenUsage?.numRequests).toBe(1);
+    expect(result.tokenUsage).toMatchObject({
+      total: 75,
+      prompt: 50,
+      completion: 25,
+      numRequests: 1,
+      attacker: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      assertions: { total: 330, prompt: 220, completion: 110, numRequests: 2 },
+    });
   });
 
   it('should handle errors and still return accumulated token usage', async () => {

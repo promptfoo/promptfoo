@@ -1,44 +1,25 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Advanced Imagen configuration showing platform-specific settings
+description: Gemini image generation with Vertex AI
 
 prompts:
   - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
 
 providers:
-  # Google AI Studio configuration (API key authentication)
-  - id: google:image:imagen-4.0-generate-preview-06-06
-    label: Imagen 4.0 (Google AI Studio)
+  # Vertex AI uses Google Cloud authentication and the global endpoint for this model.
+  - id: google:gemini-3.1-flash-image
     config:
-      aspectRatio: '16:9'
-      safetyFilterLevel: 'block_low_and_above' # Only value supported by Google AI Studio
-      # Note: seed and addWatermark are not supported in Google AI Studio
+      projectId: '{{env.GOOGLE_PROJECT_ID}}'
+      apiKeyRequired: false # This example uses Google Cloud OAuth, not a native API key.
+      imageAspectRatio: '16:9'
+      imageSize: '2K'
 
-  # Vertex AI configuration (OAuth authentication)
-  - id: google:image:imagen-4.0-generate-preview-06-06
-    label: Imagen 4.0 (Vertex AI)
-    config:
-      projectId: 'your-project-id' # Forces Vertex AI usage
-      aspectRatio: '16:9'
-      safetyFilterLevel: 'block_some' # Vertex AI supports all safety levels
-      seed: 42 # Deterministic generation
-      addWatermark: false # Disable watermark (incompatible with seed)
-
-  # Imagen 3.0 - Only available through Vertex AI
-  - id: google:image:imagen-3.0-generate-002
-    label: Imagen 3.0 (Vertex AI only)
-    config:
-      projectId: 'your-project-id'
-      aspectRatio: '1:1'
-      safetyFilterLevel: 'block_fewest'
-      personGeneration: 'allow_adult'
+defaultTest:
+  assert:
+    - type: javascript
+      value: '(context.providerResponse?.images?.length ?? 0) > 0'
 
 tests:
   - vars:
       quality: 'photorealistic'
       subject: 'a serene mountain landscape'
       style: 'golden hour photography'
-    assert:
-      - type: javascript
-        value: |
-          // Check if the output contains a valid image data URL
-          return output.includes('![Generated Image](data:image/')

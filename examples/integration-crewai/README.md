@@ -20,7 +20,7 @@ cd integration-crewai
 This example requires the following:
 
 1. **Python 3.10+**
-2. **Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)**
+2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
 3. **OpenAI API Key** - You MUST have a valid OpenAI API key to run this example
 
 ## Environment Setup
@@ -63,6 +63,10 @@ npm install -g promptfoo
 
 - `agent.py`: Contains the CrewAI agent setup and promptfoo provider interface
 - `promptfooconfig.yaml`: Configures prompts, providers, and tests for evaluation
+
+Set `providers[0].config.model` to a CrewAI model ID such as `openai/gpt-4.1`.
+The provider passes it to `LLM(model=...)` through the agent's `llm` field. CrewAI
+uses a slash between provider and model names.
 
 ### Note on Reliability
 

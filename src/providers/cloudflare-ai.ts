@@ -83,20 +83,24 @@ function getPassthroughConfig(config?: CloudflareAiConfig) {
   return passthrough;
 }
 
+function getOpenAiConfig(providerOptions: CloudflareAiProviderOptions): OpenAiCompletionOptions {
+  const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
+  const passthrough = getPassthroughConfig(providerOptions.config);
+
+  return {
+    ...providerOptions.config,
+    apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+    apiBaseUrl,
+    passthrough,
+  };
+}
+
 export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProvider {
   private cloudflareConfig: CloudflareAiConfig;
   private modelType = 'chat';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
-    const passthrough = getPassthroughConfig(providerOptions.config);
-
-    const config: OpenAiCompletionOptions = {
-      ...providerOptions.config,
-      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
-      apiBaseUrl,
-      passthrough,
-    };
+    const config = getOpenAiConfig(providerOptions);
 
     super(modelName, {
       ...providerOptions,
@@ -137,15 +141,7 @@ export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
   private modelType = 'completion';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
-    const passthrough = getPassthroughConfig(providerOptions.config);
-
-    const config: OpenAiCompletionOptions = {
-      ...providerOptions.config,
-      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
-      apiBaseUrl,
-      passthrough,
-    };
+    const config = getOpenAiConfig(providerOptions);
 
     super(modelName, {
       ...providerOptions,
@@ -186,15 +182,7 @@ export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   private modelType = 'embedding';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
-    const passthrough = getPassthroughConfig(providerOptions.config);
-
-    const config: OpenAiCompletionOptions = {
-      ...providerOptions.config,
-      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
-      apiBaseUrl,
-      passthrough,
-    };
+    const config = getOpenAiConfig(providerOptions);
 
     super(modelName, {
       ...providerOptions,

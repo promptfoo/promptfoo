@@ -16,10 +16,17 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
+  # Opus 5 and 4.8 reject temperature/top_p/top_k at the model level; promptfoo omits
+  # them for you, so they are left unset here. Use the `global.` profile for dynamic
+  # routing — regional profiles (`us.`/`eu.`) add the 10% Claude 4.5+ premium.
+  - id: bedrock:global.anthropic.claude-opus-5
+    label: Claude Opus 5
+    config:
+      max_tokens: 2048
+      region: us-east-2
   - id: bedrock:us.anthropic.claude-opus-4-8
     label: Claude Opus 4.8
     config:
-      temperature: 1
       max_tokens: 2048
       region: us-west-2
   - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0

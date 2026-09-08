@@ -625,16 +625,18 @@ The `afterAll` hook is intended for side effects (sending to monitoring, cleanup
 
 ### Guardrails
 
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+`GuardrailResponse` is the normalized safety decision returned by a target provider. The [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) reads `flagged` as the verdict; the directional fields only identify which side triggered the decision.
 
 ```typescript
 interface GuardrailResponse {
-  flagged?: boolean;
+  flagged?: boolean; // Controls guardrails/not-guardrails pass or fail
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   reason?: string;
 }
 ```
+
+For a custom target, set `flagged` explicitly. `flaggedInput: true` or `flaggedOutput: true` without `flagged: true` is diagnostic only and does not fail the assertion. If both the top-level object and the final `metadata.redteamHistory` guardrail entry are absent, Promptfoo currently treats the response as unflagged; this does not prove that a guardrail ran.
 
 ## Transformation Pipeline
 

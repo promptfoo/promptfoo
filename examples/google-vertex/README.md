@@ -19,7 +19,7 @@ cd google-vertex
 
 - Google Cloud account with Vertex AI API enabled
 - API credentials
-- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 
 ## Environment Variables
 
@@ -53,11 +53,16 @@ cd google-vertex
 
 This example includes:
 
-- `promptfooconfig.gemini.yaml`: Gemini models with function calling, system instructions, and safety settings
+- `promptfooconfig.gemini.yaml`: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
 - `promptfooconfig.claude.yaml`: Claude models for technical writing and code analysis
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
 - `promptfooconfig.search.yaml`: Search grounding for real-time information
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
+
+The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
+premium. The examples use `thinkingLevel` because these models no longer support
+manual sampling parameters such as `temperature`, `topP`, and `topK`.
 
 ## Running Examples
 
