@@ -624,7 +624,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createEnvoyProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
