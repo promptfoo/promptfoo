@@ -103,6 +103,31 @@ describe.each([
     expect(request().headers).toHaveProperty('Authorization', 'Bearer scoped-key');
   });
 
+  it('preserves process precedence for the selected key variable', async () => {
+    reply(responses);
+    await new Provider('private/model', {
+      config: { apiKeyEnvar: 'GROQ_PROXY_KEY' },
+      env: { GROQ_PROXY_KEY: 'scoped-key', OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
+    }).callApi('Hello');
+    expect(request().headers).toHaveProperty('Authorization', 'Bearer proxy-process-key');
+  });
+
+  it('uses an explicit key when the selected environment variable is absent', async () => {
+    reply(responses);
+    await new Provider('private/model', {
+      config: {
+        apiBaseUrl: 'http://127.0.0.1:9000/groq',
+        apiKeyEnvar: 'GROQ_MISSING_KEY',
+        apiKey: 'explicit-key',
+      },
+      env: { OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
+    }).callApi('Hello');
+    expect(request()).toMatchObject({
+      url: `http://127.0.0.1:9000/groq${path}`,
+      headers: { Authorization: 'Bearer explicit-key' },
+    });
+  });
+
   it.each([
     {},
     { apiBaseUrl: undefined, apiKeyEnvar: undefined },
@@ -124,19 +149,27 @@ describe.each([
     expect(request().url).toBe(`https://proxy.invalid/v1${path}`);
   });
 
-  it('reports the configured key variable when credentials are missing', async () => {
-    const restoreOpenAiKey = mockProcessEnv({ OPENAI_API_KEY: undefined });
-    try {
-      await expect(
-        new Provider('private/model', {
-          config: { apiKeyEnvar: 'GROQ_MISSING_KEY' },
-        }).callApi('Hello'),
-      ).rejects.toThrow('Set the GROQ_MISSING_KEY environment variable');
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    } finally {
-      restoreOpenAiKey();
-    }
-  });
+  it.each([undefined, 'GROQ_MISSING_KEY'])(
+    'rejects missing key %s without sending unrelated OpenAI credentials',
+    async (apiKeyEnvar) => {
+      const restoreGroqKey = mockProcessEnv({
+        GROQ_API_KEY: apiKeyEnvar ? 'unselected-groq-key' : undefined,
+      });
+      try {
+        const provider = new Provider('private/model', {
+          config: { apiBaseUrl: 'http://127.0.0.1:9000/groq', apiKeyEnvar },
+          env: { OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          `Set the ${apiKeyEnvar ?? 'GROQ_API_KEY'} environment variable`,
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restoreGroqKey();
+      }
+    },
+  );
 
   it.each([400, 429, 503])(
     'preserves upstream status %s at the configured endpoint',
