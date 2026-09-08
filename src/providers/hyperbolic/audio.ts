@@ -27,14 +27,6 @@ export type HyperbolicAudioOptions = {
 
 const HYPERBOLIC_API_BASE_URL = 'https://api.hyperbolic.xyz/v1';
 
-const HYPERBOLIC_AUDIO_MODELS = [
-  {
-    id: 'Melo-TTS',
-    aliases: ['melo-tts', 'melo'],
-    cost: 0.001, // $0.001 per 1000 characters
-  },
-];
-
 export class HyperbolicAudioProvider implements ApiProvider {
   modelName: string;
   config: HyperbolicAudioOptions;
@@ -85,11 +77,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
     if (this.isHyperbolicApi()) {
       return (textLength / 1000) * 0.005;
     }
-    const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
-    );
-    const costPer1000Chars = model?.cost || 0.001;
-    return (textLength / 1000) * costPer1000Chars;
+    return (textLength / 1000) * 0.001;
   }
 
   async callApi(
@@ -190,15 +178,11 @@ export class HyperbolicAudioProvider implements ApiProvider {
         cached,
         latencyMs,
         cost,
-        ...(data.audio
-          ? {
-              isBase64: true,
-              audio: {
-                data: data.audio,
-                format: this.isHyperbolicApi() ? 'mp3' : 'wav',
-              },
-            }
-          : {}),
+        isBase64: true,
+        audio: {
+          data: data.audio,
+          format: this.isHyperbolicApi() ? 'mp3' : 'wav',
+        },
       };
     } catch (err) {
       return {
