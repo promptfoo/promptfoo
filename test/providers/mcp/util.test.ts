@@ -227,6 +227,25 @@ describe('discoverTokenEndpoint', () => {
     vi.clearAllMocks();
   });
 
+  it('stops discovery on abort without probing fallback URLs', async () => {
+    const controller = new AbortController();
+    mockFetch.mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const discovery = discoverTokenEndpoint(
+      'https://abort-fixture.example.net/realms/test',
+      controller.signal,
+    );
+    controller.abort(new Error('fixture cleanup'));
+    await expect(discovery).rejects.toThrow('fixture cleanup');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('should discover token endpoint from root well-known URL', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
