@@ -49,6 +49,40 @@ describe('OpenAiResponsesProvider function callbacks', () => {
       expect(result.output).toBe('11');
     });
 
+    it('cancels a pending callback after the model responds', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const callbackStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_pending_callback',
+          model: 'gpt-4o',
+          output: [{ type: 'function_call', name: 'wait', arguments: '{"id":1}' }],
+          usage: { input_tokens: 2, output_tokens: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            wait: () => {
+              started();
+              return new Promise(() => {});
+            },
+          },
+        },
+      });
+      const pending = provider.callApi('wait', undefined, { abortSignal: controller.signal });
+      await callbackStarted;
+      controller.abort(new Error('cancelled response callback'));
+      await expect(pending).rejects.toThrow('cancelled response callback');
+    });
+
     it('should handle multiple function calls including status updates', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',

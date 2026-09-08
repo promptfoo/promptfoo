@@ -12,10 +12,12 @@ export interface ProcessorContext {
   cached: boolean;
   data: any;
   suppressReasoningOutput?: boolean;
+  abortSignal?: AbortSignal;
 }
 
 export interface ResponseProcessingOptions {
   suppressReasoningOutput?: boolean;
+  abortSignal?: AbortSignal;
 }
 
 export interface ResponseOutputItem {
