@@ -332,32 +332,34 @@ describe('TrueFoundry', () => {
         },
       );
 
-      it('should not apply OpenAI pricing to an unrelated passthrough namespace', async () => {
-        const model = 'vendor/production-east/gpt-4';
-        const mockResponse = {
-          choices: [{ message: { content: 'Vendor output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(JSON.stringify(mockResponse), {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          }),
-        );
-        const vendorProvider = new TrueFoundryProvider('openai-main/gpt-4o', {
-          config: {
-            openaiAccountNames: ['production-east'],
-            passthrough: { model },
-          },
-        });
+      it.each(['vendor/production-east/gpt-4', 'openai-main/production-east/gpt-4'])(
+        'should not apply OpenAI pricing to an unrelated passthrough namespace: %s',
+        async (model) => {
+          const mockResponse = {
+            choices: [{ message: { content: 'Vendor output' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          };
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(JSON.stringify(mockResponse), {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            }),
+          );
+          const vendorProvider = new TrueFoundryProvider('openai-main/gpt-4o', {
+            config: {
+              openaiAccountNames: ['production-east'],
+              passthrough: { model },
+            },
+          });
 
-        const result = await vendorProvider.callApi('Test prompt');
-        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+          const result = await vendorProvider.callApi('Test prompt');
+          const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
 
-        expect(JSON.parse(request.body ?? '{}').model).toBe(model);
-        expect(result.cost).toBeUndefined();
-      });
+          expect(JSON.parse(request.body ?? '{}').model).toBe(model);
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it('should add X-TFY-METADATA header when metadata is provided', async () => {
         const providerWithMetadata = new TrueFoundryProvider('openai/gpt-4', {

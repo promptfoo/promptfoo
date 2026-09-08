@@ -1,4 +1,4 @@
-import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type {
@@ -229,34 +229,6 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     return getTrueFoundryBillingModelName(
       super.getBillingModelName(config),
       tfConfig.openaiAccountNames,
-    );
-  }
-
-  protected calculateResponseCost(
-    data: OpenAiChatCompletionCostData,
-    config: OpenAiCompletionOptions,
-    cached: boolean,
-  ): number | undefined {
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    if (typeof passthroughModel !== 'string') {
-      return super.calculateResponseCost(data, config, cached);
-    }
-
-    const tfConfig = config as TrueFoundryCompletionOptions;
-    const billingModelName = getTrueFoundryBillingModelName(
-      passthroughModel,
-      tfConfig.openaiAccountNames,
-    );
-    return super.calculateResponseCost(
-      data,
-      {
-        ...config,
-        passthrough: {
-          ...config.passthrough,
-          model: billingModelName,
-        },
-      },
-      cached,
     );
   }
 

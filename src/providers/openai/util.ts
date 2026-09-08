@@ -969,12 +969,13 @@ export const OPENAI_REALTIME_MODELS = excludeRetiredModels([
 export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts' | 'realtime';
 
 /**
- * Returns the endpoint family historically used by a retired bare model ID.
+ * Returns the endpoint family historically used by a retired model ID, including gateway prefixes.
  *
  * First-party calls are rejected by {@link assertOpenAiApiModel}; this route is used only after
  * that guard allows a custom OpenAI-compatible endpoint.
  */
-export function getRetiredOpenAiModelRoute(modelId: string): RetiredOpenAiModelRoute | undefined {
+export function getRetiredOpenAiModelRoute(modelName: string): RetiredOpenAiModelRoute | undefined {
+  const modelId = modelName.split('/').pop() ?? modelName;
   if (!RETIRED_OPENAI_MODEL_IDS.has(modelId)) {
     return undefined;
   }

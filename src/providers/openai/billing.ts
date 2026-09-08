@@ -26,7 +26,7 @@ type OpenAIModelRates = {
   image?: OpenAIModalRates;
 };
 
-export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'fast';
+export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'fast' | 'priority';
 
 export type OpenAIBillingUsage = {
   totalInputTokens: number;
@@ -603,7 +603,7 @@ function getBedrockMantleTextRates(
   const hasBedrockBillingMarker = modelName.startsWith('bedrock:');
   const billingModelName = modelName.replace(/^bedrock:/, '');
   if (tier !== 'standard') {
-    // AWS publishes only Grok 4.3 Standard rates. Do not reuse them for other service tiers.
+    // The Mantle rates in this table cover Standard processing only.
     return undefined;
   }
   let hostname: string | undefined;

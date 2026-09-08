@@ -233,6 +233,14 @@ export function validateResolution(
     };
   }
 
+  // Veo 2 only supports 720p
+  if (model.includes('veo-2') && resolution !== '720p') {
+    return {
+      valid: false,
+      message: `Veo 2 only supports 720p resolution.`,
+    };
+  }
+
   const isStableVeo31Fast = model === 'veo-3.1-fast-generate-001';
   if (
     resolution === '4k' &&
@@ -252,14 +260,6 @@ export function validateResolution(
         message: `Veo 3 only supports ${resolution} for 16:9 aspect ratio. Use 720p for 9:16.`,
       };
     }
-  }
-
-  // Veo 2 only supports 720p
-  if (model.includes('veo-2') && resolution !== '720p') {
-    return {
-      valid: false,
-      message: `Veo 2 only supports 720p resolution.`,
-    };
   }
 
   return { valid: true };

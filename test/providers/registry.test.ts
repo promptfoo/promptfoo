@@ -1003,6 +1003,26 @@ describe('Provider Registry', () => {
       }
     });
 
+    it.each([
+      ['openai/gpt-realtime-mini-2025-10-06', 'OpenAiRealtimeProvider'],
+      ['github/openai/text-moderation-stable', 'OpenAiModerationProvider'],
+      ['vendor/o3-deep-research', 'OpenAiResponsesProvider'],
+    ])('preserves the historical endpoint and wire ID for %s', async (model, className) => {
+      const providerPath = `openai:${model}`;
+      const factory = providerMap.find((candidate) => candidate.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          ...mockProviderOptions,
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://gateway.example/v1' },
+        },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe(className);
+      expect(provider).toHaveProperty('modelName', model);
+      expect(provider.id()).toBe(mockProviderOptions.id);
+    });
+
     it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'])(
       'allows custom OpenAI-compatible endpoints to route their own %s model',
       async (customModel) => {

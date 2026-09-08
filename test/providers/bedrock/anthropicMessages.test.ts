@@ -29,13 +29,29 @@ describe('Bedrock Anthropic Messages provider', () => {
       expected: 0.065725,
     },
     { region: 'us-gov-west-1', apiBaseUrl: 'https://proxy.example/anthropic', expected: 0.0717 },
+    {
+      region: 'us-gov-west-1',
+      apiBaseUrl: 'https://proxy.example/anthropic',
+      overrideModel: 'global.anthropic.claude-opus-4-8',
+      expected: 0.05975,
+    },
+    {
+      region: 'us-gov-west-1',
+      apiBaseUrl: 'https://proxy.example/anthropic',
+      overrideModel: 'claude-opus-4-8',
+      expected: 0.05975,
+    },
   ])(
     'uses the Opus 4.8 Messages hosting rate and cache TTLs in $region',
-    async ({ region, apiBaseUrl, expected }) => {
+    async ({ region, apiBaseUrl, expected, overrideModel }) => {
       enableCache();
       const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-4-8', {
         env: { AWS_REGION: region },
-        config: { apiKey: 'bedrock-key', ...(apiBaseUrl && { apiBaseUrl }) },
+        config: {
+          apiKey: 'bedrock-key',
+          ...(apiBaseUrl && { apiBaseUrl }),
+          ...(overrideModel && { extra_body: { model: overrideModel } }),
+        },
       });
       const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         id: 'msg-opus48-hosting',
@@ -60,6 +76,7 @@ describe('Bedrock Anthropic Messages provider', () => {
       expect(cached.cost).toBeCloseTo(expected, 12);
       expect(cached.cached).toBe(true);
       expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0]?.[0].model).toBe(overrideModel ?? 'anthropic.claude-opus-4-8');
       const zero = await provider.callApi('explicit pricing', {
         vars: {},
         prompt: {

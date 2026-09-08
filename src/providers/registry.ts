@@ -12,11 +12,7 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import {
-  ANTHROPIC_MODELS,
-  ANTHROPIC_SHORTHAND_MODEL_IDS,
-  looksLikeClaudeModelId,
-} from './anthropic/util';
+import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -356,12 +352,7 @@ export const providerMap: ProviderFactory[] = [
       // released after this build works without waiting for a catalog entry. The
       // provider still logs `Using unknown Anthropic model`, and Anthropic returns
       // not_found_error if the id is not real.
-      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (
-        ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) ||
-        modelIds.includes(modelType) ||
-        looksLikeClaudeModelId(modelType)
-      ) {
+      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) || looksLikeClaudeModelId(modelType)) {
         return new AnthropicMessagesProvider(modelType, providerOptions);
       }
 

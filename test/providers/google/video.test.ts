@@ -640,8 +640,8 @@ describe('GoogleVideoProvider', () => {
       expect(result.message).toContain('Veo 3 only supports 1080p for 16:9');
     });
 
-    it('should reject 1080p for Veo 2', () => {
-      const result = validateResolution('veo-2.0-generate-001', '16:9', '1080p');
+    it.each(['1080p', '4k'])('should reject %s for Veo 2', (resolution) => {
+      const result = validateResolution('veo-2.0-generate-001', '16:9', resolution);
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Veo 2 only supports 720p');
     });

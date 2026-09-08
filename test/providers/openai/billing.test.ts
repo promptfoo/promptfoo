@@ -4,6 +4,7 @@ import {
   calculateOpenAIUsageCost,
   calculateOpenAIUsageCostFromTokenUsage,
   extractOpenAIBillingUsage,
+  type OpenAIProcessingTier,
 } from '../../../src/providers/openai/billing';
 
 describe('OpenAI billing helpers', () => {
@@ -713,8 +714,9 @@ describe('OpenAI billing helpers', () => {
       (600 * 0.125 + 400 * 0.0125 + 100 * 1) / 1e6,
       10,
     );
+    const legacyTier: OpenAIProcessingTier = 'priority';
     expect(
-      calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'priority' }),
+      calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: legacyTier }),
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
     expect(calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'fast' })).toBeCloseTo(
       (600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6,
