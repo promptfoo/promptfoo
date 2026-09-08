@@ -2,6 +2,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import { appendOpenAiApiPath } from '../openai/util';
 import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -38,12 +39,12 @@ type NscaleImageOptions = OpenAiSharedOptions & {
  * Defaults to base64 JSON response format for compatibility with Nscale API.
  */
 export class NscaleImageProvider extends OpenAiImageProvider {
-  config: NscaleImageOptions & any;
+  declare config: OpenAiImageProvider['config'] & NscaleImageOptions & { size?: any };
 
   /**
    * Create a new Nscale image provider instance.
    *
-   * @param modelName - The Nscale image model name (e.g., 'ByteDance/SDXL-Lightning-4step')
+   * @param modelName - The Nscale image model name (e.g., 'black-forest-labs/FLUX.1-schnell')
    * @param options - Provider configuration options
    */
   constructor(
@@ -55,11 +56,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       ...options,
       config: {
         ...nscaleConfig,
-        apiBaseUrl: 'https://inference.api.nscale.com/v1',
-        apiKey: NscaleImageProvider.getApiKey(options),
-      } as any, // Use type assertion since Nscale supports OpenAI-compatible parameters
+        apiBaseUrl: nscaleConfig.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+      } as OpenAiImageProvider['config'],
     });
-    this.config = nscaleConfig;
   }
 
   /**
@@ -90,7 +89,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    * @returns The API key or service token, or undefined if not found
    */
   getApiKey(): string | undefined {
-    return this.config?.apiKey || NscaleImageProvider.getApiKey({ config: this.config });
+    return NscaleImageProvider.getApiKey({ config: this.config, env: this.env });
   }
 
   /**
@@ -130,11 +129,14 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    */
   private calculateImageCost(modelName: string, n: number = 1): number {
     // Nscale pricing varies by model - these are approximate based on their pricing page
+    // Keyed by the Hugging Face repository ID Nscale uses as its model ID. These
+    // were previously keyed on identifiers that do not exist upstream
+    // (`BlackForestLabs/...`, `ByteDance/SDXL-Lightning-4step`), so every lookup
+    // missed and silently fell through to the default rate below.
     const costPerImage: Record<string, number> = {
-      'BlackForestLabs/FLUX.1-schnell': 0.0013, // $0.0013 per 1M pixels for 1024x1024
+      'black-forest-labs/FLUX.1-schnell': 0.0013, // $0.0013 per 1M pixels for 1024x1024
       'stabilityai/stable-diffusion-xl-base-1.0': 0.003, // $0.003 per 1M pixels
-      'ByteDance/SDXL-Lightning-4step': 0.0008, // $0.0008 per 1M pixels
-      'ByteDance/SDXL-Lightning-8step': 0.0016, // $0.0016 per 1M pixels
+      'ByteDance/SDXL-Lightning': 0.0008, // $0.0008 per 1M pixels
     };
 
     const baseCost = costPerImage[modelName] || 0.002; // Default cost
@@ -185,7 +187,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
+        appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),

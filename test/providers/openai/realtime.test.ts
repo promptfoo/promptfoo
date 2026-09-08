@@ -619,18 +619,21 @@ describe('OpenAI Realtime Provider', () => {
       ['inf', 'inf'],
       [1, 1],
       [4096, 4096],
-    ] as const)('normalizes max_response_output_tokens=%s to %s in the session body', async (maxResponseOutputTokens, expected) => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: {
-          modalities: ['text'],
-          max_response_output_tokens: maxResponseOutputTokens as any,
-        },
-      });
+    ] as const)(
+      'normalizes max_response_output_tokens=%s to %s in the session body',
+      async (maxResponseOutputTokens, expected) => {
+        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+          config: {
+            modalities: ['text'],
+            max_response_output_tokens: maxResponseOutputTokens as any,
+          },
+        });
 
-      const body = await provider.getRealtimeSessionBody();
+        const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_output_tokens).toBe(expected);
-    });
+        expect(body.max_output_tokens).toBe(expected);
+      },
+    );
 
     it('should handle basic text response with persistent connection', async () => {
       const config = {
@@ -3005,32 +3008,32 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it.each([
-      'gpt-realtime-2.1',
-      'gpt-realtime-2.1-mini',
-    ])('uses the GA Realtime wire shape and endpoint for %s', async (model) => {
-      const provider = new OpenAiRealtimeProvider(model, {
-        config: { modalities: ['text'] },
-      });
-      const promise = provider.directWebSocketRequest('hi');
+    it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini'])(
+      'uses the GA Realtime wire shape and endpoint for %s',
+      async (model) => {
+        const provider = new OpenAiRealtimeProvider(model, {
+          config: { modalities: ['text'] },
+        });
+        const promise = provider.directWebSocketRequest('hi');
 
-      mockHandlers.open.forEach((handler) => handler());
-      await vi.waitFor(() => expect(mockWs.send).toHaveBeenCalled());
+        mockHandlers.open.forEach((handler) => handler());
+        await vi.waitFor(() => expect(mockWs.send).toHaveBeenCalled());
 
-      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
-      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(constructedUrl).toBe(
-        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
-      );
-      expect(sessionUpdate.session).toMatchObject({
-        type: 'realtime',
-        model,
-        output_modalities: ['text'],
-      });
+        const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+        const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(constructedUrl).toBe(
+          'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
+        );
+        expect(sessionUpdate.session).toMatchObject({
+          type: 'realtime',
+          model,
+          output_modalities: ['text'],
+        });
 
-      simulateGaFlow();
-      await expect(promise).resolves.toMatchObject({ output: 'ok' });
-    });
+        simulateGaFlow();
+        await expect(promise).resolves.toMatchObject({ output: 'ok' });
+      },
+    );
 
     it('does not add a bearer header when a realtime API-key header is configured', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {

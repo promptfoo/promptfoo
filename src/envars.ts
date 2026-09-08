@@ -20,6 +20,14 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores the legacy unguarded behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
   PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
@@ -30,7 +38,6 @@ type EnvVars = {
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
-  PROMPTFOO_DISABLE_RUNTIME_WARNINGS?: boolean;
   /**
    * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
    * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
@@ -112,6 +119,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;

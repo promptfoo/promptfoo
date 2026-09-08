@@ -23,6 +23,15 @@ To also surface findings in GitHub Code Scanning, configure `sarif-output-path` 
 
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
+The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
+
+```yaml
+- name: Set up Node.js
+  uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+  with:
+    node-version: '24'
+```
+
 **[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
 
 ## Fork Pull Requests

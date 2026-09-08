@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isSecretEnvVarName,
+  preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
@@ -7,6 +9,7 @@ import {
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
@@ -37,7 +40,234 @@ describe('sanitizeRuntimeOptions', () => {
   });
 });
 
+describe('sanitizeTracingConfigForPersistence', () => {
+  it('preserves Langfuse key references without persisting the rendered secret key', () => {
+    const sourceConfig = {
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'langfuse' as const,
+          endpoint: 'https://cloud.langfuse.com',
+          auth: {
+            username: '{{ env.LANGFUSE_PUBLIC_KEY }}',
+            password: '{{ env.LANGFUSE_SECRET_KEY }}',
+          },
+        },
+      },
+    };
+    const renderedConfig = {
+      tracing: {
+        ...sourceConfig.tracing,
+        provider: {
+          ...sourceConfig.tracing.provider,
+          auth: { username: 'pk-public', password: 'sk-private' },
+        },
+      },
+    };
+
+    preserveTracingCredentialReferences(sourceConfig, renderedConfig);
+    const persistedConfig = sanitizeTracingConfigForPersistence(renderedConfig);
+
+    expect(persistedConfig.tracing?.provider?.auth).toEqual({
+      username: 'pk-public',
+      password: '{{ env.LANGFUSE_SECRET_KEY }}',
+    });
+    expect(JSON.stringify(persistedConfig)).not.toContain('sk-private');
+  });
+
+  it('removes every transitively referenced credential while preserving safe env templates', () => {
+    const sourceConfig = {
+      env: {
+        TEMPO_SOURCE_SECRET: 'private-tempo-secret',
+        TEMPO_INTERMEDIATE: '{{ env.TEMPO_SOURCE_SECRET }}',
+        TEMPO_READER: '{{ env.TEMPO_INTERMEDIATE }}',
+        REGION: 'us-west-2',
+      },
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com',
+          auth: { token: '{{ env.TEMPO_READER }}' },
+        },
+      },
+    };
+    const renderedConfig = {
+      ...sourceConfig,
+      env: {
+        TEMPO_SOURCE_SECRET: 'private-tempo-secret',
+        TEMPO_INTERMEDIATE: 'private-tempo-secret',
+        TEMPO_READER: 'private-tempo-secret',
+        REGION: 'us-west-2',
+      },
+      tracing: {
+        ...sourceConfig.tracing,
+        provider: {
+          ...sourceConfig.tracing.provider,
+          auth: { token: 'private-tempo-secret' },
+        },
+      },
+    };
+
+    preserveTracingCredentialReferences(sourceConfig, renderedConfig);
+    const persistedConfig = sanitizeTracingConfigForPersistence(renderedConfig);
+
+    expect(persistedConfig.tracing?.provider?.auth?.token).toBe('{{ env.TEMPO_READER }}');
+    expect(persistedConfig.env).toEqual({
+      TEMPO_INTERMEDIATE: '{{ env.TEMPO_SOURCE_SECRET }}',
+      TEMPO_READER: '{{ env.TEMPO_INTERMEDIATE }}',
+      REGION: 'us-west-2',
+    });
+    expect(JSON.stringify(persistedConfig)).not.toContain('private-tempo-secret');
+  });
+
+  it('handles cyclic credential environment references without looping', () => {
+    const config = {
+      env: {
+        TEMPO_READER: '{{ env.TEMPO_SOURCE }}',
+        TEMPO_SOURCE: '{{ env.TEMPO_READER }}',
+      },
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com',
+          auth: { token: '{{ env.TEMPO_READER }}' },
+        },
+      },
+    };
+
+    expect(sanitizeTracingConfigForPersistence(config).env).toEqual(config.env);
+  });
+
+  it('preserves Braintrust token references without exposing resolved credentials', () => {
+    const sourceConfig = {
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'braintrust' as const,
+          endpoint: 'https://api.braintrust.dev',
+          projectId: '12345678-1234-4123-8123-123456789abc',
+          auth: { token: '{{ env.BRAINTRUST_API_KEY }}' },
+        },
+      },
+    };
+    const renderedConfig = {
+      ...sourceConfig,
+      tracing: {
+        ...sourceConfig.tracing,
+        provider: {
+          ...sourceConfig.tracing.provider,
+          auth: { token: 'private-braintrust-secret' },
+        },
+      },
+    };
+
+    preserveTracingCredentialReferences(sourceConfig, renderedConfig);
+    const persistedConfig = sanitizeTracingConfigForPersistence(renderedConfig);
+
+    expect(persistedConfig.tracing?.provider?.auth?.token).toBe('{{ env.BRAINTRUST_API_KEY }}');
+    expect(JSON.stringify(persistedConfig)).not.toContain('private-braintrust-secret');
+  });
+});
+
+describe('isSecretEnvVarName', () => {
+  it.each([
+    'GITHUB_TOKEN',
+    'STRIPE_SECRET_KEY',
+    'PGPASSWORD',
+    'MY_SERVICE_SECRET',
+    'DB_PASSWD',
+    'OPENAI_API_KEY',
+    'AWS_SECRETKEY',
+    'SIGNING_PASSPHRASE',
+  ])('treats %s as credential-bearing', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(true);
+  });
+
+  it.each([
+    // Plurals: words are matched by suffix, and TOKENS does not end with TOKEN.
+    'MAX_TOKENS',
+    'RETRY_KEYS',
+    'LOG_LEVEL',
+    'AWS_REGION',
+    'SERVICE_URL',
+    'NODE_ENV',
+    // Ordinary config fields keep the exact-name behavior; the env-var rule is
+    // SCREAMING_SNAKE_CASE only, so it can never widen them.
+    'maxTokens',
+    'tokenCount',
+    'keyName',
+    'max_tokens',
+  ])('leaves %s alone', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(false);
+  });
+});
+
 describe('sanitizeObject', () => {
+  describe('environment variable maps', () => {
+    it('redacts credential-named variables inside an env map', () => {
+      // Regression: `env` is handed verbatim to a subprocess, so it is where a config
+      // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES
+      // caught only `API_KEY`, leaving project-specific names in cleartext in the
+      // provider config persisted with every eval result.
+      const result = sanitizeObject({
+        env: {
+          API_KEY: 'sk-value',
+          GITHUB_TOKEN: 'ghp_value',
+          MY_SERVICE_SECRET: 'plainvalue123',
+          PGPASSWORD: 'hunter2',
+          LOG_LEVEL: 'debug',
+          MAX_TOKENS: '4096',
+          AWS_REGION: 'us-east-1',
+        },
+      });
+
+      expect(result.env).toEqual({
+        API_KEY: '[REDACTED]',
+        GITHUB_TOKEN: '[REDACTED]',
+        MY_SERVICE_SECRET: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        // Non-credential variables stay readable - they are what makes a failed run
+        // debuggable from the persisted config.
+        LOG_LEVEL: 'debug',
+        MAX_TOKENS: '4096',
+        AWS_REGION: 'us-east-1',
+      });
+    });
+
+    it('reaches an env map nested in a provider config', () => {
+      const result = sanitizeObject(
+        {
+          config: {
+            mcp: { servers: [{ command: 'node', env: { GITHUB_TOKEN: 'ghp_value' } }] },
+          },
+        },
+        // Match the persistence boundary, which lifts the default depth cap so nested
+        // provider configs are walked in full.
+        { maxDepth: Number.POSITIVE_INFINITY },
+      );
+
+      expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
+    });
+
+    it('does not widen redaction outside env maps', () => {
+      const result = sanitizeObject({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+
+      expect(result).toEqual({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+    });
+  });
+
   describe('primitives and basic types', () => {
     it('should handle null', () => {
       expect(sanitizeObject(null)).toBeNull();
@@ -435,6 +665,52 @@ describe('sanitizeObject', () => {
       it('should redact AWS_BEARER_TOKEN_BEDROCK', () => {
         expect(sanitizeObject({ AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token' })).toEqual({
           AWS_BEARER_TOKEN_BEDROCK: '[REDACTED]',
+        });
+      });
+
+      // AWS SigV4 credentials are documented Bedrock provider config fields and env
+      // vars. Before this coverage they reached logs and shared configs in clear text,
+      // even though bedrock/knowledgeBase.ts already treated them as sensitive locally.
+      it.each([
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_SESSION_TOKEN',
+        'AWS_ACCESS_KEY_ID',
+        'secretAccessKey',
+        'sessionToken',
+        'accessKeyId',
+      ])('should redact %s', (field) => {
+        expect(sanitizeObject({ [field]: 'aws-credential-value' })).toEqual({
+          [field]: '[REDACTED]',
+        });
+      });
+
+      it('should redact AWS credentials nested in a Bedrock provider config', () => {
+        expect(
+          sanitizeObject({
+            providers: [
+              {
+                id: 'bedrock:anthropic.claude-sonnet-5',
+                config: {
+                  region: 'us-east-1',
+                  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+                  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                  sessionToken: 'FwoGZXIvYXdzEExampleSessionToken',
+                },
+              },
+            ],
+          }),
+        ).toEqual({
+          providers: [
+            {
+              id: 'bedrock:anthropic.claude-sonnet-5',
+              config: {
+                region: 'us-east-1',
+                accessKeyId: '[REDACTED]',
+                secretAccessKey: '[REDACTED]',
+                sessionToken: '[REDACTED]',
+              },
+            },
+          ],
         });
       });
 
@@ -1103,8 +1379,10 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      // Previously asserted to pass through in clear text, which contradicted this
+      // test's own name: secretAccessKey and sessionToken are the actual secrets.
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {
@@ -1518,26 +1796,29 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe(url);
     });
 
-    it('should skip sanitization for URLs with template variables', () => {
-      // Template URLs are configuration, not runtime secrets
-      // They get rendered by Nunjucks before actual use, then sanitized
+    it('should redact literal credentials in URLs with template variables', () => {
       const url = '{{ api_base }}/api?token=secret123&user_id=42';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('{{ api_base }}/api?token=%5BREDACTED%5D&user_id=42');
     });
 
-    it('should skip sanitization for URLs with templates and credentials', () => {
+    it('should fail closed for templated URLs with userinfo credentials', () => {
       const url = 'https://user:pass@{{ host }}/api';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
-    it('should skip sanitization for mixed template and sensitive params', () => {
+    it('should redact mixed template and sensitive params', () => {
       const url = 'https://admin:secret@{{ api_base }}/api?api_key=key123&data=public';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
-    it('should skip sanitization for templates with sensitive param names', () => {
+    it('should preserve pure templates for sensitive params', () => {
       const url = 'https://example.com/{{ path }}?password={{ user_password }}&data=public';
       expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should redact env-rendered query credentials while preserving runtime templates', () => {
+      const url = 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret';
+      expect(sanitizeUrl(url)).toBe('ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D');
     });
   });
 

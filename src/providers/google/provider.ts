@@ -22,6 +22,7 @@ import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -37,6 +38,7 @@ import {
   mergeParts,
   normalizeGeminiAudio,
   normalizeSafetySettings,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -132,7 +134,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         this.config.apiHost ||
         this.env?.VERTEX_API_HOST ||
         getEnvString('VERTEX_API_HOST') ||
-        (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+        getVertexApiHostForRegion(region)
       );
     } else {
       // AI Studio mode
@@ -408,6 +410,10 @@ export class GoogleProvider extends GoogleGenericProvider {
           }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     // Handle response schema
     if (config.responseSchema) {
@@ -694,7 +700,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? undefined
         : calculateGoogleCostFromUsage(
             this.modelName,
-            config,
+            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,
@@ -728,6 +734,7 @@ export class GoogleProvider extends GoogleGenericProvider {
                     : parsed.functionCall.args,
                 ),
                 config,
+                parsed.functionCall.id,
               );
               response.output = functionResult;
             }
