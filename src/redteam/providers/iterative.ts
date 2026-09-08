@@ -39,7 +39,12 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  stripPromptBlockPrefix,
+} from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -340,6 +345,7 @@ export async function runRedteamConversation({
     if (extractedPrompt) {
       newInjectVar = extractedPrompt;
     }
+    newInjectVar = stripPromptBlockPrefix(newInjectVar);
 
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);

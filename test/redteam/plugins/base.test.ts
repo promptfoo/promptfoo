@@ -388,6 +388,53 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
 
+    it('should append PromptBlock instruction when testGenerationInstructions is present', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifiers: {
+          testGenerationInstructions: 'Generate prompts that ask about health plans',
+        },
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Generate prompts that ask about health plans'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Each generated prompt MUST start with "PromptBlock:"'),
+      );
+    });
+
+    it('should not append PromptBlock instruction when testGenerationInstructions is not present', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifiers: {
+          otherModifier: 'some value',
+        },
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.not.stringContaining('Each generated prompt MUST start with "PromptBlock:"'),
+      );
+    });
+
+    it('should append PromptBlock instruction only once for reused config objects', () => {
+      const config: Record<string, any> = {
+        modifiers: {
+          testGenerationInstructions: 'Generate prompts that ask about health plans',
+        },
+      };
+      const template = 'Generate test cases';
+
+      RedteamPluginBase.appendModifiers(template, config);
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      expect(
+        result.match(/Each generated prompt MUST start with "PromptBlock:"/g) ?? [],
+      ).toHaveLength(1);
+    });
+
     it('should store __outputFormat in config.modifiers when inputs is defined', () => {
       const config: Record<string, any> = {
         inputs: {
