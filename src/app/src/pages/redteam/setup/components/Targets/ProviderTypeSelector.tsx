@@ -12,6 +12,11 @@ import {
   DEFAULT_VERTEX_TARGET_ID,
 } from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
+import {
+  hasCustomOpenAiBaseUrl,
+  isLocalOpenAiProviderType,
+  withLocalProviderType,
+} from './helpers';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 import { getProviderInitialConfig } from './providerInitialConfig';
 
@@ -494,6 +499,19 @@ export default function ProviderTypeSelector({
       provider_label: selectedOption?.label,
       provider_tag: selectedOption?.tag,
     });
+
+    if (
+      isLocalOpenAiProviderType(value) &&
+      provider?.id.startsWith('openai:chat:') &&
+      (providerType === value ||
+        (!isLocalOpenAiProviderType(providerType) && hasCustomOpenAiBaseUrl(provider.config)))
+    ) {
+      setProvider(
+        { ...provider, config: withLocalProviderType(provider.id, provider.config, value) },
+        value,
+      );
+      return;
+    }
 
     const initialConfig = getProviderInitialConfig(value);
     if (initialConfig) {

@@ -1709,7 +1709,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         finishNonObjectTargetRecovery?.();
       },
       setFullConfig: (config) => {
-        const providerType = getProviderType(config.target?.id);
+        const providerType = getProviderType(config.target?.id, config.target?.config);
         const normalizedConfig =
           config.target && config.target.config === undefined
             ? {

@@ -24,6 +24,7 @@ import {
   Server,
   Terminal,
 } from 'lucide-react';
+import { withLocalProviderType } from './helpers';
 import { getProviderDocumentationUrl } from './providerDocumentationMap';
 import { getProviderInitialConfig } from './providerInitialConfig';
 
@@ -475,15 +476,13 @@ const CustomTargetConfiguration = ({
   const handleConfigChange = (content: string) => {
     setRawConfigJson(content);
     try {
-      const parsedConfig = JSON.parse(content);
-      if (
-        typeof parsedConfig !== 'object' ||
-        parsedConfig === null ||
-        Array.isArray(parsedConfig)
-      ) {
+      const parsed = JSON.parse(content);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         onConfigErrorChange?.('Configuration must be a JSON object');
         return;
       }
+
+      const parsedConfig = withLocalProviderType(selectedTarget.id, parsed, providerType);
 
       if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsedConfig, selectedTarget.config)) {
         return;
@@ -505,14 +504,18 @@ const CustomTargetConfiguration = ({
           return;
         }
 
-        if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsed, selectedTarget.config)) {
+        const parsedConfig = withLocalProviderType(selectedTarget.id, parsed, providerType);
+        if (
+          preserveConfigErrorOnUnchangedConfig &&
+          deepEqual(parsedConfig, selectedTarget.config)
+        ) {
           return;
         }
 
-        const formatted = JSON.stringify(parsed, null, 2);
+        const formatted = JSON.stringify(parsedConfig, null, 2);
         setRawConfigJson(formatted);
-        updateCustomTarget('config', parsed);
-        onConfigErrorChange?.(null, { ...selectedTarget, config: parsed });
+        updateCustomTarget('config', parsedConfig);
+        onConfigErrorChange?.(null, { ...selectedTarget, config: parsedConfig });
       } catch {
         onConfigErrorChange?.('Invalid JSON configuration');
       }

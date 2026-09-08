@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { getProviderType } from './helpers';
 
 describe('getProviderType', () => {
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'restores an explicitly selected %s editor without inspecting the served name or URL',
+    (type) => {
+      expect(
+        getProviderType('openai:chat:tenant/arbitrary-model', {
+          type,
+          apiBaseUrl: 'https://private.example.test/inference/v1',
+        }),
+      ).toBe(type);
+      expect(getProviderType('anthropic:messages:my-model', { type })).toBe('anthropic');
+      expect(getProviderType('openai:responses:my-model', { type })).toBe('openai');
+    },
+  );
+
+  it.each([
+    'http://localhost:8080/v1',
+    'https://deployment.example.test/api',
+    '{{ env.LOCAL_BASE_URL }}',
+  ])('uses an editable generic target for an untyped compatible endpoint %s', (apiBaseUrl) => {
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl })).toBe('custom');
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl, type: 'unknown' })).toBe(
+      'custom',
+    );
+  });
+
+  it.each([undefined, '', ' ', 'https://api.openai.com/v1', 'https://api.openai.com/v1/'])(
+    'keeps native OpenAI presentation for base URL %s',
+    (apiBaseUrl) => {
+      expect(getProviderType('openai:chat:gpt-5-mini', { apiBaseUrl })).toBe('openai');
+    },
+  );
+
   it.each([
     ['togetherai:organization/model:revision', 'together'],
     ['togetherai', 'together'],

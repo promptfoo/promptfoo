@@ -1,4 +1,34 @@
-export function getProviderType(providerId?: string): string | undefined {
+type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
+
+export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiProviderType {
+  return type === 'llamafile' || type === 'vllm' || type === 'text-generation-webui';
+}
+
+export function hasCustomOpenAiBaseUrl(config?: Record<string, unknown>): boolean {
+  const baseUrl = config?.apiBaseUrl;
+  return (
+    typeof baseUrl === 'string' &&
+    baseUrl.trim().length > 0 &&
+    baseUrl.trim().replace(/\/+$/, '') !== 'https://api.openai.com/v1'
+  );
+}
+
+export function withLocalProviderType(
+  providerId: string | undefined,
+  config: Record<string, unknown>,
+  providerType?: string,
+): Record<string, unknown> {
+  // The runtime ID identifies the protocol; retain the local editor choice in
+  // the config, as we already do for WebSocket targets. It is not a model option.
+  return providerId?.startsWith('openai:chat:') && isLocalOpenAiProviderType(providerType)
+    ? { ...config, type: providerType }
+    : config;
+}
+
+export function getProviderType(
+  providerId?: string,
+  config?: Record<string, unknown>,
+): string | undefined {
   if (!providerId) {
     return undefined;
   }
@@ -9,6 +39,17 @@ export function getProviderType(providerId?: string): string | undefined {
 
   if (providerId.startsWith('bedrock:agents:')) {
     return 'bedrock-agent';
+  }
+
+  if (providerId.startsWith('openai:chat:')) {
+    if (isLocalOpenAiProviderType(config?.type)) {
+      return config.type;
+    }
+    // Older compatible-server configs have no UI type. Keep every server option
+    // editable without guessing the server product from its hostname or port.
+    if (hasCustomOpenAiBaseUrl(config)) {
+      return 'custom';
+    }
   }
 
   if (providerId.startsWith('file://')) {

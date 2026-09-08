@@ -1,11 +1,15 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
+import { generateOrderedYaml } from '../../utils/yamlHelpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
+
+import type { ProviderOptions } from '../../types';
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -62,6 +66,12 @@ async function replaceText(
 }
 
 describe('generated target configuration round trips', () => {
+  afterEach(() => {
+    act(() => {
+      useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+      useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
+    });
+  });
   beforeEach(() => {
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
     useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
@@ -73,6 +83,115 @@ describe('generated target configuration round trips', () => {
       providerType: undefined,
     });
   });
+
+  const localTargets = [
+    { label: 'Llamafile', type: 'llamafile' },
+    { label: 'vLLM', type: 'vllm' },
+    { label: 'Text Generation WebUI', type: 'text-generation-webui' },
+  ];
+  const localConfig = {
+    apiBaseUrl: 'https://my-inference.example.test/custom/v1',
+    apiKey: 'private-server-test-key',
+    stop: ['<end>'],
+    passthrough: { chat_template_kwargs: { enable_thinking: false } },
+  };
+  const localId = 'openai:chat:tenant/served-model:Q4_K_M';
+
+  it.each(
+    localTargets.flatMap((target) =>
+      ['saved JSON', 'YAML'].map((format) => ({ ...target, format })),
+    ),
+  )(
+    'keeps $label settings and JSON editing through $format export/import and reselection',
+    async ({ label, type, format }) => {
+      const user = userEvent.setup();
+      const view = renderWithProviders(<TargetEditor />);
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), localId);
+      // Pasting a complete config must retain the selected local target kind.
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+        JSON.stringify(localConfig),
+      );
+      const savedConfig = JSON.parse(JSON.stringify(useRedTeamConfig.getState().config));
+      if (format === 'YAML') {
+        const exported = yaml.load(generateOrderedYaml(savedConfig)) as {
+          targets: ProviderOptions[];
+        };
+        savedConfig.target = exported.targets[0];
+      }
+      view.unmount();
+      act(() => useRedTeamConfig.getState().setFullConfig(savedConfig));
+      renderWithProviders(<TargetEditor />);
+
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+      const card = screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!;
+      expect(card).toHaveClass('border-primary');
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(localId);
+      expect(
+        JSON.parse(
+          (
+            screen.getByRole('textbox', {
+              name: 'Target configuration JSON',
+            }) as HTMLTextAreaElement
+          ).value,
+        ),
+      ).toMatchObject(localConfig);
+      await user.click(card);
+      expect(useRedTeamConfig.getState().config.target).toEqual(savedConfig.target);
+
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+        '{"invalid":}',
+      );
+      expect(screen.getByText('Invalid JSON configuration')).toBeVisible();
+      expect(useRedTeamConfig.getState().config.target).toEqual(savedConfig.target);
+      const editedConfig = {
+        ...localConfig,
+        stop: ['<new-end>'],
+        passthrough: { chat_template_kwargs: { enable_thinking: true } },
+      };
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+        JSON.stringify(editedConfig),
+      );
+      await user.click(screen.getByRole('button', { name: 'Format' }));
+      expect(useRedTeamConfig.getState().config.target.config).toMatchObject(editedConfig);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      act(() =>
+        useRedTeamConfig
+          .getState()
+          .setFullConfig(JSON.parse(JSON.stringify(useRedTeamConfig.getState().config))),
+      );
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+    },
+  );
+
+  it.each(localTargets)(
+    'keeps an untyped compatible import editable and preserves it when selecting $label',
+    async ({ label, type }) => {
+      const user = userEvent.setup();
+      const imported = {
+        ...useRedTeamConfig.getState().config,
+        target: { id: localId, label: 'Existing deployment', config: localConfig },
+      };
+      act(() => useRedTeamConfig.getState().setFullConfig(imported));
+      renderWithProviders(<TargetEditor />);
+      expect(screen.getByRole('textbox', { name: 'Target configuration JSON' })).toBeVisible();
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      expect(useRedTeamConfig.getState().config.target).toMatchObject(imported.target);
+      act(() =>
+        useRedTeamConfig
+          .getState()
+          .setFullConfig(JSON.parse(JSON.stringify(useRedTeamConfig.getState().config))),
+      );
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(localId);
+    },
+  );
 
   it.each([
     {

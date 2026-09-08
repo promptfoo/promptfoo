@@ -182,22 +182,34 @@ describe('redteam UI initial target runtime contracts', () => {
       expect(JSON.parse(request!.body as string).model).toBe(
         target.id.slice('openai:chat:'.length),
       );
+      expect(JSON.parse(request!.body as string)).not.toHaveProperty('type');
     },
   );
 
   it.each(['llamafile', 'vllm', 'text-generation-webui'])(
-    'preserves %s served names, custom URLs and server keys',
+    'preserves %s served names, connections and JSON options without transmitting UI metadata',
     async (type) => {
       const target = initialConfig(type);
       target.id = 'openai:chat:tenant/models/local:quantized';
       target.config.apiBaseUrl = 'http://127.0.0.1:8999/custom/v1';
       target.config.apiKey = 'local-server-key';
-      const provider = await loadApiProvider(target.id, { options: target });
+      target.config.stop = ['<end>'];
+      target.config.passthrough = { chat_template_kwargs: { enable_thinking: false } };
+      // Saved/exported configs must load with the same runtime and wire contract.
+      const savedTarget = JSON.parse(JSON.stringify(target));
+      const provider = await loadApiProvider(savedTarget.id, { options: savedTarget });
+      expect(provider.constructor.name).toBe('OpenAiChatCompletionProvider');
       await provider.callApi('Say hello');
       const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('http://127.0.0.1:8999/custom/v1/chat/completions');
       expect(request!.headers).toMatchObject({ Authorization: 'Bearer local-server-key' });
-      expect(JSON.parse(request!.body as string).model).toBe('tenant/models/local:quantized');
+      const body = JSON.parse(request!.body as string);
+      expect(body).toMatchObject({
+        model: 'tenant/models/local:quantized',
+        stop: ['<end>'],
+        chat_template_kwargs: { enable_thinking: false },
+      });
+      expect(body).not.toHaveProperty('type');
     },
   );
 
