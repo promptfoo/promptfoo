@@ -104,7 +104,7 @@ providers:
 
 ### Speech-to-Text (STT)
 
-Transcribe audio with speaker diarization and accuracy metrics. The default is `scribe_v2`, the [recommended replacement for deprecated Scribe v1](https://elevenlabs.io/docs/overview/models#deprecated-models). Explicit `modelId: scribe_v1` remains supported:
+Transcribe audio with speaker diarization and accuracy metrics. The default is `scribe_v2`; [ElevenLabs scheduled Scribe v1 for removal on July 9, 2026](https://elevenlabs.io/docs/changelog/2026/6/8). The legacy `modelId: scribe_v1` remains configurable for compatible endpoints.
 
 - `elevenlabs:stt` - Speech-to-text transcription
 
