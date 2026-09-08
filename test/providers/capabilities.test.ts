@@ -93,6 +93,16 @@ it('honors a subclass capability exclusion even when it replaces a stub', () => 
   expect(hasProviderCapability(provider, 'callApi')).toBe(false);
 });
 
+it('honors an explicit subclass declaration that reuses the exported tuple', () => {
+  class RestrictedEmbeddingProvider extends OpenAiEmbeddingProvider {
+    override readonly promptfooCapabilities = OpenAiEmbeddingProvider.declaredProviderCapabilities;
+    override async callApi(): Promise<never> {
+      throw new Error('The text operation remains unsupported');
+    }
+  }
+  expect(hasProviderCapability(new RestrictedEmbeddingProvider('fixture'), 'callApi')).toBe(false);
+});
+
 it('rejects an embedding-only default when a text grader is required', async () => {
   const embeddingDefault = new OpenAiEmbeddingProvider('fixture');
   await expect(getAndCheckProvider('text', undefined, embeddingDefault, 'rubric')).rejects.toThrow(
@@ -151,6 +161,21 @@ it('recognizes added LiteLLM subclass operations without overriding explicit exc
   expect(
     hasProviderCapability(new RestrictedLiteLLMProvider('fixture', {}), 'callEmbeddingApi'),
   ).toBe(false);
+});
+
+it('preserves prototype lifecycle and validation hooks on LiteLLM subclasses', async () => {
+  const cleanup = vi.fn().mockResolvedValue(undefined);
+  const validateFunctionToolCall = vi.fn();
+  class CustomLiteLLMProvider extends LiteLLMProvider {}
+  Object.defineProperties(CustomLiteLLMProvider.prototype, {
+    cleanup: { value: cleanup },
+    validateFunctionToolCall: { value: validateFunctionToolCall },
+  });
+  const provider = new CustomLiteLLMProvider('fixture', {});
+  provider.validateFunctionToolCall!('{}');
+  await providerRegistry.withScope([provider], async () => undefined);
+  expect(validateFunctionToolCall).toHaveBeenCalledWith('{}');
+  expect(cleanup).toHaveBeenCalledOnce();
 });
 
 describe.each(['chat', 'completion', 'embedding'] as const)('LiteLLM %s forwarding', (kind) => {

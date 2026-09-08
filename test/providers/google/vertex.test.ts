@@ -169,6 +169,46 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
   return cacheSetKey;
 }
 
+describe('Vertex cache bypass for non-Gemini models', () => {
+  beforeEach(() => {
+    mockCacheGet.mockReset().mockResolvedValue(JSON.stringify({ output: 'stale' }));
+    mockCacheSet.mockReset();
+    mockIsCacheEnabled.mockReset().mockReturnValue(true);
+  });
+
+  it.each([
+    [
+      'claude-3-5-sonnet-v2@20241022',
+      {
+        content: [{ type: 'text', text: 'Claude fresh' }],
+        usage: { input_tokens: 1, output_tokens: 2 },
+      },
+      'Claude fresh',
+    ],
+    ['chat-bison', { predictions: [{ candidates: [{ content: 'PaLM fresh' }] }] }, 'PaLM fresh'],
+    [
+      'llama-3.3-70b-instruct-maas',
+      {
+        choices: [{ message: { content: 'Llama fresh' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 2 },
+      },
+      'Llama fresh',
+    ],
+  ] as const)('bypasses cache on %s', async (model, data, expected) => {
+    const request = mockVertexRequest(data);
+    const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
+    const response = await provider.callApi('hello', {
+      prompt: { raw: 'hello', label: 'test' },
+      vars: {},
+      bustCache: true,
+    });
+    expect(response.output).toBe(expected);
+    expect(request).toHaveBeenCalledOnce();
+    expect(mockCacheGet).not.toHaveBeenCalled();
+    expect(mockCacheSet).not.toHaveBeenCalled();
+  });
+});
+
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 

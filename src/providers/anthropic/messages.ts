@@ -1012,6 +1012,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ephemeralCacheKey,
         cacheClearGeneration,
       );
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
