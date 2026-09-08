@@ -263,7 +263,7 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID to use (e.g., 'claude-sonnet-4-20250514', 'gpt-4o')
+   * Model ID to use (e.g., 'claude-sonnet-4-6', 'gpt-4o')
    * Combined with provider_id to specify the exact model
    */
   model?: string;

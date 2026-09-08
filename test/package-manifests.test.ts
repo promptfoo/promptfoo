@@ -12,7 +12,7 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-type PackageLockManifest<T = PackageManifest & { version?: string }> = {
+type PackageLockManifest<T = PackageManifest & { version?: string; optional?: boolean }> = {
   packages: Record<string, T>;
 };
 
@@ -22,7 +22,7 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.35.3';
+const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
@@ -487,9 +487,44 @@ describe('package manifests', () => {
       devDependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     }>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
 
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+    expect(packageLock.packages[''].dependencies?.sharp).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+  });
+
+  it('keeps the Slack SDK optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const sdkName = '@slack/web-api';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+
+    expect(sdkRange).toBe('^8.1.1');
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(packageLock.packages[`node_modules/${sdkName}`].optional).toBe(true);
+    expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
+      true,
+    );
+  });
+
+  it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const binaryName = '@rollup/rollup-linux-x64-gnu';
+    const binaryRange = packageJson.optionalDependencies?.[binaryName];
+    const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+    expect(binaryRange).toBeDefined();
+    expect(minVersion(binaryRange!)?.compare('4.63.1')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBe(binaryRange);
+    expect(binaryPackage.optional).toBe(true);
+    expect(satisfies(binaryPackage.version!, binaryRange!)).toBe(true);
   });
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
@@ -547,7 +582,7 @@ describe('package manifests', () => {
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
-    expect(minVersion(developmentRange!)?.compare('5.10.1')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(clientVersion).toBeDefined();
@@ -733,12 +768,12 @@ describe('package manifests', () => {
     const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(installedVersion).toBeDefined();
-    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(installedVersion!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });

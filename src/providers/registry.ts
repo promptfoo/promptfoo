@@ -159,7 +159,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createAbliterationProvider(providerPath, {
-        config: providerOptions,
+        providerOptions,
         env: context.env,
       });
     },
@@ -796,7 +796,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
       if (modelType === 'chat') {
         return new LocalAiChatProvider(modelName, providerOptions);
       }
@@ -806,7 +806,7 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new LocalAiEmbeddingProvider(modelName, providerOptions);
       }
-      return new LocalAiChatProvider(modelType, providerOptions);
+      return new LocalAiChatProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {

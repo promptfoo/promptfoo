@@ -8,7 +8,7 @@
  *
  * Usage:
  *   cloudflare-gateway:openai:gpt-4o
- *   cloudflare-gateway:anthropic:claude-sonnet-4-20250514
+ *   cloudflare-gateway:anthropic:claude-sonnet-4-6
  *   cloudflare-gateway:groq:llama-3.3-70b-versatile
  *
  * @see https://developers.cloudflare.com/ai-gateway/
@@ -218,6 +218,11 @@ function buildGatewayUrl(
     );
 
     return `${baseUrl}/azure-openai/${resourceName}/${deploymentName}`;
+  }
+
+  // Mistral's native gateway proxy retains the upstream /v1 path.
+  if (provider === 'mistral') {
+    return `${baseUrl}/mistral/v1`;
   }
 
   if (provider === 'workers-ai') {

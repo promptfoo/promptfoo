@@ -261,6 +261,22 @@ describe('transformMCPConfigToClaudeCode', () => {
     ).resolves.toEqual({});
   });
 
+  it('uses the singular server when it shares a key with a plural server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'shared', command: 'single-server' },
+        servers: [{ name: 'shared', command: 'plural-server' }],
+      }),
+    ).resolves.toEqual({ shared: { type: 'stdio', command: 'single-server', args: [] } });
+  });
+
+  it('rejects a server without a URL, command, or path', async () => {
+    await expect(transformMCPConfigToClaudeCode({ enabled: true, server: {} })).rejects.toThrow(
+      'MCP configuration cannot be converted to Claude Agent SDK MCP server config',
+    );
+  });
+
   it('rejects unsupported tool filters instead of silently dropping them', async () => {
     await expect(
       transformMCPConfigToClaudeCode({

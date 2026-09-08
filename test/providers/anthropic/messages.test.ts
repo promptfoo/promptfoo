@@ -1610,7 +1610,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('executes MCP tool_use blocks and continues the Anthropic conversation with tool_result', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1687,7 +1687,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('sums thinking tokens across MCP continuation rounds', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1745,7 +1745,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('does not cache MCP continuation results by default', async () => {
       enableCache();
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1813,7 +1813,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('leaves mixed MCP and non-MCP tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1854,7 +1854,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('drops forced tool_choice on MCP continuation requests', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           tool_choice: 'required' as any,
           mcp: {
@@ -1920,7 +1920,7 @@ describe('AnthropicMessagesProvider', () => {
     ])(
       'marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)',
       async ({ mcpResult, expectedContent }) => {
-        provider = createProvider('claude-3-5-sonnet-latest', {
+        provider = createProvider('claude-sonnet-4-6', {
           config: {
             mcp: {
               enabled: true,
@@ -1975,7 +1975,7 @@ describe('AnthropicMessagesProvider', () => {
     );
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -2009,7 +2009,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('publishes executed MCP tool calls as metadata.toolCalls across rounds', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
         },
@@ -2073,7 +2073,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('marks a failed MCP tool call as is_error in metadata.toolCalls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
         },
@@ -2109,7 +2109,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('omits metadata.toolCalls entirely when no MCP tool ran', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
         },
@@ -2129,7 +2129,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('keeps tool calls made before the max_tool_calls bail-out', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
@@ -2175,7 +2175,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           mcp: {
@@ -2235,7 +2235,7 @@ describe('AnthropicMessagesProvider', () => {
       // Regression: max_tool_calls: 0 is an explicit "do not auto-execute MCP
       // tools" guard, but 0 was treated as invalid and silently widened to the
       // default of 8, so tools ran anyway.
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 0,
           mcp: {
@@ -2272,7 +2272,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           mcp: {
@@ -2312,7 +2312,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('continues MCP tool execution through the streaming path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           stream: true,
           mcp: {
@@ -2373,7 +2373,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('returns a streaming error once further MCP execution exceeds max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           stream: true,
@@ -2436,7 +2436,7 @@ describe('AnthropicMessagesProvider', () => {
 
   describe('cleanup', () => {
     it('should await initialization before cleanup', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -2462,7 +2462,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup when MCP is not enabled', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: false,
@@ -2476,7 +2476,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,

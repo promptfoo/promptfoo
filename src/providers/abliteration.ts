@@ -92,6 +92,8 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
 export function createAbliterationProvider(
   providerPath: string,
   options: {
+    providerOptions?: ProviderOptions;
+    /** @deprecated Use `providerOptions` instead. */
     config?: ProviderOptions;
     id?: string;
     env?: EnvOverrides;
@@ -106,7 +108,7 @@ export function createAbliterationProvider(
     );
   }
 
-  const providerOptions = options.config || {};
+  const providerOptions = options.providerOptions ?? options.config ?? {};
 
   return new AbliterationProvider(modelName, {
     ...providerOptions,
