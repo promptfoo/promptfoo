@@ -79,7 +79,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       // Default to regular Google API
       const modelName = splits[1];
 
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (modelName === 'gemini-omni-flash-preview' || modelName === 'gemini-omni-1.1-flash') {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, providerOptions);
       }

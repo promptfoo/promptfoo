@@ -123,15 +123,15 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     vertexCost: GEMINI_3_5_FLASH_LITE_COST,
     vertexRegionalMultiplier: 1.1,
   })),
-  {
-    id: 'gemini-omni-flash-preview',
+  ...['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'].map((id) => ({
+    id,
     cost: {
       input: 1.5 / 1e6,
       output: 9.0 / 1e6,
       audioInput: 1.5 / 1e6,
       videoOutput: 17.5 / 1e6,
     },
-  },
+  })),
 
   // Gemini 3.1 models.
   ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest'].map(

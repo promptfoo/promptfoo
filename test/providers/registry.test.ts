@@ -1398,9 +1398,32 @@ describe('Provider Registry', () => {
       ],
       // Bare google:<model> default chat route (no service-type segment).
       [
+        'google:gemini-omni-1.1-flash',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
+        'palm:gemini-omni-1.1-flash',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
         'google:gemini-omni-flash-preview',
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
+        'palm:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
+        'google:gemini-omni-1.1-flash-custom',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:gemini-omni-1.1-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
         'google:gemini-3.8-flash',
@@ -1496,6 +1519,28 @@ describe('Provider Registry', () => {
       expect((provider as any).config?.vertexai).toBe(true);
       expect(provider.id()).toBe(providerPath);
     });
+
+    it.each(['google:gemini-omni-1.1-flash', 'palm:gemini-omni-1.1-flash'])(
+      'preserves explicit provider options for %s',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const options = {
+          id: 'custom-omni-id',
+          config: { apiKey: 'test-key', aspectRatio: '9:16' },
+          env: { GOOGLE_API_KEY: 'env-test-key' },
+        };
+        const provider = await factory!.create(providerPath, options, bareContext);
+        expect(provider.id()).toBe('custom-omni-id');
+        expect(provider).toMatchObject({
+          modelName: 'gemini-omni-1.1-flash',
+          config: options.config,
+          env: options.env,
+        });
+        expect((provider as any).config.vertexai).toBeUndefined();
+      },
+    );
 
     it.each(['vertex:gemini-omni-flash-preview', 'vertex:chat:gemini-omni-flash-preview'])(
       'applies vertexai config and provider id for %s',

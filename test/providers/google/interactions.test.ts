@@ -34,130 +34,133 @@ describe('GoogleInteractionsProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it('routes Omni Flash through the Interactions API and prices video output tokens', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'interaction-1',
-        status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
-          },
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/webm', data: 'dmlkZW8=' }],
-          },
-        ],
-        usage: {
-          total_input_tokens: 100,
-          total_output_tokens: 600,
-          total_reasoning_tokens: 20,
-          total_tokens: 720,
-          output_tokens_by_modality: [
-            { modality: 'text', tokens: 100 },
-            { modality: 'video', tokens: 500 },
+  it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
+    'routes %s through the Interactions API and prices video output tokens',
+    async (modelName) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          id: 'interaction-1',
+          status: 'completed',
+          steps: [
+            {
+              type: 'model_output',
+              content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
+            },
+            {
+              type: 'model_output',
+              content: [{ type: 'video', mime_type: 'video/webm', data: 'dmlkZW8=' }],
+            },
           ],
-        },
-      },
-      cached: false,
-    } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: {
-        apiKey: 'test-key',
-        aspectRatio: '9:16',
-        previousInteractionId: 'interaction-0',
-        store: true,
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
-        service_tier: 'priority',
-        maxOutputTokens: 2_048,
-        generationConfig: {
-          maxOutputTokens: 2_048,
-          thinking_level: 'low',
-          video_config: { task: 'text_to_video' },
-          temperature: 0.2,
-          topP: 0.8,
-          top_p: 0.8,
-          stopSequences: ['stop'],
-          stop_sequences: ['stop'],
-          negative_prompt: 'do not include text',
-          system_instruction: 'unsupported',
-        } as any,
-        passthrough: {
-          generation_config: {
-            seed: 42,
-            temperature: 0.4,
-            negative_prompt: 'unsupported passthrough prompt',
+          usage: {
+            total_input_tokens: 100,
+            total_output_tokens: 600,
+            total_reasoning_tokens: 20,
+            total_tokens: 720,
+            output_tokens_by_modality: [
+              { modality: 'text', tokens: 100 },
+              { modality: 'video', tokens: 500 },
+            ],
           },
-          generationConfig: { temperature: 0.6 },
-          system_instruction: { parts: [{ text: 'unsupported passthrough instruction' }] },
-          temperature: 0.8,
-          service_tier: 'priority',
-          serviceTier: 'priority',
         },
-      },
-    });
-
-    const result = await provider.callApi('A city at dusk', { evaluationId: 'eval-1' } as any);
-
-    expect(mockFetchWithCache).toHaveBeenCalledWith(
-      'https://generativelanguage.googleapis.com/v1beta/interactions',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Api-Revision': '2026-05-20',
-          'x-goog-api-key': 'test-key',
-        }),
-        body: JSON.stringify({
-          model: 'gemini-omni-flash-preview',
-          input: 'A city at dusk',
-          response_format: { type: 'video', aspect_ratio: '9:16' },
-          previous_interaction_id: 'interaction-0',
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider(modelName, {
+        config: {
+          apiKey: 'test-key',
+          aspectRatio: '9:16',
+          previousInteractionId: 'interaction-0',
           store: true,
-          safety_settings: [
-            { type: 'hate_speech', threshold: 'block_low_and_above' },
-            { type: 'harassment', threshold: 'block_medium_and_above' },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
-          generation_config: {
-            max_output_tokens: 2_048,
+          service_tier: 'priority',
+          maxOutputTokens: 2_048,
+          generationConfig: {
+            maxOutputTokens: 2_048,
             thinking_level: 'low',
             video_config: { task: 'text_to_video' },
-            seed: 42,
+            temperature: 0.2,
+            topP: 0.8,
+            top_p: 0.8,
+            stopSequences: ['stop'],
+            stop_sequences: ['stop'],
+            negative_prompt: 'do not include text',
+            system_instruction: 'unsupported',
+          } as any,
+          passthrough: {
+            generation_config: {
+              seed: 42,
+              temperature: 0.4,
+              negative_prompt: 'unsupported passthrough prompt',
+            },
+            generationConfig: { temperature: 0.6 },
+            system_instruction: { parts: [{ text: 'unsupported passthrough instruction' }] },
+            temperature: 0.8,
+            service_tier: 'priority',
+            serviceTier: 'priority',
           },
-          background: false,
-          stream: false,
+        },
+      });
+
+      const result = await provider.callApi('A city at dusk', { evaluationId: 'eval-1' } as any);
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1beta/interactions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Api-Revision': '2026-05-20',
+            'x-goog-api-key': 'test-key',
+          }),
+          body: JSON.stringify({
+            model: modelName,
+            input: 'A city at dusk',
+            response_format: { type: 'video', aspect_ratio: '9:16' },
+            previous_interaction_id: 'interaction-0',
+            store: true,
+            safety_settings: [
+              { type: 'hate_speech', threshold: 'block_low_and_above' },
+              { type: 'harassment', threshold: 'block_medium_and_above' },
+            ],
+            generation_config: {
+              max_output_tokens: 2_048,
+              thinking_level: 'low',
+              video_config: { task: 'text_to_video' },
+              seed: 42,
+            },
+            background: false,
+            stream: false,
+          }),
         }),
-      }),
-      expect.any(Number),
-      'json',
-      true,
-    );
-    expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
-    expect(mockStoreBlob).toHaveBeenCalledWith(
-      Buffer.from('video'),
-      'video/webm',
-      expect.objectContaining({ evalId: 'eval-1', kind: 'video' }),
-    );
-    expect(result.video).toMatchObject({
-      id: 'interaction-1',
-      url: 'blob://video/omni',
-      format: 'webm',
-      model: 'gemini-omni-flash-preview',
-      aspectRatio: '9:16',
-    });
-    expect(result.tokenUsage).toEqual({
-      prompt: 100,
-      completion: 600,
-      total: 720,
-      cached: 0,
-      numRequests: 1,
-      completionDetails: { reasoning: 20 },
-    });
-    expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
-  });
+        expect.any(Number),
+        'json',
+        true,
+      );
+      expect(mockFetchWithCache.mock.calls[0]?.[1]).not.toHaveProperty('_authHash');
+      expect(mockStoreBlob).toHaveBeenCalledWith(
+        Buffer.from('video'),
+        'video/webm',
+        expect.objectContaining({ evalId: 'eval-1', kind: 'video' }),
+      );
+      expect(result.video).toMatchObject({
+        id: 'interaction-1',
+        url: 'blob://video/omni',
+        format: 'webm',
+        model: modelName,
+        aspectRatio: '9:16',
+      });
+      expect(result.tokenUsage).toEqual({
+        prompt: 100,
+        completion: 600,
+        total: 720,
+        cached: 0,
+        numRequests: 1,
+        completionDetails: { reasoning: 20 },
+      });
+      expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
+    },
+  );
 
   it('returns a useful error when the Interactions API does not return video', async () => {
     mockFetchWithCache.mockResolvedValue({
@@ -1109,21 +1112,24 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
-  it('surfaces gateway errors without a Google-shaped error body', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: { message: 'Service Unavailable' },
-      cached: false,
-      status: 503,
-      statusText: 'Service Unavailable',
-    } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: { apiKey: 'test-key' },
-    });
+  it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
+    'surfaces gateway errors for %s without a Google-shaped error body',
+    async (modelName) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { message: 'Service Unavailable' },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      } as any);
+      const provider = new GoogleInteractionsProvider(modelName, {
+        config: { apiKey: 'test-key' },
+      });
 
-    await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
-      error: 'Gemini Interactions API error: HTTP 503 Service Unavailable',
-    });
-  });
+      await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
+        error: 'Gemini Interactions API error: HTTP 503 Service Unavailable',
+      });
+    },
+  );
 
   it('surfaces polling gateway errors without a Google-shaped error body', async () => {
     mockFetchWithCache
