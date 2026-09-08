@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url';
 
 import { globSync } from 'glob';
 import { minimatch } from 'minimatch';
-import { type Node, parseSync, Visitor } from 'oxc-parser';
+import { type Comment, type Node, parseSync, Visitor } from 'oxc-parser';
 import { z } from 'zod';
 import {
+  getExternalModuleName,
   getLayerForFile,
   getPackageName,
   normalizePath,
@@ -108,9 +109,14 @@ function discoverManifests(repoRoot: string): string[] {
   );
   const workspaceDirectories = globSync(
     included.map((pattern) => `${pattern.replace(/\\/g, '/').replace(/\/$/, '')}/`),
-    { cwd: repoRoot, ignore: [...ignored, ...exclusions] },
+    { cwd: repoRoot, ignore: ['**/node_modules/**', ...exclusions] },
   );
   const manifests = workspaceDirectories
+    .filter((directory) =>
+      included.some((pattern) =>
+        minimatch(directory, pattern, { partial: true, windowsPathsNoEscape: true }),
+      ),
+    )
     .map((directory) => normalizePath(path.join(directory, 'package.json')))
     .filter((manifest) => fs.existsSync(path.join(repoRoot, manifest)));
   return [...new Set(['package.json', ...manifests])].sort();
@@ -159,9 +165,19 @@ function staticSpecifier(node: Node): string | undefined {
   return undefined;
 }
 
-function discoverFiles(repoRoot: string, manifests: string[], configuredRoots: string[]) {
+function discoverFiles(
+  repoRoot: string,
+  manifests: string[],
+  configuredRoots: string[],
+  ignoredRoots: string[],
+) {
   const files = new Set<string>();
   const declarationFiles = new Set<string>();
+  const configuredIgnores = ignoredRoots.flatMap((root) => [root, `${root}/**`]);
+  const sourceIgnores = (root: string) => [
+    ...ignored.map((pattern) => `${root}${pattern}`),
+    ...configuredIgnores,
+  ];
   for (const manifest of manifests) {
     const root = manifest === 'package.json' ? '' : `${path.posix.dirname(manifest)}/`;
     for (const pattern of [
@@ -173,16 +189,18 @@ function discoverFiles(repoRoot: string, manifests: string[], configuredRoots: s
         ? [`${root}docs/**/*.${extensions}`, `${root}blog/**/*.${extensions}`]
         : []),
     ]) {
-      for (const file of globSync(pattern, { cwd: repoRoot, nodir: true, ignore: ignored }).map(
-        normalizePath,
-      )) {
+      for (const file of globSync(pattern, {
+        cwd: repoRoot,
+        nodir: true,
+        ignore: sourceIgnores(root),
+      }).map(normalizePath)) {
         files.add(file);
       }
     }
     for (const file of globSync(`${root}dist/**/*.d.{ts,mts,cts}`, {
       cwd: repoRoot,
       nodir: true,
-      ignore: ['**/node_modules/**', '**/dist/test/**'],
+      ignore: ['**/node_modules/**', '**/dist/test/**', ...configuredIgnores],
     }).map(normalizePath)) {
       files.add(file);
       declarationFiles.add(file);
@@ -193,7 +211,11 @@ function discoverFiles(repoRoot: string, manifests: string[], configuredRoots: s
     for (const file of globSync([root, `${root}/**/*.${extensions}`], {
       cwd: repoRoot,
       nodir: true,
-      ignore: ignored,
+      ignore: sourceIgnores(
+        manifestFor(`${root}/`, manifests) === 'package.json'
+          ? ''
+          : `${path.posix.dirname(manifestFor(`${root}/`, manifests))}/`,
+      ),
     }).map(normalizePath)) {
       if (/\.(?:[cm]?[jt]s|[jt]sx)$/.test(file)) {
         files.add(file);
@@ -202,6 +224,47 @@ function discoverFiles(repoRoot: string, manifests: string[], configuredRoots: s
   }
 
   return { files, declarationFiles };
+}
+
+function leadingTypeReferences(
+  comments: Comment[],
+  firstStatement: number,
+  packages: Map<string, PackageJson>,
+) {
+  const references: Array<{ start: number; specifier: string; dependency: string }> = [];
+  // TypeScript directives are leading line comments, not AST imports. Ignore
+  // lookalikes in strings/block comments and comments after the first statement.
+  for (const comment of comments) {
+    if (comment.type !== 'Line' || comment.start >= firstStatement) {
+      continue;
+    }
+    const directive = comment.value.match(
+      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>\s*$/,
+    );
+    const typeAttribute =
+      directive &&
+      [...directive[1].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].find(
+        (attribute) => attribute[1] === 'types',
+      );
+    const specifier = typeAttribute?.[2] ?? typeAttribute?.[3];
+    if (!specifier) {
+      continue;
+    }
+    const name = getExternalModuleName(specifier);
+    if (!name) {
+      continue;
+    }
+    const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
+    const hasTypesDeclaration = [...packages.values()].some((pkg) =>
+      sections.some((section) => Object.hasOwn(pkg[section] ?? {}, typesPackage)),
+    );
+    references.push({
+      start: comment.start,
+      specifier,
+      dependency: name === 'node' || hasTypesDeclaration ? typesPackage : name,
+    });
+  }
+  return references;
 }
 
 /** Report source evidence and declaration ownership; neither proves installed dependency reach. */
@@ -225,7 +288,12 @@ export function reportDependencyOwnership(
     })),
   };
   const configuredRoots = sourceConfig.layers.flatMap((layer) => layer.roots);
-  const { files, declarationFiles } = discoverFiles(repoRoot, manifests, configuredRoots);
+  const { files, declarationFiles } = discoverFiles(
+    repoRoot,
+    manifests,
+    configuredRoots,
+    (config.ignoredRoots ?? []).map((root) => normalizePath(root).replace(/\/+$/, '')),
+  );
 
   const usages = new Map<string, Reference[]>();
   const computedImports: Array<{
@@ -282,8 +350,12 @@ export function reportDependencyOwnership(
     const layer = getLayerForFile(file, sourceConfig);
     const aliases = [...Object.keys(config.aliases ?? {}), ...(ledger.aliases[manifest] ?? [])];
     const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
-    const add = (node: Node, specifier: string, kind: Reference['kind']) => {
-      const dependency = getPackageName(specifier);
+    const add = (
+      node: Pick<Node, 'start'>,
+      specifier: string,
+      kind: Reference['kind'],
+      dependency = getPackageName(specifier),
+    ) => {
       // Workspace names remain dependencies and need declarations, even when a broad
       // source alias shares their scope (for example @promptfoo/*).
       if (
@@ -324,6 +396,13 @@ export function reportDependencyOwnership(
         add(node, specifier, kind);
       }
     };
+    for (const reference of leadingTypeReferences(
+      result.comments,
+      result.program.body[0]?.start ?? source.length,
+      packages,
+    )) {
+      add(reference, reference.specifier, 'type', reference.dependency);
+    }
     new Visitor({
       ImportDeclaration(node) {
         add(
