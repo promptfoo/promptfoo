@@ -638,7 +638,12 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { profile: { type: 'string', default: 'default' } } });
+  const { values } = parseArgs({
+    options: {
+      profile: { type: 'string', default: 'default' },
+      registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+    },
+  });
   assert(
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
@@ -692,7 +697,7 @@ async function main(): Promise<void> {
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
-        `--registry=${runNpm(['config', 'get', 'registry'], ROOT).trim()}`,
+        `--registry=${values.registry}`,
         tarballPath,
       ],
       consumerDir,

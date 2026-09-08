@@ -2,8 +2,9 @@
 
 `scripts/testPackageArtifact.ts` copies these scripts into a temporary consumer
 outside the repository, installs a packed `promptfoo`, and runs its public API.
-The consumer inherits the configured npm registry but not the repository's
-workspaces, lockfile, overrides, or development dependencies.
+The consumer uses the public npm registry and is isolated from the repository's
+workspaces, lockfile, overrides, and development dependencies. To select a trusted
+local mirror explicitly, pass `--registry https://your-registry.example/`.
 
 After `npm run build`, run from the repository root:
 
