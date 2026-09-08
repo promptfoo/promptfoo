@@ -6,7 +6,9 @@ The consumer uses the public npm registry and is isolated from the repository's
 workspaces, lockfile, overrides, and development dependencies. To select a trusted
 local mirror explicitly, pass `--registry https://your-registry.example/`.
 
-After `npm run build`, run from the repository root:
+Use npm 11 as required by the repository. Older npm 10 pack implementations can
+run `prepare` despite `--ignore-scripts`. After `npm run build`, run from the
+repository root:
 
 ```sh
 npm run test:package-artifact
