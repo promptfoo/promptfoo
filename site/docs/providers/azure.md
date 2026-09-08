@@ -92,10 +92,10 @@ providers:
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4.1)
 - `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
-- `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
+- `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
-- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.5) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
+- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.6) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
 Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
@@ -124,19 +124,19 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anthropic Claude** | `claude-mythos-5` (gated Preview; Microsoft Entra ID only), `claude-mythos-preview` (gated research Preview), `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-opus-4-5`, `claude-opus-4-1` (scheduled to retire August 5, 2026; migrate to `claude-opus-4-8`), `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5` — see [Using Claude Models](#using-claude-models) for deployment and config details |
-| **Meta Llama**       | `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-4-Scout-17B-16E-Instruct`, `Llama-3.3-70B-Instruct`                                                                                                                                                                                                                                                                                                                                                                                   |
-| **DeepSeek**         | `DeepSeek-R1` (Legacy; retires August 13, 2026), `DeepSeek-V3.2`, `DeepSeek-V3.2-Speciale`, `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`                                                                                                                                                                                                                                                                                                                                                     |
-| **Mistral**          | `Mistral-Large-3`, `mistral-medium-3-5` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **Cohere**           | `cohere-command-a`, `Cohere-command-a-plus-05-2026` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5-Pro`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                                                                                                |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **xAI Grok**         | `grok-4`, `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-code-fast-1`; Preview: `grok-4.3`, `grok-4-20-reasoning`, `grok-4-20-non-reasoning`                                                                                                                                                                                                                                                                                                                          |
-| **MoonshotAI Kimi**  | `Kimi-K2.5`, `Kimi-K2.6`, `Kimi-K2.7-Code` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-mythos-5` (gated Preview; Microsoft Entra ID only), `claude-mythos-preview` (gated research Preview), `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-opus-4-5`, `claude-opus-4-1` (retirement date August 5, 2026; migrate to `claude-opus-4-8`), `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-4-Scout-17B-16E-Instruct`, `Llama-3.3-70B-Instruct`                                                                                                                                                                                                                                                                                                                                                                               |
+| **DeepSeek**         | `DeepSeek-R1` (Legacy; retirement date August 13, 2026), `DeepSeek-V3.2`, `DeepSeek-V3.2-Speciale`, `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`                                                                                                                                                                                                                                                                                                                                         |
+| **Mistral**          | `Mistral-Large-3`, `mistral-medium-3-5` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Cohere**           | `cohere-command-a`, `Cohere-command-a-plus-05-2026` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                                                                                                        |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **xAI Grok**         | `grok-4`, `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-code-fast-1`; Preview: `grok-4.3`, `grok-4-20-reasoning`, `grok-4-20-non-reasoning`                                                                                                                                                                                                                                                                                                                      |
+| **MoonshotAI Kimi**  | `Kimi-K2.5`, `Kimi-K2.6`, `Kimi-K2.7-Code` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 For the complete list of models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
@@ -1184,34 +1184,17 @@ historical pricing metadata for those IDs so saved evaluation results can still 
 
 Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Image generation** models (`MAI-Image-2.5-Pro`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all in **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
-- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited — see [Reasoning chat](#reasoning-chat-azurechat).
+- **Image generation** models (`MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation with explicit width and height. For MAI-Image-2.6 and MAI-Image-2.6-Flash, use `config.passthrough` to send the documented [`auto_aspect_ratio` and `web_grounding` boolean options](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#request-parameters). Image editing uses a separate multipart `/mai/v1/images/edits` request and requires additional provider support.
+- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
 
-The current image-model IDs and versions come from Microsoft's
-[MAI image guide](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image);
-retirement dates come from the
-[Azure model retirement schedule](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule):
-
-| Model ID              | Version      | Status and lifecycle                                        |
-| --------------------- | ------------ | ----------------------------------------------------------- |
-| `MAI-Image-2.5-Pro`   | `2026-06-19` | Preview                                                     |
-| `MAI-Image-2.5`       | `2026-06-02` | Preview                                                     |
-| `MAI-Image-2.5-Flash` | `2026-06-02` | Preview                                                     |
-| `MAI-Image-2e`        | `2026-04-09` | Preview; retires August 15, 2026; use `MAI-Image-2.5-Flash` |
-| `MAI-Image-2`         | `2026-02-20` | Preview; retires August 15, 2026; use `MAI-Image-2.5`       |
-
-Microsoft has not published an unambiguous token price for `MAI-Image-2.5-Pro`, so promptfoo
-does not provide a built-in cost estimate for it. Use Azure Cost Management for authoritative
-billing.
-
-Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
+Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint. This example uses the [documented MAI-Image-2.6 version `2026-07-31`](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#mai-image-models-at-a-glance); confirm regional availability before deploying:
 
 ```bash
 az cognitiveservices account deployment create \
   --name <RESOURCE> --resource-group <RG> \
-  --deployment-name mai-image-2-5 \
-  --model-name MAI-Image-2.5 --model-format Microsoft \
-  --model-version 2026-06-02 --sku-name GlobalStandard --sku-capacity 1
+  --deployment-name mai-image-2-6 \
+  --model-name MAI-Image-2.6 --model-format Microsoft \
+  --model-version 2026-07-31 --sku-name GlobalStandard --sku-capacity 1
 
 export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
 export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
@@ -1219,18 +1202,22 @@ export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
 
 ### Image generation (`azure:image`)
 
+[Azure retired `MAI-Image-2` and `MAI-Image-2e` on August 15, 2026](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule). The 2.5 variants retire on October 1, 2026. For new deployments, review the preview [MAI-Image-2.6 and MAI-Image-2.6-Flash models](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image) and confirm regional availability. Historical cost metadata remains available.
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:image:mai-image-2-5
+  - id: azure:image:mai-image-2-6
     config:
-      # `model` is used only for cost reporting — Azure deployment names can't
-      # contain the dot in "MAI-Image-2.5", so name the model id explicitly.
-      model: MAI-Image-2.5
+      # Optional model ID for cost lookup; no built-in 2.6 price is available yet.
+      model: MAI-Image-2.6
       width: 1024 # min 768; width * height must be <= 1,048,576
       height: 1024
+      passthrough:
+        auto_aspect_ratio: false # Set true to let the model choose the aspect ratio
+        web_grounding: false # Set true to use Bing Search context
 
 tests:
   - vars:
@@ -1241,9 +1228,9 @@ tests:
         value: output.startsWith('promptfoo://blob/') || output.startsWith('data:image/')
 ```
 
-The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's token counts. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage from the API's token counts. Cost estimates require a matching built-in model price; uncached `MAI-Image-2.6` and `MAI-Image-2.6-Flash` responses omit cost because these models have no price entries. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
 
-To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. See the [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) for a complete vision-grading config.
+To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. The [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) illustrates this grading pattern with a legacy 2.5 deployment; update its deployment and model settings for the 2.6 configuration above.
 
 ### Reasoning chat (`azure:chat`)
 
@@ -1267,17 +1254,23 @@ The MAI image models are in **Preview**, and the MAI text models roll out region
 
 ## Assistants
 
-To evaluate an OpenAI assistant on Azure:
+:::warning Retired API
 
-1. Create a deployment for the assistant in the Azure portal
-2. Create an assistant in the Azure web UI
-3. Install the `@azure/openai-assistants` package:
+[Azure OpenAI Assistants retired on August 26, 2026](https://learn.microsoft.com/en-us/azure/foundry/how-to/navigate-from-classic). Use the Foundry agent provider for new agent evaluations. The configuration below documents the legacy integration; assistant IDs and Foundry agent names are different resources and cannot be substituted directly.
+
+:::
+
+The following setup and examples are archival references for pre-retirement configurations, not instructions for creating new Azure OpenAI assistants. Before retirement, this integration required:
+
+1. An Azure OpenAI deployment
+2. An assistant created in the Azure web UI
+3. The `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants
 ```
 
-4. Configure your provider with the assistant ID:
+4. A provider configuration referencing the assistant ID:
 
 ```yaml
 providers:
@@ -1286,11 +1279,11 @@ providers:
       apiHost: yourdeploymentname.openai.azure.com
 ```
 
-Replace the assistant ID and deployment name with your actual values.
+The assistant ID and deployment name above represent the former Azure OpenAI resources; they are not Foundry agent identifiers.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
+The retired Azure OpenAI Assistants integration supported tool calling through `tools` schemas and `functionToolCallbacks` implementations. This archived configuration shows that former contract:
 
 :::warning Callback files must live inside `basePath`
 
@@ -1335,10 +1328,10 @@ providers:
 
 ### Using Vector Stores with Assistants
 
-Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store:
+The retired Azure OpenAI Assistants integration supported file search with vector stores. Its setup required:
 
-1. Create a vector store in the Azure Portal or via the API
-2. Configure your assistant to use it:
+1. A vector store created in the Azure Portal or via the API
+2. An assistant configuration referencing that store:
 
 ```yaml
 providers:
@@ -1359,15 +1352,11 @@ providers:
       apiVersion: '2025-04-01-preview'
 ```
 
-Key requirements:
-
-- Set up a tool with `type: file_search`
-- Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
-- Set the appropriate `apiVersion` (recommended: `2025-04-01-preview` or later)
+This archived configuration used a `file_search` tool, the `tool_resources.file_search.vector_store_ids` array, and the `2025-04-01-preview` API version.
 
 ### Simple Example
 
-Here's an example of a simple full assistant eval:
+This archived eval shows the former Azure OpenAI assistant configuration:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -1384,9 +1373,9 @@ tests:
       topic: bananas
 ```
 
-For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
+Historical Azure OpenAI Assistants configurations are preserved in the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
 
-See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants/) documents compatible endpoints that still implement that API. For Azure, use the [Foundry agent provider](#azure-ai-foundry-agents) for new agent evaluations.
 
 ## Azure AI Foundry Agents
 
@@ -1617,11 +1606,7 @@ Use Azure Foundry Agents when:
 - You're using managed identities or service principals for authentication
 - You want to leverage Azure AI Projects features
 
-Use standard Azure Assistants when:
-
-- You're using Azure OpenAI Service directly (not through AI Foundry)
-- You have an existing Azure OpenAI resource and endpoint
-- You prefer API key-based authentication
+Azure OpenAI Assistants is retired. Existing Azure OpenAI resources and API keys do not restore that API; migrate to a Foundry agent and configure its project URL and agent name.
 
 ### Example Repository
 
@@ -1629,7 +1614,15 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-The `azure:video:<deployment name>` provider sends text prompts to Azure's video generation jobs API. Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
+The `azure:video:<deployment name>` provider sends text prompts to Azure's legacy Sora jobs API (`/openai/v1/video/generations/jobs`). Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
+
+:::warning Check the deployed model version
+
+Azure's [retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule) lists October 15, 2026 for `sora-2` version `2025-12-08`, with no replacement. This differs from the native OpenAI Videos API's September 24 shutdown.
+
+Sora 2 uses a [different Videos API and request schema](https://learn.microsoft.com/en-us/azure/foundry-classic/openai/concepts/video-generation#model-comparison). Changing the deployment name on `azure:video:` does not implement that protocol, and the Sora 2 date does not establish availability of the legacy jobs API. Keep these legacy configurations only for existing deployments whose availability you have verified in Azure.
+
+:::
 
 ### Prerequisites
 
@@ -1705,7 +1698,7 @@ tests:
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
-- [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
+- [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Legacy workflow for Assistants-compatible endpoints
 - [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
   - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples
   - [Claude](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/claude) - Anthropic Claude on Azure AI Foundry
@@ -1713,5 +1706,5 @@ tests:
   - [DeepSeek](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/deepseek) - DeepSeek reasoning models
   - [Mistral](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/mistral) - Mistral models
   - [Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/comparison) - Multi-provider comparison
-  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Assistant with tools examples
+  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Archived Azure Assistants configurations
   - [Foundry Agent](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) - Azure AI Foundry Agents
