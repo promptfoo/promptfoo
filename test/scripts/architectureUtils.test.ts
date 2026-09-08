@@ -53,6 +53,14 @@ require.resolve('path');`;
     expect(extractModuleSpecifiers(source, 'fixture.ts')).toHaveLength(12);
   });
 
+  it('counts all JavaScript line terminators with CRLF as one line', () => {
+    const source =
+      "import 'a';\r\nimport 'b';\rimport 'c';\u2028import 'd';\u2029import 'e';\nimport 'f';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
   it('surfaces computed loaders without inventing literal dependencies', () => {
     const source =
       "import(target); require(target); require.resolve(target); import(`fixed`); // import('fake')";

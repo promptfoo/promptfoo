@@ -315,7 +315,7 @@ export function extractModuleReferences(sourceText: string, filePath: string): M
       specifier,
       kind,
       syntax,
-      line: sourceText.slice(0, node.start).split('\n').length,
+      line: sourceText.slice(0, node.start).split(/\r\n|[\n\r\u2028\u2029]/u).length,
     });
   };
   new Visitor({
@@ -1015,14 +1015,14 @@ export function buildArchitectureReport(
       ];
     }),
   );
+  const sourceRoots = ['src', 'packages', ...config.layers.flatMap((layer) => layer.roots)];
   const unresolvedInternal = sourceScan.references.filter(
     (reference) =>
       !reference.resolvedImport &&
       (reference.specifier.startsWith('.') ||
         reference.specifier.startsWith('/') ||
         reference.specifier.startsWith('#') ||
-        reference.specifier === 'src' ||
-        reference.specifier.startsWith('src/') ||
+        sourceRoots.some((root) => isWithinRoot(reference.specifier, root)) ||
         Object.keys(config.aliases ?? {}).some(
           (alias) => reference.specifier === alias || reference.specifier.startsWith(`${alias}/`),
         )),

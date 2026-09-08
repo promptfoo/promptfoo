@@ -109,6 +109,28 @@ describe('computeCrossLayerEdges', () => {
     ).toThrow('includeFacade: true');
   });
 
+  it('reports unresolved package and configured-root paths as internal references', () => {
+    const config = configWith([
+      { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+      { name: 'shared', roots: ['internal/shared'], allowedDependencies: [] },
+    ]);
+    write(
+      'src/index.ts',
+      "import 'packages/missing'; import 'internal/shared/missing'; import 'external';",
+    );
+    write('internal/shared/index.ts');
+    const report = buildArchitectureReport(
+      repoRoot,
+      config,
+      scanArchitectureSources(repoRoot, config, { includeFacade: true }),
+    );
+    expect(report.unresolvedInternal.map(({ specifier }) => specifier)).toEqual([
+      'packages/missing',
+      'internal/shared/missing',
+    ]);
+    expect(report.entrypoints['src/index.ts'].value.externalSpecifiers).toEqual(['external']);
+  });
+
   it('runs the real JSON checker with clean stdout and preserves failure exit status', () => {
     const config = configWith([
       { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
