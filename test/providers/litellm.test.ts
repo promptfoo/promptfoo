@@ -307,6 +307,33 @@ describe('LiteLLM Provider', () => {
       expect(typeof provider.callEmbeddingApi).toBe('function');
     });
 
+    it('forwards cache bypass to the wrapped embedding provider', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { data: [{ embedding: [0.1] }] },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
+      const abortSignal = new AbortController().signal;
+
+      expect(
+        await provider.callEmbeddingApi!(
+          'text',
+          { prompt: { raw: 'text', label: 'text' }, vars: {}, bustCache: true },
+          { abortSignal },
+        ),
+      ).toMatchObject({ embedding: [0.1] });
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: abortSignal }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
     it('should be recognized as a valid embedding provider', () => {
       const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
       // Check that it has either callEmbeddingApi or callSimilarityApi (matching matcher provider validation)
