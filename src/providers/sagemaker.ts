@@ -647,12 +647,20 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Create a deterministic representation of the request parameters
     const configForKey = {
       endpoint: this.getEndpointName(),
-      modelType: this.config.modelType,
+      modelType: this.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),
-      maxTokens: this.config.maxTokens,
-      temperature: this.config.temperature,
-      topP: this.config.topP,
+      maxTokens: this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024,
+      temperature:
+        typeof this.config.temperature === 'number'
+          ? this.config.temperature
+          : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7),
+      topP:
+        typeof this.config.topP === 'number'
+          ? this.config.topP
+          : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0),
+      stopSequences: this.config.stopSequences || [],
+      responsePath: this.config.responseFormat?.path,
       region: this.getRegion(),
     };
 

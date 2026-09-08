@@ -203,13 +203,13 @@ describe('HyperbolicAudioProvider', () => {
     it('should calculate cost based on text length', () => {
       provider = new HyperbolicAudioProvider('Melo-TTS', {});
       const textLength = 5000; // 5000 characters
-      expect(provider['calculateAudioCost'](textLength)).toBe(0.005); // $0.001 per 1000 chars
+      expect(provider['calculateAudioCost'](textLength)).toBe(0.025); // $5 per million chars
     });
 
     it('should handle partial thousands', () => {
       provider = new HyperbolicAudioProvider('Melo-TTS', {});
       const textLength = 1500; // 1.5 thousand characters
-      expect(provider['calculateAudioCost'](textLength)).toBe(0.0015);
+      expect(provider['calculateAudioCost'](textLength)).toBe(0.0075);
     });
   });
 });

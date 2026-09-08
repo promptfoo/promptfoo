@@ -19,7 +19,7 @@ if ! command -v litellm &>/dev/null; then
 fi
 
 # Check for at least one API key
-if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GOOGLE_AI_API_KEY" ]; then
+if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${GOOGLE_AI_API_KEY:-}" ]; then
   echo "ERROR: No API keys found. Set at least one of the environment variables above."
   exit 1
 fi
@@ -27,10 +27,6 @@ fi
 echo "Starting proxy on http://localhost:4000..."
 echo ""
 
-# Start the proxy with models used in the example
-litellm \
-  --model gpt-4.1 \
-  --model claude-sonnet-4-6 \
-  --model gemini-2.5-pro \
-  --model text-embedding-3-large \
-  --port 4000
+# Load the backend routes and public model aliases from the example config.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+litellm --config "$SCRIPT_DIR/litellm_config.yaml" --port 4000
