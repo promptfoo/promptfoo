@@ -80,7 +80,9 @@ rejects malformed bytes; it does not start an OTLP receiver.
 
 The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
 the acceptance scripts/fixtures into a temporary tool package. Its three tools
-use exact versions from the repository lockfile; the installed Promptfoo consumer
+and their complete dependency graph are copied from the repository lockfile,
+including integrity hashes and optional native packages, then installed with `npm ci`.
+The installed Promptfoo consumer
 resolves dependencies independently. No repository dependency install or build is
 required on those platforms. Incremental TypeScript compiler state is excluded
 from the published archive.

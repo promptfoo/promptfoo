@@ -121,7 +121,7 @@ describe('standalone artifact tooling', () => {
     expect(fs.readdirSync(root)).toHaveLength(count);
   });
 
-  it('prepares only the pinned test tools and preserves a selected archive with spaces', () => {
+  it('locks the complete test-tool dependency tree and preserves a selected archive with spaces', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact tools with spaces '));
     directories.push(root);
     const tarball = path.join(root, 'selected archive.tgz');
@@ -136,13 +136,96 @@ describe('standalone artifact tooling', () => {
     expect(fs.readFileSync(tarball, 'utf8')).toBe('selected bytes');
     const manifest = JSON.parse(fs.readFileSync(path.join(output.tooling, 'package.json'), 'utf8'));
     expect(manifest.private).toBe(true);
-    expect(Object.keys(manifest.dependencies).sort()).toEqual(['semver', 'tsx', 'typescript']);
-    for (const version of Object.values(manifest.dependencies)) {
-      expect(version).toMatch(/^\d+\.\d+\.\d+/);
+    const repositoryLock = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../package-lock.json'), 'utf8'),
+    );
+    expect(manifest.dependencies).toEqual(
+      Object.fromEntries(
+        ['tsx', 'typescript', 'semver'].map((name) => [
+          name,
+          repositoryLock.packages[`node_modules/${name}`].version,
+        ]),
+      ),
+    );
+    expect(manifest).not.toHaveProperty('devDependencies');
+    expect(manifest).not.toHaveProperty('workspaces');
+    const toolingLock = JSON.parse(
+      fs.readFileSync(path.join(output.tooling, 'package-lock.json'), 'utf8'),
+    );
+    expect(toolingLock.lockfileVersion).toBe(3);
+    expect(toolingLock.packages[''].dependencies).toEqual(manifest.dependencies);
+    expect(toolingLock.packages['']).not.toHaveProperty('devDependencies');
+    expect(toolingLock.packages['']).not.toHaveProperty('workspaces');
+    const nativePackages = ['esbuild', 'typescript'].flatMap((name) =>
+      Object.keys(repositoryLock.packages[`node_modules/${name}`].optionalDependencies).map(
+        (dependency) => `node_modules/${dependency}`,
+      ),
+    );
+    const expectedPackages = [
+      'node_modules/tsx',
+      'node_modules/typescript',
+      'node_modules/semver',
+      'node_modules/esbuild',
+      'node_modules/tsx/node_modules/fsevents',
+      ...nativePackages,
+    ];
+    expect(Object.keys(toolingLock.packages).sort()).toEqual(['', ...expectedPackages].sort());
+    for (const packagePath of expectedPackages) {
+      const expected = { ...repositoryLock.packages[packagePath] };
+      delete expected.dev;
+      delete expected.devOptional;
+      expect(toolingLock.packages[packagePath]).toMatchObject(expected);
+      expect(toolingLock.packages[packagePath]).not.toHaveProperty('dev');
+      expect(toolingLock.packages[packagePath]).not.toHaveProperty('devOptional');
     }
-    for (const excluded of ['src', 'dist', 'drizzle', 'node_modules', 'package-lock.json']) {
+    for (const excluded of ['src', 'dist', 'drizzle', 'node_modules']) {
       expect(fs.existsSync(path.join(output.tooling, excluded))).toBe(false);
     }
+  });
+
+  it('rejects a missing transitive tool dependency before creating an installable bootstrap', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-missing-lock-edge-'));
+    directories.push(root);
+    const scripts = path.join(root, 'scripts');
+    const temporary = path.join(root, 'temporary');
+    const artifacts = path.join(root, 'artifacts');
+    const fixtures = path.join(root, 'test', 'fixtures', 'package-artifact');
+    for (const directory of [scripts, temporary, artifacts, fixtures]) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
+    for (const filename of [
+      'preparePackageArtifactTest.mjs',
+      'testPackageArtifact.ts',
+      'packPackageArtifact.ts',
+      'postbuild.ts',
+    ]) {
+      fs.copyFileSync(
+        path.resolve(__dirname, '../../scripts', filename),
+        path.join(scripts, filename),
+      );
+    }
+    const lock = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../package-lock.json'), 'utf8'),
+    );
+    delete lock.packages['node_modules/esbuild'];
+    fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify(lock));
+    fs.writeFileSync(path.join(artifacts, 'selected.tgz'), 'selected bytes');
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(scripts, 'preparePackageArtifactTest.mjs'),
+        '--artifact-directory',
+        artifacts,
+        '--temp-root',
+        temporary,
+      ],
+      { encoding: 'utf8', timeout: 5_000, env: { ...process.env, GITHUB_OUTPUT: '' } },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('esbuild');
+    expect(fs.readdirSync(temporary)).toEqual([]);
+    expect(fs.readFileSync(path.join(artifacts, 'selected.tgz'), 'utf8')).toBe('selected bytes');
   });
 });
 
