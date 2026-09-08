@@ -218,7 +218,8 @@ providers:
 
 tests:
   - assert:
-      - type: is-valid-audio
+      - type: javascript
+        value: "typeof output === 'string' && output.length > 0"
 ```
 
 ### Vision-Language Model Example
