@@ -87,6 +87,25 @@ it('recognizes a subclass implementation that replaces an inherited text stub', 
   expect((await provider.callApi()).output).toBe('implemented by subclass');
 });
 
+it('honors a subclass prototype capability getter over an inherited instance marker', async () => {
+  class RestrictedEmbeddingProvider extends OpenAiEmbeddingProvider {
+    override async callApi(): Promise<never> {
+      throw new Error('text unavailable');
+    }
+  }
+  const getCapabilities = vi.fn(() => ['callEmbeddingApi']);
+  Object.defineProperty(RestrictedEmbeddingProvider.prototype, 'promptfooCapabilities', {
+    get: getCapabilities,
+  });
+  const provider = new RestrictedEmbeddingProvider('fixture');
+  expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(true);
+  expect(hasProviderCapability(provider, 'callApi')).toBe(false);
+  expect(getCapabilities).toHaveBeenCalled();
+  await expect(getAndCheckProvider('text', provider, null, 'rubric')).rejects.toThrow(
+    'not a valid text provider',
+  );
+});
+
 it('recognizes an override on the same prototype as its capability declaration', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     static override readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
