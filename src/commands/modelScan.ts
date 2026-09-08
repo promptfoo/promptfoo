@@ -21,7 +21,7 @@ import {
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
-import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { parseModelAuditArgs } from '../util/modelAuditCliParser';
 import { checkModelAuditInstalled } from '../util/modelAuditInstall';
 import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
@@ -173,35 +173,6 @@ function shouldRescan(
     return true;
   }
   return existingVersion !== currentVersion;
-}
-
-/**
- * Warn about deprecated CLI options.
- */
-function warnDeprecatedOptions(options: Record<string, unknown>): void {
-  const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
-    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-    return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
-  });
-
-  for (const opt of deprecatedOptionsUsed) {
-    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-    const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
-
-    if (replacement) {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Use '${replacement}' instead.`);
-    } else if (fullOption === '--jfrog-api-token') {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN env var.`);
-    } else if (fullOption === '--jfrog-access-token') {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN env var.`);
-    } else if (fullOption === '--registry-uri') {
-      logger.warn(
-        `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI env var.`,
-      );
-    } else {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated and has been removed.`);
-    }
-  }
 }
 
 /**
@@ -932,9 +903,6 @@ export function modelScanCommand(program: Command): void {
         return;
       }
 
-      // Warn about deprecated options
-      warnDeprecatedOptions(options as Record<string, unknown>);
-
       // Check modelaudit installation
       const { installed, version: currentScannerVersion } = await checkModelAuditInstalled();
       if (!installed) {
@@ -1002,9 +970,6 @@ export function modelScanCommand(program: Command): void {
         return;
       }
       const args = parsed.args;
-      if (parsed.unsupportedOptions.length > 0) {
-        logger.warn(`Unsupported options detected: ${parsed.unsupportedOptions.join(', ')}`);
-      }
 
       if (saveToDatabase || outputFormat === 'text') {
         logger.info(`Running model scan on: ${paths.join(', ')}`);
