@@ -27,7 +27,7 @@ import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
-import { isPromptfooSampleTarget } from './providers/shared';
+import { awaitProviderOperation, isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -1429,6 +1429,7 @@ async function gradeRunEvalResponse({
   vars: Vars;
 }) {
   const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
+    abortSignal,
     evalId,
     prompt,
     promptIdx,
@@ -1494,6 +1495,7 @@ async function gradeRunEvalResponse({
 }
 
 async function transformRunEvalResponse({
+  abortSignal,
   evalId,
   prompt,
   promptIdx,
@@ -1503,6 +1505,7 @@ async function transformRunEvalResponse({
   testIdx,
   vars,
 }: {
+  abortSignal?: AbortSignal;
   evalId?: string;
   prompt: Prompt;
   promptIdx: number;
@@ -1517,20 +1520,25 @@ async function transformRunEvalResponse({
 }> {
   const processedResponse = { ...response };
   if (provider.transform) {
-    processedResponse.output = await transform(provider.transform, processedResponse.output, {
-      vars,
-      prompt,
-    });
+    abortSignal?.throwIfAborted();
+    processedResponse.output = await awaitProviderOperation(
+      transform(provider.transform, processedResponse.output, { vars, prompt }),
+      abortSignal,
+    );
   }
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
   if (testTransform) {
-    processedResponse.output = await transform(testTransform, processedResponse.output, {
-      vars,
-      prompt,
-      ...(response && response.metadata && { metadata: response.metadata }),
-    });
+    abortSignal?.throwIfAborted();
+    processedResponse.output = await awaitProviderOperation(
+      transform(testTransform, processedResponse.output, {
+        vars,
+        prompt,
+        ...(response && response.metadata && { metadata: response.metadata }),
+      }),
+      abortSignal,
+    );
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');

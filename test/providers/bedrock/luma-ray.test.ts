@@ -239,6 +239,18 @@ describe('LumaRayVideoProvider', () => {
   });
 
   describe('Text-to-Video Generation', () => {
+    it('cancels a pending credential lookup before starting a video job', async () => {
+      const controller = new AbortController();
+      const credentials = vi
+        .spyOn(provider, 'getCredentials')
+        .mockImplementation(() => new Promise(() => {}));
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled credentials'));
+      await expect(call).rejects.toThrow('cancelled credentials');
+      expect(mockBedrockSend).not.toHaveBeenCalled();
+    });
+
     it('stops waiting for an S3 response body after cancellation', async () => {
       const controller = new AbortController();
       let started!: () => void;

@@ -1006,11 +1006,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await this.getCachedResponse(
-        cache,
-        cacheKey,
-        ephemeralCacheKey,
-        cacheClearGeneration,
+      const cachedResponse = await awaitProviderOperation(
+        this.getCachedResponse(cache, cacheKey, ephemeralCacheKey, cacheClearGeneration),
+        options?.abortSignal,
       );
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
@@ -1093,19 +1091,25 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       if (shouldUseResponseCache) {
         try {
-          await this.setCachedResponse(
-            cache,
-            cacheKey,
-            ephemeralCacheKey,
-            cacheClearGeneration,
-            getCacheTtlMs(),
-            JSON.stringify(resolvedMessage),
+          options?.abortSignal?.throwIfAborted();
+          await awaitProviderOperation(
+            this.setCachedResponse(
+              cache,
+              cacheKey,
+              ephemeralCacheKey,
+              cacheClearGeneration,
+              getCacheTtlMs(),
+              JSON.stringify(resolvedMessage),
+            ),
+            options?.abortSignal,
           );
         } catch (err) {
+          options?.abortSignal?.throwIfAborted();
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
+      options?.abortSignal?.throwIfAborted();
       const response = this.buildMessageResponse(
         resolvedMessage,
         config,
