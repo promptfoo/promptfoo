@@ -57,7 +57,9 @@ By default, eval results are stored locally. Inputs and outputs may leave your m
 
 ### Do you collect any PII?
 
-We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, or invoke a Cloud-backed feature. Setting `PROMPTFOO_DISABLE_TELEMETRY=1` prevents telemetry event requests, including the opt-out acknowledgment. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
+We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, or invoke a Cloud-backed feature. Setting `PROMPTFOO_DISABLE_TELEMETRY=1` prevents telemetry event requests from the CLI and backend, including the opt-out acknowledgment. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
+
+Browser PostHog telemetry and session replay are configured separately at build time. To opt out, build the Web UI with `PROMPTFOO_DISABLE_TELEMETRY=true`; the browser check does not recognize `1`. Changing the variable at runtime does not alter prebuilt Web UI assets.
 
 ### How do I configure Promptfoo for corporate networks or proxies?
 
