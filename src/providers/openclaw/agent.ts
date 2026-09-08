@@ -555,7 +555,7 @@ export class OpenClawAgentProvider implements ApiProvider {
       ...(authState.auth && { auth: authState.auth }),
     };
 
-    const device = this.buildSignedDevice(authState, nonce);
+    const device = this.buildSignedDevice(authState, nonce, frame.payload?.ts);
     if (device) {
       params.device = device;
     }
@@ -566,9 +566,18 @@ export class OpenClawAgentProvider implements ApiProvider {
   private buildSignedDevice(
     authState: ConnectAuthState,
     nonce: string,
+    challengeTimestamp: unknown,
   ): ReturnType<typeof buildSignedOpenClawDevice> | undefined {
     if (!authState.deviceIdentity || this.openclawConfig.disable_device_auth) {
       return undefined;
+    }
+
+    if (
+      typeof challengeTimestamp !== 'number' ||
+      !Number.isInteger(challengeTimestamp) ||
+      challengeTimestamp < 0
+    ) {
+      throw new Error('Invalid OpenClaw connect challenge timestamp');
     }
 
     try {
@@ -579,6 +588,7 @@ export class OpenClawAgentProvider implements ApiProvider {
         role: CLIENT_ROLE,
         scopes: authState.scopes,
         nonce,
+        nowMs: challengeTimestamp,
         token: authState.signatureToken,
         platform: process.platform,
         deviceFamily: this.openclawConfig.device_family,
