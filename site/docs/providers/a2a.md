@@ -84,6 +84,7 @@ context, similar to how the MCP provider uses discovered tools.
 | `polling.timeoutMs`  | number                       | `300000` | Maximum time to wait for task completion                                    |
 | `message`            | object                       | -        | Custom A2A message template                                                 |
 | `configuration`      | object                       | -        | A2A message configuration sent with each request                            |
+| `metadata`           | object                       | -        | A2A request metadata sent with each request                                 |
 | `transformResponse`  | string \| Function           | -        | JavaScript transform for reshaping the final provider response              |
 | `timeoutMs`          | number                       | -        | Per-request HTTP timeout. Defaults to promptfoo's provider request timeout. |
 
@@ -229,9 +230,11 @@ providers:
           - text: '{{prompt}}'
       configuration:
         returnImmediately: false
+      metadata:
+        metadata_field: '{{metadata_field_value}}'
 ```
 
-Promptfoo renders Nunjucks variables in `message`, `auth`, `headers`, `agentCardUrl`, `url`, and
+Promptfoo renders Nunjucks variables in `message`, `auth`, `headers`, `agentCardUrl`, `url`, `metadata` and
 `configuration`. It also adds a stable `messageId` and uses `sessionId` as the A2A `contextId` when
 available.
 
