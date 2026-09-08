@@ -52,9 +52,8 @@ export async function runBedrockVideoJob(
   let invocationArn: string | undefined;
   let phase = 'Failed to start video generation';
   try {
-    const { BedrockRuntimeClient, StartAsyncInvokeCommand, GetAsyncInvokeCommand } = await import(
-      '@aws-sdk/client-bedrock-runtime'
-    );
+    const { BedrockRuntimeClient, StartAsyncInvokeCommand, GetAsyncInvokeCommand } =
+      await awaitProviderOperation(import('@aws-sdk/client-bedrock-runtime'), signal);
     client = new BedrockRuntimeClient(await clientConfig(provider, signal));
     const started = await awaitProviderOperation(
       client.send(
@@ -139,7 +138,10 @@ export async function storeBedrockVideo(
     }
     const [, bucket, prefix] = match;
     const key = `${prefix.replace(/\/$/, '')}/output.mp4`;
-    const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const { S3Client, GetObjectCommand } = await awaitProviderOperation(
+      import('@aws-sdk/client-s3'),
+      signal,
+    );
     client = new S3Client(await clientConfig(provider, signal));
     logger.debug(`[${label}] Downloading video from S3`, { bucket, key });
     const response = await awaitProviderOperation(
