@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
@@ -311,6 +311,139 @@ describe('OpenRouter', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    describe('response cost', () => {
+      beforeEach(() => {
+        mockedFetchWithRetries.mockReset();
+      });
+
+      function mockResponse(usage: unknown, status = 200) {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          Response.json(
+            { choices: [{ message: { content: 'Cost fixture' }, finish_reason: 'stop' }], usage },
+            { status, statusText: status === 200 ? 'OK' : 'Bad Request' },
+          ),
+        );
+      }
+
+      function provider(config: Record<string, unknown> = {}, model = 'openai/gpt-4o') {
+        return new OpenRouterProvider(model, { config: { apiKey: 'test-key', ...config } });
+      }
+
+      it('uses the total account charge rather than upstream inference cost', async () => {
+        mockResponse({
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+          cost: 0.012,
+          cost_details: { upstream_inference_cost: 0.8 },
+        });
+        const result = await provider().callApi('Cost prompt');
+        expect(result.cost).toBe(0.012);
+        expect(result.output).toBe('Cost fixture');
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 20, total: 30 });
+      });
+
+      it.each([0, 0.25])('accepts reported cost %s without token counts', async (cost) => {
+        mockResponse({ cost });
+        expect((await provider().callApi('Cost prompt')).cost).toBe(cost);
+      });
+
+      it.each([
+        undefined,
+        null,
+        {},
+        { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      ])('does not borrow native OpenAI prices when billing is absent (%j)', async (usage) => {
+        mockResponse(usage);
+        const result = await provider({}, 'gpt-4o').callApi('Cost prompt');
+        expect(result.output).toBe('Cost fixture');
+        expect(result.cost).toBeUndefined();
+      });
+
+      it.each([-1, '0.01', null, {}, true])('rejects malformed reported cost %j', async (cost) => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost });
+        const result = await provider({}, 'gpt-4o').callApi('Cost prompt');
+        expect(result.output).toBe('Cost fixture');
+        expect(result.cost).toBeUndefined();
+      });
+
+      it('preserves complete explicit per-token rates for arbitrary gateway IDs', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        const result = await provider({ cost: 0.01 }, 'vendor/custom-model').callApi('Cost prompt');
+        expect(result.cost).toBeCloseTo(0.3);
+      });
+
+      it('gives directional rates priority over the shared rate', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 1.5 });
+        const result = await provider({ cost: 1, inputCost: 0.01, outputCost: 0.02 }).callApi(
+          'Cost prompt',
+        );
+        expect(result.cost).toBe(0.5);
+      });
+
+      it('preserves an explicit zero rate', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        expect((await provider({ cost: 0 }).callApi('Cost prompt')).cost).toBe(0);
+      });
+
+      it('honors prompt-level cost overrides', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        const result = await provider({ cost: 1 }).callApi('Cost prompt', {
+          vars: {},
+          prompt: { raw: 'Cost prompt', label: 'Cost prompt', config: { cost: 0.01 } },
+        });
+        expect(result.cost).toBeCloseTo(0.3);
+      });
+
+      it.each([{ inputCost: 0.01 }, { cost: -1 }, { cost: Infinity }, { cost: NaN }])(
+        'does not invent cost for incomplete or invalid manual rates (%j)',
+        async (config) => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+          expect((await provider(config, 'gpt-4o').callApi('Cost prompt')).cost).toBeUndefined();
+        },
+      );
+
+      it('leaves a manual estimate unknown when token counts are missing', async () => {
+        mockResponse({ cost: 0.5 });
+        expect((await provider({ cost: 0.01 }).callApi('Cost prompt')).cost).toBeUndefined();
+      });
+
+      it('keeps custom endpoint routing and authorization when reading cost', async () => {
+        mockResponse({ cost: 0.25 });
+        const result = await provider({
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+          apiKey: 'custom-fixture-key',
+        }).callApi('Cost prompt');
+        expect(result.cost).toBe(0.25);
+        const [url, options] = mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe('https://proxy.example.com/openrouter/api/v1/chat/completions');
+        expect(options?.headers).toMatchObject({ Authorization: 'Bearer custom-fixture-key' });
+      });
+
+      it.each([{}, { cost: 1 }])('does not rebill a promptfoo cache hit (%j)', async (config) => {
+        expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
+        enableCache();
+        try {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.25 });
+          const instance = provider(config);
+          const first = await instance.callApi('Cost cache prompt');
+          const second = await instance.callApi('Cost cache prompt');
+          expect(first.cached).toBe(false);
+          expect(second).toMatchObject({ cached: true, cost: 0, tokenUsage: { cached: 30 } });
+          expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        } finally {
+          disableCache();
+        }
+      });
+
+      it('preserves HTTP errors without assigning their billing metadata', async () => {
+        mockResponse({ cost: 0.25 }, 400);
+        const result = await provider().callApi('Cost prompt');
+        expect(result.error).toContain('API error: 400');
+        expect(result.cost).toBeUndefined();
+      });
     });
 
     describe('Thinking tokens handling', () => {
