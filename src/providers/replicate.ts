@@ -7,6 +7,7 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
+import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 
@@ -146,7 +147,12 @@ export class ReplicateProvider implements ApiProvider {
     return true;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'replicate',
@@ -175,10 +181,13 @@ export class ReplicateProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
   }
 
-  protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  protected async callApiInternal(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
@@ -258,6 +267,7 @@ export class ReplicateProvider implements ApiProvider {
           : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
@@ -275,7 +285,7 @@ export class ReplicateProvider implements ApiProvider {
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
         cached = false;
-        response = await this.pollForCompletion(response.id);
+        response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
       if (response.status === 'failed') {
@@ -339,15 +349,20 @@ export class ReplicateProvider implements ApiProvider {
     };
   }
 
-  protected async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {
+  protected async pollForCompletion(
+    predictionId: string,
+    signal?: AbortSignal,
+  ): Promise<ReplicatePrediction> {
     const maxPolls = 30; // Max 30 seconds of polling
     const pollInterval = 1000; // 1 second
 
     for (let i = 0; i < maxPolls; i++) {
+      signal?.throwIfAborted();
       const pollResponse = await fetchWithCache(
         `https://api.replicate.com/v1/predictions/${predictionId}`,
         {
           method: 'GET',
+          signal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
           },
@@ -367,7 +382,11 @@ export class ReplicateProvider implements ApiProvider {
         return prediction;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (signal) {
+        await sleepWithAbort(pollInterval, signal);
+      } else {
+        await sleep(pollInterval);
+      }
     }
 
     throw new Error('Prediction timed out');
@@ -397,9 +416,18 @@ export class ReplicateModerationProvider
   extends ReplicateProvider
   implements ApiModerationProvider
 {
-  async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
+  async callModerationApi(
+    prompt: string,
+    assistant: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderModerationResponse> {
     try {
-      const response = await this.callApi(`Human: ${prompt}\n\nAssistant: ${assistant}`);
+      const response = await this.callApi(
+        `Human: ${prompt}\n\nAssistant: ${assistant}`,
+        context,
+        options,
+      );
       // LlamaGuard moderation runs as a chat completion. Preserve any token usage
       // reported by that provider response for downstream assertion metrics.
       const tokenUsageResult = response.tokenUsage ? { tokenUsage: response.tokenUsage } : {};
@@ -466,8 +494,9 @@ export class ReplicateImageProvider extends ReplicateProvider {
   async callApi(
     prompt: string,
     _context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',
@@ -521,6 +550,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
           : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
@@ -538,7 +568,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
       // If still processing, poll for completion
       if (prediction.status === 'starting' || prediction.status === 'processing') {
-        prediction = await this.pollForCompletion(prediction.id);
+        prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
       logger.debug('Final Replicate prediction status', {
