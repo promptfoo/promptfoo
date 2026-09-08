@@ -173,7 +173,7 @@ export function parseGeminiContent(
     if (failure) {
       return respond(failure);
     }
-    if (current.finishReason === 'STOP' && !current.content?.parts) {
+    if (!current.content?.parts && ['STOP', 'MAX_TOKENS'].includes(current.finishReason ?? '')) {
       continue;
     }
     if (facade === 'vertex' && !current.content?.parts) {

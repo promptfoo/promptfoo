@@ -151,6 +151,17 @@ it('preserves subclass text capability through a rate-limit object wrapper', asy
       'callApi',
     ),
   ).toBe(false);
+  const prototypeCapabilities = Object.create({
+    get promptfooCapabilities() {
+      return ['callEmbeddingApi'];
+    },
+  }) as ApiProvider;
+  prototypeCapabilities.id = () => 'prototype-embedding';
+  prototypeCapabilities.callApi = vi.fn().mockRejectedValue(new Error('text stub'));
+  prototypeCapabilities.callEmbeddingApi = vi.fn().mockResolvedValue({ embedding: [1] });
+  const guarded = wrapProviderWithRateLimiting(prototypeCapabilities, registry);
+  expect(hasProviderCapability(guarded, 'callApi')).toBe(false);
+  await expect(getAndCheckProvider('text', guarded, null, 'rubric')).rejects.toThrow();
 });
 
 it('honors a subclass capability exclusion even when it replaces a stub', () => {
