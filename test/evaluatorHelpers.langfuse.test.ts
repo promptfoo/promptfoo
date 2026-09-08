@@ -35,6 +35,51 @@ describe('renderPrompt - Langfuse integration', () => {
       expect(result).toBe('Hello from Langfuse v3');
     });
 
+    it('passes register-derived wrapper values as data', async () => {
+      mockGetPrompt.mockResolvedValue('Compiled prompt');
+      const vars = {
+        stored: '{{7*7}}',
+        wrapper: '{{ "Stored: " ~ stored }}',
+      };
+
+      const result = await renderPrompt(
+        toPrompt('langfuse://test-prompt:3:text'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['stored'],
+      );
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'test-prompt',
+        {
+          stored: '{{7*7}}',
+          wrapper: 'Stored: {{7*7}}',
+        },
+        'text',
+        3,
+        undefined,
+      );
+      expect(vars.wrapper).toBe('{{ "Stored: " ~ stored }}');
+      expect(result).toBe('Compiled prompt');
+    });
+
+    it('retains simple resolved aliases when integration rendering fails', async () => {
+      mockGetPrompt.mockRejectedValue(new Error('Langfuse unavailable'));
+      const vars = {
+        stored: '{{7*7}}',
+        wrapper: 'Stored: {{stored}}',
+      };
+
+      await expect(
+        renderPrompt(toPrompt('langfuse://test-prompt:3:text'), vars, {}, undefined, undefined, [
+          'stored',
+        ]),
+      ).rejects.toThrow('Langfuse unavailable');
+      expect(vars.wrapper).toBe('Stored: {{7*7}}');
+    });
+
     it('should handle langfuse:// prompt with version and type', async () => {
       mockGetPrompt.mockResolvedValue('[{"role": "system", "content": "You are helpful"}]');
 

@@ -61,6 +61,50 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('stores and later reuses template-like output as data', async () => {
+    const storedOutput = 'answer is {{7*7}}';
+    const registers = {};
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi
+        .fn()
+        .mockResolvedValueOnce({ output: storedOutput })
+        .mockResolvedValueOnce({ output: 'done' }),
+    };
+
+    const storedResults = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Generate an answer', label: 'test-label' },
+      test: { options: { storeOutputAs: 'prior_output' } },
+      conversations: {},
+      registers,
+    });
+    expect(storedResults[0].success).toBe(true);
+    expect(registers).toEqual({ prior_output: storedOutput });
+
+    const reusedResults = await runEval({
+      ...defaultOptions,
+      testIdx: 1,
+      provider,
+      prompt: { raw: '{{message}}', label: 'test-label' },
+      test: { vars: { message: 'Previous answer: {{prior_output}}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(reusedResults[0].success).toBe(true);
+    expect(provider.callApi).toHaveBeenLastCalledWith(
+      `Previous answer: ${storedOutput}`,
+      expect.anything(),
+      undefined,
+    );
+    expect(vi.mocked(provider.callApi).mock.calls[1]?.[1]?.vars?.message).toBe(
+      `Previous answer: ${storedOutput}`,
+    );
+    expect(reusedResults[0].vars.message).toBe(`Previous answer: ${storedOutput}`);
+  });
+
   it('should expose eval runtime vars to prompt and provider rendering', async () => {
     await runEval({
       ...defaultOptions,
