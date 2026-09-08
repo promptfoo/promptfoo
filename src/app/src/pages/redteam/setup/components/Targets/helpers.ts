@@ -7,6 +7,10 @@ export function getProviderType(providerId?: string): string | undefined {
     return 'codex-security';
   }
 
+  if (providerId.startsWith('bedrock:agents:')) {
+    return 'bedrock-agent';
+  }
+
   if (providerId.startsWith('file://')) {
     if (/\.(js|ts)(?::[^/\\]+)?$/i.test(providerId)) {
       return 'javascript';
@@ -30,6 +34,14 @@ export function getProviderType(providerId?: string): string | undefined {
   }
   if (providerType === 'ws' || providerType === 'wss') {
     return 'websocket';
+  }
+
+  // Runtime provider prefixes can differ from the target selector's UI types.
+  if (providerType === 'togetherai') {
+    return 'together';
+  }
+  if (providerType === 'llama') {
+    return 'llama.cpp';
   }
 
   return providerType;

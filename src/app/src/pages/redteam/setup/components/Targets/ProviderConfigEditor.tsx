@@ -667,6 +667,7 @@ function ProviderConfigEditor({
 
       {/* Cloud and enterprise providers - use custom config for now */}
       {[
+        'bedrock-agent',
         'sagemaker',
         'databricks',
         'cloudflare-ai',

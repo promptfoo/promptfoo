@@ -3,6 +3,23 @@ import { getProviderType } from './helpers';
 
 describe('getProviderType', () => {
   it.each([
+    ['togetherai:organization/model:revision', 'together'],
+    ['togetherai', 'together'],
+    ['together:organization/model', 'together'],
+    ['llama:organization/model:quantization', 'llama.cpp'],
+    ['llama', 'llama.cpp'],
+    ['llama.cpp', 'llama.cpp'],
+    ['bedrock:agents:deployed-agent-id', 'bedrock-agent'],
+    ['bedrock-agent', 'bedrock-agent'],
+    ['bedrock:converse:amazon.nova-lite-v1:0', 'bedrock'],
+    ['bedrock:amazon.nova-lite-v1:0', 'bedrock'],
+    ['openai:chat:togetherai/my-served-model', 'openai'],
+    ['custom:llama:my-model', 'custom'],
+  ])('maps runtime provider %s to UI type %s without inspecting model names', (id, type) => {
+    expect(getProviderType(id)).toBe(type);
+  });
+
+  it.each([
     {
       providerId: 'a2a:https://agent.example.com/a2a/v1',
       expected: 'a2a',
