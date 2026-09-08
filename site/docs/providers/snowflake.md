@@ -41,7 +41,7 @@ export SNOWFLAKE_ACCOUNT_IDENTIFIER="myorg-myaccount"
 export SNOWFLAKE_API_KEY="your-bearer-token"
 ```
 
-For per-provider connections, set `config.accountIdentifier` and `config.apiKey` together. The eval or provider `env` block can supply `SNOWFLAKE_API_KEY`; a token registered globally or set in the process takes precedence over a provider `env` token.
+For per-provider connections, set `config.accountIdentifier` and `config.apiKey` together. An explicit `config.apiKey` takes precedence over a provider `env.SNOWFLAKE_API_KEY`, which takes precedence over eval or process tokens.
 
 Then use the provider without specifying credentials:
 

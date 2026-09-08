@@ -22,7 +22,7 @@ export CDP_DOMAIN=your-domain-here
 export CDP_TOKEN=your-token-here
 ```
 
-For per-provider connections, set `config.domain` and `config.apiKey` together. The eval or provider `env` block can supply `CDP_TOKEN`; a token registered globally or set in the process takes precedence over a provider `env` token.
+For per-provider connections, set `config.domain` and `config.apiKey` together. An explicit `config.apiKey` takes precedence over a provider `env.CDP_TOKEN`, which takes precedence over eval or process tokens.
 
 ## Basic Usage
 
