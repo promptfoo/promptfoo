@@ -4,6 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { readLayerConfig } from './architectureUtils';
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/', 'packages/'];
@@ -31,11 +33,22 @@ function hasPrefix(filePath: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => filePath.startsWith(prefix));
 }
 
-function isRootOwnedTypeScriptFile(filePath: string): boolean {
-  return !filePath.includes('/') || hasPrefix(filePath, rootOwnedPrefixes);
+function isRootOwnedTypeScriptFile(filePath: string, configuredRoots: string[]): boolean {
+  return (
+    !filePath.includes('/') ||
+    hasPrefix(filePath, rootOwnedPrefixes) ||
+    configuredRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))
+  );
 }
 
 export function getTrackedTypeScriptFiles(repositoryRoot = repoRoot): string[] {
+  const configuredRoots = fs.existsSync(path.join(repositoryRoot, 'architecture/layers.json'))
+    ? readLayerConfig(repositoryRoot).layers.flatMap((layer) =>
+        layer.roots.map((root) =>
+          normalizePath(path.relative(repositoryRoot, path.resolve(repositoryRoot, root))),
+        ),
+      )
+    : [];
   return execFileSync('git', ['ls-files', '-z'], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -46,7 +59,7 @@ export function getTrackedTypeScriptFiles(repositoryRoot = repoRoot): string[] {
     .filter(
       (filePath) =>
         isTypeScriptFile(filePath) &&
-        isRootOwnedTypeScriptFile(filePath) &&
+        isRootOwnedTypeScriptFile(filePath, configuredRoots) &&
         !hasPrefix(filePath, externalProjectPrefixes),
     )
     .sort();
@@ -59,19 +72,31 @@ function runCompiler(configPath: string, repositoryRoot: string, args: string[])
   const result = spawnSync(process.execPath, [compilerPath, '--project', configPath, ...args], {
     cwd: repositoryRoot,
     encoding: 'utf8',
+    // The root project includes dependency declarations; its file list is large.
+    maxBuffer: 16 * 1024 * 1024,
   });
   if (result.error) {
     throw result.error;
   }
   if (result.status !== 0) {
+    const output = args.includes('--listFilesOnly')
+      ? result.stdout
+          .split(/\r?\n/)
+          .filter((line) => /\berror TS\d+:/.test(line) || /^\s+\S/.test(line))
+          .join('\n')
+      : result.stdout;
+    const diagnostics = [output.trim(), result.stderr.trim()].filter(Boolean).join('\n');
     throw new Error(
-      `Could not read TypeScript project ${normalizePath(path.relative(repositoryRoot, configPath))}:\n${result.stdout}${result.stderr}`,
+      `Could not read TypeScript project ${normalizePath(path.relative(repositoryRoot, configPath))}:\n${diagnostics || `Compiler exited with status ${result.status}`}`,
     );
   }
   return result.stdout;
 }
 
 function readProjectConfig(configPath: string, repositoryRoot: string): ProjectConfig {
+  // --showConfig can discard invalid options without returning an error.
+  // Validate every project, including root reference diagnostics, without emitting.
+  runCompiler(configPath, repositoryRoot, ['--listFilesOnly', '--pretty', 'false']);
   return JSON.parse(runCompiler(configPath, repositoryRoot, ['--showConfig']));
 }
 
@@ -111,9 +136,6 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
         continue;
       }
       visited.add(referencedConfigPath);
-      // --showConfig can discard invalid options without returning an error.
-      // --listFilesOnly reports config diagnostics without emitting build files.
-      runCompiler(referencedConfigPath, repositoryRoot, ['--listFilesOnly', '--pretty', 'false']);
       const referencedConfig = readProjectConfig(referencedConfigPath, repositoryRoot);
       const projectPrefix = `${normalizePath(
         path.relative(repositoryRoot, path.dirname(referencedConfigPath)),
