@@ -166,7 +166,11 @@ describeEvaluator('evaluator execution control', () => {
     const provider: ApiProvider = {
       id: () => 'delayed-provider',
       delay: 10_000,
-      callApi: vi.fn().mockResolvedValue({ output: 'ready' }),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ready',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+      }),
     };
     const suite: TestSuite = {
       providers: [provider],
@@ -180,6 +184,12 @@ describeEvaluator('evaluator execution control', () => {
       await vi.waitFor(() => expect(delay).toHaveBeenCalledOnce());
       controller.abort(new Error('cancelled post-provider delay'));
       await pending.catch(() => undefined);
+      const rows = await evalRecord.getResults();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response?.output).toBe('ready');
+      expect(rows[0].cost).toBe(0.25);
+      expect(rows[0].response?.tokenUsage?.total).toBe(5);
+      expect(evalRecord.getStats().tokenUsage.total).toBe(5);
     } finally {
       controller.abort();
       delay.mockRestore();

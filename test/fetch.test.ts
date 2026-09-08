@@ -480,7 +480,7 @@ describe('fetchWithProxy', () => {
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
-    expect(actualEncoding).toBe('utf8');
+    expect(actualEncoding).toEqual({ encoding: 'utf8', signal: undefined });
     expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
@@ -500,6 +500,31 @@ describe('fetchWithProxy', () => {
       expect.anything(),
       expect.objectContaining({ dispatcher: expect.any(Object) }),
     );
+  });
+
+  it('aborts while a custom CA certificate is being read', async () => {
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture/ca.pem' });
+    vi.mocked(getEnvString).mockImplementation((key) =>
+      key === 'PROMPTFOO_CA_CERT_PATH' ? '/fixture/ca.pem' : '',
+    );
+    const controller = new AbortController();
+    const reason = new Error('cancelled CA read');
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
+    global.fetch = mockFetch;
+    vi.mocked(fsPromises.readFile).mockImplementation((_path, options) => {
+      const signal = (options as { signal?: AbortSignal }).signal;
+      return signal
+        ? new Promise((_, reject) =>
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+          )
+        : Promise.resolve('fixture-ca');
+    });
+
+    const request = fetchWithProxy('https://example.com', {}, controller.signal);
+    await vi.waitFor(() => expect(fsPromises.readFile).toHaveBeenCalledOnce());
+    controller.abort(reason);
+    await expect(request).rejects.toBe(reason);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
@@ -640,7 +665,7 @@ describe('fetchWithProxy', () => {
     const normalizedCertPath = path.normalize(mockCertPath);
 
     expect(normalizedActual).toBe(normalizedExpected);
-    expect(actualEncoding).toBe('utf8');
+    expect(actualEncoding).toEqual({ encoding: 'utf8', signal: undefined });
     expect(normalizedActual).toContain(normalizedBasePath);
     expect(normalizedActual).toContain(normalizedCertPath);
     expect(ProxyAgent).toHaveBeenCalledWith({
