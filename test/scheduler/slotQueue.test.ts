@@ -552,6 +552,50 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(1);
       expect(queue.getQueueDepth()).toBe(0);
     });
+
+    it('does not let Retry-After be bypassed by shorter quota reset clocks', () => {
+      const parsed = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '1',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '10s',
+      });
+
+      queue.updateRateLimitState(parsed);
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('retry-after-limited'));
+
+      vi.advanceTimersByTime(10000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(20000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('does not let Retry-After shorten a longer quota reset clock', () => {
+      const resetAt = Date.now() + 60000;
+      queue.updateRateLimitState({
+        remainingTokens: 0,
+        resetAt,
+        resetAtTokens: resetAt,
+      });
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('longer-quota-reset'));
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
   });
 
   describe('isQuotaExhausted - clears stale state after reset time', () => {

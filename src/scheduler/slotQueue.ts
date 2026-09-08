@@ -162,6 +162,11 @@ export class SlotQueue {
       const newResetAt = Date.now() + retryAfterMs;
       // Use the later of existing or new reset time
       this.resetAt = this.resetAt ? Math.max(this.resetAt, newResetAt) : newResetAt;
+      // Retry-After applies to the rate-limited request as a whole. Keep it
+      // as a minimum boundary for both quota clocks without shortening a
+      // provider's longer quota-specific reset window.
+      this.resetAtRequests = Math.max(this.resetAtRequests ?? this.resetAt, this.resetAt);
+      this.resetAtTokens = Math.max(this.resetAtTokens ?? this.resetAt, this.resetAt);
     } else if (!this.resetAt) {
       // No retryAfter provided and no existing reset - use conservative default
       this.resetAt = Date.now() + 60000;
