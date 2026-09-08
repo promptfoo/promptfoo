@@ -59,16 +59,27 @@ If you keep your key in a local `.env` file, add `--env-file .env` to the comman
 
 ## Models
 
-{/* Preserve existing links to consolidated sections. */}
-<Link id="gpt-41" />
-<Link id="usage-examples" />
+Use an explicit endpoint in each provider ID. This makes the request format predictable, including for newly released models.
+
+| Task                                   | Provider ID                                | Guide                                                                    |
+| -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
+| Text, image inputs, and built-in tools | `openai:responses:<model>`                 | [Responses API](#responses-api)                                          |
+| Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
+| Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
+| Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
+| Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
+| Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
+| Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
+| Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
+
+For file transcription, see the [current provider limitations](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
+
 <Link id="gpt-51" />
 <Link id="available-models" />
 <Link id="key-features" />
 <Link id="usage-examples-1" />
 <Link id="reasoning-modes" />
 <Link id="migration-from-gpt-5" />
-<Link id="gpt-51-codex-max" />
 <Link id="key-capabilities" />
 <Link id="usage-examples-2" />
 <Link id="reasoning-effort-levels" />
@@ -92,23 +103,6 @@ If you keep your key in a local `.env` file, add `--env-file .env` to the comman
 <Link id="available-models-4" />
 <Link id="key-specifications-3" />
 <Link id="usage-examples-6" />
-<Link id="reasoning-models-o1-o3-o3-pro-o3-mini-o4-mini" />
-<Link id="how-reasoning-models-work" />
-
-Use an explicit endpoint in each provider ID. This makes the request format predictable, including for newly released models.
-
-| Task                                   | Provider ID                                | Guide                                                                    |
-| -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| Text, image inputs, and built-in tools | `openai:responses:<model>`                 | [Responses API](#responses-api)                                          |
-| Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
-| Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
-| Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
-| Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
-| Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
-| Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
-| Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
-
-For file transcription, see the [current provider limitations](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
 Choose a model you can access, then test it with representative inputs. [OpenAI's model catalog](https://developers.openai.com/api/docs/models) lists current availability, capabilities, and limits. The main text-model choices are:
 
@@ -173,6 +167,12 @@ Chat Completions and Responses use different multimodal content blocks. Use the 
 
 ## Parameters {#configuring-parameters}
 
+<Link id="reasoning-models-o1-o3-o3-pro-o3-mini-o4-mini" />
+<Link id="how-reasoning-models-work" />
+<Link id="reasoning-models" />
+<Link id="o3-and-o4-mini-models" />
+<Link id="o3-and-o4-mini" />
+
 Put model options under the provider's `config`. Match the options to the endpoint and model:
 
 | Setting                           | Chat Completions                          | Responses                                   |
@@ -198,6 +198,9 @@ providers:
 
 Reasoning tokens count toward the output limit and billing, even though they are not the visible answer. Leave enough room for both reasoning and the final output.
 
+<Link id="gpt-41" />
+<Link id="usage-examples" />
+
 Promptfoo omits `temperature` for models it recognizes as reasoning models, including GPT-5, Astra, and o-series models. For a non-reasoning model such as `gpt-4.1-mini`, you can set `temperature: 0` and, on Chat Completions, `max_tokens`. Check the selected model's API documentation before using other sampling options.
 
 <details>
@@ -221,6 +224,8 @@ For endpoint-specific fields, see the [Chat Completions reference](https://devel
 </details>
 
 ### Connection settings
+
+<Link id="using-with-azure" />
 
 The default base URL is `https://api.openai.com/v1`. Set `apiBaseUrl` for an OpenAI-compatible gateway and `apiKeyEnvar` to select its credential:
 
@@ -293,23 +298,8 @@ When grading generated text with embeddings, configure the embedding provider on
 {/* Preserve existing links to consolidated sections. */}
 <Link id="supported-responses-models" />
 <Link id="using-the-responses-api" />
-<Link id="basic-mcp-configuration" />
-<Link id="mcp-tool-configuration-options" />
-<Link id="authentication-with-mcp-servers" />
-<Link id="filtering-mcp-tools" />
-<Link id="approval-settings" />
-<Link id="complete-mcp-example" />
-<Link id="reasoning-models" />
-<Link id="o3-and-o4-mini-models" />
-<Link id="o3-and-o4-mini" />
-<Link id="deep-research-models-responses-api-only" />
 <Link id="advanced-configuration" />
-<Link id="response-format" />
 <Link id="best-practices-2" />
-<Link id="gpt-5-pro-timeout-configuration" />
-<Link id="sending-images-in-prompts-1" />
-<Link id="function-calling" />
-<Link id="using-with-azure" />
 <Link id="complete-example-1" />
 
 Use `openai:responses:<model>` for text, image and file inputs, built-in tools, and response state. A basic configuration is:
@@ -382,6 +372,8 @@ Authenticated background jobs are persisted for resumption only when a non-secre
 <Link id="prompt-config-example" />
 <Link id="provider-config-example" />
 <Link id="per-test-structured-output" />
+
+<Link id="response-format" />
 
 Use a JSON schema when assertions need specific fields. Promptfoo accepts `response_format` in both Chat Completions and Responses configurations and translates it to the selected API's format.
 
@@ -457,6 +449,8 @@ For complete configurations, see the [structured output example](https://github.
 </details>
 
 ## Tool calling
+
+<Link id="function-calling" />
 
 Use tools to test which function the model selects and which arguments it produces. A tool definition alone does not execute your application code.
 
@@ -601,6 +595,13 @@ The [`search-rubric` assertion](/docs/configuration/expected-outputs/model-grade
 
 ### MCP tools {#mcp-model-context-protocol-support}
 
+<Link id="basic-mcp-configuration" />
+<Link id="mcp-tool-configuration-options" />
+<Link id="authentication-with-mcp-servers" />
+<Link id="filtering-mcp-tools" />
+<Link id="approval-settings" />
+<Link id="complete-mcp-example" />
+
 For a remote MCP server, add a tool with `type: mcp`. OpenAI connects to that server. This example limits access to one public documentation tool and skips approval only for that tool:
 
 ```yaml
@@ -621,14 +622,9 @@ Use `headers` inside the MCP tool for authentication, with secret values supplie
 
 ## Images
 
-{/* Preserve existing links to consolidated sections. */}
-<Link id="gpt-image-2" />
-<Link id="gpt-image-15" />
-<Link id="gpt-image-1" />
-<Link id="gpt-image-1-mini" />
-<Link id="example" />
-
 ### Sending images in prompts
+
+<Link id="sending-images-in-prompts-1" />
 
 For Responses, use `input_text` and `input_image` blocks. Save this as `image-prompt.json`, reference it with `prompts: [file://image-prompt.json]`, and supply `question` and `image_url` test variables:
 
@@ -668,6 +664,12 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 </details>
 
 ### Generating images
+
+<Link id="gpt-image-2" />
+<Link id="gpt-image-15" />
+<Link id="gpt-image-1" />
+<Link id="gpt-image-1-mini" />
+<Link id="example" />
 
 `openai:image:gpt-image-2` calls `/v1/images/generations` for text-to-image evals:
 
@@ -712,8 +714,6 @@ Cost estimates may be absent for `quality: auto` or custom sizes. Returned usage
 
 {/* Preserve existing links to consolidated sections. */}
 <Link id="audio-configuration-options" />
-<Link id="transcription-configuration-options" />
-<Link id="diarization-example" />
 
 Choose the route for your task: `openai:chat:gpt-audio-1.5` for audio input or output in a chat request, [text to speech](#text-to-speech) for reading supplied text aloud, or [Realtime](#realtime-api-models) for conversational sessions. The Responses provider does not support this audio-chat format.
 
@@ -790,11 +790,16 @@ providers:
 
 Custom voices use `voice: { id: voice_123 }` and require access to that voice in your OpenAI project. To cache a custom-voice response, set a non-secret project or tenant header such as `OpenAI-Project`. `OpenAI-Organization` alone does not isolate projects.
 
-Speech requests with credential-bearing custom headers or URLs bypass persistent caching. The binary GPT-4o mini TTS response does not provide token usage, so Promptfoo leaves its cost unset.
+On `api.openai.com`, secret authentication headers are excluded from the cache key; non-secret project or tenant headers keep cached results separate. Rotating an authentication secret alone does not invalidate that cache. Authenticated custom endpoints bypass persistent caching, even with a tenant header. Caching also skips requests with detected secrets in the body, URL path, or non-authentication header values.
+
+The binary GPT-4o mini TTS response does not provide token usage, so Promptfoo leaves its cost unset.
 
 </details>
 
 ### Audio transcription
+
+<Link id="transcription-configuration-options" />
+<Link id="diarization-example" />
 
 OpenAI recommends `gpt-transcribe` for files and `gpt-live-transcribe` for live audio. The built-in `openai:transcription:*` provider still uses the older model-specific request formats: it sends `verbose_json` for an unrecognized model and does not expose the new `languages` or `keywords` fields. Changing its model ID alone is not a supported migration to these models.
 
@@ -904,6 +909,8 @@ Set `PROMPTFOO_RETRY_5XX=true` to retry HTTP server errors. Check the error and 
 
 ### Timeouts {#timeout-configuration}
 
+<Link id="gpt-5-pro-timeout-configuration" />
+
 Responses requests with `background: true` and GPT-5 Pro variants use a 10-minute timeout unless `PROMPTFOO_EVAL_TIMEOUT_MS` is set. Regular requests use the standard request timeout, normally 5 minutes. Set an overall limit for a longer run:
 
 ```sh
@@ -925,6 +932,9 @@ For these long-running Responses requests, `REQUEST_TIMEOUT_MS` does not overrid
 <Link id="pricing" />
 <Link id="using-functions" />
 <Link id="evaluating-assistants" />
+
+<Link id="deep-research-models-responses-api-only" />
+<Link id="gpt-51-codex-max" />
 
 Use [OpenAI's deprecation schedule](https://developers.openai.com/api/docs/deprecations) as the source for shutdown dates and replacements. These migrations require more than changing a model name:
 
