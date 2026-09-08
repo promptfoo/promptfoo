@@ -154,7 +154,7 @@ providers:
 | `noise_scale`   | Speech variation (0–1)                                                   |
 | `noise_scale_w` | Timing variation (0–1)                                                   |
 
-The prompt supplies the required `text` field. Prompt-level configuration overrides these provider options. The [native audio API](https://www.hyperbolic.ai/docs/inference/audio-apis) returns base64-encoded MP3 audio and does not document `model` or `voice` parameters. Existing explicit `config.model` and `config.voice` values are still forwarded for compatibility with custom endpoints; changing the route suffix never adds a `model` field.
+The prompt supplies the required `text` field. Prompt-level configuration overrides these provider options. The [native audio API](https://www.hyperbolic.ai/docs/inference/audio-apis) returns base64-encoded MP3 audio and does not document `model` or `voice` parameters. The provider omits `config.model` and `config.voice` for the native endpoint and forwards them only to custom endpoints. Use `speaker` for native voice selection; changing the route suffix never adds a `model` field.
 
 For a custom audio endpoint, set `apiBaseUrl` to its base URL, including any version prefix and omitting the trailing slash. The provider appends `/audio/generation`. Custom endpoints retain the legacy WAV output metadata and $0.001 per 1,000-character estimate; these defaults do not establish the custom service's format or pricing.
 
@@ -218,7 +218,8 @@ providers:
 
 tests:
   - assert:
-      - type: is-valid-audio
+      - type: javascript
+        value: "typeof output === 'string' && output.length > 0"
 ```
 
 ### Vision-Language Model Example
