@@ -99,6 +99,20 @@ it('recognizes an override on the same prototype as its capability declaration',
   expect(await getAndCheckProvider('text', provider, null, 'rubric')).toBe(provider);
 });
 
+it('recognizes a LiteLLM subclass operation with its own capability declaration', async () => {
+  class EmbeddingLiteLLMProvider extends LiteLLMProvider {
+    async callEmbeddingApi() {
+      return { embedding: [1] };
+    }
+  }
+  Object.defineProperty(EmbeddingLiteLLMProvider, 'declaredProviderCapabilities', {
+    value: ['callEmbeddingApi'],
+  });
+  const provider = new EmbeddingLiteLLMProvider('fixture');
+  expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(true);
+  expect(await getAndCheckProvider('embedding', provider, null, 'rubric')).toBe(provider);
+});
+
 it('recognizes an instance-owned implementation that replaces an inherited text stub', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     override callApi = async () => ({ output: 'implemented on instance' });
