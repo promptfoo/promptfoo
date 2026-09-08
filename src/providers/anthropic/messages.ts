@@ -382,6 +382,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolResultBlocks = await Promise.all(
         toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse, signal)),
       );
+      signal?.throwIfAborted();
 
       toolUses.forEach((toolUse, index) => {
         const resultBlock = toolResultBlocks[index];
@@ -471,6 +472,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         content: normalizeMcpToolContent(result.content),
       };
     } catch (error) {
+      signal?.throwIfAborted();
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
