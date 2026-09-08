@@ -19,7 +19,7 @@ import {
 } from '../../src/tracing/otelSdk';
 import type { Span, Tracer, TracerProvider } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -55,18 +55,26 @@ const config: OtelConfig = {
   debug: false,
 };
 
-function wrapSavedProvider(previousProvider: TracerProvider, decorate: boolean): TracerProvider {
+function wrapSavedProvider(
+  previousProvider: TracerProvider,
+  mode: 'direct' | 'eager' | 'lazy' | 'captured',
+): TracerProvider {
+  const captured = mode === 'captured' ? previousProvider.getTracer('captured') : undefined;
   return {
     getTracer(name, version, options): Tracer {
-      if (!decorate) {
+      if (mode === 'direct') {
         return previousProvider.getTracer(name, version, options);
       }
+      const eager =
+        mode === 'eager' ? previousProvider.getTracer(name, version, options) : undefined;
+      const getTracer = () =>
+        captured ?? eager ?? previousProvider.getTracer(name, version, options);
       return {
         startSpan(...args) {
-          return previousProvider.getTracer(name, version, options).startSpan(...args);
+          return getTracer().startSpan(...args);
         },
         startActiveSpan(...args: unknown[]) {
-          const tracer = previousProvider.getTracer(name, version, options);
+          const tracer = getTracer();
           return Reflect.apply(tracer.startActiveSpan, tracer, args);
         },
       };
@@ -334,8 +342,9 @@ describe('real OTEL SDK lifecycle', () => {
     expect(child.parentSpanContext?.spanId).toBe(exportedParent.spanContext().spanId);
   });
 
-  it('lets a host register while idle and routes cached tracers to its provider', async () => {
+  it('lets a host register while idle without reassigning cached managed tracers', async () => {
     const cachedBefore = trace.getTracer('cached-before-host');
+    const firstUsedAfterRelease = trace.getTracer('unused-before-host');
     const releaseOwned = await acquireOtel(config);
     const cachedDuring = trace.getTracer('cached-during-host');
     cachedBefore.startSpan('owned-before').end();
@@ -351,9 +360,15 @@ describe('real OTEL SDK lifecycle', () => {
     const hostGlobal = trace.getTracerProvider();
     const hostShutdown = vi.spyOn(hostProvider, 'shutdown');
     const releaseBorrowed = await acquireOtel(config);
-    await cachedBefore.startActiveSpan('host-parent', async (parent) => {
+    for (const cached of [cachedBefore, cachedDuring, firstUsedAfterRelease]) {
+      const inactive = cached.startSpan('inactive-owned-tracer');
+      expect(inactive.isRecording()).toBe(false);
+      inactive.end();
+    }
+    const hostTracer = trace.getTracer('host-after-release');
+    await hostTracer.startActiveSpan('host-parent', async (parent) => {
       await Promise.resolve();
-      cachedDuring.startSpan('host-child').end();
+      hostTracer.startSpan('host-child').end();
       parent.end();
     });
     await releaseBorrowed();
@@ -367,11 +382,133 @@ describe('real OTEL SDK lifecycle', () => {
     const [child, parent] = hostExporter.getFinishedSpans();
     expect([child.name, parent.name]).toEqual(['host-child', 'host-parent']);
     expect(child.parentSpanContext?.spanId).toBe(parent.spanContext().spanId);
-    expect(child.instrumentationScope.name).toBe('cached-during-host');
-    expect(parent.instrumentationScope.name).toBe('cached-before-host');
+    expect(child.instrumentationScope.name).toBe('host-after-release');
+    expect(parent.instrumentationScope.name).toBe('host-after-release');
+    expect(exportedSpans[0].map((span) => span.name)).toEqual(['owned-before', 'owned-during']);
   });
 
-  it.each(['wrapped', 'decorated', 'restored'] as const)(
+  it('matches native SDK affinity when a replacement host processor uses an older cached tracer', async () => {
+    const originalExporter = new InMemorySpanExporter();
+    const originalProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(originalExporter)],
+    });
+    try {
+      originalProvider.register();
+      const originalTracer = trace.getTracer('original-native');
+      const hostExporter = new InMemorySpanExporter();
+      const processor: SpanProcessor = {
+        onStart(span, parentContext) {
+          originalTracer.startSpan('original-child', {}, trace.setSpan(parentContext, span)).end();
+        },
+        onEnd() {},
+        async forceFlush() {},
+        async shutdown() {},
+      };
+      hostProvider = new NodeTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      });
+      trace.disable();
+      hostProvider.register({ contextManager: null, propagator: null });
+      trace.getTracer('replacement-native').startSpan('host-parent').end();
+      await originalProvider.forceFlush();
+      await hostProvider.forceFlush();
+
+      const [child] = originalExporter.getFinishedSpans();
+      const [parent] = hostExporter.getFinishedSpans();
+      expect(originalExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+        'original-child',
+      ]);
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual(['host-parent']);
+      expect(child.parentSpanContext?.spanId).toBe(parent.spanContext().spanId);
+    } finally {
+      await originalProvider.shutdown();
+    }
+  });
+
+  it.each([true, false])(
+    'keeps cached managed tracer affinity with active SDK=%s',
+    async (active) => {
+      const release = await acquireOtel(config);
+      const ownedTracer = trace.getTracer('managed-cached-child');
+      if (!active) {
+        await release();
+      }
+      const hostExporter = new InMemorySpanExporter();
+      const recording: boolean[] = [];
+      const processor: SpanProcessor = {
+        onStart(span, parentContext) {
+          const child = ownedTracer.startSpan(
+            'managed-child',
+            {},
+            trace.setSpan(parentContext, span),
+          );
+          recording.push(child.isRecording());
+          child.end();
+        },
+        onEnd() {},
+        async forceFlush() {},
+        async shutdown() {},
+      };
+      hostProvider = new NodeTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      });
+      trace.disable();
+      hostProvider.register({ contextManager: null, propagator: null });
+      trace.getTracer('host-parent').startSpan('host-parent').end();
+      await hostProvider.forceFlush();
+      await release();
+
+      expect(recording).toEqual([active]);
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual(['host-parent']);
+      expect(exportedSpans[0].map((span) => span.name)).toEqual(active ? ['managed-child'] : []);
+      if (active) {
+        expect(exportedSpans[0][0].parentSpanContext?.spanId).toBe(
+          hostExporter.getFinishedSpans()[0].spanContext().spanId,
+        );
+      }
+    },
+  );
+
+  it.each([true, false])(
+    'preserves host-owned onStart children with active managed SDK=%s',
+    async (active) => {
+      const release = await acquireOtel(config);
+      if (!active) {
+        await release();
+      }
+      const hostExporter = new InMemorySpanExporter();
+      let hostTracer: Tracer;
+      const processor: SpanProcessor = {
+        onStart(span, parentContext) {
+          if (span.name === 'host-parent') {
+            hostTracer.startSpan('host-child', {}, trace.setSpan(parentContext, span)).end();
+          }
+        },
+        onEnd() {},
+        async forceFlush() {},
+        async shutdown() {},
+      };
+      hostProvider = new NodeTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      });
+      trace.disable();
+      hostProvider.register({ contextManager: null, propagator: null });
+      hostTracer = trace.getTracer('host-owned-cache');
+      hostTracer.startSpan('host-parent').end();
+      await hostProvider.forceFlush();
+      await release();
+
+      const [child, parent] = hostExporter.getFinishedSpans();
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+        'host-child',
+        'host-parent',
+      ]);
+      expect(child.parentSpanContext?.spanId).toBe(parent.spanContext().spanId);
+      expect(exportedSpans[0]).toHaveLength(0);
+    },
+  );
+
+  it.each(['direct', 'eager', 'lazy', 'captured', 'restored'] as const)(
     'avoids cycles when a host uses the %s previous provider',
     async (mode) => {
       const release = await acquireOtel(config);
@@ -379,17 +516,16 @@ describe('real OTEL SDK lifecycle', () => {
       const cached = trace.getTracer('cached-host-wrapper');
       cached.startSpan('before-host-wrapper').end();
       const replacement =
-        mode === 'restored'
-          ? previousProvider
-          : wrapSavedProvider(previousProvider, mode === 'decorated');
+        mode === 'restored' ? previousProvider : wrapSavedProvider(previousProvider, mode);
       trace.disable();
       expect(trace.setGlobalTracerProvider(replacement)).toBe(true);
       const hostGlobal = trace.getTracerProvider();
-      cached.startActiveSpan('active-through-host-wrapper', (span) => span.end());
+      const wrapped = trace.getTracer('saved-provider-wrapper');
+      wrapped.startActiveSpan('active-through-host-wrapper', (span) => span.end());
       await release();
 
       expect(trace.getTracerProvider()).toBe(hostGlobal);
-      const inactive = cached.startSpan('inactive-through-host-wrapper');
+      const inactive = wrapped.startSpan('inactive-through-host-wrapper');
       expect(inactive.isRecording()).toBe(false);
       inactive.end();
       expect(exportedSpans[0].map((span) => span.name)).toEqual([
@@ -401,19 +537,18 @@ describe('real OTEL SDK lifecycle', () => {
     },
   );
 
-  it.each(['wrapped', 'decorated'] as const)(
+  it.each(['direct', 'eager', 'lazy', 'captured'] as const)(
     'avoids cycles with a %s saved provider after final release',
     async (mode) => {
       const release = await acquireOtel(config);
       const previousProvider = trace.getTracerProvider();
       const cached = trace.getTracer('cached-idle-host-wrapper');
       cached.startSpan('before-release').end();
+      const replacement = wrapSavedProvider(previousProvider, mode);
       await release();
-      expect(
-        trace.setGlobalTracerProvider(wrapSavedProvider(previousProvider, mode === 'decorated')),
-      ).toBe(true);
+      expect(trace.setGlobalTracerProvider(replacement)).toBe(true);
 
-      const inactive = cached.startSpan('after-release');
+      const inactive = trace.getTracer('saved-provider-after-release').startSpan('after-release');
       expect(inactive.isRecording()).toBe(false);
       inactive.end();
       const borrowed = await acquireOtel(config);
@@ -424,17 +559,14 @@ describe('real OTEL SDK lifecycle', () => {
     },
   );
 
-  it('preserves host callback binding, nested spans and cleanup after a callback throws', async () => {
-    const release = await acquireOtel(config);
-    const cached = trace.getTracer('cached-host-callback');
-    cached.startSpan('before-host-callback').end();
-    await release();
-
+  it('preserves borrowed host callback binding, nested spans and errors', async () => {
     const hostExporter = new InMemorySpanExporter();
     hostProvider = new NodeTracerProvider({
       spanProcessors: [new SimpleSpanProcessor(hostExporter)],
     });
     const hostTracer = hostProvider.getTracer('host-callback');
+    hostProvider.register();
+    trace.disable();
     const binding = {};
     const extraArgument = {};
     expect(
@@ -452,6 +584,8 @@ describe('real OTEL SDK lifecycle', () => {
         },
       }),
     ).toBe(true);
+    const cached = trace.getTracer('cached-host-callback');
+    const release = await acquireOtel(config);
 
     const result = {};
     let callbackResult: Promise<object> | undefined;
@@ -495,6 +629,8 @@ describe('real OTEL SDK lifecycle', () => {
     ]);
     expect(spans[0].parentSpanContext?.spanId).toBe(spans[2].spanContext().spanId);
     expect(spans[1].parentSpanContext?.spanId).toBe(spans[2].spanContext().spanId);
+    await release();
+    expect(exportedSpans).toHaveLength(0);
   });
 
   it('does not unregister a host provider installed while its own SDK is shutting down', async () => {
@@ -530,18 +666,20 @@ describe('real OTEL SDK lifecycle', () => {
     });
     hostProvider.register({ contextManager: null, propagator: null });
     const hostGlobal = trace.getTracerProvider();
-    cached.startSpan('cached-host-before-shutdown-completes').end();
+    const beforeShutdown = cached.startSpan('cached-owned-before-shutdown-completes');
+    expect(beforeShutdown.isRecording()).toBe(false);
+    beforeShutdown.end();
     finishShutdown();
     await releasing;
     expect(trace.getTracerProvider()).toBe(hostGlobal);
-    cached.startSpan('cached-host-after-shutdown-completes').end();
+    const afterShutdown = cached.startSpan('cached-owned-after-shutdown-completes');
+    expect(afterShutdown.isRecording()).toBe(false);
+    afterShutdown.end();
     const hostSpan = trace.getTracer('host').startSpan('host-after-owned-shutdown');
     expect(hostSpan.isRecording()).toBe(true);
     hostSpan.end();
     await hostProvider.forceFlush();
     expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
-      'cached-host-before-shutdown-completes',
-      'cached-host-after-shutdown-completes',
       'host-after-owned-shutdown',
     ]);
   });

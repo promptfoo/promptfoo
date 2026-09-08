@@ -30,63 +30,27 @@ let instance: OtelInstance | null = null;
 let shutdownPromise: Promise<void> | undefined;
 
 const noopTracer = new ProxyTracerProvider().getTracer('promptfoo.inactive');
-// Track only the current synchronous forwarding stack. A host may delegate
-// back to a provider it saved before replacing the global registration.
-let forwardingProviders = new Set<TracerProvider>();
 
 // The API's ProxyTracer caches its first delegate. Keep that delegate independent
 // of any SDK generation so instrumentation can safely cache a tracer once.
+// Like native SDK tracers, these remain associated with their provider; they do
+// not migrate to a host that subsequently replaces the global registration.
 const lifecycleProvider: TracerProvider = {
   getTracer(name, version, options): Tracer {
     const getOwnedTracer = (): Tracer =>
       instance && !shutdownPromise
         ? instance.provider.getTracer(name, version, options)
         : noopTracer;
-    const callTracer = (method: 'startSpan' | 'startActiveSpan', args: unknown[]) => {
-      const globalProvider = trace.getTracerProvider();
-      if (
-        globalProvider === lifecycleProvider ||
-        (globalProvider instanceof ProxyTracerProvider &&
-          globalProvider.getDelegate() === lifecycleProvider) ||
-        forwardingProviders.has(globalProvider)
-      ) {
-        const tracer = getOwnedTracer();
-        return Reflect.apply(tracer[method], tracer, args);
-      }
-      // Honor an embedding application's replacement provider. With no provider
-      // registered, the API returns a no-op without starting another SDK.
-      const forwarding = forwardingProviders;
-      forwarding.add(globalProvider);
-      try {
-        const tracer = globalProvider.getTracer(name, version, options);
-        const callback = args[args.length - 1];
-        if (method === 'startActiveSpan' && typeof callback === 'function') {
-          args[args.length - 1] = function (this: unknown, ...callbackArgs: unknown[]) {
-            // User callbacks may start nested spans through cached tracers. They
-            // execute outside the forwarding stack, including async callbacks.
-            const previous = forwardingProviders;
-            forwardingProviders = new Set();
-            try {
-              return Reflect.apply(callback, this, callbackArgs);
-            } finally {
-              forwardingProviders = previous;
-            }
-          };
-        }
-        return Reflect.apply(tracer[method], tracer, args);
-      } finally {
-        forwarding.delete(globalProvider);
-      }
-    };
 
     return {
       startSpan(...args) {
-        return callTracer('startSpan', args);
+        return getOwnedTracer().startSpan(...args);
       },
       startActiveSpan(...args: unknown[]) {
         // Forward all three public overloads unchanged, including callback return
         // values and thrown errors, as the API's own ProxyTracer does.
-        return callTracer('startActiveSpan', args);
+        const tracer = getOwnedTracer();
+        return Reflect.apply(tracer.startActiveSpan, tracer, args);
       },
     };
   },
@@ -286,7 +250,7 @@ async function shutdownInstance(closing: OtelInstance): Promise<void> {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
     // Release our API registration so a host SDK can register while idle. Cached
-    // tracers retain lifecycleProvider and dispatch to the next active provider.
+    // tracers retain lifecycleProvider and follow its next managed generation.
     const globalProvider = trace.getTracerProvider();
     if (
       globalProvider instanceof ProxyTracerProvider &&
