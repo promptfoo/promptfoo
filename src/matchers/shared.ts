@@ -3,23 +3,32 @@ import type { GradingResult, TokenUsage } from '../types/index';
 /**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
- * the existing completionDetails shape (passing through whatever the
- * provider returned, or undefined if not present).
+ * the existing completionDetails shape and any incurred usage reported by
+ * the provider.
  */
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
 ): TokenUsage {
+  const prompt = tokenUsage?.prompt ?? 0;
+  const completion = tokenUsage?.completion ?? 0;
+  const cached = tokenUsage?.cached ?? 0;
+  const componentTotal = prompt + completion;
+  const cachedResponse = tokenUsage?.numRequests === 0 && cached > 0 && componentTotal <= cached;
+
   return {
-    total: tokenUsage?.total || 0,
-    prompt: tokenUsage?.prompt || 0,
-    completion: tokenUsage?.completion || 0,
-    cached: tokenUsage?.cached || 0,
-    numRequests: tokenUsage?.numRequests || 0,
+    total: tokenUsage?.total ?? (cachedResponse ? 0 : componentTotal),
+    prompt,
+    completion,
+    cached,
+    numRequests: tokenUsage?.numRequests ?? 0,
     completionDetails: tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
+    ...(tokenUsage?.incurredTokenUsage && {
+      incurredTokenUsage: tokenUsage.incurredTokenUsage,
+    }),
   };
 }
 
@@ -116,9 +125,19 @@ export function splitIntoSentences(text: string) {
  * edge case (e.g. decimals like "3.14", abbreviations); full segmentation would
  * need an NLP tokenizer. It is a substantial improvement over newline-only
  * splitting for the common prose case.
+ *
+ * Bare enumeration markers are dropped: splitting an inline numbered list such as
+ * "1. Paris is the capital. 2. France is in Europe." on the sentence boundary
+ * strands the "1." / "2." markers as their own segments, which would inflate
+ * sentence-level counts (e.g. the RAGAS context-relevance numerator). A segment
+ * that is only a list marker carries no content, so it is not a unit.
  */
+const ENUMERATION_MARKER_ONLY = /^\d+[.)]$/;
+
 export function splitTextIntoSentences(text: string): string[] {
   const lines = text.split('\n').filter((line) => line.trim() !== '');
   const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
-  return segments.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0);
+  return segments
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0 && !ENUMERATION_MARKER_ONLY.test(sentence));
 }

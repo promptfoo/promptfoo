@@ -7,7 +7,7 @@ export function addBase64Encoding(testCases: TestCase[], injectVar: string): Tes
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Base64`,
+        metric: assertion.metric ? `${assertion.metric}/Base64` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

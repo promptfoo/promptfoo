@@ -70,10 +70,29 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for OpenAI responses API with web_search_preview tool
+  // Check for OpenAI Responses API with either supported web-search tool.
   if (
     isOpenAiResponsesProvider(provider, id) &&
-    hasTool(provider, (t) => t.type === 'web_search_preview')
+    hasTool(provider, (t) => t.type === 'web_search' || t.type === 'web_search_preview')
+  ) {
+    return true;
+  }
+
+  // Chat Completions search models always retrieve from the web before responding.
+  const isOpenAiChat =
+    !isOpenAiResponsesProvider(provider, id) &&
+    (id.startsWith('openai:chat:') ||
+      provider.constructor?.name === 'OpenAiChatCompletionProvider');
+  const passthroughModel = provider.config?.passthrough?.model;
+  const chatModelId =
+    typeof passthroughModel === 'string'
+      ? passthroughModel
+      : 'modelName' in provider && typeof provider.modelName === 'string'
+        ? provider.modelName
+        : id;
+  if (
+    isOpenAiChat &&
+    /(?:^|[/:])(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
   ) {
     return true;
   }
@@ -181,7 +200,7 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.3 with Responses API web search
+  // xAI Grok 4.3 with Responses API web search (available to US and EU accounts)
   const loadXaiWebSearch = async () => {
     try {
       return await loadApiProvider('xai:responses:grok-4.3', {

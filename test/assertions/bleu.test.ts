@@ -4,12 +4,12 @@ import { calculateBleuScore, handleBleuScore } from '../../src/assertions/bleu';
 import type { AssertionParams } from '../../src/types/index';
 
 describe('BLEU score calculation', () => {
-  it('identical sentences should have BLEU score close to, but not equal to one due to smoothing', () => {
+  it('identical sentences should have BLEU score equal to one', () => {
     const references = ['The cat sat on the mat.'];
     const candidate = 'The cat sat on the mat.';
 
     const score = calculateBleuScore(candidate, references);
-    expect(score).toBeGreaterThan(0.999);
+    expect(score).toBe(1);
   });
 
   it('completely different sentences should have very low but non-zero BLEU score due to smoothing', () => {
@@ -232,21 +232,37 @@ describe('BLEU score calculation', () => {
     }).toThrow('Invalid inputs');
   });
 
+  it('should return 0 for an empty candidate instead of throwing', () => {
+    expect(calculateBleuScore('', ['some reference'])).toBe(0);
+  });
+
+  it('should return 0 for a whitespace-only candidate', () => {
+    expect(calculateBleuScore('   ', ['some reference'])).toBe(0);
+    expect(calculateBleuScore('\n\t', ['some reference'])).toBe(0);
+  });
+
+  it('should still throw for a null or undefined candidate', () => {
+    expect(() => calculateBleuScore(null as never, ['some reference'])).toThrow('Invalid inputs');
+    expect(() => calculateBleuScore(undefined as never, ['some reference'])).toThrow(
+      'Invalid inputs',
+    );
+  });
+
   it('should throw error for invalid weights', () => {
     const references = ['The cat sat on the mat.'];
-    const invalidWeights = [0.5, 0.5, 0.5, 0.5];
+    const weightsNotSummingToOne = [0.5, 0.5, 0.5, 0.5];
 
     expect(() => {
-      calculateBleuScore('test', references, invalidWeights);
+      calculateBleuScore('test', references, weightsNotSummingToOne);
     }).toThrow('Weights must sum to 1');
   });
 
   it('should throw error for wrong number of weights', () => {
     const references = ['The cat sat on the mat.'];
-    const invalidWeights = [0.5, 0.5];
+    const incorrectLengthWeights = [0.5, 0.5];
 
     expect(() => {
-      calculateBleuScore('test', references, invalidWeights);
+      calculateBleuScore('test', references, incorrectLengthWeights);
     }).toThrow('Invalid inputs');
   });
 
@@ -376,5 +392,38 @@ describe('handleBleuScore', () => {
       reason: expect.stringMatching(/BLEU score \d+\.\d+ is less than threshold 0\.5/),
       assertion: expect.any(Object),
     });
+  });
+
+  it('should return pass:false score:0 for empty output instead of throwing', () => {
+    const result = handleBleuScore({
+      assertion: { type: 'bleu' },
+      renderedValue: 'some reference',
+      outputString: '',
+      inverse: false,
+    } as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should treat whitespace-only output like empty output', () => {
+    const result = handleBleuScore({
+      assertion: { type: 'bleu' },
+      renderedValue: 'some reference',
+      outputString: '   \n\t',
+      inverse: false,
+    } as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should pass an inverse assertion for empty output (score inverts to 1)', () => {
+    const result = handleBleuScore({
+      assertion: { type: 'bleu' },
+      renderedValue: 'some reference',
+      outputString: '',
+      inverse: true,
+    } as AssertionParams);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 });
