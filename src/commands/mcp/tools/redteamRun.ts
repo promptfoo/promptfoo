@@ -113,10 +113,9 @@ export function registerRedteamRunTool(server: McpServer) {
           progressBar = true,
         } = args;
 
+        validateDefaultMcpConfigFile();
         if (configPath) {
           validateMcpConfigFile(configPath);
-        } else {
-          validateDefaultMcpConfigFile();
         }
 
         if (output) {

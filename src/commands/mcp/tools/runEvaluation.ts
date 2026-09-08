@@ -140,10 +140,9 @@ export function registerRunEvaluationTool(server: McpServer) {
           resultOffset = 0,
         } = args;
 
+        validateDefaultMcpConfigFile();
         if (configPath) {
           validateMcpConfigFile(configPath);
-        } else {
-          validateDefaultMcpConfigFile();
         }
 
         // Load default config

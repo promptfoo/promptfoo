@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import express from 'express';
 import logger from '../../logger';
-import { csrfProtection } from '../../server/middleware/csrfProtection';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
@@ -36,7 +35,22 @@ function getHostnameFromHostHeader(host: string): string | undefined {
 
 export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
   const hostname = req.headers.host ? getHostnameFromHostHeader(req.headers.host) : undefined;
-  if (hostname && ALLOWED_MCP_HTTP_HOSTS.has(hostname)) {
+  const origin = req.headers.origin;
+  let localOrigin = false;
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      localOrigin = /^https?:$/.test(url.protocol) && ALLOWED_MCP_HTTP_HOSTS.has(url.hostname);
+    } catch {
+      // Invalid browser origins cannot authorize a local MCP request.
+    }
+  }
+  const safeMethod = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+  if (
+    hostname &&
+    ALLOWED_MCP_HTTP_HOSTS.has(hostname) &&
+    (safeMethod || (origin ? localOrigin : req.headers['sec-fetch-site'] !== 'cross-site'))
+  ) {
     next();
     return;
   }
@@ -165,7 +179,6 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   const app = express();
   app.use(mcpHostProtection);
   app.use(express.json());
-  app.use(csrfProtection);
 
   const mcpServer = await createMcpServer();
 

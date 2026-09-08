@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
-import { validateMcpConfigFile } from '../lib/security';
+import { validateDefaultMcpConfigFile, validateMcpConfigFile } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -37,6 +37,10 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
       const { configPaths } = args;
 
       try {
+        validateDefaultMcpConfigFile();
+        const configPathsArray =
+          configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
+        configPathsArray?.forEach((configPath) => validateMcpConfigFile(configPath));
         // Load default configuration
         let defaultConfig;
         try {
@@ -55,10 +59,6 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         }
 
         // Use the same logic as the validate command
-        const configPathsArray =
-          configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
-        configPathsArray?.forEach((configPath) => validateMcpConfigFile(configPath));
-
         const { config, testSuite } = await resolveConfigs(
           { config: configPathsArray },
           defaultConfig,

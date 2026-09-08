@@ -193,6 +193,27 @@ describe('MCP tool security guards', () => {
     expect(resolveConfigs).not.toHaveBeenCalled();
   });
 
+  it('validates cwd defaults before loading a separately selected safe config', async () => {
+    const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+    const { registerValidatePromptfooConfigTool } = await import(
+      '../../../../src/commands/mcp/tools/validatePromptfooConfig'
+    );
+    const handler = captureToolHandler(registerValidatePromptfooConfigTool);
+    const defaultPath = writeDefaultConfig({
+      providers: [`file://${outsideWorkspacePath('provider.py')}`],
+    });
+    const selectedDir = fs.mkdtempSync(path.join(process.cwd(), '.mcp-validate-'));
+    const selectedPath = path.join(selectedDir, 'config.yaml');
+    fs.writeFileSync(selectedPath, 'prompts: [hello]\nproviders: [echo]\n');
+    try {
+      expect((await handler({ configPaths: [selectedPath] })).isError).toBe(true);
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(defaultPath, { force: true });
+      fs.rmSync(selectedDir, { recursive: true, force: true });
+    }
+  });
+
   it('should summarize validate_promptfoo_config results without returning raw configs', async () => {
     const { registerValidatePromptfooConfigTool } = await import(
       '../../../../src/commands/mcp/tools/validatePromptfooConfig'
@@ -318,6 +339,9 @@ describe('MCP tool security guards', () => {
       prompts: ['hello'],
       providers: [`file://${outsideWorkspacePath('evil-provider.js')}`],
     });
+    const selectedDir = fs.mkdtempSync(path.join(process.cwd(), '.mcp-selected-'));
+    const selectedPath = path.join(selectedDir, 'config.yaml');
+    fs.writeFileSync(selectedPath, 'prompts: [hello]\nproviders: [echo]\n');
 
     try {
       const result = await handler({});
@@ -325,8 +349,12 @@ describe('MCP tool security guards', () => {
       expect(result.isError).toBe(true);
       expect(parseToolResponse(result).error).toContain('Path must be within base directory');
       expect(loadDefaultConfig).not.toHaveBeenCalled();
+      const explicitResult = await handler({ configPath: selectedPath });
+      expect(explicitResult.isError).toBe(true);
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
     } finally {
       fs.rmSync(configPath, { force: true });
+      fs.rmSync(selectedDir, { recursive: true, force: true });
     }
   });
 
@@ -352,6 +380,21 @@ describe('MCP tool security guards', () => {
     } finally {
       fs.rmSync(configPath, { force: true });
     }
+  });
+
+  it('rejects file-backed redteam plugin and strategy paths outside the workspace', async () => {
+    const { doGenerateRedteam } = await import('../../../../src/redteam/commands/generate');
+    const { registerRedteamGenerateTool } = await import(
+      '../../../../src/commands/mcp/tools/redteamGenerate'
+    );
+    const handler = captureToolHandler(registerRedteamGenerateTool);
+    for (const args of [
+      { plugins: [`file://${outsideWorkspacePath('plugin.yaml')}`] },
+      { strategies: [`file://${outsideWorkspacePath('strategy.js')}`] },
+    ]) {
+      expect((await handler(args)).isError).toBe(true);
+    }
+    expect(doGenerateRedteam).not.toHaveBeenCalled();
   });
 
   it('should reject redteam_run implicit default configs before starting scans', async () => {

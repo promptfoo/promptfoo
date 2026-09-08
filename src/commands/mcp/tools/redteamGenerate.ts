@@ -179,10 +179,9 @@ export function registerRedteamGenerateTool(server: McpServer) {
           progressBar = true,
         } = args;
 
+        validateDefaultMcpConfigFile();
         if (configPath) {
           validateMcpConfigFile(configPath);
-        } else {
-          validateDefaultMcpConfigFile();
         }
 
         const outputPath = output || (write ? undefined : 'redteam.yaml');
@@ -192,6 +191,11 @@ export function registerRedteamGenerateTool(server: McpServer) {
 
         if (provider) {
           validateProviderId(provider);
+        }
+        for (const entry of [...(plugins ?? []), ...(strategies ?? [])]) {
+          if (entry.startsWith('file://')) {
+            validateMcpFilePath(entry.slice('file://'.length));
+          }
         }
 
         // Load default config

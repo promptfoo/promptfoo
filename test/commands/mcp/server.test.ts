@@ -335,7 +335,26 @@ describe('MCP Server', () => {
 
       expect(expressMocks.app.use).toHaveBeenNthCalledWith(1, expect.any(Function));
       expect(expressMocks.app.use).toHaveBeenNthCalledWith(2, 'json-middleware');
-      expect(expressMocks.app.use).toHaveBeenNthCalledWith(3, expect.any(Function));
+      expect(expressMocks.app.use).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects remote browser origins while retaining local and CLI requests', async () => {
+      const { mcpHostProtection } = await import('../../../src/commands/mcp/server');
+      const response = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+      const check = (headers: Record<string, string>) =>
+        mcpHostProtection(
+          { headers: { host: '127.0.0.1:3100', ...headers }, method: 'POST', path: '/mcp' } as any,
+          response as any,
+          next,
+        );
+
+      check({ origin: 'https://outside.example.test' });
+      expect(response.status).toHaveBeenCalledWith(403);
+      expect(next).not.toHaveBeenCalled();
+      check({ origin: 'http://localhost:3000' });
+      check({});
+      expect(next).toHaveBeenCalledTimes(2);
     });
 
     it('should reject DNS-rebinding Host headers', async () => {

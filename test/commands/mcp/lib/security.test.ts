@@ -93,6 +93,30 @@ describe('MCP Security', () => {
     });
 
     it.skipIf(process.platform === 'win32')(
+      'allows contained ../ paths but rejects dangling symlinks',
+      () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-path-'));
+        const workspace = path.join(root, 'workspace');
+        fs.mkdirSync(path.join(workspace, 'nested'), { recursive: true });
+        fs.symlinkSync(
+          path.join(root, 'missing', 'outside.txt'),
+          path.join(workspace, 'dangling.txt'),
+        );
+        const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+        try {
+          expect(() =>
+            validateMcpFilePath('../inside.txt', path.join(workspace, 'nested')),
+          ).not.toThrow();
+          expect(() => validateMcpFilePath('dangling.txt')).toThrow(ConfigurationError);
+          expect(() => validateMcpFilePath('../outside.txt')).toThrow(ConfigurationError);
+        } finally {
+          cwdSpy.mockRestore();
+          fs.rmSync(root, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it.skipIf(process.platform === 'win32')(
       'should reject paths that traverse outside the workspace through symlinks',
       () => {
         const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
@@ -324,6 +348,22 @@ describe('MCP Security', () => {
           },
         }),
       ).toThrow(ConfigurationError);
+      for (const config of [
+        { auth: { type: 'file', path: path.join(path.dirname(process.cwd()), 'auth.js') } },
+        { transformRequest: '(request) => request' },
+        { validateStatus: 'status => status < 500' },
+      ]) {
+        expect(() => validateProviderReference({ id: 'http://localhost:8080', config })).toThrow(
+          ConfigurationError,
+        );
+      }
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          env: { MODULE: `file://${path.join(path.dirname(process.cwd()), 'transform.js')}` },
+          config: { transformRequest: '{{ env.MODULE }}' },
+        }),
+      ).toThrow(ConfigurationError);
     });
 
     it('should allow exec providers with in-workspace script arguments', () => {
@@ -331,6 +371,18 @@ describe('MCP Security', () => {
       expect(() =>
         validateProviderId(`exec:node ${path.join(path.dirname(process.cwd()), 'evil.js')}`),
       ).toThrow(ConfigurationError);
+    });
+
+    it('distinguishes scoped packages and HTTP URLs from local provider paths', () => {
+      expect(() => validateProviderId('package:@scope/prompt-provider:Provider')).not.toThrow();
+      expect(() => validateProviderId('package:/tmp/outside.mjs:Provider')).toThrow(
+        ConfigurationError,
+      );
+      expect(() => validateProviderId('package:@scope/../outside:Provider')).toThrow(
+        ConfigurationError,
+      );
+      expect(() => validateProviderId('https://example.test/~team/api')).not.toThrow();
+      expect(() => validateProviderId('https://example.test/a/../api')).not.toThrow();
     });
 
     it('should reject exec providers that run inline code instead of workspace scripts', () => {
@@ -347,8 +399,14 @@ describe('MCP Security', () => {
       expect(() =>
         validateProviderId(`exec:node --require=${outsideModule} scripts/provider.js`),
       ).toThrow(ConfigurationError);
+      expect(() => validateProviderId(`exec:node -r${outsideModule} scripts/provider.js`)).toThrow(
+        ConfigurationError,
+      );
       expect(() =>
         validateProviderId('exec:node --require=scripts/bootstrap.js scripts/provider.js'),
+      ).not.toThrow();
+      expect(() =>
+        validateProviderId('exec:node --require scripts/bootstrap.js scripts/provider.js'),
       ).not.toThrow();
     });
 
@@ -549,6 +607,21 @@ describe('MCP Security', () => {
         expect(() => validateMcpConfigFile('configs/*.yaml', workspace)).toThrow(
           ConfigurationError,
         );
+        const links = path.join(workspace, 'links');
+        fs.mkdirSync(links);
+        fs.writeFileSync(path.join(outside, 'filter.mjs'), 'export default () => true;\n');
+        fs.symlinkSync(path.join(outside, 'filter.mjs'), path.join(links, 'filter.mjs'));
+        fs.writeFileSync(
+          path.join(configs, 'safe.yaml'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: ['echo'],
+            nunjucksFilters: { filter: '../links/*.mjs' },
+          }),
+        );
+        expect(() => validateMcpConfigFile('configs/safe.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
@@ -652,8 +725,90 @@ describe('MCP Security', () => {
         expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
           ConfigurationError,
         );
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.json'),
+          JSON.stringify({
+            prompts: [`exec:node --require=${path.join(tempRoot, 'outside.js')} scripts/prompt.js`],
+            providers: ['echo'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('checks nested prompt and test contents and prompt object raw paths', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-nested-'));
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(workspace);
+      const external = path.join(root, 'outside.txt');
+      fs.writeFileSync(
+        path.join(workspace, 'prompt.json'),
+        JSON.stringify({ raw: `file://${external}` }),
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'tests.json'),
+        JSON.stringify([{ provider: `file://${external}` }]),
+      );
+      fs.writeFileSync(external, 'MCP_FIXTURE=local\n');
+      fs.symlinkSync(external, path.join(workspace, '.env'));
+      try {
+        for (const config of [
+          { prompts: [{ raw: external }], providers: ['echo'] },
+          { prompts: ['prompt.json'], providers: ['echo'] },
+          { prompts: ['hello'], providers: ['echo'], tests: 'tests.json' },
+          { prompts: ['hello'], providers: ['echo'], commandLineOptions: { envPath: external } },
+          { prompts: ['hello'], providers: ['echo'], commandLineOptions: { envPath: '.env' } },
+        ]) {
+          fs.writeFileSync(path.join(workspace, 'promptfooconfig.json'), JSON.stringify(config));
+          expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+            ConfigurationError,
+          );
+        }
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('uses each referenced file and provider environment when scanning paths', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-env-'));
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'sub.yaml'),
+        `env:\n  P: ${root}/outside.txt\nprompts: '{{ env.P }}'\nproviders: [echo]\n`,
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'provider.json'),
+        JSON.stringify({ id: 'file://{{ env.DIR }}/script.py' }),
+      );
+      try {
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          'providers:\n  - $ref: ./sub.yaml\n',
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
+
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: [
+              { id: 'file://provider.json', env: { DIR: workspace } },
+              { id: 'file://provider.json', env: { DIR: root } },
+            ],
+          }),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
       }
     });
   });

@@ -8,7 +8,7 @@ import { isProviderConfigFileReference, normalizeProviderRef } from '../../../ut
 import { renderEnvOnlyInObject } from '../../../util/render';
 import { ConfigurationError } from './errors';
 
-import type { EnvOverrides } from '../../../types/env';
+type EnvOverrides = Record<string, string | undefined>;
 
 /**
  * Security utilities for MCP server operations
@@ -53,12 +53,20 @@ const INLINE_EXECUTION_FLAGS = new Set([
   '-c',
   '/c',
   '-command',
+  '-m',
   '--command',
   '-e',
   '--eval',
   '--exec',
   '-p',
   '--print',
+]);
+const PRELOAD_EXECUTION_FLAGS = new Set([
+  '-r',
+  '--require',
+  '--import',
+  '--loader',
+  '--experimental-loader',
 ]);
 
 /**
@@ -121,23 +129,38 @@ function validateMcpFilePathWithinWorkspace(
   basePath: string,
   resolutionBasePath: string,
 ): void {
-  validateFilePath(filePath);
-
   const resolvedBase = fs.realpathSync(basePath);
   const resolvedPath = path.resolve(resolutionBasePath, filePath);
   let existingPath = resolvedPath;
 
-  while (!fs.existsSync(existingPath)) {
-    const parentPath = path.dirname(existingPath);
-    if (parentPath === existingPath) {
+  for (;;) {
+    try {
+      fs.lstatSync(existingPath);
       break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      const parentPath = path.dirname(existingPath);
+      if (parentPath === existingPath) {
+        throw new ConfigurationError('Path does not have an existing parent', filePath);
+      }
+      existingPath = parentPath;
     }
-    existingPath = parentPath;
   }
 
-  const realExistingPath = fs.realpathSync(existingPath);
+  let realExistingPath: string;
+  try {
+    realExistingPath = fs.realpathSync(existingPath);
+  } catch {
+    throw new ConfigurationError('Path contains a dangling or inaccessible symlink', filePath);
+  }
   const relativePath = path.relative(resolvedBase, realExistingPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
     throw new ConfigurationError(`Path must be within base directory: ${basePath}`, filePath);
   }
 }
@@ -263,7 +286,16 @@ function validateConfigFileReference(value: string, state: ProviderValidationSta
   const withoutProtocol = rendered.startsWith(FILE_PROVIDER_PREFIX)
     ? rendered.slice(FILE_PROVIDER_PREFIX.length)
     : rendered;
-  validateMcpFilePath(stripConfigFileExport(withoutProtocol), state.basePath);
+  const filePath = stripConfigFileExport(withoutProtocol);
+  const matches = globSync(filePath, {
+    absolute: true,
+    cwd: state.basePath,
+    nodir: true,
+    windowsPathsNoEscape: true,
+  });
+  for (const candidate of matches.length ? matches : [filePath]) {
+    validateMcpFilePath(candidate, state.basePath);
+  }
 }
 
 function resolveConfigFileReference(value: string, state: ProviderValidationState): string {
@@ -301,8 +333,9 @@ function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): 
 
 function validateFileReferencesInValue(value: unknown, state: ProviderValidationState): void {
   if (typeof value === 'string') {
-    if (value.startsWith(FILE_PROVIDER_PREFIX)) {
-      validateConfigFileReference(value, state);
+    const rendered = renderEnvOnlyInObject(value, state.env);
+    if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
+      validateConfigFileReference(rendered, state);
     }
     return;
   }
@@ -314,6 +347,9 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
 
   const object = getObject(value);
   if (object) {
+    if (object.type === 'file' && typeof object.path === 'string') {
+      validateConfigFileReference(object.path, state);
+    }
     for (const [key, entry] of Object.entries(object)) {
       if (key === '$ref') {
         validateJsonSchemaRef(entry, state);
@@ -323,57 +359,42 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
   }
 }
 
-function validateExecConfigFileReference(value: string, state: ProviderValidationState): void {
-  const commandParts = parseCommandParts(value.slice('exec:'.length));
-  if (!commandParts.length) {
-    throw new ConfigurationError('Invalid config file reference: exec prompt is empty');
-  }
-
-  let hasWorkspaceScript = false;
-  for (const part of commandParts) {
-    if (isInlineExecutionFlag(part)) {
-      throw new ConfigurationError(
-        'Invalid config file reference: exec prompts used through MCP must reference a workspace script file, not inline code',
-      );
-    }
-
-    if (
-      path.isAbsolute(part) ||
-      part.includes('/') ||
-      part.includes('\\') ||
-      hasConfigFileExtension(part)
-    ) {
-      validateConfigFileReference(part, state);
-      hasWorkspaceScript = true;
-    }
-  }
-
-  if (!hasWorkspaceScript) {
-    throw new ConfigurationError(
-      'Invalid config file reference: exec prompts used through MCP must reference a workspace script file',
-    );
-  }
-}
-
 function validateLocalConfigFileReferences(
   value: unknown,
   state: ProviderValidationState,
   recurseObjectValues = false,
+  inspectContents = false,
 ): void {
   if (typeof value === 'string') {
     const renderedValue = renderEnvOnlyInObject(value, state.env);
     if (isLocalConfigFileReference(renderedValue)) {
       if (renderedValue.startsWith('exec:')) {
-        validateExecConfigFileReference(renderedValue, state);
+        validateExecReference(renderedValue, state, true);
       } else {
         validateConfigFileReference(renderedValue, state);
+      }
+      if (inspectContents) {
+        const filePath = stripConfigFileExport(
+          renderedValue.startsWith(FILE_PROVIDER_PREFIX)
+            ? renderedValue.slice(FILE_PROVIDER_PREFIX.length)
+            : renderedValue,
+        );
+        for (const match of globSync(filePath, {
+          absolute: true,
+          cwd: state.basePath,
+          nodir: true,
+        })) {
+          validateStaticConfigFile(match, state);
+        }
       }
     }
     return;
   }
 
   if (Array.isArray(value)) {
-    value.forEach((entry) => validateLocalConfigFileReferences(entry, state, recurseObjectValues));
+    value.forEach((entry) =>
+      validateLocalConfigFileReferences(entry, state, recurseObjectValues, inspectContents),
+    );
     return;
   }
 
@@ -384,15 +405,17 @@ function validateLocalConfigFileReferences(
         validateLocalConfigFileReferences(key, state);
       }
     }
-    if (typeof object.path === 'string') {
-      validateLocalConfigFileReferences(object.path, state);
+    for (const reference of [object.path, object.file].filter(
+      (entry): entry is string => typeof entry === 'string',
+    )) {
+      validateLocalConfigFileReferences(reference, state);
     }
-    if (typeof object.file === 'string') {
-      validateLocalConfigFileReferences(object.file, state);
+    if (inspectContents && typeof object.raw === 'string') {
+      validateLocalConfigFileReferences(object.raw, state, false, true);
     }
     if (recurseObjectValues) {
       Object.values(object).forEach((entry) =>
-        validateLocalConfigFileReferences(entry, state, recurseObjectValues),
+        validateLocalConfigFileReferences(entry, state, recurseObjectValues, inspectContents),
       );
     }
   }
@@ -402,16 +425,21 @@ function validateStaticConfigLocalReferences(
   rootConfig: Record<string, unknown>,
   state: ProviderValidationState,
 ): void {
-  validateLocalConfigFileReferences(rootConfig.prompts, state);
+  validateLocalConfigFileReferences(rootConfig.prompts, state, false, true);
   const promptMap = getObject(rootConfig.prompts);
   if (promptMap) {
     Object.keys(promptMap).forEach((promptPath) =>
       validateLocalConfigFileReferences(promptPath, state),
     );
   }
-  validateLocalConfigFileReferences(rootConfig.tests, state);
-  validateLocalConfigFileReferences(rootConfig.defaultTest, state);
+  validateLocalConfigFileReferences(rootConfig.tests, state, false, true);
+  validateLocalConfigFileReferences(rootConfig.defaultTest, state, false, true);
   validateLocalConfigFileReferences(rootConfig.outputPath, state);
+  for (const envPath of [getObject(rootConfig.commandLineOptions)?.envPath].flat()) {
+    if (typeof envPath === 'string') {
+      validateConfigFileReference(envPath, state);
+    }
+  }
   validateLocalConfigFileReferences(rootConfig.extensions, state, true);
   validateLocalConfigFileReferences(rootConfig.nunjucksFilters, state, true);
 }
@@ -480,6 +508,33 @@ function validateProviderReferenceWithState(
     validateMcpConfigObject(descriptor.loadOptions.config, providerState);
   }
   const configObject = getObject(descriptor.loadOptions.config);
+  if (/^https?:\/\//i.test(renderedProviderId) || renderedProviderId === 'http') {
+    for (const key of [
+      'transformRequest',
+      'transformResponse',
+      'responseParser',
+      'validateStatus',
+    ]) {
+      const value = configObject?.[key];
+      if (
+        value !== undefined &&
+        (typeof value !== 'string' ||
+          !renderEnvOnlyInObject(value, env).startsWith(FILE_PROVIDER_PREFIX))
+      ) {
+        throw new ConfigurationError(`Inline HTTP ${key} is not allowed through MCP tools`);
+      }
+    }
+    const sessionParser = getObject(configObject?.session)?.responseParser;
+    if (
+      sessionParser !== undefined &&
+      (typeof sessionParser !== 'string' ||
+        !renderEnvOnlyInObject(sessionParser, env).startsWith(FILE_PROVIDER_PREFIX))
+    ) {
+      throw new ConfigurationError(
+        'Inline HTTP session responseParser is not allowed through MCP tools',
+      );
+    }
+  }
   validateMcpConfigObject(configObject?.mcp, providerState);
   validateProviderIdWithState(descriptor.loadProviderPath, providerState);
 }
@@ -495,10 +550,11 @@ function validateProviderConfigFile(providerPath: string, state: ProviderValidat
   }
 
   const realProviderPath = fs.realpathSync(resolvedProviderPath);
-  if (state.validatedConfigFiles.has(realProviderPath)) {
+  const cacheKey = JSON.stringify([realProviderPath, state.env]);
+  if (state.validatedConfigFiles.has(cacheKey)) {
     return;
   }
-  state.validatedConfigFiles.add(realProviderPath);
+  state.validatedConfigFiles.add(cacheKey);
 
   const rawConfig = yaml.load(fs.readFileSync(realProviderPath, 'utf8'));
   const configs = Array.isArray(rawConfig) ? rawConfig : [rawConfig];
@@ -514,53 +570,58 @@ function parseCommandParts(command: string): string[] {
 }
 
 function isInlineExecutionFlag(part: string): boolean {
-  return INLINE_EXECUTION_FLAGS.has(part.toLowerCase());
+  return (
+    INLINE_EXECUTION_FLAGS.has(part.split('=', 1)[0].toLowerCase()) || /^-[cemp].+/i.test(part)
+  );
 }
 
-function validateExecProviderId(providerId: string, state: ProviderValidationState): void {
-  const commandParts = parseCommandParts(providerId.slice('exec:'.length));
-  if (commandParts.length === 0) {
-    throw new ConfigurationError(`Invalid provider ID format: ${providerId}`);
-  }
+function validateExecReference(
+  value: string,
+  state: ProviderValidationState,
+  configPrompt: boolean,
+): void {
+  const parts = parseCommandParts(value.slice('exec:'.length));
+  const looksLikePath = (part: string) =>
+    path.isAbsolute(part) ||
+    part.includes('/') ||
+    part.includes('\\') ||
+    (configPrompt ? hasConfigFileExtension(part) : hasProviderFileExtension(part));
+  const validatePath = (part: string) =>
+    configPrompt
+      ? validateConfigFileReference(part, state)
+      : validateMcpFilePath(stripProviderFileExport(part), state.basePath);
 
-  let hasWorkspaceScript = false;
-  for (const part of commandParts) {
-    const optionSeparatorIndex = part.indexOf('=');
-    const optionName = optionSeparatorIndex === -1 ? part : part.slice(0, optionSeparatorIndex);
-    const optionValue =
-      optionSeparatorIndex === -1 ? undefined : part.slice(optionSeparatorIndex + 1);
-
-    if (isInlineExecutionFlag(optionName)) {
+  let hasScript = false;
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (isInlineExecutionFlag(part)) {
       throw new ConfigurationError(
-        'Invalid provider ID format: exec providers used through MCP must reference a workspace script file, not inline code',
+        'MCP exec commands must use a workspace script, not inline code',
       );
     }
-
-    if (
-      optionValue &&
-      (path.isAbsolute(optionValue) ||
-        optionValue.includes('/') ||
-        optionValue.includes('\\') ||
-        hasProviderFileExtension(optionValue))
-    ) {
-      validateMcpFilePath(stripProviderFileExport(optionValue), state.basePath);
+    const separator = part.indexOf('=');
+    const option = (separator === -1 ? part : part.slice(0, separator)).toLowerCase();
+    const optionValue = separator === -1 ? undefined : part.slice(separator + 1);
+    const preload =
+      part.match(/^-r(.+)$/i)?.[1] ??
+      (PRELOAD_EXECUTION_FLAGS.has(option) ? (optionValue ?? parts[++index]) : undefined);
+    if (preload || PRELOAD_EXECUTION_FLAGS.has(option)) {
+      if (!preload || !isLocalConfigFileReference(preload)) {
+        throw new ConfigurationError('MCP exec preloads require a workspace file');
+      }
+      validatePath(preload);
+      continue;
     }
-
-    if (
-      path.isAbsolute(part) ||
-      part.includes('/') ||
-      part.includes('\\') ||
-      hasProviderFileExtension(part)
-    ) {
-      validateMcpFilePath(stripProviderFileExport(part), state.basePath);
-      hasWorkspaceScript = true;
+    if (optionValue && looksLikePath(optionValue)) {
+      validatePath(optionValue);
+    }
+    if (looksLikePath(part)) {
+      validatePath(part);
+      hasScript = true;
     }
   }
-
-  if (!hasWorkspaceScript) {
-    throw new ConfigurationError(
-      'Invalid provider ID format: exec providers used through MCP must reference a workspace script file',
-    );
+  if (!parts.length || !hasScript) {
+    throw new ConfigurationError('MCP exec commands require a workspace script file');
   }
 }
 
@@ -595,13 +656,18 @@ function validateStaticConfigFile(configPath: string, state: ProviderValidationS
   }
 
   const realConfigPath = fs.realpathSync(configPath);
-  if (state.validatedConfigFiles.has(realConfigPath)) {
+  const rawConfig = yaml.load(fs.readFileSync(realConfigPath, 'utf8'));
+  const configState = {
+    ...state,
+    basePath: path.dirname(realConfigPath),
+    env: mergeProviderEnv(getObject(rawConfig)?.env, state.env),
+  };
+  const cacheKey = JSON.stringify([realConfigPath, configState.env]);
+  if (state.validatedConfigFiles.has(cacheKey)) {
     return;
   }
-  state.validatedConfigFiles.add(realConfigPath);
+  state.validatedConfigFiles.add(cacheKey);
 
-  const configState = { ...state, basePath: path.dirname(realConfigPath) };
-  const rawConfig = yaml.load(fs.readFileSync(realConfigPath, 'utf8'));
   validateStaticConfigContents(rawConfig, configState);
 }
 
@@ -611,17 +677,10 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
   }
 
   const renderedProviderId = renderProviderIdForValidation(providerId, state.env);
-  if (renderedProviderId.includes('..') || renderedProviderId.includes('~')) {
-    throw new ConfigurationError(
-      'Invalid provider ID format: provider IDs cannot contain ".." or "~"',
-    );
-  }
-
   if (renderedProviderId.startsWith('exec:')) {
-    validateExecProviderId(renderedProviderId, state);
+    validateExecReference(renderedProviderId, state, false);
     return;
   }
-
   if (/\s/.test(renderedProviderId)) {
     throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
   }
@@ -635,6 +694,21 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     } catch {
       throw new ConfigurationError(`Invalid provider URL: ${renderedProviderId}`);
     }
+  }
+
+  if (renderedProviderId.startsWith('package:')) {
+    const packageName = renderedProviderId.slice('package:'.length).split(':', 1)[0];
+    if (
+      !packageName ||
+      path.isAbsolute(packageName) ||
+      /^[A-Za-z]:[\\/]/.test(packageName) ||
+      packageName.startsWith('.') ||
+      packageName.split('/').includes('..') ||
+      packageName.includes('\\')
+    ) {
+      throw new ConfigurationError('MCP package providers must use a package name', providerId);
+    }
+    return;
   }
 
   const providerPath = getLocalProviderPath(renderedProviderId);
@@ -651,6 +725,9 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     throw new ConfigurationError(
       `Invalid provider ID format: ${renderedProviderId}. Expected a supported provider file.`,
     );
+  }
+  if (renderedProviderId.includes('..') || renderedProviderId.includes('~')) {
+    throw new ConfigurationError('Invalid provider ID format: unexpected traversal', providerId);
   }
 }
 
