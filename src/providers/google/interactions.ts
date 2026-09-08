@@ -685,7 +685,11 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
     return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
 
-  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  const apiHost =
+    env?.GOOGLE_API_HOST ||
+    env?.PALM_API_HOST ||
+    getEnvString('GOOGLE_API_HOST') ||
+    getEnvString('PALM_API_HOST');
   if (apiHost) {
     return endpointFromHost(apiHost);
   }
@@ -852,6 +856,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleInteractionsRequestConfig(this.config, promptConfig);
+    if (this.modelName === 'gemini-omni-1.1-flash') {
+      config.vertexai = false;
+    }
     const { toolsDisabled } = resolveGoogleToolConfig(config);
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const providerPassthrough = this.config.passthrough || {};
@@ -866,7 +873,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (routeError) {
       return { error: routeError };
     }
-    const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
+    const isVideoModel = [
+      'gemini-omni-flash-preview',
+      'gemini-omni-1.1-flash',
+      'gemini-omni-1.1-flash-preview',
+    ].includes(effectiveModel);
     const allowSamplingControls = config.vertexai && isVideoModel;
     const {
       input: interactionInput,

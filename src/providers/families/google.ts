@@ -68,6 +68,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
       if (
         modelName === 'gemini-omni-flash-preview' ||
+        modelName === 'gemini-omni-1.1-flash-preview' ||
         modelName === 'gemini-robotics-er-2-preview'
       ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
@@ -170,10 +171,17 @@ export const googleProviderFactories: ProviderFactory[] = [
 
       if (
         modelName === 'gemini-omni-flash-preview' ||
+        modelName === 'gemini-omni-1.1-flash' ||
         modelName === 'gemini-robotics-er-2-preview'
       ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
-        return new GoogleInteractionsProvider(modelName, providerOptions);
+        return new GoogleInteractionsProvider(modelName, {
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            ...(modelName === 'gemini-omni-1.1-flash' && { vertexai: false }),
+          },
+        });
       }
 
       // Check if this is a Gemini native image generation model. Dispatch is on
