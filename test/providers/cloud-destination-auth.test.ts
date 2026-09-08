@@ -4,6 +4,7 @@ import { setEnvOverridesProvider } from '../../src/envOverrides';
 import { loadApiProvider } from '../../src/providers';
 import { mockProcessEnv } from '../util/utils';
 
+import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { EnvOverrides } from '../../src/types/env';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -128,6 +129,66 @@ describe.each([
 
       expect(await provider.callApi('hello')).toMatchObject(successResponse);
       expectRequest(destinationB, 'fixture-suite-token-b');
+    });
+
+    function withoutVendorCredentials() {
+      restoreProcessEnv();
+      restoreProcessEnv = mockProcessEnv({
+        CDP_TOKEN: '',
+        SNOWFLAKE_API_KEY: '',
+        OPENAI_API_KEY: 'fixture-process-openai',
+      });
+      const env = {
+        CDP_TOKEN: '',
+        SNOWFLAKE_API_KEY: '',
+        OPENAI_API_KEY: 'fixture-scoped-openai',
+      };
+      setEnvOverridesProvider(() => env);
+      return env;
+    }
+
+    it('does not substitute an OpenAI key when the vendor token is missing', async () => {
+      const env = withoutVendorCredentials();
+      const provider = (await loadApiProvider(providerPath, {
+        env,
+        options: { env, config: { [configKey]: destinationB, apiKey: '' } },
+      })) as OpenAiChatCompletionProvider;
+      expect(provider.getApiKey()).toBeUndefined();
+
+      if (providerName === 'cloudera') {
+        await expect(provider.callApi('hello')).rejects.toThrow('CDP_TOKEN');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { message: 'fixture unauthorized' } },
+          cached: false,
+          status: 401,
+          statusText: 'Unauthorized',
+        });
+        expect(await provider.callApi('hello')).toEqual({
+          error: 'API error: 401 Unauthorized\n{"error":{"message":"fixture unauthorized"}}',
+        });
+        expectRequest(destinationB, 'undefined');
+      }
+    });
+
+    it('preserves explicit Authorization without a vendor token', async () => {
+      const env = withoutVendorCredentials();
+      const provider = (await loadApiProvider(providerPath, {
+        env,
+        options: {
+          env,
+          config: {
+            [configKey]: destinationB,
+            apiKey: '',
+            ...(providerName === 'cloudera' ? { apiKeyRequired: false } : {}),
+            headers: { Authorization: 'Bearer fixture-custom-auth' },
+          },
+        },
+      })) as OpenAiChatCompletionProvider;
+      expect(provider.getApiKey()).toBeUndefined();
+      expect(await provider.callApi('hello')).toMatchObject(successResponse);
+      expectRequest(destinationB, 'fixture-custom-auth');
     });
 
     it('uses an explicit config destination and token ahead of all environment pairs', async () => {
