@@ -763,9 +763,8 @@ providers:
 Use `grok-voice-think-fast-2.0` for the current flagship model, or
 `grok-voice-latest` to follow xAI's recommended alias. xAI's July 29 release
 notes say the alias moves from 1.0 to 2.0 on August 5, 2026. Version 2.0 costs
-$0.08 per minute; the previous-generation `grok-voice-think-fast-1.0` costs
-$0.05 per minute. Promptfoo switches the alias estimate on the published
-transition date.
+$0.08 per audio minute; the previous-generation `grok-voice-think-fast-1.0` costs
+$0.05 per audio minute. Both also charge per text input; see [Pricing](#voice-pricing).
 
 #### Turn Detection
 
@@ -963,10 +962,15 @@ tests:
         value: Provides information about recent AI news
 ```
 
-#### Pricing
+#### Pricing {#voice-pricing}
 
-Grok Voice Think Fast 2.0 is billed at **$0.08 per minute** of connection time.
-The previous-generation 1.0 model costs **$0.05 per minute**.
+[xAI's pricing](https://docs.x.ai/developers/pricing) lists Grok Voice Think Fast 2.0 at
+**$0.08 per audio minute**, and the previous-generation 1.0 model at **$0.05 per audio minute**.
+Both also charge **$0.004 per text input**. This adapter sends the evaluation prompt as a text input.
+
+Promptfoo retains elapsed connection time in `metadata.durationMs`, but the WebSocket response
+does not establish a complete billing total or billed audio duration. Response `cost` therefore
+remains unavailable; connection time is not treated as billed audio time.
 
 For more information on the available models and API usage, refer to the
 [xAI Speech to Speech documentation](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech).

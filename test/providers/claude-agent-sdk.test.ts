@@ -403,6 +403,19 @@ describe('ClaudeCodeSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it.each(['best', 'fable', 'fable[1m]', 'opus[1m]', 'opusplan[1m]'])(
+      'recognizes the documented Claude Code %s model selector',
+      (model) => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+        new ClaudeCodeSDKProvider({ config: { model } });
+        new ClaudeCodeSDKProvider({ config: { fallback_model: `sonnet,${model}` } });
+
+        expect(warnSpy).not.toHaveBeenCalled();
+        warnSpy.mockRestore();
+      },
+    );
+
     it('should not warn about known Anthropic models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 

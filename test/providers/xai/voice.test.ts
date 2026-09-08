@@ -203,6 +203,16 @@ describe('XAI Voice Provider', () => {
       }
     });
 
+    it.each(['a1b2c3d4', 'TenantVoiceA'])(
+      'preserves opaque voice ID %s in session setup',
+      async (voice) => {
+        const provider = new XAIVoiceProvider('grok-voice-think-fast-2.0', { config: { voice } });
+        const setup = await (provider as any).buildSessionConfig();
+        expect(provider.config.voice).toBe(voice);
+        expect(setup.session.voice).toBe(voice);
+      },
+    );
+
     it('normalizes legacy title-cased voice names', () => {
       const provider = new XAIVoiceProvider('grok-3', { config: { voice: 'Ara' } });
 
