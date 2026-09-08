@@ -15,14 +15,19 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
 ## Quick Start
 
-1. **Set your API keys**:
+1. **Set the API keys for the full example**:
+
+   The checked-in evaluation calls all three chat routes and uses OpenAI embeddings for similarity assertions, so running it unchanged requires all three keys:
 
    ```bash
    export OPENAI_API_KEY=your-openai-key
-   # Optional: Add other providers
    export ANTHROPIC_API_KEY=your-anthropic-key
    export GOOGLE_AI_API_KEY=your-google-key
    ```
+
+   The proxy can start with any one of these keys. To evaluate a subset, remove unused chat providers from `promptfooconfig.yaml` and their routes from `litellm_config.yaml`, or use a promptfoo config that selects only routes with configured credentials.
+
+   Keep `OPENAI_API_KEY` for the default embedding route even if you omit GPT chat. To run without OpenAI, configure an embedding provider you can access in both configs, or remove the `similar` assertion and its `defaultTest.options.provider.embedding` setting.
 
 2. **Start the LiteLLM proxy**:
 

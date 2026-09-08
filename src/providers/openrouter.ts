@@ -17,6 +17,16 @@ import type {
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
+type OpenRouterUsage = NonNullable<OpenAiChatCompletionCostData['usage']> & {
+  cost?: unknown;
+  is_byok?: unknown;
+  cost_details?: unknown;
+};
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
  * for models like Gemini that include thinking/reasoning tokens.
@@ -70,12 +80,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   protected override calculateResponseCost(
     data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
-    cached: boolean,
   ): number | undefined {
-    if (cached) {
-      return 0;
-    }
-
+    // Preserve logical cost on cache replay; the evaluator tracks incurred spending separately.
     if (
       config.cost !== undefined ||
       config.inputCost !== undefined ||
@@ -88,18 +94,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       const promptTokens = data.usage?.prompt_tokens;
       const completionTokens = data.usage?.completion_tokens;
       if (
-        typeof inputCost !== 'number' ||
-        !Number.isFinite(inputCost) ||
-        inputCost < 0 ||
-        typeof outputCost !== 'number' ||
-        !Number.isFinite(outputCost) ||
-        outputCost < 0 ||
-        typeof promptTokens !== 'number' ||
-        !Number.isFinite(promptTokens) ||
-        promptTokens < 0 ||
-        typeof completionTokens !== 'number' ||
-        !Number.isFinite(completionTokens) ||
-        completionTokens < 0
+        !isNonNegativeFiniteNumber(inputCost) ||
+        !isNonNegativeFiniteNumber(outputCost) ||
+        !isNonNegativeFiniteNumber(promptTokens) ||
+        !isNonNegativeFiniteNumber(completionTokens)
       ) {
         return undefined;
       }
@@ -107,14 +105,51 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       return Number.isFinite(cost) ? cost : undefined;
     }
 
-    // usage.cost is the total charged to the OpenRouter account. Its upstream
-    // inference cost is a separate value; native vendor rates cannot substitute.
+    const usage = data.usage as OpenRouterUsage | undefined;
+    // BYOK inference is billed separately by the upstream provider. A waived
+    // charge or gateway fee cannot represent its total cost.
+    if (usage?.is_byok === true) {
+      return undefined;
+    }
+
+    // Without an explicit BYOK flag, retain the reported OpenRouter account
+    // charge. Upstream components and native vendor rates cannot substitute.
     // https://openrouter.ai/docs/cookbook/administration/usage-accounting
-    const usage = data.usage as
-      | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cost?: unknown })
-      | undefined;
     const cost = usage?.cost;
-    return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+    return isNonNegativeFiniteNumber(cost) ? cost : undefined;
+  }
+
+  private getBillingMetadata(data: OpenAiChatCompletionCostData): ProviderResponse['metadata'] {
+    const usage = data.usage as OpenRouterUsage | undefined;
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+      return undefined;
+    }
+    const details =
+      usage.cost_details &&
+      typeof usage.cost_details === 'object' &&
+      !Array.isArray(usage.cost_details)
+        ? (usage.cost_details as Record<string, unknown>)
+        : undefined;
+
+    // These are independent reported facts, regardless of whether generic cost
+    // is a configured estimate, the account charge, or unavailable.
+    const billing: Record<string, unknown> = {};
+    const amounts = {
+      accountCharge: usage.cost,
+      reportedUpstreamInferenceCost: details?.upstream_inference_cost,
+      reportedUpstreamPromptCost: details?.upstream_inference_prompt_cost,
+      reportedUpstreamCompletionCost: details?.upstream_inference_completions_cost,
+      reportedServerToolCost: details?.server_tool_cost,
+    };
+    for (const [name, amount] of Object.entries(amounts)) {
+      if (isNonNegativeFiniteNumber(amount)) {
+        billing[name] = amount;
+      }
+    }
+    if (typeof usage.is_byok === 'boolean') {
+      billing.isByok = usage.is_byok;
+    }
+    return Object.keys(billing).length > 0 ? { openrouter: billing } : undefined;
   }
 
   async callApi(
@@ -287,7 +322,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: this.calculateResponseCost(data, config, cached),
+      cost: this.calculateResponseCost(data, config),
+      metadata: this.getBillingMetadata(data),
       ...(finishReason && { finishReason }),
     };
   }
