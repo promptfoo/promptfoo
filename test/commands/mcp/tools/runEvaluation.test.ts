@@ -7,6 +7,10 @@ import cliState from '../../../../src/cliState';
 import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+vi.mock('../../../../src/telemetry', () => ({
+  default: { record: vi.fn() },
+}));
+
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
   default: {
