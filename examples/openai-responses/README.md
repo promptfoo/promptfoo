@@ -71,9 +71,13 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 Example comparing GPT-5.5 standard and pro models with different Responses API reasoning settings.
 
-### GPT-5.6 limited preview (`promptfooconfig.gpt-5.6.yaml`)
+### GPT-5.6 (`promptfooconfig.gpt-5.6.yaml`)
 
-Example comparing the public Sol, Terra, and Luna preview identifiers. Your OpenAI account must be enabled for the limited preview. Sol uses the new `max` reasoning effort; `ultra` is available through the Codex providers rather than the Responses API.
+Example comparing the Sol, Terra, and Luna tiers. The `gpt-5.6` alias routes to Sol. All tiers support `max` reasoning; Codex `ultra` is available for Sol and Terra rather than as a Responses API reasoning value.
+
+### GPT-6 Astra (`promptfooconfig.gpt-6-astra.yaml`)
+
+Example using Astra with Responses, `high` reasoning, and structured output. Requires an OpenAI account with Astra access. Astra supports `low`, `medium`, `high`, `xhigh`, and `max` reasoning; tool calling requires Responses. See the [provider documentation](https://www.promptfoo.dev/docs/providers/openai/#gpt-6-astra) for pricing and hosting availability.
 
 ### Image Processing (`promptfooconfig.image.yaml`)
 
@@ -135,8 +139,11 @@ npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 # GPT-5.5 example
 npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
 
-# GPT-5.6 limited-preview example
+# GPT-5.6 example
 npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
+
+# GPT-6 Astra example
+npx promptfoo eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
 
 # Prompt caching example
 npx promptfoo eval -c promptfooconfig.prompt-cache.yaml

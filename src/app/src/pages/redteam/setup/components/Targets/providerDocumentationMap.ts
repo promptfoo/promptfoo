@@ -25,6 +25,8 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Agent Frameworks
   'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  'codex-security': `${BASE_DOCS_URL}/openai-codex-security`,
+  openinterpreter: `${BASE_DOCS_URL}/openinterpreter`,
   'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
   'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
   langchain: `${BASE_DOCS_URL}/python`,
@@ -107,7 +109,12 @@ export function getProviderDocumentationUrl(providerType?: string): string {
   }
 
   // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
-  const normalizedType = providerType.includes(':') ? providerType.split(':')[0] : providerType;
+  const normalizedType =
+    providerType === 'openai:codex-security' || providerType.startsWith('openai:codex-security:')
+      ? 'codex-security'
+      : providerType.includes(':')
+        ? providerType.split(':')[0]
+        : providerType;
 
   return PROVIDER_DOCUMENTATION_MAP[normalizedType] || BASE_DOCS_URL;
 }
@@ -123,19 +130,4 @@ export function hasSpecificDocumentation(providerType?: string): boolean {
   }
 
   return providerType in PROVIDER_DOCUMENTATION_MAP;
-}
-
-/**
- * Gets a help text for a provider with documentation link
- * @param providerType The provider type
- * @returns Formatted help text with documentation link
- */
-export function getProviderHelpText(providerType?: string): string {
-  const hasSpecific = hasSpecificDocumentation(providerType);
-
-  if (hasSpecific && providerType) {
-    return `Learn how to configure ${providerType} in our documentation.`;
-  }
-
-  return 'Learn how to configure providers in our documentation.';
 }

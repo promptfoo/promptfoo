@@ -46,7 +46,7 @@ export class LlamaProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: this.config?.n_predict || 512,
+      n_predict: this.config?.n_predict ?? 512,
       temperature: this.config?.temperature,
       top_k: this.config?.top_k,
       top_p: this.config?.top_p,

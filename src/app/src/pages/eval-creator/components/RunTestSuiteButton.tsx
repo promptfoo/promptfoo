@@ -33,6 +33,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
@@ -90,6 +91,7 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
       ...(sourceEvalId && { sourceEvalId }),
     };

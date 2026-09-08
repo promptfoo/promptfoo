@@ -12,7 +12,7 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
@@ -80,7 +80,13 @@ export async function matchesAnswerRelevance(
     `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
-  const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
+  const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
+  const inputEmbeddingResp = await callGradingProvider(
+    embeddingProvider,
+    'answer-relevance.embedding',
+    () => callEmbeddingApi(input),
+    { callContext: providerCallContext, operationName: 'embeddings' },
+  );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
@@ -91,7 +97,12 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await embeddingProvider.callEmbeddingApi(question);
+    const resp = await callGradingProvider(
+      embeddingProvider,
+      'answer-relevance.embedding',
+      () => callEmbeddingApi(question),
+      { callContext: providerCallContext, operationName: 'embeddings' },
+    );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
@@ -151,9 +162,9 @@ export async function matchesContextRecall(
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    ...(vars || {}),
     context: contextString,
     groundTruth,
-    ...(vars || {}),
   });
 
   const resp = await callProviderWithContext(
@@ -161,9 +172,9 @@ export async function matchesContextRecall(
     promptText,
     'context-recall',
     {
+      ...(vars || {}),
       context: contextString,
       groundTruth,
-      ...(vars || {}),
     },
     providerCallContext,
   );
@@ -352,9 +363,9 @@ export async function matchesContextFaithfulness(
   const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
+    ...(vars || {}),
     question: query,
     answer: tryParse(output),
-    ...(vars || {}),
   });
 
   let resp = await callProviderWithContext(
@@ -362,9 +373,9 @@ export async function matchesContextFaithfulness(
     promptText,
     'context-faithfulness-longform',
     {
+      ...(vars || {}),
       question: query,
       answer: tryParse(output),
-      ...(vars || {}),
     },
     providerCallContext,
   );
@@ -379,9 +390,9 @@ export async function matchesContextFaithfulness(
 
   const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
+    ...(vars || {}),
     context: contextString,
     statements,
-    ...(vars || {}),
   });
 
   resp = await callProviderWithContext(
@@ -389,9 +400,9 @@ export async function matchesContextFaithfulness(
     promptText,
     'context-faithfulness-nli',
     {
+      ...(vars || {}),
       context: contextString,
       statements,
-      ...(vars || {}),
     },
     providerCallContext,
   );

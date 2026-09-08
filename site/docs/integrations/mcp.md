@@ -26,7 +26,7 @@ To enable MCP for a provider, add the `mcp` block to your provider's `config` in
 ```yaml title="promptfooconfig.yaml"
 description: Testing MCP memory server integration with Google AI Studio
 providers:
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       mcp:
         enabled: true
@@ -148,7 +148,7 @@ You can configure multiple MCP servers by assigning different MCP server configu
 ```yaml title="promptfooconfig.yaml"
 description: Using multiple MCP servers
 providers:
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       mcp:
         enabled: true

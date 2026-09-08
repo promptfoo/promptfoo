@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js `^20.20.0` or `>=22.22.0` installed in your CI environment
+- Node.js `>=22.22.0` installed in your CI environment (Node.js 24 LTS recommended)
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments
@@ -145,7 +145,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
 
       - name: Cache promptfoo
@@ -200,6 +200,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
 
       - name: Run red team scan
         uses: promptfoo/promptfoo-action@v1
@@ -314,7 +319,7 @@ Test multiple models or configurations in parallel:
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-4, gpt-3.5-turbo, claude-3-opus]
+    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
 steps:
   - name: Test ${{ matrix.model }}
     run: |
@@ -461,7 +466,7 @@ gh pr comment --body "
 ## Caching Strategies
 
 <!-- prettier-ignore -->
-Optimize CI/CD performance with proper caching [[memory:3455374]]:
+Optimize CI/CD performance with proper caching:
 
 ```yaml
 # Set cache location
