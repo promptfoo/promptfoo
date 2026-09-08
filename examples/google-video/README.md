@@ -83,7 +83,7 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend a video with Google AI Studio by passing a base64 or `file://` source video and setting `durationSeconds: 8`; Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`).
+Extend a previously Veo-generated video with Google AI Studio by passing a base64 or `file://` source video and setting `durationSeconds: 8`; Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`).
 
 ## Notes
 

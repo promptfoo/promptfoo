@@ -21,6 +21,6 @@ tests:
       - type: is-valid-video
 
 # To use this:
-# 1. Save a source video locally.
+# 1. Save a previously Veo-generated video locally.
 # 2. Replace YOUR_SOURCE_VIDEO.mp4 with its path.
 # 3. Set GOOGLE_API_KEY or GEMINI_API_KEY.
