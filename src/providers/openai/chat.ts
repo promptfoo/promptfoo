@@ -823,7 +823,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
-      await deleteFromCache?.();
+      if (callApiOptions?.abortSignal?.aborted) {
+        void deleteFromCache?.().catch(() => {});
+      } else {
+        await deleteFromCache?.();
+      }
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {
