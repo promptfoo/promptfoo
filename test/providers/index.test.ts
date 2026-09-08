@@ -713,11 +713,10 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
-  it('loadApiProvider with github', async () => {
-    const provider = await loadApiProvider('github:gpt-4o-mini');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('gpt-4o-mini');
+  it('rejects retired GitHub Models before inference', async () => {
+    await expect(loadApiProvider('github:gpt-4o-mini')).rejects.toThrow(
+      'GitHub Models was retired',
+    );
   });
 
   it('loadApiProvider with perplexity', async () => {
