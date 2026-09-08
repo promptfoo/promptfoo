@@ -395,8 +395,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30],
-    ['gpt-5.6-sol', 5, 30],
+    ['gpt-5.6', 4, 20],
+    ['gpt-5.6-sol', 4, 20],
     ['gpt-5.6-terra', 2, 12],
     ['gpt-5.6-luna', 0.2, 1.2],
   ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
@@ -405,8 +405,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30, 10, 45],
-    ['gpt-5.6-sol', 5, 30, 10, 45],
+    ['gpt-5.6', 4, 20, 8, 30],
+    ['gpt-5.6-sol', 4, 20, 8, 30],
     ['gpt-5.6-terra', 2, 12, 4, 18],
     ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
   ])(

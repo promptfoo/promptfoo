@@ -2,6 +2,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -55,6 +56,26 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each([
+    ['localai:chat:served-model:q4:latest', 'LocalAiChatProvider'],
+    ['localai:completion:served-model:q4:latest', 'LocalAiCompletionProvider'],
+    ['localai:embedding:served-model:q4:latest', 'LocalAiEmbeddingProvider'],
+    ['localai:embeddings:served-model:q4:latest', 'LocalAiEmbeddingProvider'],
+    ['localai:served-model:q4:latest', 'LocalAiChatProvider'],
+  ])('preserves the full served model name for %s', async (providerPath, className) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    const provider = await factory!.create(
+      providerPath,
+      { id: 'custom-local-id', env: { LOCALAI_BASE_URL: 'http://localhost:1234/v1' } },
+      { basePath: '.', options: {} },
+    );
+    expect(provider.constructor.name).toBe(className);
+    expect(provider).toHaveProperty('modelName', 'served-model:q4:latest');
+    expect(provider.id()).toBe('custom-local-id');
+    expect(provider).toHaveProperty('apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
   describe('Provider Factories', () => {
     const mockProviderOptions: ProviderOptions = {
       id: 'test-provider',
@@ -311,6 +332,23 @@ describe('Provider Registry', () => {
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
+
+    it.each(['llamaapi:vendor:model', 'llamaapi:chat:vendor:model'])(
+      'routes %s uniquely to the Llama API provider',
+      async (providerPath) => {
+        const matchingFactories = providerMap.filter((factory) => factory.test(providerPath));
+        expect(matchingFactories).toHaveLength(1);
+
+        const provider = await matchingFactories[0].create(
+          providerPath,
+          { ...mockProviderOptions, id: undefined },
+          mockContext,
+        );
+
+        expect(provider).toBeInstanceOf(LlamaApiProvider);
+        expect(provider.id()).toBe('llamaapi:vendor:model');
+      },
+    );
 
     describe.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
       'Meta model %s',
