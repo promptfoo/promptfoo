@@ -30,7 +30,7 @@ export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
   apiKeyRequired?: boolean;
-  /** Allow fallback to OPENAI_API_KEY when no explicit or selected key is available. */
+  /** Allow OPENAI_API_KEY when no credential variable is selected. */
   useDefaultApiKey?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;

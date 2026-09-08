@@ -13,6 +13,7 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 
 import { fetchWithCache } from '../../src/cache';
 import { createNscaleProvider } from '../../src/providers/nscale';
+import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { OpenAiGenericProvider } from '../../src/providers/openai';
 import { mockProcessEnv } from '../util/utils';
 
@@ -54,6 +55,24 @@ describe('Nscale request construction', () => {
     expect(body).not.toHaveProperty('apiKey');
     expect(JSON.stringify(body)).not.toContain('SERVICE-TOKEN-SECRET');
     expect(headers.Authorization).toBe('Bearer SERVICE-TOKEN-SECRET');
+  });
+
+  it('keeps scoped image credentials out of config and sends them as request authentication', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { data: [{ url: 'https://example.invalid/image.png' }] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = createNscaleProvider('nscale:image:flux/flux.1-schnell', {
+      env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale-secret' },
+    });
+    expect(JSON.stringify(provider.config)).not.toContain('scoped-nscale-secret');
+    expect((provider as NscaleImageProvider).getApiKey()).toBe('scoped-nscale-secret');
+    await provider.callApi('a garden');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: 'Bearer scoped-nscale-secret',
+    });
   });
 
   it('applies configured headers as HTTP headers rather than body fields', async () => {

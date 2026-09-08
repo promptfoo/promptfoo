@@ -69,25 +69,27 @@ export function createNscaleProvider(
     }
   }
 
-  // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
-  const getApiKey = () => {
-    return (
-      config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
+  const getApiKeyEnvar = () => {
+    if (config.apiKeyEnvar) {
+      return config.apiKeyEnvar;
+    }
+    // Select a native namespace without copying its credential into config.
+    for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
+      if (options.env?.[envar] || getEnvString(envar)) {
+        return envar;
+      }
+    }
+    return 'NSCALE_SERVICE_TOKEN';
   };
 
   const nscaleConfig = {
     ...options,
     config: {
       ...providerLevelOptions,
+      apiKeyEnvar: getApiKeyEnvar(),
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
       apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-      apiKey: getApiKey(),
       passthrough: {
         ...modelParameters,
         ...explicitPassthrough,
@@ -106,7 +108,7 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config as any, // Allow flexible config type for Nscale image options
+      config,
       id: options.id,
       env: options.env,
     });

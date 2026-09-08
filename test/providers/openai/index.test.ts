@@ -149,7 +149,7 @@ describe('OpenAI Provider', () => {
             new OpenAiGenericProvider('local', {
               config: { useDefaultApiKey, apiKeyEnvar: 'MISSING_LOCAL_MODEL_KEY' },
             }).getApiKey(),
-          ).toBe(useDefaultApiKey === false ? undefined : 'hosted-key');
+          ).toBeUndefined();
           expect(
             new OpenAiGenericProvider('local', {
               config: { useDefaultApiKey },

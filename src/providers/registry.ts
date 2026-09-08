@@ -869,14 +869,10 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('nscale:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       return createNscaleProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env,
       });
     },
   },
@@ -1295,16 +1291,9 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('cometapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const { createCometApiProvider } = await import('./cometapi');
-      return createCometApiProvider(providerPath, {
-        ...providerOptions,
-        env: context.env,
-      });
+      return createCometApiProvider(providerPath, providerOptions);
     },
   },
   {
