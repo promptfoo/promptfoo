@@ -29,6 +29,7 @@ const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
   'apiKey',
   'apiKeyEnvar',
   'apiKeyRequired',
+  'useDefaultApiKey',
   'apiHost',
   'apiBaseUrl',
   'organization',
@@ -70,6 +71,9 @@ export function createNscaleProvider(
 
   // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
   const getApiKey = () => {
+    if (config.apiKeyEnvar) {
+      return config.apiKey;
+    }
     return (
       config.apiKey ||
       options.env?.NSCALE_SERVICE_TOKEN ||
@@ -83,6 +87,7 @@ export function createNscaleProvider(
     ...options,
     config: {
       ...providerLevelOptions,
+      apiKeyEnvar: config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN',
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
       apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',

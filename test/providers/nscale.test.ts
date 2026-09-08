@@ -89,6 +89,7 @@ describe('createNscaleProvider', () => {
       config: {
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
         apiKey: undefined, // No API key or service token set
+        apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
         passthrough: {},
       },
       id: 'custom-id',
