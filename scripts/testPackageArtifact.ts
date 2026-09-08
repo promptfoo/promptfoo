@@ -640,7 +640,10 @@ async function main(): Promise<void> {
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
   );
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
+  // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
+  const tempDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
+  );
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
@@ -718,7 +721,7 @@ async function main(): Promise<void> {
       if (values.profile === 'omit-optional') {
         assert.throws(() => packageRequire.resolve(optionalPackage), { code: 'MODULE_NOT_FOUND' });
       } else {
-        assert(packageRequire.resolve(optionalPackage).startsWith(consumerDir));
+        assert(packageRequire.resolve(optionalPackage).startsWith(`${consumerDir}${path.sep}`));
       }
     }
 
