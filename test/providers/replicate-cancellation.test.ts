@@ -31,6 +31,64 @@ function reply(status: string, output?: unknown) {
   };
 }
 
+it('shares a cached prediction across row signals while cancelling only its caller', async () => {
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  vi.mocked(getCache).mockResolvedValue({ get: vi.fn(), set: vi.fn() } as any);
+  let finish!: (value: ReturnType<typeof reply>) => void;
+  vi.mocked(fetchWithCache).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
+  const first = new AbortController();
+  const second = new AbortController();
+  const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
+  const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
+  expect(sharedSignal).toBeInstanceOf(AbortSignal);
+  first.abort();
+  await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
+  expect(sharedSignal?.aborted).toBe(false);
+  finish(reply('succeeded', 'shared output'));
+  await expect(result2).resolves.toMatchObject({ output: 'shared output' });
+});
+
+it('aborts an unneeded shared prediction and allows a fresh creation', async () => {
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  vi.mocked(getCache).mockResolvedValue({ get: vi.fn(), set: vi.fn() } as any);
+  vi.mocked(fetchWithCache).mockImplementation(
+    (_url, request) =>
+      new Promise((_resolve, reject) => {
+        request?.signal?.addEventListener('abort', () => reject(request.signal?.reason), {
+          once: true,
+        });
+      }),
+  );
+  const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
+  const first = new AbortController();
+  const second = new AbortController();
+  const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
+  const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
+  first.abort();
+  await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
+  expect(sharedSignal?.aborted).toBe(false);
+  second.abort();
+  await expect(result2).rejects.toMatchObject({ name: 'AbortError' });
+  expect(sharedSignal?.aborted).toBe(true);
+  const third = new AbortController();
+  const result3 = provider.callApi('Hello', undefined, { abortSignal: third.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetchWithCache).toHaveBeenCalledTimes(2);
+  third.abort();
+  await expect(result3).rejects.toMatchObject({ name: 'AbortError' });
+});
+
 describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellation', (Provider) => {
   it('rejects an already-aborted call before cache or network access', async () => {
     const controller = new AbortController();
