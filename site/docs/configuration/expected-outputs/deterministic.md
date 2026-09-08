@@ -287,9 +287,9 @@ See [`is-sql`](#is-sql) for advanced usage, including specific database types an
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
+The `cost` assertion checks whether the cost reported by the selected provider is at or below a specified threshold.
 
-This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
+This requires the provider to return cost information; an unknown cost cannot be checked. Use `--no-cache` when comparing fresh inference costs, because response-cache cost reporting depends on the provider.
 
 Example:
 
