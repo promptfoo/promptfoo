@@ -201,11 +201,13 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     options?: CallApiOptionsParams,
   ): Promise<{ invocationArn?: string; error?: string }> {
     try {
-      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -245,11 +247,13 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     const startTime = Date.now();
 
     try {
-      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -317,8 +321,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       const [, bucket, keyPrefix] = match;
 
       // Download from S3
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await this.getCredentials();
+      const { S3Client, GetObjectCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-s3'),
+        options?.abortSignal,
+      );
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const s3 = new S3Client({
         region: this.getRegion(),

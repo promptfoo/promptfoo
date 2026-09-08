@@ -433,8 +433,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       : undefined;
 
     if (cache && cacheKey) {
-      const cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Claude response', {
           model: this.modelName,
@@ -528,9 +530,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (cache && cacheKey) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
@@ -707,8 +714,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let response;
     let cachedResponse;
     if (cache && cacheKey) {
-      cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         logger.debug('Returning cached Vertex Gemini response', {
@@ -952,8 +958,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         if (cache && cacheKey) {
-          await cache.set(cacheKey, JSON.stringify(response));
+          options?.abortSignal?.throwIfAborted();
+          await awaitProviderOperation(
+            cache.set(cacheKey, JSON.stringify(response)),
+            options?.abortSignal,
+          );
         }
+        options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
@@ -1041,8 +1052,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       : undefined;
 
     if (cache && cacheKey) {
-      const cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Palm2 response', {
           model: this.modelName,
@@ -1103,9 +1116,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (cache && cacheKey) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
@@ -1195,8 +1213,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     });
 
     if (cache && cacheKey) {
-      const cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Llama response', {
           model: this.modelName,
@@ -1301,9 +1321,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (cache && cacheKey) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
