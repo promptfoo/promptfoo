@@ -197,6 +197,10 @@ export function hasProviderCapability<K extends ProviderCapability>(
   provider: unknown,
   capability: K,
 ): provider is ProviderIdentity & Pick<ProviderOperations, K> {
+  const delegate =
+    typeof provider === 'object' && provider !== null
+      ? (provider as Record<symbol, unknown>)[Symbol.for('promptfoo.capabilityDelegate')]
+      : undefined;
   return (
     typeof provider === 'object' &&
     provider !== null &&
@@ -208,7 +212,11 @@ export function hasProviderCapability<K extends ProviderCapability>(
       provider.promptfooCapabilities === undefined ||
       (Array.isArray(provider.promptfooCapabilities) &&
         provider.promptfooCapabilities.includes(capability)) ||
-      hasSubclassCapabilityOverride(provider, capability))
+      hasSubclassCapabilityOverride(provider, capability) ||
+      (Array.isArray(provider.promptfooCapabilities) &&
+        inheritedProviderCapabilities.has(provider.promptfooCapabilities) &&
+        delegate !== provider &&
+        hasProviderCapability(delegate, capability)))
   );
 }
 
