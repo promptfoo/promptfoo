@@ -4,6 +4,7 @@ import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
   type EvaluateTableOutput,
+  type GradingResult,
   ResultFailureReason,
 } from '@promptfoo/types';
 import { act, screen, waitFor } from '@testing-library/react';
@@ -11,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
+import { EvaluationPanel } from './EvaluationPanel';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -369,6 +371,71 @@ describe('EvalOutputCell', () => {
     const statusElement = container.querySelector('.status.pass');
     expect(statusElement).toBeInTheDocument();
   });
+
+  it.each([false, true])(
+    'counts rubric dimensions and keeps the shared prompt visible (aggregate passes=%s)',
+    async (aggregatePasses) => {
+      const user = userEvent.setup();
+      const children: GradingResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Correct',
+          assertion: { type: 'llm-rubric', metric: 'accuracy', value: 'Answers correctly' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Verbose',
+          assertion: { type: 'llm-rubric', metric: 'style', value: 'Uses plain language' },
+        },
+      ];
+      const batch: GradingResult = {
+        pass: aggregatePasses,
+        score: 0.5,
+        reason: 'Weighted rubric summary',
+        assertion: {
+          type: 'llm-rubric',
+          provider: 'local-grader',
+          rubricComponents: true,
+          ...(aggregatePasses && { threshold: 0.5 }),
+          value: {
+            components: [
+              { metric: 'accuracy', value: 'Answers correctly' },
+              { metric: 'style', value: 'Uses plain language' },
+            ],
+          },
+        },
+        componentResults: children,
+        metadata: {
+          rubricComponents: true,
+          renderedGradingPrompt: 'Shared prompt for both rubric dimensions',
+        },
+      };
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            pass: batch.pass,
+            score: batch.score,
+            gradingResult: { ...batch, componentResults: [batch, ...children] },
+          }}
+        />,
+      );
+      expect(screen.getByText('1 FAIL 1 PASS')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+      const dialogResults: GradingResult[] = JSON.parse(
+        screen.getByTestId('dialog-component').getAttribute('data-grading-results') || '[]',
+      );
+      expect(dialogResults).toHaveLength(3);
+      expect(dialogResults[0]).toEqual(batch);
+
+      renderWithProviders(<EvaluationPanel gradingResults={dialogResults} />);
+      await user.click(screen.getByText('llm-rubric - Full Grading Prompt'));
+      expect(screen.getByText('Shared prompt for both rubric dimensions')).toBeInTheDocument();
+    },
+  );
 
   it('combines assertion contexts in comment dialog', async () => {
     const user = userEvent.setup();

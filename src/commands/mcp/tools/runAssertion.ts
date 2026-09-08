@@ -5,7 +5,23 @@ import logger from '../../../logger';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type { Assertion, AtomicTestCase } from '../../../types/index';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../../types/index';
+
+function summarizeGradingResult(result: GradingResult) {
+  return {
+    passed: result.pass,
+    scoreDescription:
+      result.score === 1
+        ? 'Perfect'
+        : result.score >= 0.8
+          ? 'Good'
+          : result.score >= 0.5
+            ? 'Moderate'
+            : 'Poor',
+    hasNamedMetrics: Object.keys(result.namedScores || {}).length > 0,
+    usedTokens: result.tokensUsed ? result.tokensUsed.total || 0 : 0,
+  };
+}
 
 /**
  * Run an assertion against an LLM output to test grading logic
@@ -37,6 +53,10 @@ export function registerRunAssertionTool(server: McpServer) {
         .object({
           type: z.string().describe('Assertion type (e.g., "contains", "llm-rubric", "equals")'),
           value: z.any().optional().describe('Expected value or criteria for the assertion'),
+          rubricComponents: z
+            .boolean()
+            .optional()
+            .describe('Grade llm-rubric value.components together in one judge call'),
           threshold: z.number().optional().describe('Score threshold for pass/fail (0-1)'),
           weight: z.number().optional().describe('Weight of this assertion (default: 1)'),
           metric: z.string().optional().describe('Name this assertion as a metric'),
@@ -109,6 +129,7 @@ export function registerRunAssertionTool(server: McpServer) {
           assertion: {
             type: assertion.type,
             value: assertion.value,
+            rubricComponents: assertion.rubricComponents,
             threshold: assertion.threshold,
             weight: assertion.weight || 1,
             metric: assertion.metric,
@@ -127,19 +148,7 @@ export function registerRunAssertionTool(server: McpServer) {
             vars: Object.keys(vars).length > 0 ? vars : null,
             latencyMs,
           },
-          evaluation: {
-            passed: result.pass,
-            scoreDescription:
-              result.score === 1
-                ? 'Perfect'
-                : result.score >= 0.8
-                  ? 'Good'
-                  : result.score >= 0.5
-                    ? 'Moderate'
-                    : 'Poor',
-            hasNamedMetrics: Object.keys(result.namedScores || {}).length > 0,
-            usedTokens: result.tokensUsed ? result.tokensUsed.total || 0 : 0,
-          },
+          evaluation: summarizeGradingResult(result),
         };
 
         return createToolResponse('run_assertion', true, assertionData);

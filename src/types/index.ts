@@ -579,8 +579,24 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set by the llm-rubric matcher after validating an explicitly enabled batch.
+    rubricComponents?: true;
     [key: string]: any;
   };
+}
+
+/**
+ * A batched rubric's parent retains shared diagnostics and scoring, but its
+ * dimensions already appear in the flattened results used for assertion counts.
+ * Legacy assert-set parents and grader failures without children still count.
+ */
+export function isRubricBatchAggregate(result: GradingResult | null | undefined): boolean {
+  return Boolean(
+    (result?.assertion?.type === 'llm-rubric' || result?.assertion?.type === 'not-llm-rubric') &&
+      result.metadata?.rubricComponents === true &&
+      Array.isArray(result.componentResults) &&
+      result.componentResults.length > 0,
+  );
 }
 
 export function isGradingResult(result: any): result is GradingResult {
@@ -697,6 +713,56 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
+// Shared by the rubric matcher and the evaluation creator. Components deliberately
+// share the parent's provider, prompt, transform, and threshold.
+const LlmRubricComponentMetricSchema = z
+  .string()
+  .refine(
+    (metric) =>
+      metric.trim().length > 0 &&
+      !/\{[{%#]/.test(metric) &&
+      metric !== '__count' &&
+      metric !== 'prototype' &&
+      !Object.prototype.hasOwnProperty.call(Object.prototype, metric),
+    'Component and parent metrics must be non-empty literal names, not reserved object keys',
+  );
+
+export const LlmRubricComponentsAssertionSchema = z
+  .object({
+    rubricComponents: z.literal(true),
+    value: z
+      .object({
+        components: z
+          .array(
+            z
+              .object({
+                metric: LlmRubricComponentMetricSchema,
+                value: z.string().refine((value) => value.trim().length > 0),
+                weight: z.number().finite().positive().default(1),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
+    threshold: z.number().finite().min(0).max(1).optional(),
+    metric: LlmRubricComponentMetricSchema.optional(),
+  })
+  .refine(
+    ({ value: { components }, metric }) =>
+      new Set(components.map((component) => component.metric)).size === components.length &&
+      components.every((component) => component.metric !== metric) &&
+      Number.isFinite(components.reduce((sum, component) => sum + component.weight, 0)),
+    'Component metrics must be unique and distinct from the parent metric, with finite total weight',
+  );
+
+export const LLM_RUBRIC_COMPONENTS_CONFIG_ERROR =
+  'Invalid llm-rubric components: set rubricComponents: true and provide a non-empty list of inline string rubrics with unique, literal, non-reserved metrics distinct from the literal parent metric and positive finite weights (default 1). Only metric, value, and weight are supported per component; the parent threshold must be from 0 to 1.';
+
+export type LlmRubricComponent = z.infer<
+  typeof LlmRubricComponentsAssertionSchema
+>['value']['components'][number];
+
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
@@ -735,6 +801,9 @@ export const AssertionSchema = z.object({
 
   // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
+
+  // Opt in to grading value.components in one shared llm-rubric call.
+  rubricComponents: z.boolean().optional(),
 
   // Override the grading rubric
   rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),

@@ -86,6 +86,54 @@ tests:
       question: How many planets are in our solar system?
 ```
 
+## Grading multiple components in one call
+
+In a YAML or API configuration, set `rubricComponents: true` and use `value.components` to evaluate several named criteria against the same output in one judge call. This is useful when the criteria share a grader and prompt, and you want separate scores without sending the candidate output once per criterion.
+
+```yaml
+assert:
+  - type: llm-rubric
+    provider: openai:gpt-5-mini
+    metric: overall-quality
+    rubricComponents: true
+    threshold: 0.8
+    value:
+      components:
+        - metric: accuracy
+          value: 'Accurately answers the question: {{ question }}'
+          weight: 2
+        - metric: clarity
+          value: Uses clear language appropriate for the audience
+          # weight defaults to 1
+```
+
+The parent score is `sum(component.score * component.weight) / sum(component.weight)`. With a parent `threshold`, that score alone determines whether the batch passes. Without a threshold, every component must return `pass: true`. For example, scores of 1 and 0.5 with weights 2 and 1 produce a score of approximately 0.833, which passes a threshold of 0.8 even if the second component fails.
+
+Each component must have a unique, literal `metric` name and a non-empty inline rubric string in `value`. Rubric strings support test variables. Weights must be positive finite numbers, and their total must be finite. Parent and component metric names cannot use templates, reserved object keys such as `__proto__` or `constructor`, or the derived-metric variable `__count`; the parent metric must also differ from every component metric.
+
+The explicit flag preserves existing object rubrics, including objects with their own `components` key: when the flag is omitted or false, they retain scalar grading behavior. A `file://` script or data reference may also supply the component object; the original reference remains in the result.
+
+Components share the parent's provider, `rubricPrompt`, and transformed candidate output. Component-level provider, prompt, transform, and threshold overrides are rejected. Use separate assertions or an `assert-set` when the criteria need different graders or settings. In redteam configurations that would otherwise use hosted remote grading, specify an explicit grading provider: hosted grading does not support the components response format.
+
+The judge must return one complete JSON object, optionally enclosed in a JSON code fence:
+
+```json
+{
+  "components": [
+    { "metric": "accuracy", "pass": true, "score": 1, "reason": "The answer is accurate." },
+    { "metric": "clarity", "pass": false, "score": 0.5, "reason": "Some terms are unexplained." }
+  ]
+}
+```
+
+Every requested metric must appear exactly once. Missing, duplicate, or unknown metrics, malformed JSON, non-boolean `pass`, non-string `reason`, and scores outside the finite range from 0 to 1 are grader failures. `not-llm-rubric` inverts a valid parent's pass and score; it does not turn a grader failure into a pass.
+
+Custom `rubricPrompt` templates must request this response format. They can use `{{ output }}`, `{{ rubric }}` (the object containing the rendered components), and `{{ rubricText }}` (its JSON string, including when object property access is enabled). `{{ outputText }}` provides the candidate output as text even when it contains JSON. Existing prompt files and image-capable providers use the same loading and image input paths as a single rubric.
+
+Results include per-component `componentResults`, `namedScores`, and `namedScoreWeights` for the results UI and JSON export. Token usage belongs to the parent judge call and is counted once, including inside an `assert-set`. Batching reduces the number of judge calls; it does not guarantee equivalent grading decisions or lower cost for every model and rubric.
+
+The flattened result list includes both the batch summary and criterion diagnostics. Custom scoring functions should use the named metrics instead of treating every flattened entry as an independent assertion.
+
 ## Overriding the LLM grader
 
 By default, `llm-rubric` uses `gpt-5` for grading. You can override this in several ways:
@@ -295,6 +343,8 @@ For more details, see the [object template handling guide](/docs/usage/troublesh
 
 ## Threshold Support
 
+This section describes single-rubric grading. For `value.components`, the parent threshold applies to the weighted score as described [above](#grading-multiple-components-in-one-call).
+
 The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
 
 ```yaml
@@ -307,6 +357,8 @@ assert:
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
 ## Pass vs. Score Semantics
+
+For single-rubric grading:
 
 - PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
 - If the model omits `pass`, promptfoo assumes `pass: true` by default.

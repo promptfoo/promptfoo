@@ -31,6 +31,7 @@ import {
   type EvaluateTableOutput,
   type EvaluateTableRow,
   type GradingResult,
+  isRubricBatchAggregate,
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
@@ -564,6 +565,7 @@ type ManualRatingUpdate = {
   score: EvaluateTableOutput['score'];
   componentResults?: NonNullable<GradingResult['componentResults']>;
   modifiedComponentResults: boolean;
+  automaticResult?: Pick<GradingResult, 'pass' | 'score' | 'reason'>;
 };
 
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
@@ -868,6 +870,49 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
+function getRubricBatchAutomaticResult(
+  gradingResult: GradingResult | undefined | null,
+): ManualRatingUpdate['automaticResult'] {
+  if (!gradingResult?.componentResults?.some(isRubricBatchAggregate)) {
+    return undefined;
+  }
+  const snapshot = gradingResult.metadata?.rubricBatchAutomaticResult;
+  if (
+    snapshot &&
+    typeof snapshot === 'object' &&
+    typeof snapshot.pass === 'boolean' &&
+    typeof snapshot.score === 'number' &&
+    Number.isFinite(snapshot.score) &&
+    typeof snapshot.reason === 'string'
+  ) {
+    return { pass: snapshot.pass, score: snapshot.score, reason: snapshot.reason };
+  }
+  return undefined;
+}
+
+function getRubricBatchResultBeforeOverride(
+  existingOutput: EvaluateTableOutput,
+): ManualRatingUpdate['automaticResult'] {
+  const existingResult = existingOutput.gradingResult;
+  const snapshot = getRubricBatchAutomaticResult(existingResult);
+  if (snapshot) {
+    return snapshot;
+  }
+  const alreadyManuallyRated =
+    existingResult?.reason === 'Manual result (overrides all other grading results)' ||
+    existingResult?.componentResults?.some(
+      (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+    );
+  if (!existingResult?.componentResults?.some(isRubricBatchAggregate) || alreadyManuallyRated) {
+    return undefined;
+  }
+  return {
+    pass: existingResult.pass ?? existingOutput.pass,
+    score: existingResult.score ?? existingOutput.score,
+    reason: existingResult.reason ?? 'Automatic result',
+  };
+}
+
 function getManualRatingUpdate({
   existingOutput,
   isPass,
@@ -906,7 +951,11 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    if (componentResults.length > 0) {
+    const automaticResult = getRubricBatchAutomaticResult(existingOutput.gradingResult);
+    if (automaticResult) {
+      finalPass = automaticResult.pass;
+      finalScore = automaticResult.score;
+    } else if (componentResults.length > 0) {
       finalPass =
         componentResults.filter((result) => result.pass).length === componentResults.length;
       finalScore = averageComponentResultScore(componentResults, finalScore);
@@ -917,6 +966,7 @@ function getManualRatingUpdate({
       score: finalScore,
       componentResults,
       modifiedComponentResults: true,
+      ...(automaticResult && { automaticResult }),
     };
   }
 
@@ -968,6 +1018,18 @@ function buildManualGradingResult({
     comment,
   };
 
+  const hasRubricBatch =
+    existingOutput.gradingResult?.componentResults?.some(isRubricBatchAggregate);
+  if (typeof score !== 'undefined' || typeof isPass === 'boolean') {
+    const automaticResult = getRubricBatchResultBeforeOverride(existingOutput);
+    if (automaticResult) {
+      gradingResult.metadata = {
+        ...gradingResult.metadata,
+        rubricBatchAutomaticResult: automaticResult,
+      };
+    }
+  }
+
   if (isPass === null) {
     gradingResult.pass = ratingUpdate.pass;
     gradingResult.score = ratingUpdate.score;
@@ -976,6 +1038,13 @@ function buildManualGradingResult({
     }
     if (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE) {
       delete gradingResult.assertion;
+    }
+    if (ratingUpdate.automaticResult) {
+      gradingResult.reason = ratingUpdate.automaticResult.reason;
+    }
+    if (hasRubricBatch && gradingResult.metadata) {
+      gradingResult.metadata = { ...gradingResult.metadata };
+      delete gradingResult.metadata.rubricBatchAutomaticResult;
     }
   } else if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
     gradingResult.pass = ratingUpdate.pass;

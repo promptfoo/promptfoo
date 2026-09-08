@@ -558,6 +558,16 @@ async function aggregateAssertions(
 ): Promise<void> {
   const db = await getDb();
 
+  // SQL equivalent of isRubricBatchAggregate. COALESCE keeps older results with
+  // missing assertion/value/children fields in the count instead of excluding NULL.
+  const countableAssertion = sql`NOT COALESCE(
+    json_extract(json_each.value, '$.assertion.type') IN ('llm-rubric', 'not-llm-rubric')
+    AND json_type(json_each.value, '$.metadata.rubricComponents') = 'true'
+    AND json_type(json_each.value, '$.componentResults') = 'array'
+    AND json_array_length(json_each.value, '$.componentResults') > 0,
+    0
+  )`;
+
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   const query = sql`
@@ -570,6 +580,7 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+                AND ${countableAssertion}
             )
           ELSE 0
         END
@@ -581,6 +592,7 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+                AND ${countableAssertion}
             )
           ELSE 0
         END

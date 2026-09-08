@@ -53,6 +53,22 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it.each([true, false])(
+    'preserves explicit rubricComponents=%s in parsed configuration',
+    (rubricComponents) => {
+      const assertion = {
+        type: 'llm-rubric',
+        rubricComponents,
+        value: { components: [{ metric: 'quality', value: 'Good answer' }] },
+      };
+      expect(AssertionSchema.parse(assertion)).toEqual(assertion);
+    },
+  );
+
+  it.each(['true', 1, null])('rejects a non-boolean component opt-in: %j', (rubricComponents) => {
+    expect(AssertionSchema.safeParse({ type: 'llm-rubric', rubricComponents }).success).toBe(false);
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 
