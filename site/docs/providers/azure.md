@@ -542,6 +542,8 @@ Then Azure OpenAI will be used as the default provider for all operations includ
 
 Because embedding models are distinct from text generation models, to set a default embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
 
+When Azure is selected for chat and this variable is absent, promptfoo uses configured Gemini API, Mistral, or Voyage embedding credentials, then Google Application Default Credentials. It keeps Azure for chat and never sends embedding requests to the chat deployment. Without another embedding credential, the existing OpenAI embedding fallback requires its own API key. An explicit embedding provider override takes precedence; keep that override when comparing against an existing vector index.
+
 Set this environment variable to the deployment name of your embedding model:
 
 ```bash
