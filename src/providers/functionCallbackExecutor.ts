@@ -51,27 +51,40 @@ export async function executeCallback({
         loads = new Map();
         callbackLoads.set(cache, loads);
       }
+      const previousLoad = loads.get(name);
       const load = Symbol(name);
       loads.set(name, load);
       let callback = cache[name];
       if (!callback || references.get(name) !== reference) {
-        if (typeof reference === 'function') {
-          callback = reference;
-        } else if (typeof reference === 'string' && reference) {
-          callback = reference.startsWith('file://')
-            ? await awaitProviderOperation(loadFile(reference), signal)
-            : loadInline
-              ? loadInline(reference)
-              : new Function('return ' + reference)();
-        } else {
-          throw new Error(
-            reference == null || reference === ''
-              ? `No callback found for function '${name}'`
-              : `Invalid callback configuration for ${name}`,
-          );
-        }
-        if (typeof callback !== 'function') {
-          throw new Error(`Callback '${name}' did not resolve to a function`);
+        let resolved = false;
+        try {
+          if (typeof reference === 'function') {
+            callback = reference;
+          } else if (typeof reference === 'string' && reference) {
+            callback = reference.startsWith('file://')
+              ? await awaitProviderOperation(loadFile(reference), signal)
+              : loadInline
+                ? loadInline(reference)
+                : new Function('return ' + reference)();
+          } else {
+            throw new Error(
+              reference == null || reference === ''
+                ? `No callback found for function '${name}'`
+                : `Invalid callback configuration for ${name}`,
+            );
+          }
+          if (typeof callback !== 'function') {
+            throw new Error(`Callback '${name}' did not resolve to a function`);
+          }
+          resolved = true;
+        } finally {
+          if (!resolved && loads.get(name) === load) {
+            if (previousLoad) {
+              loads.set(name, previousLoad);
+            } else {
+              loads.delete(name);
+            }
+          }
         }
         if (loads.get(name) === load) {
           cache[name] = callback;

@@ -159,6 +159,17 @@ export interface ProviderOperations {
 
 export type ProviderCapability = keyof ProviderOperations;
 
+const inheritedProviderCapabilities = new WeakSet<readonly ProviderCapability[]>();
+
+/** Mark only the built-in declaration as inherited; a subclass assignment remains explicit. */
+export function inheritProviderCapabilities<T extends readonly ProviderCapability[]>(
+  declared: T,
+): T {
+  const inherited = [...declared] as unknown as T;
+  inheritedProviderCapabilities.add(inherited);
+  return inherited;
+}
+
 /** A subclass may replace a built-in stub, but its explicit capability declaration takes precedence. */
 function hasSubclassCapabilityOverride(provider: object, capability: ProviderCapability): boolean {
   let prototype = Object.getPrototypeOf(provider);
@@ -168,13 +179,9 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
       prototype.constructor &&
       Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities')
     ) {
-      const declared = prototype.constructor.declaredProviderCapabilities;
       const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
-        overridden &&
-        (Array.isArray(declared)
-          ? capabilities === declared
-          : Object.values(declared).includes(capabilities))
+        overridden && Array.isArray(capabilities) && inheritedProviderCapabilities.has(capabilities)
       );
     }
     if (Object.prototype.hasOwnProperty.call(prototype, capability)) {

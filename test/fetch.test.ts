@@ -2371,6 +2371,30 @@ describe('fetchWithProxy transient error retries', () => {
     }
   });
 
+  it('honors a Request-embedded abort signal during transient backoff', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const reason = new Error('request cancelled');
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(createMockResponse({ status: 503, statusText: 'Service Unavailable' }));
+    vi.stubGlobal('fetch', mockFetch);
+    try {
+      const request = fetchWithProxy(
+        new Request('https://example.com', { signal: controller.signal }),
+      );
+      const rejection = expect(request).rejects.toBe(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockFetch).toHaveBeenCalledOnce();
+      controller.abort(reason);
+      await rejection;
+      expect(mockFetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
   it('should retry on 503 Service Unavailable', async () => {
     const transientResponse = createMockResponse({
       status: 503,

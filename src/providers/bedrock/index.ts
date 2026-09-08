@@ -3,6 +3,15 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../../types/providers';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -20,14 +29,6 @@ import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHa
 import { calculateBedrockInvokeModelCost } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 
 // Utility function to coerce string values to numbers
@@ -2962,7 +2963,9 @@ export class AwsBedrockEmbeddingProvider
   implements ApiEmbeddingProvider
 {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = AwsBedrockEmbeddingProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AwsBedrockEmbeddingProvider.declaredProviderCapabilities,
+  );
 
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');

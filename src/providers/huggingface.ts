@@ -2,20 +2,20 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  type ApiProvider,
+  type ApiSimilarityProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderClassificationResponse,
+  type ProviderEmbeddingResponse,
+  type ProviderOptions,
+  type ProviderResponse,
+  type ProviderSimilarityResponse,
+} from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
-
-import type {
-  ApiProvider,
-  ApiSimilarityProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-  ProviderSimilarityResponse,
-} from '../types/index';
 
 const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
@@ -404,8 +404,9 @@ type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities =
-    HuggingfaceFeatureExtractionProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceFeatureExtractionProvider.declaredProviderCapabilities,
+  );
 
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
@@ -504,8 +505,9 @@ type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
 
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   static readonly declaredProviderCapabilities = ['callSimilarityApi'] as const;
-  readonly promptfooCapabilities =
-    HuggingfaceSentenceSimilarityProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceSentenceSimilarityProvider.declaredProviderCapabilities,
+  );
 
   modelName: string;
   config: HuggingfaceSentenceSimilarityOptions;
