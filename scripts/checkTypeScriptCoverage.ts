@@ -182,7 +182,7 @@ export function runTypeScriptCoverageCheck(): number {
     console.error(`- ${filePath}`);
   }
   console.error(
-    'Add them to the root project. Files under packages/ may instead belong to a package tsconfig explicitly referenced by the root project.',
+    'Add them to their owning tsconfig: the nearest referenced package project for owned files under packages/, otherwise the root project.',
   );
   return 1;
 }
