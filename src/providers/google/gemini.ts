@@ -174,6 +174,7 @@ export function parseGeminiContent(
       return respond(failure);
     }
     if (!current.content?.parts && ['STOP', 'MAX_TOKENS'].includes(current.finishReason ?? '')) {
+      candidate = { ...candidate, ...current, content: candidate?.content ?? current.content };
       continue;
     }
     if (facade === 'vertex' && !current.content?.parts) {
