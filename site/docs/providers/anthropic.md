@@ -673,7 +673,7 @@ controls at the model level:
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
 
-Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set `inputCost: 2 / 1e6` and `outputCost: 10 / 1e6` to track the introductory rate (a single `cost` is applied as both the input and output rate, so it cannot express the two).
+Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 per million output**, with no long-context surcharge above 200K tokens. Anthropic made these rates permanent on August 10, 2026, canceling the planned September increase. See [Anthropic's pricing documentation](https://platform.claude.com/docs/en/about-claude/pricing). The newer tokenizer can produce more tokens for the same text, so compare total request costs when migrating from Sonnet 4.6.
 
 ### Claude Opus 4.8 notes
 

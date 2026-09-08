@@ -101,6 +101,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   input: Input;
 
   private fal: typeof import('@fal-ai/client') | null = null;
+  private client: import('@fal-ai/client').FalClient | null = null;
 
   constructor(
     modelType: 'image',
@@ -176,10 +177,10 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       }
     }
 
-    this.fal.fal.config({
+    this.client = this.fal.createFalClient({
       credentials: this.apiKey,
       ...this.clientConfig,
-    } as Parameters<typeof this.fal.fal.config>[0]);
+    });
 
     if (!response) {
       response = await this.runInference(input);
@@ -211,7 +212,11 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       }
     }
 
-    const result = await this.fal.fal.subscribe(this.modelName, {
+    const client = (this.client ??= this.fal.createFalClient({
+      credentials: this.apiKey,
+      ...this.clientConfig,
+    }));
+    const result = await client.subscribe(this.modelName, {
       input: input as Record<string, unknown>,
     });
     return result as Result;

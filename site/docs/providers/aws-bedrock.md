@@ -1122,8 +1122,8 @@ The Responses API stores conversation state by default. Set `store: false` on ev
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: Sol is $5.50 input /
-$33 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
+GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
+$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
 remain available for at least 30 minutes. Place
 `prompt_cache_breakpoint: { mode: explicit }` on a stable
@@ -1585,6 +1585,11 @@ When loading image files as variables, promptfoo automatically converts them to 
 
 ## Embeddings
 
+Cohere embedding models require an input type. Promptfoo defaults to `search_document`;
+set `config.input_type: search_query` when embedding retrieval queries. The embedding
+provider returns a single numeric vector for each input text. Titan continues to use
+its separate `inputText` request format.
+
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
 
 ```yaml
@@ -1821,6 +1826,10 @@ providers:
 
 The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
+A generation model is required: specify it in the provider ID or supply `config.modelArn`. The provider returns a configuration error before contacting AWS if both are missing.
+
+System-defined inference profile IDs with `us.`, `eu.`, `apac.`, `global.`, `jp.`, or `au.` prefixes and full Bedrock ARNs are passed through unchanged, including ARNs for other AWS partitions. Choose a model or profile available to your AWS account and Knowledge Base region; promptfoo does not select a default or create a profile.
+
 For example:
 
 - `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
@@ -1829,12 +1838,19 @@ For example:
 Configuration options include:
 
 - `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
+- `modelArn`: Optional explicit generation model ARN, overriding the model in the provider ID
 - `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
-- `temperature`: Controls randomness in response generation (default: 0.0)
+- `temperature`: Controls randomness in response generation (uses the model default when omitted)
 - `max_tokens`: Maximum number of tokens in the generated response
+- `top_p`: Nucleus sampling probability
+- `top_k`: Model-specific top-k sampling, forwarded as an additional model request field when supported by the selected model
 - `numberOfResults`: Number of chunks to retrieve from the knowledge base (optional, uses AWS default when not specified)
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
+
+For Claude models that no longer support sampling parameters, such as [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
+
+[Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
 
 ### Knowledge Base Example
 
