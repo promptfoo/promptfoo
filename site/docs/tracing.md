@@ -241,15 +241,15 @@ The [agentic runtime plugins](/docs/red-team/plugins/agentic/) use traces as gra
 
 Useful attributes include:
 
-| Attribute                            | Purpose                                                                        |
-| ------------------------------------ | ------------------------------------------------------------------------------ |
-| `promptfoo.agentic.plugin_id`        | Plugin id the span provides evidence for, such as `mcp-schema-injection`       |
-| `promptfoo.agentic.evidence_json`    | JSON object with plugin-scoped structured runtime evidence for the grader      |
-| `promptfoo.agentic.finding.kind`     | Short finding type, such as `approval_reused` or `guardrail_missed_tool`       |
-| `promptfoo.agentic.finding.location` | Runtime location, such as tool name, agent name, guardrail name, or MCP server |
-| `promptfoo.agentic.finding.evidence` | Human-readable evidence summary                                                |
-| `promptfoo.agentic.finding.severity` | Optional severity hint, such as `low`, `medium`, `high`, or `critical`         |
-| `promptfoo.agent_sdk.*`              | Accepted alias namespace for Agents SDK provider evidence                      |
+| Attribute                            | Purpose                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `promptfoo.agentic.plugin_id`        | Full plugin id the span provides evidence for, such as `agentic:mcp-schema-injection` |
+| `promptfoo.agentic.evidence_json`    | JSON object with plugin-scoped structured runtime evidence for the grader             |
+| `promptfoo.agentic.finding.kind`     | Short finding type, such as `approval_reused` or `guardrail_missed_tool`              |
+| `promptfoo.agentic.finding.location` | Runtime location, such as tool name, agent name, guardrail name, or MCP server        |
+| `promptfoo.agentic.finding.evidence` | Human-readable evidence summary                                                       |
+| `promptfoo.agentic.finding.severity` | Optional severity hint, such as `low`, `medium`, `high`, or `critical`                |
+| `promptfoo.agent_sdk.*`              | Accepted alias namespace for Agents SDK provider evidence                             |
 
 For example, an MCP schema-injection span might include:
 
