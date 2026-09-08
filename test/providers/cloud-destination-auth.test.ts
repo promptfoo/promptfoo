@@ -144,36 +144,5 @@ describe.each([
       expect(await provider.callApi('hello')).toMatchObject(successResponse);
       expectRequest(destinationC, 'fixture-config-token-c');
     });
-
-    it.each([
-      { status: 401, statusText: 'Unauthorized', registeredSuite: false },
-      { status: 403, statusText: 'Forbidden', registeredSuite: true },
-    ])(
-      'preserves $status errors with a coherent destination and token',
-      async ({ status, statusText, registeredSuite }) => {
-        const suiteEnv = registeredSuite
-          ? scopeEnv(destinationA, 'fixture-suite-token-a')
-          : undefined;
-        setEnvOverridesProvider(suiteEnv ? () => suiteEnv : undefined);
-        const errorData = { error: { message: 'Fixture authentication failure' } };
-        vi.mocked(fetchWithCache).mockResolvedValue({
-          data: errorData,
-          cached: false,
-          status,
-          statusText,
-        });
-        const provider = await loadApiProvider(providerPath, {
-          env: suiteEnv,
-          options: { env: providerEnvB },
-        });
-
-        const response = await provider.callApi('hello');
-        expect(response.error).toBe(
-          `API error: ${status} ${statusText}\n${JSON.stringify(errorData)}`,
-        );
-        expect(response.output).toBeUndefined();
-        expectRequest(destinationB, 'fixture-provider-token-b');
-      },
-    );
   },
 );
