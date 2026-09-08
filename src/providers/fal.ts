@@ -101,7 +101,6 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   input: Input;
 
   private fal: typeof import('@fal-ai/client') | null = null;
-  private client: import('@fal-ai/client').FalClient | null = null;
 
   constructor(
     modelType: 'image',
@@ -166,22 +165,6 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       cached = response !== undefined;
     }
 
-    if (!this.fal) {
-      try {
-        this.fal = await import('@fal-ai/client');
-      } catch (err) {
-        logger.error(`Error loading @fal-ai/client: ${err}`);
-        throw new Error(
-          'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
-        );
-      }
-    }
-
-    this.client = this.fal.createFalClient({
-      credentials: this.apiKey,
-      ...this.clientConfig,
-    });
-
     if (!response) {
       response = await this.runInference(input);
     }
@@ -212,10 +195,10 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       }
     }
 
-    const client = (this.client ??= this.fal.createFalClient({
+    const client = this.fal.createFalClient({
       credentials: this.apiKey,
       ...this.clientConfig,
-    }));
+    });
     const result = await client.subscribe(this.modelName, {
       input: input as Record<string, unknown>,
     });

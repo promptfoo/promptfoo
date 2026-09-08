@@ -8,6 +8,8 @@ description: 'Configure OpenAI models including GPT-5.6, GPT-5.5, GPT-4.1, o-ser
 
 To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify the `apiKey` field in the configuration file, or pass the API key as an argument to the constructor.
 
+When `apiKeyEnvar` is configured, only that environment variable is used unless `apiKey` is also set. Provider `env` overrides take precedence over process environment variables; a missing named variable does not fall back to `OPENAI_API_KEY`.
+
 Example:
 
 ```sh
