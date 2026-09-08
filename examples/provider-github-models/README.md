@@ -2,10 +2,12 @@
 
 > **Retired example:** [GitHub Models retired on July 30, 2026](https://docs.github.com/en/github-models), including its inference API. This configuration is retained as a historical reference and no longer runs. Choose another provider and its own credentials; GitHub Copilot is a separate service.
 
+The original configuration is preserved in [historical-config.yaml](./historical-config.yaml). Its archive filename keeps this retired example out of the interactive list of runnable examples.
+
 <details>
 <summary>Historical setup and usage</summary>
 
-You can run this example with:
+Before retirement, this example was initialized with:
 
 ```bash
 npx promptfoo@latest init --example provider-github-models
