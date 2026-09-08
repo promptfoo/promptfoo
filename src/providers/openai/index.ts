@@ -164,6 +164,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o1') ||
       model.includes('/o3') ||
       model.includes('/o4') ||
+      /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
       isGpt6AstraModel(model)
     );
