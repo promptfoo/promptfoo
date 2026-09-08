@@ -131,7 +131,9 @@ tests:
       scenario: formal
     assert:
       - type: javascript
-        value: Boolean(context.providerResponse.audio?.data)
+        value: |
+          const audio = context.providerResponse.audio;
+          return Boolean(audio?.data || audio?.blobRef);
 
   - vars:
       scenario: casual
@@ -185,7 +187,8 @@ tests:
       - type: javascript
         value: |
           // Verify audio was generated
-          return Boolean(context.providerResponse.audio?.data);
+          const audio = context.providerResponse.audio;
+          return Boolean(audio?.data || audio?.blobRef);
 ```
 
 Run `promptfoo eval -c transcription-test.yaml --no-cache` to save `audio/tts-<timestamp>.mp3`, then copy the generated file to `audio/generated-speech.mp3`. Add STT to verify accuracy in a second config, `stt-accuracy.yaml`:
@@ -351,7 +354,7 @@ In the web UI, you'll see:
 Create `agent-with-tools.yaml`:
 
 ```yaml
-description: "Test agent with order lookup tool"
+description: 'Test agent with order lookup tool'
 
 prompts:
   - |
@@ -378,7 +381,7 @@ providers:
                 properties:
                   order_number:
                     type: string
-                    description: The order number (format: ORDER-XXXXX)
+                    description: 'The order number (format: ORDER-XXXXX)'
                 required:
                   - order_number
 
@@ -386,10 +389,10 @@ providers:
       toolMockConfig:
         order_lookup:
           response:
-            order_number: "ORDER-12345"
-            status: "Shipped"
-            tracking_number: "1Z999AA10123456784"
-            expected_delivery: "2024-03-20"
+            order_number: 'ORDER-12345'
+            status: 'Shipped'
+            tracking_number: '1Z999AA10123456784'
+            expected_delivery: '2024-03-20'
 
       evaluationCriteria:
         - name: uses_tool
@@ -415,7 +418,7 @@ tests:
           return toolCalls.length > 0;
 
       - type: contains
-        value: "1Z999AA10123456784"  # Tracking number from mock
+        value: '1Z999AA10123456784' # Tracking number from mock
 ```
 
 Run with tool mocking:
