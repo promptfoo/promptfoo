@@ -178,17 +178,13 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
     const hasDeclaration =
       prototype.constructor &&
       Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
-    // A declaring class owns its stubs; an override can replace one on a subclass.
-    const declaredCapabilities = (
-      prototype.constructor as { declaredProviderCapabilities?: unknown } | undefined
-    )?.declaredProviderCapabilities;
+    // A declaring class owns its stubs; subclasses may override even a map-backed wrapper.
     const parentCapabilities = (
       Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
     )?.declaredProviderCapabilities;
     if (
       Object.prototype.hasOwnProperty.call(prototype, capability) &&
-      (!hasDeclaration ||
-        (Array.isArray(declaredCapabilities) && Array.isArray(parentCapabilities)))
+      (!hasDeclaration || parentCapabilities !== undefined)
     ) {
       overridden = true;
     }
