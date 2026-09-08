@@ -134,16 +134,14 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
  * - 'max': Deepest single-agent reasoning for GPT-5.6
  * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
@@ -280,7 +278,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex').
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
@@ -310,7 +308,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -668,13 +666,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
