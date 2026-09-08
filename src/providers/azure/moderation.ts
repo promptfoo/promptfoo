@@ -12,7 +12,7 @@ import {
   type ProviderModerationResponse,
 } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getRequestSignal } from '../shared';
+import { awaitProviderOperation, getRequestSignal } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
@@ -254,8 +254,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         assistantResponse,
       );
       const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
       options?.abortSignal?.throwIfAborted();
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
@@ -316,10 +319,13 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       const result = parseAzureModerationResponse(data);
 
       if (useCache && cacheKey) {
+        options?.abortSignal?.throwIfAborted();
         const cache = await getCache();
-        await cache.set(cacheKey, result);
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(cache.set(cacheKey, result), options?.abortSignal);
       }
 
+      options?.abortSignal?.throwIfAborted();
       return result;
     } catch (err) {
       return handleApiError(err);

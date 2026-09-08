@@ -20,6 +20,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import * as time from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -33,6 +34,34 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
+  it('stops waiting for a pending response transform and skips later transforms on cancellation', async () => {
+    const controller = new AbortController();
+    const pendingTransform = createDeferred<string>();
+    const transformSpy = vi
+      .mocked(transform)
+      .mockImplementationOnce(() => pendingTransform.promise);
+    const provider: ApiProvider = {
+      id: () => 'transform-provider',
+      transform: 'provider transform',
+      callApi: vi.fn().mockResolvedValue({ output: 'ready' }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('hello')],
+      tests: [{ options: { transform: 'test transform' } }],
+    };
+    const pending = evaluate(suite, new Eval({}), { abortSignal: controller.signal });
+    try {
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled transform'));
+      await pending.catch(() => undefined);
+      expect(transformSpy).toHaveBeenCalledOnce();
+    } finally {
+      pendingTransform.resolve('ready');
+      transformSpy.mockRestore();
+    }
+  });
+
   it.each([false, true])(
     'isolates overlapping evaluation cleanup (shared provider: %s)',
     async (shared) => {
