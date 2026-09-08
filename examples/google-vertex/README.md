@@ -64,13 +64,9 @@ The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
 premium. The examples use `thinkingLevel` because these models no longer support
 manual sampling parameters such as `temperature`, `topP`, and `topK`.
 
-> Google schedules the Vertex models `gemini-2.5-pro`, `gemini-2.5-flash`, and
-> `gemini-2.5-flash-lite` for [retirement on October 20, 2026](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions).
-> These IDs remain in several example targets and the basic example's explicit
-> grading provider. Test replacements for both before retirement. This deadline
-> applies to Vertex, not the native Gemini API.
-> Google now documents Vertex AI under its
-> [Gemini Enterprise Agent Platform name](https://docs.cloud.google.com/gemini-enterprise-agent-platform/vertex-ai-name-changes).
+> Some example targets and the basic grading provider use Gemini 2.5 on Vertex.
+> Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes)
+> for retirement dates, and test supported replacements before they retire.
 
 ## Running Examples
 

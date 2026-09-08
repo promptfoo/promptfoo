@@ -63,7 +63,7 @@ controls, which promptfoo removes automatically. Configure reasoning with
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 
 :::warning Vertex model retirement
-Google schedules `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite` for [retirement on October 20, 2026](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions). Google now documents Vertex AI under its [Gemini Enterprise Agent Platform name](https://docs.cloud.google.com/gemini-enterprise-agent-platform/vertex-ai-name-changes). Test a supported replacement before that date, including any explicitly configured grading provider. This is the Vertex lifecycle; native Gemini API dates are separate.
+Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes) for current Gemini 2.5 retirement dates. Test a supported replacement for each affected target and any explicitly configured grading provider.
 :::
 
 ### Claude Models
