@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'GitHub Models Provider Test'
+# Historical only: GitHub Models retired July 30, 2026; github: now reports a retirement error.
+description: 'Retired GitHub Models historical example'
 
 prompts:
   - 'What is the capital of {{country}}?'

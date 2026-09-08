@@ -1,5 +1,10 @@
 # provider-github-models (GitHub Models Provider)
 
+> **Retired example:** [GitHub Models retired on July 30, 2026](https://docs.github.com/en/github-models), including its inference API. This configuration is retained as a historical reference and no longer runs. Choose another provider and its own credentials; GitHub Copilot is a separate service.
+
+<details>
+<summary>Historical setup and usage</summary>
+
 You can run this example with:
 
 ```bash
@@ -51,3 +56,5 @@ GitHub Models supports various models including:
 - `github:mistral-ai/mistral-large`
 
 See the [GitHub Models marketplace](https://github.com/marketplace?type=models) for the full list.
+
+</details>
