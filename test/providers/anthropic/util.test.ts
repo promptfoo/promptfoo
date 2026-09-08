@@ -241,24 +241,25 @@ describe('Anthropic utilities', () => {
 
     it('should calculate default cost for Claude Sonnet 5 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
-      expect(cost).toBeCloseTo(0.0022); // $2/MTok input and $10/MTok output
+      expect(cost).toBeCloseTo(0.0022, 10); // $2/MTok input and $10/MTok output
     });
 
     it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
-      expect(cost).toBeCloseTo(0.4);
+      expect(cost).toBeCloseTo(0.4, 10);
     });
 
     it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
       // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
       // there is no >200K surcharge.
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
-      expect(cost).toBeCloseTo(0.8);
+      expect(cost).toBeCloseTo(0.8, 10);
     });
 
     it('applies Sonnet 5 cache rates while preserving explicit pricing overrides', () => {
       expect(calculateAnthropicCost('claude-sonnet-5', {}, 1000, 100, 2000, 400)).toBeCloseTo(
         0.0044,
+        10,
       );
       expect(
         calculateAnthropicCost(
@@ -269,7 +270,7 @@ describe('Anthropic utilities', () => {
           2000,
           400,
         ),
-      ).toBeCloseTo(0.0066);
+      ).toBeCloseTo(0.0066, 10);
     });
 
     it.each([
@@ -277,11 +278,15 @@ describe('Anthropic utilities', () => {
       ['us.anthropic.claude-sonnet-5', 1.1],
       ['global.anthropic.claude-sonnet-5', 1],
     ])('preserves independent Bedrock Sonnet 5 estimates for %s', (model, premium) => {
-      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium);
-      expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(0.0066 * premium);
+      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium, 10);
+      expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(
+        0.0066 * premium,
+        10,
+      );
+      // Explicit rates are final and suppress the regional premium.
       expect(
         calculateAnthropicCost(model, { inputCost: 2 / 1e6, outputCost: 10 / 1e6 }, 1000, 100),
-      ).toBeCloseTo(0.003 * premium);
+      ).toBeCloseTo(0.003, 10);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
