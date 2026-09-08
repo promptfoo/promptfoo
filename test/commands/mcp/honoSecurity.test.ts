@@ -4,6 +4,18 @@ import { NONCE, secureHeaders } from 'hono/secure-headers';
 import { describe, expect, it } from 'vitest';
 
 describe('MCP Hono dependency security', () => {
+  it('ignores query-looking parameters after a URL fragment', async () => {
+    const app = new Hono();
+
+    app.get('/items', (context) => context.json({ role: context.req.query('role') ?? null }));
+
+    const fragmentResponse = await app.request('http://localhost/items#?role=admin');
+    const queryResponse = await app.request('http://localhost/items?role=reader#?role=admin');
+
+    expect(await fragmentResponse.json()).toEqual({ role: null });
+    expect(await queryResponse.json()).toEqual({ role: 'reader' });
+  });
+
   // CVE-2026-69207 / GHSA-8j4g-w8fx-2239: with the default (unset) `allowHeaders`,
   // `hono/cors` reflected the attacker-controlled `Access-Control-Request-Headers`
   // preflight header by splitting it on `/\s*,\s*/`. A long whitespace run with no
