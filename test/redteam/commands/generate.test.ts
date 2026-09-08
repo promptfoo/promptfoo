@@ -358,6 +358,40 @@ describe('doGenerateRedteam', () => {
     expect(synthesize).toHaveBeenCalledOnce();
   });
 
+  it('uses the resolved relative default provider as the request-owned generation fallback', async () => {
+    const resolvedProvider = createMockProvider({ id: 'request-owned-file-provider' });
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/nested/config',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+        defaultTest: { provider: 'file://grader.mjs' },
+      },
+      config: { redteam: {}, defaultTest: { provider: resolvedProvider } },
+    });
+    vi.mocked(synthesize).mockImplementationOnce(async (options) => {
+      cliState.config = { defaultTest: { provider: 'unrelated-provider' } };
+      await Promise.resolve();
+      expect(options.requestScoped).toBe(true);
+      expect(options.fallbackProvider).toBe(resolvedProvider);
+      return {
+        testCases: [],
+        purpose: 'hello',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      };
+    });
+    mockReadFileSync({ prompts: [], providers: [], tests: [] });
+    await doGenerateRedteam({
+      config: '/nested/config/config.yaml',
+      output: 'isolated.yaml',
+      force: true,
+    });
+    expect(synthesize).toHaveBeenCalledOnce();
+  });
+
   it('should generate redteam tests and write to output file', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {

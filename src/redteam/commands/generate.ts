@@ -664,8 +664,10 @@ async function doGenerateRedteamInternal(
 
   const generationEnv =
     resolvedConfig?.env ?? (options.defaultConfig as Partial<UnifiedConfig> | undefined)?.env ?? {};
+  // Config resolution loads relative provider files using the configuration directory.
+  const resolvedDefaultTest = resolvedConfig?.defaultTest ?? testSuite.defaultTest;
   const defaultTestConfig =
-    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
+    typeof resolvedDefaultTest === 'object' ? resolvedDefaultTest : undefined;
   const defaultTestProvider =
     (defaultTestConfig as any)?.provider ||
     (defaultTestConfig?.options?.provider as any)?.text ||
