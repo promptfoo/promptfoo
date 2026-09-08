@@ -12,7 +12,7 @@ declare module '@ibm-cloud/watsonx-ai' {
   export interface WatsonXAI {
     newInstance(config: any): any;
     generateText(params: any): Promise<any>;
-    listFoundationModelSpecs(params?: { filters?: string }): Promise<{
+    listFoundationModelSpecs(params?: { filters?: string; signal?: AbortSignal }): Promise<{
       result: {
         resources?: Array<{
           model_id: string;

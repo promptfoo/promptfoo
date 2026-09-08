@@ -73,6 +73,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   expect(fetchWithCache).not.toHaveBeenCalled();
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.resetAllMocks();
   clearModelSpecsCache();
@@ -93,6 +95,7 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     );
     expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledWith({
       filters: `modelid_${modelId}`,
+      signal: expect.any(AbortSignal),
     });
     expect(chat ? regionalClient.textChat : regionalClient.generateText).toHaveBeenCalledWith(
       expect.objectContaining({ modelId }),
@@ -133,6 +136,108 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(second.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
     expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
   });
+
+  it('aborts stalled metadata at the request deadline and retries after recovery', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+    const regionalClient = client();
+    let metadataSignal: AbortSignal | undefined;
+    let onMetadataStarted!: () => void;
+    const metadataStarted = new Promise<void>((resolve) => {
+      onMetadataStarted = resolve;
+    });
+    regionalClient.listFoundationModelSpecs.mockImplementationOnce(
+      ({ signal }: { signal?: AbortSignal }) => {
+        metadataSignal = signal;
+        onMetadataStarted();
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new Error('Metadata aborted')), {
+            once: true,
+          });
+        });
+      },
+    );
+    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+    const instance = provider(chat);
+    const pending = instance.callApi('Hello');
+    await metadataStarted;
+    await vi.advanceTimersByTimeAsync(49);
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+    expect(metadataSignal).toBeInstanceOf(AbortSignal);
+    expect(metadataSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(metadataSignal?.aborted).toBe(true);
+    const result = await pending;
+    expect(result.output).toBe('Hello');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const recovered = await instance.callApi('Hello again');
+    expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([false, true])(
+    'bounds SDK waits that settle after cancellation (rejects=%s)',
+    async (rejects) => {
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+      const regionalClient = client();
+      let onMetadataStarted!: () => void;
+      const metadataStarted = new Promise<void>((resolve) => {
+        onMetadataStarted = resolve;
+      });
+      let settleMetadata!: () => void;
+      regionalClient.listFoundationModelSpecs.mockImplementationOnce(() => {
+        onMetadataStarted();
+        return new Promise((resolve, reject) => {
+          settleMetadata = () =>
+            rejects
+              ? reject(new Error('Delayed SDK cancellation'))
+              : resolve(metadata('class_1', 'class_1'));
+        });
+      });
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      const pending = instance.callApi('Hello');
+      await metadataStarted;
+      await vi.advanceTimersByTimeAsync(50);
+      const result = await pending;
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Late SDK success must not populate the cache; rejection must remain handled.
+      settleMetadata();
+      const recovered = await instance.callApi('Hello again');
+      expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([false, true])(
+    'clears the metadata deadline after settlement (failure=%s)',
+    async (fails) => {
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+      const regionalClient = client();
+      if (fails) {
+        regionalClient.listFoundationModelSpecs.mockRejectedValueOnce(new Error('Unavailable'));
+      }
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      await provider(chat).callApi('Hello');
+      const signal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(signal.aborted).toBe(false);
+    },
+  );
 
   it.each([
     { cost: 0.01, expected: 0.3 },

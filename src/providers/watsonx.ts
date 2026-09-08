@@ -7,7 +7,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { parseChatPrompt } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -266,8 +266,23 @@ async function getModelCost(
     return cached.cost;
   }
 
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      // Cancel transport as well as bounding SDK auth/retry waits that may ignore the signal.
+      controller.abort();
+      reject(new Error('WatsonX model pricing metadata request timed out'));
+    }, getRequestTimeoutMs());
+  });
   try {
-    const response = await client.listFoundationModelSpecs({ filters: `modelid_${modelId}` });
+    const response = await Promise.race([
+      client.listFoundationModelSpecs({
+        filters: `modelid_${modelId}`,
+        signal: controller.signal,
+      }),
+      deadline,
+    ]);
     const resources = response.result?.resources;
     if (!Array.isArray(resources)) {
       return undefined;
@@ -291,6 +306,8 @@ async function getModelCost(
     logger.debug('[WatsonX] Model pricing metadata is unavailable', { error });
     // Do not cache failures: a later response can retry after recovery.
     return undefined;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
