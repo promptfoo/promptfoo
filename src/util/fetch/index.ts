@@ -239,14 +239,19 @@ export async function fetchWithProxy(
   };
 
   // Support custom CA certificates
+  combinedSignal?.throwIfAborted();
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
+      const ca = await fsPromises.readFile(resolvedPath, {
+        encoding: 'utf8',
+        signal: combinedSignal ?? undefined,
+      });
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
+      combinedSignal?.throwIfAborted();
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
