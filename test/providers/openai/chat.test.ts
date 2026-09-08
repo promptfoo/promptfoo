@@ -1284,6 +1284,46 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8, numRequests: 1 });
     });
 
+    it('finishes cancelled callbacks without waiting for stalled cache eviction', async () => {
+      const controller = new AbortController();
+      let releaseEviction!: () => void;
+      const deleteFromCache = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseEviction = resolve;
+          }),
+      );
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            { message: { content: null, function_call: { name: 'tool', arguments: '{}' } } },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      const callback = vi.fn(() => {
+        controller.abort(new Error('cancelled callback'));
+        return Promise.reject(controller.signal.reason);
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { functionToolCallbacks: { tool: callback } },
+      });
+      const completed = provider.callApi('Run tool', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      const settled = await Promise.race([
+        completed.then(() => true),
+        new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+      ]);
+      releaseEviction();
+      const result = await completed;
+      expect(settled).toBe(true);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+      expect(result.error).toContain('cancelled callback');
+    });
+
     it('should handle errors in function tool callbacks', async () => {
       const mockResponse = {
         data: {
