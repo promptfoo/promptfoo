@@ -179,6 +179,22 @@ describe('providerRegistry', () => {
     expect(provider.cleanup).toHaveBeenCalledTimes(2);
   });
 
+  it('claims a new owner before the previous scope can begin teardown', async () => {
+    const events: string[] = [];
+    const provider = { cleanup: vi.fn(() => events.push('cleanup')) };
+    let second: Promise<void> | undefined;
+    const first = providerRegistry.withScope([provider], async () => {
+      queueMicrotask(() => {
+        second = providerRegistry.withScope([provider], async () => {
+          events.push('use');
+        });
+      });
+    });
+    await first;
+    await second;
+    expect(events).toEqual(['use', 'cleanup']);
+  });
+
   it('waits for cleanup before adopting a reused provider into an active scope', async () => {
     const enteredCleanup = createDeferred<void>();
     const finishCleanup = createDeferred<void>();
