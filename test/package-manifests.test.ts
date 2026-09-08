@@ -535,6 +535,7 @@ describe('package manifests', () => {
       expect(packageLock.packages[''].optionalDependencies?.[dependency]).toBe(range);
       const installed = packageLock.packages[`node_modules/${dependency}`];
       expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
+      expect(installed?.version, `${dependency} must have a locked version`).toBeDefined();
       expect(satisfies(installed.version!, range!)).toBe(true);
     }
   });
