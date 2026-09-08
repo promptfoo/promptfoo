@@ -115,6 +115,32 @@ describe('ChatKitBrowserPool', () => {
       expect(mockChromium.launch).toHaveBeenCalledOnce();
     });
 
+    it('keeps a predecessor shutdown pending when a cancelled replacement finishes first', async () => {
+      const first = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      await first.initialize();
+      const server = vi.mocked(createServer).mock.results[0].value;
+      const closing = createDeferred<void>();
+      server.close.mockImplementationOnce(async (callback: () => void) => {
+        await closing.promise;
+        callback();
+      });
+
+      const oldShutdown = first.shutdown();
+      const replacement = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      const cancelled = expect(replacement.initialize()).rejects.toThrow(
+        'cancelled during shutdown',
+      );
+      await replacement.shutdown();
+      const third = ChatKitBrowserPool.getInstance({ serverPort: 31415 });
+      const thirdInit = third.initialize();
+      await Promise.resolve();
+      expect(server.listen).toHaveBeenCalledOnce();
+
+      closing.resolve();
+      await Promise.all([oldShutdown, cancelled, thirdInit]);
+      expect(server.listen).toHaveBeenCalledTimes(2);
+    });
+
     it('waits for the old fixed port to close before initializing a replacement', async () => {
       const closing = createDeferred<void>();
       const first = ChatKitBrowserPool.getInstance({ serverPort: 31415 });

@@ -158,6 +158,26 @@ describe('Cerebras provider', () => {
       });
     });
 
+    it('keeps authentication and transport settings out of the model request', async () => {
+      const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
+        config: {
+          config: {
+            apiKey: 'configured-key',
+            headers: { 'x-test': 'test-header' },
+            linkedTargetId: 'internal-target',
+            temperature: 0.4,
+          },
+        },
+      }) as OpenAiChatCompletionProvider;
+      const { body } = await provider.getOpenAiBody('prompt');
+      expect(provider.getApiKey()).toBe('configured-key');
+      expect(provider.config.headers).toEqual({ 'x-test': 'test-header' });
+      expect(body).toMatchObject({ temperature: 0.4 });
+      expect(JSON.stringify(body)).not.toContain('configured-key');
+      expect(JSON.stringify(body)).not.toContain('internal-target');
+      expect(JSON.stringify(body)).not.toContain('test-header');
+    });
+
     it('should allow id and env options', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         id: 'custom-id',

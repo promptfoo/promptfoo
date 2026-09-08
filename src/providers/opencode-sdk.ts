@@ -838,6 +838,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
+  private previousClientInitialization?: Promise<void>;
   private clientGeneration = 0;
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
@@ -902,6 +903,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     this.clientGeneration++;
+    this.previousClientInitialization =
+      this.clientInitialization ?? this.previousClientInitialization;
     this.clientInitialization = undefined;
     for (const session of this.sessions.values()) {
       try {
@@ -1316,6 +1319,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const { createOpencode, createOpencodeClient } = opencodeModule;
     let initialization: Promise<void>;
     initialization = (async () => {
+      if (config.port && this.previousClientInitialization) {
+        const previous = this.previousClientInitialization;
+        await previous.catch(() => undefined);
+        if (this.previousClientInitialization === previous) {
+          this.previousClientInitialization = undefined;
+        }
+        if (generation !== this.clientGeneration) {
+          throw new Error('OpenCode initialization cancelled during cleanup');
+        }
+      }
       if (config.baseUrl) {
         this.client = createOpencodeClient({
           baseUrl: config.baseUrl,

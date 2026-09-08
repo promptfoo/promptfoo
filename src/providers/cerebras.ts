@@ -1,4 +1,4 @@
-import { resolveProviderCreatorInput } from './creator';
+import { resolveProviderCreatorInput, splitOpenAiCompatibleConfig } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { ApiProvider } from '../types/index';
@@ -35,17 +35,17 @@ export function createCerebrasProvider(
   const splits = parsedPath.segments;
   const modelName = splits.slice(1).join(':');
 
-  // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = providerOptions.config || {};
+  const { providerOptions: settings, passthrough } = splitOpenAiCompatibleConfig(
+    providerOptions.config || {},
+  );
 
   const cerebrasConfig = {
     ...providerOptions,
     config: {
       apiBaseUrl: 'https://api.cerebras.ai/v1',
       apiKeyEnvar: 'CEREBRAS_API_KEY',
-      passthrough: {
-        ...configWithoutBasePath,
-      },
+      ...settings,
+      passthrough,
     },
   };
 
