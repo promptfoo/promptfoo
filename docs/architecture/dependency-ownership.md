@@ -74,6 +74,21 @@ The report does not infer execution order, installation size, native binary
 availability, or a package's transitive requirements. Production declaration
 repairs still require a packed consumer installation and relevant capability QA.
 
+## Consumer profiles need their own evidence
+
+A successful default install can still have an invalid optional-peer edge. The
+September 2026 packed-consumer check resolved MongoDB 7.5.0's optional
+`gcp-metadata ^7.0.1` peer to the hoisted 9.x package required by Google Auth 11;
+`npm ls` reported that mismatch. The root Mongoose override is not inherited by
+consumers. Retain the documented Google authentication pin until a separate
+compatibility change validates both paths; do not flatten incompatible majors
+because the ownership table marks a dependency shared.
+
+A generic `--omit=optional` install is not a supported local SQLite CLI profile:
+it also removes libSQL's platform binary. Successful ESM/CJS imports alone do not
+prove evaluation works. Capability experiments must retain required native assets
+explicitly and run the actual CLI/API before claiming a usable smaller profile.
+
 ## Reviewed annotations
 
 Annotations explain uses that direct import scanning cannot establish: computed

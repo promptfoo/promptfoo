@@ -37,8 +37,8 @@
       "manifest": "package.json",
       "dependency": "gcp-metadata",
       "disposition": "compatibility-pin",
-      "reason": "Retained as the documented Google authentication transitive compatibility pin, not a direct source import.",
-      "evidence": ["src/providers/google/auth.ts", "knip.jsonc"]
+      "reason": "Retained as the documented Google authentication transitive compatibility pin, not a direct source import. Root overrides do not propagate to installed consumers, so this declaration does not prove that transitive optional peers accept the selected major; validate the packed consumer tree separately.",
+      "evidence": ["src/providers/google/auth.ts", "knip.jsonc", "package.json"]
     },
     {
       "manifest": "package.json",
