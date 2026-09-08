@@ -822,20 +822,32 @@ describe('Fal Provider', () => {
       });
 
       it.each([true, false])('handles a missing SDK with a cache hit: %s', async (cached) => {
+        // Exercise the dependency swap even when the SDK was already loaded.
+        await import('@fal-ai/client');
         const importSdk = vi.fn(() => {
           throw new Error('Fixture missing SDK');
         });
         vi.doMock('@fal-ai/client', importSdk);
-        vi.mocked(isCacheEnabled).mockReturnValue(cached);
-        vi.mocked(getCache().get).mockResolvedValue(JSON.stringify('cached image'));
+        vi.resetModules();
         try {
+          const freshCache = await import('../../src/cache');
+          vi.mocked(freshCache.isCacheEnabled).mockReturnValue(cached);
+          vi.mocked(freshCache.getCache).mockReturnValue({
+            get: vi.fn().mockResolvedValue(JSON.stringify('cached image')),
+          } as any);
+          const { FalImageGenerationProvider: FreshFalImageGenerationProvider } = await import(
+            '../../src/providers/fal'
+          );
+          const freshProvider = new FreshFalImageGenerationProvider('fal-ai/flux/schnell', {
+            config: { apiKey: 'test-api-key' },
+          });
           if (cached) {
-            await expect(provider.callApi('test prompt')).resolves.toEqual({
+            await expect(freshProvider.callApi('test prompt')).resolves.toEqual({
               cached: true,
               output: 'cached image',
             });
           } else {
-            await expect(provider.callApi('test prompt')).rejects.toThrow(
+            await expect(freshProvider.callApi('test prompt')).rejects.toThrow(
               'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
             );
           }
@@ -846,6 +858,7 @@ describe('Fal Provider', () => {
             createFalClient: mockCreateClient,
             fal: { config: mockConfig, subscribe: mockSubscribe },
           }));
+          vi.resetModules();
         }
       });
     });
