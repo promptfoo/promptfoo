@@ -12,6 +12,7 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -120,6 +121,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
@@ -138,6 +143,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runPython).mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -317,6 +323,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should accept an empty string from an external JavaScript variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.js' };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -336,6 +351,28 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+    });
+
+    it('should accept an empty string from a package variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyVariable: () => ({ output: '' }),
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it('should accept an empty string from an external Python variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.py' };
+
+      vi.mocked(runPython).mockResolvedValueOnce({ output: '' });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
     });
 
     it('should throw a clear error when a package variable does not export a function', async () => {
