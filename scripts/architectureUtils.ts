@@ -304,6 +304,24 @@ export function extractModuleReferences(sourceText: string, filePath: string): M
   if (result.errors.length > 0) {
     throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
   }
+  // Oxc's JavaScript AST offsets use UTF-16 code units, like string/RegExp indices.
+  const lineStarts = [0];
+  for (const match of sourceText.matchAll(/\r\n|[\n\r\u2028\u2029]/gu)) {
+    lineStarts.push(match.index + match[0].length);
+  }
+  const lineAtOffset = (offset: number): number => {
+    let low = 0;
+    let high = lineStarts.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (lineStarts[middle] <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  };
   const references: ModuleReference[] = [];
   const add = (
     node: Node,
@@ -315,7 +333,7 @@ export function extractModuleReferences(sourceText: string, filePath: string): M
       specifier,
       kind,
       syntax,
-      line: sourceText.slice(0, node.start).split(/\r\n|[\n\r\u2028\u2029]/u).length,
+      line: lineAtOffset(node.start),
     });
   };
   new Visitor({
@@ -981,6 +999,15 @@ export function buildArchitectureReport(
   if (!sourceScan.includesFacade) {
     throw new Error('Architecture reports require a scan with includeFacade: true.');
   }
+  const normalizedEntrypoints = [
+    ...new Set(
+      entrypoints.map((entrypoint) =>
+        normalizePath(
+          path.relative(repoRoot, path.resolve(repoRoot, entrypoint.replace(/\\/g, '/'))),
+        ),
+      ),
+    ),
+  ];
   const scannedFiles = new Set(sourceScan.sourceFiles);
   const unscannedInternal = sourceScan.references.filter(
     (reference) => reference.resolvedImport && !scannedFiles.has(reference.resolvedImport),
@@ -1076,8 +1103,8 @@ export function buildArchitectureReport(
       ),
     };
   };
-  for (const entrypoint of entrypoints) {
-    if (!sourceScan.sourceFiles.includes(entrypoint)) {
+  for (const entrypoint of normalizedEntrypoints) {
+    if (!scannedFiles.has(entrypoint)) {
       throw new Error(
         `Architecture report entrypoint "${entrypoint}" is not in the checked source tree.`,
       );
@@ -1095,7 +1122,7 @@ export function buildArchitectureReport(
     unscannedInternal,
     computedReferences: sourceScan.computedReferences,
     entrypoints: Object.fromEntries(
-      entrypoints.map((entrypoint) => [
+      normalizedEntrypoints.map((entrypoint) => [
         entrypoint,
         {
           combined: reach(entrypoint, 'combined'),

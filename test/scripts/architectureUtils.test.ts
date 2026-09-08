@@ -61,6 +61,16 @@ require.resolve('path');`;
     ]);
   });
 
+  it('uses UTF-16 offsets after long Unicode prefixes and across every line terminator', () => {
+    const prefix = `/* ${'é漢😀'.repeat(1000)} */`;
+    const source =
+      `${prefix} import 'same-line';\r\nimport 'crlf';\rimport 'cr';` +
+      "\u2028import 'line-separator';\u2029import 'paragraph-separator';\nimport 'lf';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
   it('surfaces computed loaders without inventing literal dependencies', () => {
     const source =
       "import(target); require(target); require.resolve(target); import(`fixed`); // import('fake')";

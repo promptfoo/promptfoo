@@ -89,6 +89,28 @@ describe('computeCrossLayerEdges', () => {
     );
   });
 
+  it('normalizes entrypoint spellings before validating and traversing the source graph', () => {
+    const config = configWith([
+      { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+      { name: 'a', roots: ['src/a.ts'], allowedDependencies: [] },
+    ]);
+    write('src/index.ts', "export * from './a';");
+    write('src/a.ts', "import 'external';");
+    const scan = scanArchitectureSources(repoRoot, config, { includeFacade: true });
+    const report = buildArchitectureReport(repoRoot, config, scan, [
+      './src/index.ts',
+      'src\\index.ts',
+      'src/nested/../index.ts',
+      path.join(repoRoot, 'src/index.ts'),
+    ]);
+    expect(Object.keys(report.entrypoints)).toEqual(['src/index.ts']);
+    expect(report.entrypoints['src/index.ts'].value.files).toEqual(['src/a.ts', 'src/index.ts']);
+    expect(report.entrypoints['src/index.ts'].value.externalSpecifiers).toEqual(['external']);
+    expect(() => buildArchitectureReport(repoRoot, config, scan, ['../outside.ts'])).toThrow(
+      'not in the checked source tree',
+    );
+  });
+
   it('surfaces reach that crosses ignored/declaration files and requires a facade-inclusive scan', () => {
     const config = {
       ...configWith([{ name: 'facade', roots: ['src'], allowedDependencies: [] }]),
