@@ -691,6 +691,123 @@ describe('OpenClaw Provider', () => {
     });
   });
 
+  describe.each([
+    { name: 'chat', Provider: OpenClawChatProvider },
+    { name: 'responses', Provider: OpenClawResponsesProvider },
+  ])('$name prompt model isolation', ({ name, Provider }) => {
+    beforeEach(() => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    });
+
+    it('should ignore prompt model passthrough before building parameters and effective config', async () => {
+      const provider = new Provider(undefined, {
+        config: {
+          backend_model: 'openai/gpt-4.1',
+          passthrough: { seed: 7 },
+        },
+      });
+      const context = {
+        vars: {},
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: {
+            temperature: 0.25,
+            max_tokens: 73,
+            max_output_tokens: 73,
+            passthrough: { model: 'gpt-5-mini', user: 'prompt-user' },
+          },
+        },
+      };
+      const originalContext = structuredClone(context);
+      const baseline = await provider.getOpenAiBody('test prompt', {
+        ...context,
+        prompt: {
+          ...context.prompt,
+          config: { ...context.prompt.config, passthrough: { user: 'prompt-user' } },
+        },
+      });
+
+      const result = await provider.getOpenAiBody('test prompt', context);
+
+      expect(result).toEqual(baseline);
+      expect(result.body).toMatchObject({
+        model: 'openclaw/default',
+        temperature: 0.25,
+        user: 'prompt-user',
+        [name === 'chat' ? 'max_tokens' : 'max_output_tokens']: 73,
+      });
+      expect(result.config.passthrough).toEqual({ user: 'prompt-user' });
+      expect(result.config.headers?.['x-openclaw-model']).toBe('openai/gpt-4.1');
+      expect(context).toEqual(originalContext);
+      expect(provider.config.passthrough).toEqual({ seed: 7 });
+    });
+
+    it.each([
+      { option: 'backend_model', config: { backend_model: 'openai/gpt-4.1' } },
+      { option: 'model_override', config: { model_override: 'openai/gpt-4.1' } },
+      { option: 'unknown backend', config: {} },
+    ])(
+      'should preserve $option billing when prompt model passthrough is ignored',
+      async ({ config }) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'priced' } }],
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'priced' }],
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              input_tokens: 10,
+              output_tokens: 5,
+              total_tokens: 15,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+        const provider = new Provider('main', {
+          config: { ...config, gateway_url: 'http://test:18789' },
+        });
+        const baseline = await provider.callApi('without ignored model');
+        const context = {
+          vars: {},
+          prompt: {
+            raw: 'with ignored model',
+            label: 'with ignored model',
+            config: { passthrough: { model: 'gpt-5-mini', user: 'prompt-user' } },
+          },
+        };
+
+        const result = await provider.callApi('with ignored model', context);
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('priced');
+        expect(result.cost).toBe(baseline.cost);
+        if (Object.keys(config).length > 0) {
+          expect(baseline.cost).toBeGreaterThan(0);
+          expect(mockFetchWithCache.mock.calls[1][1].headers['x-openclaw-model']).toBe(
+            'openai/gpt-4.1',
+          );
+        } else {
+          expect(result.cost).toBeUndefined();
+        }
+        expect(JSON.parse(mockFetchWithCache.mock.calls[1][1].body)).toMatchObject({
+          model: 'openclaw/main',
+          user: 'prompt-user',
+        });
+        expect(context.prompt.config.passthrough.model).toBe('gpt-5-mini');
+      },
+    );
+  });
+
   describe('OpenClawChatProvider', () => {
     beforeEach(() => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);

@@ -6,7 +6,7 @@ import JSON5 from 'json5';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { CallApiContextParams, ProviderOptions } from '../../types/providers';
 import type { OpenClawConfig, OpenClawGatewayConfig } from './types';
 
 export const DEFAULT_GATEWAY_PORT = 18789;
@@ -491,6 +491,35 @@ export function buildOpenClawHeaders(
   return {
     ...headers,
     ...contextHeaders,
+  };
+}
+
+export function buildOpenClawCallContext(
+  context?: CallApiContextParams,
+): CallApiContextParams | undefined {
+  const passthrough = context?.prompt?.config?.passthrough;
+  if (
+    !context?.prompt?.config ||
+    !passthrough ||
+    typeof passthrough !== 'object' ||
+    Array.isArray(passthrough) ||
+    !('model' in passthrough)
+  ) {
+    return context;
+  }
+
+  // Remove route overrides before OpenAI parameter and billing decisions.
+  return {
+    ...context,
+    prompt: {
+      ...context.prompt,
+      config: {
+        ...context.prompt.config,
+        passthrough: Object.fromEntries(
+          Object.entries(passthrough).filter(([name]) => name !== 'model'),
+        ),
+      },
+    },
   };
 }
 

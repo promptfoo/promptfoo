@@ -1,5 +1,6 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
+  buildOpenClawCallContext,
   buildOpenClawHeaders,
   buildOpenClawModelName,
   buildOpenClawProviderOptions,
@@ -137,7 +138,11 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const result = await super.getOpenAiBody(
+      prompt,
+      buildOpenClawCallContext(context),
+      callApiOptions,
+    );
     // OpenClaw's Responses endpoint doesn't support the `text` format parameter
     if ('text' in result.body) {
       delete (result.body as Record<string, unknown>).text;

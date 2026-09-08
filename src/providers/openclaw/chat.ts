@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
+  buildOpenClawCallContext,
   buildOpenClawHeaders,
   buildOpenClawModelName,
   buildOpenClawProviderOptions,
@@ -71,7 +72,11 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const result = await super.getOpenAiBody(
+      prompt,
+      buildOpenClawCallContext(context),
+      callApiOptions,
+    );
     return {
       ...result,
       body: {
@@ -83,6 +88,10 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
         headers: buildOpenClawHeaders(this.agentId, result.config as OpenClawConfig),
       },
     };
+  }
+
+  protected getGenAISystem(): string {
+    return 'openclaw';
   }
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
