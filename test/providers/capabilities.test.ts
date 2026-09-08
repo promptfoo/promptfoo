@@ -76,6 +76,18 @@ it('recognizes a subclass implementation that replaces an inherited text stub', 
   expect((await provider.callApi()).output).toBe('implemented by subclass');
 });
 
+it('recognizes an override on the same prototype as its capability declaration', async () => {
+  class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+    static override readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+    override async callApi() {
+      return { output: 'implemented by subclass' };
+    }
+  }
+  const provider = new TextEmbeddingProvider('fixture');
+  expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+  expect(await getAndCheckProvider('text', provider, null, 'rubric')).toBe(provider);
+});
+
 it('recognizes an instance-owned implementation that replaces an inherited text stub', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     override callApi = async () => ({ output: 'implemented on instance' });
