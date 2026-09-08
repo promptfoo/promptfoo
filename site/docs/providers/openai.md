@@ -690,14 +690,14 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 <Link id="gpt-image-1-mini" />
 <Link id="example" />
 
-`openai:image:gpt-image-2` calls `/v1/images/generations` for text-to-image evals:
+`openai:image:gpt-image-2.5-flare` calls `/v1/images/generations` for text-to-image evals. Use `gpt-image-2.5-sunburst` to compare Sunburst on the same prompts; both aliases and their `2026-09-08` snapshots are supported.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'A product photo of {{product}} on a plain white background.'
 
 providers:
-  - id: openai:image:gpt-image-2
+  - id: openai:image:gpt-image-2.5-flare
     config:
       size: 1024x1024
       quality: low
@@ -708,7 +708,9 @@ tests:
       product: a blue ceramic mug
 ```
 
-This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented. It does not yet recognize OpenAI's GPT Image 2.5 models; use a [custom provider](/docs/providers/custom-api/) to evaluate those models with the current [Image API](https://developers.openai.com/api/docs/guides/image-generation).
+GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. Cost comes from the response's token usage; it is left unset when usage is missing because older models' per-image estimates do not apply. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+
+This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented.
 
 <details>
 <summary>GPT Image 2 options</summary>
