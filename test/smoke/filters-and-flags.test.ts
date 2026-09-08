@@ -494,6 +494,41 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results.length).toBe(1);
     expect(parsed.results.results[0].response.output).toContain('Eve');
   });
+
+  it('1.8.3.7 - multiple --filter-metadata-any flags use OR logic without duplicates', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-any-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata-any',
+        'category=auth',
+        '--filter-metadata-any',
+        'priority=high',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Alice matches both filters but should only run once.
+    expect(parsed.results.results.length).toBe(3);
+    const outputs = parsed.results.results.map(
+      (r: { response: { output: string } }) => r.response.output,
+    );
+    expect(outputs.filter((o: string) => o.includes('Alice'))).toHaveLength(1);
+    expect(outputs.some((o: string) => o.includes('Charlie'))).toBe(true);
+    expect(outputs.some((o: string) => o.includes('Diana'))).toBe(true);
+  });
 });
 
 describe('Provider Filter Tests', () => {
