@@ -271,6 +271,21 @@ describe('JSON export with improved error handling', () => {
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow('50000 results');
     });
 
+    it('should handle coded oversized-string errors with helpful message', async () => {
+      mockEval.toEvaluateSummary.mockRejectedValueOnce(
+        Object.assign(
+          new RangeError('Cannot create a string longer than the maximum allowed length'),
+          {
+            code: 'ERR_STRING_TOO_LONG',
+          },
+        ),
+      );
+
+      await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
+        'Consider using JSONL format instead',
+      );
+    });
+
     it('should not create output file when memory error occurs', async () => {
       try {
         await writeOutput(tempFilePath, mockEval, null);
@@ -290,6 +305,12 @@ describe('JSON export with improved error handling', () => {
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
         'Database connection failed',
       );
+    });
+
+    it('should propagate unrelated RangeError exceptions', async () => {
+      mockEval.toEvaluateSummary.mockRejectedValue(new RangeError('Index out of range'));
+
+      await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow('Index out of range');
     });
 
     it('should handle file system errors', async () => {

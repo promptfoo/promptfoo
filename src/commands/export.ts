@@ -7,7 +7,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { getLogDirectory, getLogFiles } from '../util/logs';
-import { createOutputData, writeOutput } from '../util/output';
+import { createOutputData, isStringSizeError, writeOutput } from '../util/output';
 import type { Command } from 'commander';
 
 /**
@@ -146,14 +146,25 @@ export function exportCommand(program: Command) {
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          const jsonData = JSON.stringify(
-            await createOutputData(result, null, {
-              includeMedia: Boolean(cmdObj.includeMedia),
-            }),
-            null,
-            2,
-          );
-          logger.info(jsonData);
+          try {
+            const jsonData = JSON.stringify(
+              await createOutputData(result, null, {
+                includeMedia: Boolean(cmdObj.includeMedia),
+              }),
+              null,
+              2,
+            );
+            logger.info(jsonData);
+          } catch (error) {
+            if (isStringSizeError(error)) {
+              logger.error(
+                `Eval too large to output to console. Use -o to export to a file instead:\n\n  promptfoo export eval ${evalId} -o output.jsonl\n`,
+              );
+              process.exitCode = 1;
+              return;
+            }
+            throw error;
+          }
         }
 
         telemetry.record('command_used', {
