@@ -14,6 +14,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
@@ -219,14 +220,17 @@ function getGatewayCacheConfig(config: VercelAiConfig, env?: EnvOverrides) {
 /**
  * Creates an AbortController with timeout and returns cleanup function.
  */
-function createTimeoutController(timeoutMs: number): {
+function createTimeoutController(
+  timeoutMs: number,
+  abortSignal?: AbortSignal,
+): {
   signal: AbortSignal;
   cleanup: () => void;
 } {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   return {
-    signal: controller.signal,
+    signal: abortSignal ? AbortSignal.any([controller.signal, abortSignal]) : controller.signal,
     cleanup: () => clearTimeout(timeoutId),
   };
 }
@@ -234,8 +238,17 @@ function createTimeoutController(timeoutMs: number): {
 /**
  * Handles common error cases and returns appropriate ProviderResponse.
  */
-function handleApiError(error: unknown, timeoutMs: number, context: string): ProviderResponse {
+function handleApiError(
+  error: unknown,
+  timeoutMs: number,
+  context: string,
+  abortSignal?: AbortSignal,
+): ProviderResponse {
   const errorMessage = error instanceof Error ? error.message : String(error);
+
+  if (abortSignal?.aborted) {
+    return { error: 'Request aborted' };
+  }
 
   if (error instanceof Error && error.name === 'AbortError') {
     return { error: `Request timed out after ${timeoutMs}ms` };
@@ -302,9 +315,10 @@ export class VercelAiProvider implements ApiProvider {
   private async callApiStreaming(
     messages: ChatMessage[],
     context?: CallApiContextParams,
+    abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
@@ -325,11 +339,15 @@ export class VercelAiProvider implements ApiProvider {
       });
 
       let output = '';
-      for await (const chunk of result.textStream) {
-        output += chunk;
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          output += part.text;
+        } else if (part.type === 'error') {
+          throw part.error;
+        }
       }
-
       const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
+      signal.throwIfAborted();
 
       logger.debug('Vercel AI Gateway streaming response received', {
         model: this.modelName,
@@ -339,7 +357,7 @@ export class VercelAiProvider implements ApiProvider {
 
       return { output, tokenUsage: mapTokenUsage(usage), finishReason };
     } catch (error) {
-      return handleApiError(error, timeout, 'streaming API call');
+      return handleApiError(error, timeout, 'streaming API call', abortSignal);
     } finally {
       cleanup();
     }
@@ -351,9 +369,10 @@ export class VercelAiProvider implements ApiProvider {
   private async callApiStructured(
     messages: ChatMessage[],
     context?: CallApiContextParams,
+    abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
@@ -380,7 +399,7 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal: signal,
       });
 
-      cleanup();
+      signal.throwIfAborted();
 
       logger.debug('Vercel AI Gateway structured output response received', {
         model: this.modelName,
@@ -394,12 +413,20 @@ export class VercelAiProvider implements ApiProvider {
         finishReason: result.finishReason,
       };
     } catch (error) {
+      return handleApiError(error, timeout, 'structured output API call', abortSignal);
+    } finally {
       cleanup();
-      return handleApiError(error, timeout, 'structured output API call');
     }
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (options?.abortSignal?.aborted) {
+      return { error: 'Request aborted' };
+    }
     const cache = await getCache();
     const cacheKey = this.getCacheKey(prompt);
 
@@ -410,7 +437,10 @@ export class VercelAiProvider implements ApiProvider {
         logger.debug(`Returning cached response for Vercel AI Gateway: ${this.modelName}`);
         try {
           const parsed = JSON.parse(cachedResponse) as ProviderResponse;
-          return { ...parsed, cached: true };
+          // Older streaming responses could cache partial output after an SDK error.
+          if (!parsed.error && parsed.finishReason !== 'error') {
+            return { ...parsed, cached: true };
+          }
         } catch {
           // If parsing fails, return as raw output
           return { output: cachedResponse, cached: true };
@@ -424,12 +454,12 @@ export class VercelAiProvider implements ApiProvider {
     // Dispatch to appropriate method based on config
     const response = await withSdkTraceContext(context, async () => {
       if (this.config.responseSchema) {
-        return this.callApiStructured(messages, context);
+        return this.callApiStructured(messages, context, options?.abortSignal);
       }
       if (this.config.streaming) {
-        return this.callApiStreaming(messages, context);
+        return this.callApiStreaming(messages, context, options?.abortSignal);
       }
-      return this.callApiNonStreaming(messages, context);
+      return this.callApiNonStreaming(messages, context, options?.abortSignal);
     });
 
     // Cache the response if successful
@@ -450,9 +480,10 @@ export class VercelAiProvider implements ApiProvider {
   private async callApiNonStreaming(
     messages: ChatMessage[],
     context?: CallApiContextParams,
+    abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
       const gateway = await createGatewayInstance(this.config, this.env);
@@ -472,7 +503,7 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal: signal,
       });
 
-      cleanup();
+      signal.throwIfAborted();
 
       logger.debug('Vercel AI Gateway response received', {
         model: this.modelName,
@@ -486,8 +517,9 @@ export class VercelAiProvider implements ApiProvider {
         finishReason: result.finishReason,
       };
     } catch (error) {
+      return handleApiError(error, timeout, 'API call', abortSignal);
+    } finally {
       cleanup();
-      return handleApiError(error, timeout, 'API call');
     }
   }
 }

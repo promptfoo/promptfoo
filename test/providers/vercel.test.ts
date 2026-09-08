@@ -398,12 +398,12 @@ describe('VercelAiProvider', () => {
       const { streamText } = await import('ai');
       async function* textStream() {
         expectActiveEvaluationParent();
-        yield 'response';
+        yield { type: 'text-delta', text: 'response' };
       }
       vi.mocked(streamText).mockImplementationOnce(() => {
         expectActiveEvaluationParent();
         return {
-          textStream: textStream(),
+          fullStream: textStream(),
           usage: Promise.resolve({ inputTokens: 1, outputTokens: 2 }),
           finishReason: Promise.resolve('stop'),
         } as any;
@@ -433,15 +433,14 @@ describe('VercelAiProvider', () => {
     it('should handle streaming responses', async () => {
       const { streamText } = await import('ai');
 
-      // Mock async generator for textStream
       async function* mockTextStream() {
-        yield 'Hello ';
-        yield 'from ';
-        yield 'streaming!';
+        yield { type: 'text-delta', text: 'Hello ' };
+        yield { type: 'text-delta', text: 'from ' };
+        yield { type: 'text-delta', text: 'streaming!' };
       }
 
       vi.mocked(streamText).mockReturnValueOnce({
-        textStream: mockTextStream(),
+        fullStream: mockTextStream(),
         usage: Promise.resolve({ inputTokens: 5, outputTokens: 15, totalTokens: 20 }),
         finishReason: Promise.resolve('stop'),
       } as any);
@@ -467,11 +466,11 @@ describe('VercelAiProvider', () => {
       const { streamText } = await import('ai');
 
       async function* mockTextStream() {
-        yield 'Response';
+        yield { type: 'text-delta', text: 'Response' };
       }
 
       vi.mocked(streamText).mockReturnValueOnce({
-        textStream: mockTextStream(),
+        fullStream: mockTextStream(),
         usage: Promise.resolve({ inputTokens: 5, outputTokens: 10 }),
         finishReason: Promise.resolve('stop'),
       } as any);
@@ -508,6 +507,22 @@ describe('VercelAiProvider', () => {
       expect(result).toEqual({
         error: 'API call error: Stream connection failed',
       });
+    });
+
+    it('returns in-band stream errors without caching partial output', async () => {
+      const { streamText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      async function* fullStream() {
+        yield { type: 'text-delta', text: 'Partial response' };
+        yield { type: 'error', error: new Error('Stream failed') };
+      }
+      vi.mocked(streamText).mockImplementation(() => ({ fullStream: fullStream() }) as any);
+      const provider = new VercelAiProvider('fixture/model', { config: { streaming: true } });
+
+      expect(await provider.callApi('Hello')).toEqual({ error: 'API call error: Stream failed' });
+      expect(await provider.callApi('Hello')).toEqual({ error: 'API call error: Stream failed' });
+      expect(streamText).toHaveBeenCalledTimes(2);
+      expect(mockCache.set).not.toHaveBeenCalled();
     });
 
     it('cleans up the timeout when stream creation fails before iteration', async () => {
@@ -551,6 +566,63 @@ describe('VercelAiProvider', () => {
     });
   });
 
+  describe('caller cancellation', () => {
+    it.each(['text', 'streaming', 'structured'])(
+      'cancels %s generation without caching it',
+      async (mode) => {
+        const { generateText, streamText, generateObject } = await import('ai');
+        const controller = new AbortController();
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        const abort = (signal: AbortSignal) => {
+          controller.abort();
+          expect(signal.aborted).toBe(true);
+          signal.throwIfAborted();
+        };
+        vi.mocked(generateText).mockImplementation(
+          async ({ abortSignal }) => abort(abortSignal!) as any,
+        );
+        vi.mocked(generateObject).mockImplementation(
+          async ({ abortSignal }) => abort(abortSignal!) as any,
+        );
+        vi.mocked(streamText).mockImplementation(
+          ({ abortSignal }) =>
+            ({
+              fullStream: (async function* () {
+                controller.abort();
+                expect(abortSignal!.aborted).toBe(true);
+                yield { type: 'abort' };
+              })(),
+            }) as any,
+        );
+        const provider = new VercelAiProvider('fixture/model', {
+          config: {
+            streaming: mode === 'streaming',
+            ...(mode === 'structured' ? { responseSchema: { type: 'object' } } : {}),
+          },
+        });
+
+        expect(
+          await provider.callApi('Hello', undefined, { abortSignal: controller.signal }),
+        ).toEqual({
+          error: 'Request aborted',
+        });
+        expect(mockCache.set).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not call the SDK or return cached output for a cancelled request', async () => {
+      const { generateText } = await import('ai');
+      const provider = new VercelAiProvider('fixture/model');
+      expect(
+        await provider.callApi('Hello', undefined, { abortSignal: AbortSignal.abort() }),
+      ).toEqual({
+        error: 'Request aborted',
+      });
+      expect(generateText).not.toHaveBeenCalled();
+      expect(mockCache.get).not.toHaveBeenCalled();
+    });
+  });
+
   describe('caching', () => {
     it('bypasses legacy generation entries and reuses corrected response entries', async () => {
       const { generateText } = await import('ai');
@@ -584,6 +656,24 @@ describe('VercelAiProvider', () => {
       const cached = await provider.callApi('cache migration fixture');
       expect(cached).toEqual({ ...fresh, cached: true });
       expect(generateText).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries cached partial output from failed streams', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      mockCache.get.mockResolvedValue(JSON.stringify({ output: 'Partial', finishReason: 'error' }));
+      vi.mocked(generateText).mockResolvedValueOnce({ text: 'Fresh', finishReason: 'stop' } as any);
+      const provider = new VercelAiProvider('fixture/model');
+
+      expect(await provider.callApi('Hello')).toMatchObject({
+        output: 'Fresh',
+        finishReason: 'stop',
+      });
+      expect(generateText).toHaveBeenCalledTimes(1);
+      expect(mockCache.set).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining('Fresh'),
+      );
     });
 
     it('does not invoke the SDK for a traced cache hit', async () => {
