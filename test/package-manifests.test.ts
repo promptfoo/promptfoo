@@ -680,6 +680,7 @@ describe('package manifests', () => {
     expect(swcRange).toBeDefined();
     expect(minVersion(swcRange!)?.compare('1.16.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(swcRange);
+    expect(swc?.version).toBeDefined();
     expect(satisfies(swc.version!, swcRange!)).toBe(true);
     expect(swc.dev).toBe(true);
 
@@ -701,6 +702,7 @@ describe('package manifests', () => {
     );
     for (const [dependencyName, nativeVersion] of Object.entries(swc.optionalDependencies ?? {})) {
       const native = packageLock.packages[`node_modules/${dependencyName}`];
+      expect(native?.version, `${dependencyName} must have a locked version`).toBeDefined();
       expect(nativeVersion).toBe(swc.version);
       expect(native.version).toBe(swc.version);
       expect(native.dev).toBe(true);
