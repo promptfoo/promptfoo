@@ -170,16 +170,20 @@ export function inheritProviderCapabilities<T extends readonly ProviderCapabilit
   return inherited;
 }
 
-/** A subclass may replace a built-in stub, but its explicit capability declaration takes precedence. */
-function hasSubclassCapabilityOverride(provider: object, capability: ProviderCapability): boolean {
-  if (
-    Object.prototype.hasOwnProperty.call(provider, 'promptfooCapabilities') &&
-    !Object.prototype.hasOwnProperty.call(
-      (provider as ProviderIdentity).promptfooCapabilities ?? [],
-      inheritedProviderCapabilities,
-    )
-  ) {
-    return false;
+/** A subclass may replace a built-in stub, but the nearest explicit declaration takes precedence. */
+function getSubclassCapabilityOverride(
+  provider: object,
+  capability: ProviderCapability,
+): boolean | undefined {
+  const ownDeclaration = Object.getOwnPropertyDescriptor(provider, 'promptfooCapabilities');
+  if (ownDeclaration) {
+    const capabilities = ownDeclaration.get?.call(provider) ?? ownDeclaration.value;
+    if (
+      capabilities !== undefined &&
+      !Object.prototype.hasOwnProperty.call(capabilities ?? [], inheritedProviderCapabilities)
+    ) {
+      return Array.isArray(capabilities) && capabilities.includes(capability);
+    }
   }
   let prototype = Object.getPrototypeOf(provider);
   let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
@@ -207,14 +211,15 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
     if (hasDeclaration) {
       const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
-        overridden &&
-        Array.isArray(capabilities) &&
-        Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)
+        (overridden &&
+          Array.isArray(capabilities) &&
+          Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) ||
+        undefined
       );
     }
     prototype = Object.getPrototypeOf(prototype);
   }
-  return false;
+  return undefined;
 }
 
 /** Check both the implementation and any explicit capability declaration. */
@@ -233,18 +238,18 @@ export function hasProviderCapability<K extends ProviderCapability>(
     typeof provider.id === 'function' &&
     capability in provider &&
     typeof (provider as Record<string, unknown>)[capability] === 'function' &&
-    (!('promptfooCapabilities' in provider) ||
-      provider.promptfooCapabilities === undefined ||
-      (Array.isArray(provider.promptfooCapabilities) &&
-        provider.promptfooCapabilities.includes(capability)) ||
-      hasSubclassCapabilityOverride(provider, capability) ||
-      (Array.isArray(provider.promptfooCapabilities) &&
-        Object.prototype.hasOwnProperty.call(
-          provider.promptfooCapabilities,
-          inheritedProviderCapabilities,
-        ) &&
-        delegate !== provider &&
-        hasProviderCapability(delegate, capability)))
+    (getSubclassCapabilityOverride(provider, capability) ??
+      (!('promptfooCapabilities' in provider) ||
+        provider.promptfooCapabilities === undefined ||
+        (Array.isArray(provider.promptfooCapabilities) &&
+          provider.promptfooCapabilities.includes(capability)) ||
+        (Array.isArray(provider.promptfooCapabilities) &&
+          Object.prototype.hasOwnProperty.call(
+            provider.promptfooCapabilities,
+            inheritedProviderCapabilities,
+          ) &&
+          delegate !== provider &&
+          hasProviderCapability(delegate, capability))))
   );
 }
 
