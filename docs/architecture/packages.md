@@ -134,14 +134,15 @@ aliases take precedence over the broad `@promptfoo` source alias. These mappings
 are architecture-analysis inputs, not a replacement for compiler/bundler aliases
 or package export validation.
 
-The TypeScript coverage check treats tracked `packages/` TypeScript files as
-root-owned by default. Separate package compiler projects must be explicitly
+The TypeScript coverage check treats tracked `packages/` TypeScript files and
+configured product roots outside the usual directories as root-owned by default. Separate package compiler projects must be explicitly
 referenced from the root `tsconfig.json` (solution references are traversed).
 The nearest referenced package project owns membership even when the root or a
 parent includes the same files; configurations in the same directory combine.
 Referenced package projects own only files below their own directory; a package
 project cannot excuse missing root-source coverage. Coverage checks verify tracked
-file membership and compiler-configuration validity. They do not typecheck package
+file membership and compiler-configuration validity, including root project
+references. They do not typecheck package
 source: wire each separate package's actual typecheck into CI as part of its
 extraction, alongside artifact consumer checks.
 
