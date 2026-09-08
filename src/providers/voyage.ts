@@ -27,10 +27,13 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   config: any;
   env?: any;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, config: any = {}, env?: any, id?: string) {
     this.modelName = modelName;
     this.config = config;
     this.env = env;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   id() {

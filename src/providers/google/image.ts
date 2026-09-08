@@ -80,6 +80,10 @@ export class GoogleImageProvider implements ApiProvider {
   constructor(modelName: string, options: GoogleImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 

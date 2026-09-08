@@ -1488,6 +1488,45 @@ describe('Provider Registry', () => {
       },
     );
 
+    it.each([
+      [
+        'google:image:imagen-4.0-generate-001',
+        'imagen-4.0-generate-001',
+        'google:image:imagen-4.0-generate-001',
+      ],
+      [
+        'palm:image:imagen-4.0-generate-001',
+        'imagen-4.0-generate-001',
+        'google:image:imagen-4.0-generate-001',
+      ],
+      ['google:gemini-3.1-flash-image', 'gemini-3.1-flash-image', 'google:gemini-3.1-flash-image'],
+      ['palm:gemini-3.1-flash-image', 'gemini-3.1-flash-image', 'google:gemini-3.1-flash-image'],
+      [
+        'google:live:gemini-3.1-flash-live-preview',
+        'gemini-3.1-flash-live-preview',
+        'google:live:gemini-3.1-flash-live-preview',
+      ],
+      [
+        'palm:live:gemini-3.1-flash-live-preview',
+        'gemini-3.1-flash-live-preview',
+        'google:live:gemini-3.1-flash-live-preview',
+      ],
+    ])(
+      'preserves custom IDs and model names for %s',
+      async (providerPath, modelName, defaultId) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        for (const id of ['media-eval-label', undefined, '']) {
+          const config = { apiKey: 'test-api-key' };
+          const provider = await factory!.create(providerPath, { id, config }, bareContext);
+          expect(provider.id()).toBe(id || defaultId);
+          expect(provider).toMatchObject({ modelName, config });
+        }
+      },
+    );
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-preview';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
