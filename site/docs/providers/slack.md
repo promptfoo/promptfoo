@@ -425,7 +425,7 @@ prompts:
 
 #### 3. Load Testing
 
-Run sequentially in a shared channel so overlapping prompts do not collect the same response:
+Use a sequential run as a baseline in a shared channel. Concurrent load tests require isolated channels so prompts do not collect the same response:
 
 ```bash
 promptfoo eval -c bot-test-config.yaml -j 1

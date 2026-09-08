@@ -156,6 +156,8 @@ The cost calculation includes:
 - Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
 - Usage tier considerations (high, medium, low)
 
+The local token-based cost estimate is partial: it excludes search/request fees and Deep Research citation and reasoning charges. Unknown model names use the Sonar fallback rates, which do not verify pricing for that model. Check [Perplexity pricing](https://docs.perplexity.ai/docs/getting-started/pricing) for all applicable charges.
+
 ## Advanced Use Cases
 
 ### Comprehensive Research

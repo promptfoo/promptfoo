@@ -5,7 +5,7 @@ set -euo pipefail
 
 echo "Starting LiteLLM proxy server..."
 echo ""
-echo "Required environment variables:"
+echo "Credentials for routes you use:"
 echo "  - OPENAI_API_KEY (for GPT models and embeddings)"
 echo "  - ANTHROPIC_API_KEY (for Claude models)"
 echo "  - GOOGLE_AI_API_KEY (for Gemini models)"
