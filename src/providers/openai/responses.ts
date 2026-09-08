@@ -797,17 +797,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       return this.isReasoningModel();
     }
 
-    const isGpt5Model = modelName.startsWith('gpt-5') || modelName.includes('/gpt-5');
-    return (
-      modelName === 'codex-mini-latest' ||
-      modelName.startsWith('o1') ||
-      modelName.startsWith('o3') ||
-      modelName.startsWith('o4') ||
-      modelName.includes('/o1') ||
-      modelName.includes('/o3') ||
-      modelName.includes('/o4') ||
-      isGpt5Model
-    );
+    return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
   }
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {

@@ -66,7 +66,7 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepS
 ### deepseek-v4-pro
 
 - Higher-capability V4 model with thinking and non-thinking modes
-- Preview model awaiting its official release; the Responses API is not yet supported
+- Released August 13, 2026; DeepSeek's native [Responses API](https://api-docs.deepseek.com/guides/responses_api/) supports this model. The `deepseek:` provider uses Chat Completions.
 - 1M context window, up to 384K output tokens
 - Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
 - Output: $0.87/1M

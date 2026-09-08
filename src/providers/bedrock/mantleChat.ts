@@ -70,8 +70,12 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return 'bedrock';
   }
 
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(/^(openai|xai)\./, '');
+  }
+
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^(openai|xai)\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   protected isReasoningModel(): boolean {

@@ -83,7 +83,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
   /**
    * Check if the current deployment is a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first (match chat.ts behavior)
@@ -150,6 +150,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -169,9 +170,10 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const temperature = this.supportsTemperature(capabilityModelName)
       ? (config.temperature ?? temperatureDefault)
       : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isFixedReasoningModel
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     const instructions = config.instructions;
 
@@ -260,6 +262,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {
+      body.reasoning = { ...body.reasoning };
+      delete body.reasoning.effort;
+      if (Object.keys(body.reasoning).length === 0) {
+        delete body.reasoning;
+      }
+    }
 
     applyGpt6AstraRequestRules(body, capabilityModelName, 'responses');
 

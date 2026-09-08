@@ -69,7 +69,6 @@ useful starting points:
 | `deepseek-ai/DeepSeek-V4-Flash-0731`      |        1,000,000 |
 | `Qwen/Qwen3.6-Plus`                       |        1,000,000 |
 | `thinkingmachines/Inkling`                |          524,288 |
-| `moonshotai/Kimi-K2.7-Code`               |          262,144 |
 | `zai-org/GLM-5.2`                         |        1,048,575 |
 | `MiniMaxAI/MiniMax-M3`                    |          524,288 |
 | `Qwen/Qwen3.5-9B`                         |          262,144 |

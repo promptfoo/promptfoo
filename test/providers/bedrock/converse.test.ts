@@ -2427,9 +2427,9 @@ Third line`;
       );
     });
 
-    it('strips unsupported raw fields for always-on Claude Sonnet 5 thinking', async () => {
-      // Sonnet 5 rejects sampling controls and always uses adaptive thinking. Manual thinking
-      // converts to adaptive, while an invalid disabled request is omitted.
+    it('strips unsupported raw sampling fields while preserving Sonnet 5 thinking choices', async () => {
+      // Sonnet 5 rejects sampling controls. Manual thinking converts to adaptive,
+      // while an explicit disabled request remains supported.
       const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
         config: {
           region: 'us-east-1',
@@ -2465,7 +2465,20 @@ Third line`;
       await disabledProvider.callApi('Test');
 
       expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.not.objectContaining({ additionalModelRequestFields: expect.anything() }),
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
+        }),
+      );
+
+      const typedDisabledProvider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
+        config: { region: 'us-east-1', thinking: { type: 'disabled' } },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await typedDisabledProvider.callApi('Test');
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
+        }),
       );
     });
 

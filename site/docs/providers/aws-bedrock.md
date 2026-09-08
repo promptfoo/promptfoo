@@ -881,8 +881,9 @@ endpoints cost $2.20/$11 after the 10% regional premium. Standard $3/$15 global 
 September 1, 2026. Global prompt-cache reads, 5-minute writes, and 1-hour writes cost
 $0.20/$2.50/$4.00 per million cached tokens during the promotion and
 $0.30/$3.75/$6.00 afterward. In-region and geo endpoints apply the same 10% premium to
-each cache tier. Adaptive thinking is always on and cannot be disabled; promptfoo converts manual
-thinking budgets to adaptive thinking and omits `thinking: { type: 'disabled' }`.
+each cache tier. Adaptive thinking is on by default, including when `thinking` is omitted.
+Promptfoo converts manual thinking budgets to adaptive thinking and preserves an explicit
+`thinking: { type: 'disabled' }` to turn thinking off.
 
 :::warning Region-specific Claude end-of-life
 

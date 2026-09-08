@@ -150,6 +150,11 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.modelName;
   }
 
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
+  }
+
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
     const model = modelName.replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');

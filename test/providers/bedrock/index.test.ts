@@ -818,7 +818,7 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
-    it('omits disabled thinking and keeps default headroom for Claude Sonnet 5', async () => {
+    it('preserves disabled thinking and the non-thinking cap for Claude Sonnet 5', async () => {
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         { region: 'us-east-1', thinking: { type: 'disabled' } },
         'hi',
@@ -826,8 +826,8 @@ describe('AwsBedrockGenericProvider', () => {
         'us.anthropic.claude-sonnet-5',
       );
 
-      expect(params.thinking).toBeUndefined();
-      expect(params.max_tokens).toBe(2048);
+      expect(params.thinking).toEqual({ type: 'disabled' });
+      expect(params.max_tokens).toBe(1024);
     });
 
     it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(

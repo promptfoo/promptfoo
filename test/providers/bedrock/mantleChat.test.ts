@@ -247,6 +247,8 @@ describe('bedrock mantle Chat Completions provider', () => {
           config: {
             apiKey: 'bedrock-key',
             apiBaseUrl: 'http://localhost:1234/v1',
+            reasoning_effort: 'high',
+            max_completion_tokens: 4096,
             ...(scope === 'provider' ? { passthrough } : {}),
           },
         });
@@ -256,7 +258,14 @@ describe('bedrock mantle Chat Completions provider', () => {
             : undefined;
         const result = await provider.callApi('hello', context);
         const [, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
-        expect(JSON.parse(request?.body as string).model).toBe('openai.gpt-5.6-terra');
+        const body = JSON.parse(request?.body as string);
+        expect(body).toMatchObject({
+          model: 'openai.gpt-5.6-terra',
+          reasoning_effort: 'high',
+          max_completion_tokens: 4096,
+        });
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
         expect(result.cost).toBeCloseTo(
           (700 * 2.2 + 200 * 0.22 + 100 * 2.75 + 500 * 13.2) / 1e6,
           12,

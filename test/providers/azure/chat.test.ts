@@ -873,11 +873,34 @@ describe('AzureChatCompletionProvider', () => {
         const { body } = await (provider as any).getOpenAiBody('test prompt');
 
         expect(body).toHaveProperty('max_completion_tokens', 2_000);
-        expect(body).toHaveProperty('reasoning_effort', 'high');
+        expect(body).not.toHaveProperty('reasoning_effort');
         expect(body).not.toHaveProperty('max_tokens');
         expect(body).not.toHaveProperty('temperature');
       },
     );
+
+    it('omits default and passthrough effort for fixed-reasoning Azure deployments', async () => {
+      const direct = new AzureChatCompletionProvider('gpt-chat-latest');
+      const { body: directBody } = await direct.getOpenAiBody('hello');
+      expect(directBody).not.toHaveProperty('reasoning_effort');
+
+      const provider = new AzureChatCompletionProvider('opaque-deployment', {
+        config: { modelName: 'gpt-4.1' },
+      });
+      const passthrough = { reasoning_effort: 'high' };
+      const { body } = await provider.getOpenAiBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'override',
+          config: { modelName: 'gpt-chat-latest', passthrough },
+        },
+      });
+      expect(body.model).toBe('opaque-deployment');
+      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body).not.toHaveProperty('temperature');
+      expect(passthrough.reasoning_effort).toBe('high');
+    });
 
     it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
       const provider = new AzureChatCompletionProvider('claude-opus-4-7', {

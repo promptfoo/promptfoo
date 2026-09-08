@@ -12,6 +12,46 @@ import type { Mock } from 'vitest';
 const CUSTOM_OPENAI_API_BASE_URL = 'https://gateway.example/v1';
 
 describe('OpenAiResponsesProvider reasoning models', () => {
+  it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    'preserves %s reasoning through provider and prompt model overrides',
+    async (model) => {
+      const direct = new OpenAiResponsesProvider(model, {
+        config: { apiKey: 'test-key', reasoning_effort: 'high' },
+      });
+      const { body: directBody } = await direct.getOpenAiBody('Test prompt');
+      expect(directBody.reasoning).toEqual({ effort: 'high' });
+      expect(directBody).not.toHaveProperty('temperature');
+      expect(directBody).not.toHaveProperty('max_output_tokens');
+
+      for (const perPrompt of [false, true]) {
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            reasoning_effort: 'high',
+            ...(!perPrompt && { passthrough: { model } }),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          perPrompt
+            ? {
+                vars: {},
+                prompt: {
+                  raw: 'Test prompt',
+                  label: 'override',
+                  config: { passthrough: { model } },
+                },
+              }
+            : undefined,
+        );
+        expect(body.model).toBe(model);
+        expect(body.reasoning).toEqual(directBody.reasoning);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+      }
+    },
+  );
+
   it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
     setOpenAiEnv({
       OPENAI_MAX_COMPLETION_TOKENS: '4096',

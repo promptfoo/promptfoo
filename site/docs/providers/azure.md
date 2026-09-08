@@ -154,6 +154,10 @@ Azure retired the `gpt-5.1-chat`, `gpt-5.2-chat`, and `gpt-5.3-chat` versions by
 
 ### GPT-chat-latest on Azure
 
+This model uses fixed reasoning. Promptfoo omits configurable reasoning effort while retaining
+reasoning-model token and sampling controls. For an opaque deployment name, set `modelName: gpt-chat-latest`
+so these rules apply. See [Microsoft's model documentation](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure).
+
 Azure's exact product and model ID is `gpt-chat-latest`, not `gpt-5-chat-latest` or OpenAI's
 `chat-latest` API alias. Azure publishes dates as model versions, separately from the deployment name you choose. Promptfoo accepts arbitrary deployment names; recognizable `<model>-<version>` names can also match built-in cost metadata.
 

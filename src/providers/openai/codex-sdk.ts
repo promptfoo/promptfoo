@@ -2487,7 +2487,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     if (
       modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
-      config.model?.startsWith('openai.')
+      config.model !== undefined &&
+      /^openai\.gpt-5\.6(?:-|$)/.test(config.model)
     ) {
       return `bedrock:${config.model.slice('openai.'.length)}`;
     }

@@ -9,7 +9,11 @@ function isLiveOnlyModel(modelName: string): boolean {
   );
 }
 
-function validateGoogleModelRoute(modelName: string, serviceType?: string): void {
+function validateGoogleModelRoute(
+  modelName: string,
+  serviceType?: string,
+  allowNativeInteractions = false,
+): void {
   if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
     throw new Error(
       `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`,
@@ -18,7 +22,8 @@ function validateGoogleModelRoute(modelName: string, serviceType?: string): void
   if (
     modelName === GEMINI_ROBOTICS_STANDARD_MODEL &&
     serviceType !== undefined &&
-    serviceType !== 'chat'
+    serviceType !== 'chat' &&
+    !(allowNativeInteractions && serviceType === 'interactions')
   ) {
     throw new Error(
       `Model "${modelName}" uses the standard Gemini Interactions API. Use google:${modelName} or vertex:${modelName}.`,
@@ -116,7 +121,7 @@ export const googleProviderFactories: ProviderFactory[] = [
             `Model "${modelName}" uses the standard Gemini Interactions API and does not support ${providerPrefix}:chat:. Use ${providerPrefix}:${modelName}.`,
           );
         }
-        validateGoogleModelRoute(modelName, serviceType);
+        validateGoogleModelRoute(modelName, serviceType, true);
 
         if (serviceType === 'live') {
           // This is a Live API request

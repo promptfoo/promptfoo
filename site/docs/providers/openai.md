@@ -1917,9 +1917,8 @@ npx promptfoo@latest init --example openai-audio
 
 Use `openai:tts:<model>` or `openai:speech:<model>` to generate playable audio through
 `/v1/audio/speech`. Supported models are `gpt-4o-mini-tts`,
-`gpt-4o-mini-tts-2025-12-15`, `tts-1`, `tts-1-1106`, `tts-1-hd`, and `tts-1-hd-1106`.
-OpenAI shut down `gpt-4o-mini-tts-2025-03-20` on July 23, 2026; retain that ID only in
-historical eval results.
+`gpt-4o-mini-tts-2025-12-15`, `gpt-4o-mini-tts-2025-03-20`, `tts-1`, `tts-1-1106`,
+`tts-1-hd`, and `tts-1-hd-1106`. See OpenAI's [TTS model documentation](https://developers.openai.com/api/docs/models/gpt-4o-mini-tts) for its published snapshots.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:

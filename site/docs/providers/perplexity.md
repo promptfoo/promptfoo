@@ -138,11 +138,6 @@ providers:
       return_images: true
 ```
 
-Perplexity citations are exposed through the standard `metadata.citations` field, and all search
-artifacts are preserved in `metadata.perplexity`. When requested, image results and follow-up
-questions are available at `metadata.perplexity.images` and
-`metadata.perplexity.related_questions`.
-
 ### Cost Tracking
 
 promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:

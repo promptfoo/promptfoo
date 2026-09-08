@@ -684,8 +684,7 @@ Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 p
 ### Claude Opus 4.8 notes
 
 Opus 4.8 is a previous-generation Opus model that builds directly on Opus 4.7. For current
-Opus-tier workloads, use Opus 5; for Anthropic's highest-capability generally available model,
-use Fable 5. Opus 4.8 supports the same feature set as Opus 4.7, so the guidance below applies
+Opus-tier workloads, use Opus 5. Opus 4.8 supports the same feature set as Opus 4.7, so the guidance below applies
 unchanged. Promptfoo handles the model-level differences automatically:
 
 - **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
