@@ -118,6 +118,21 @@ describe('package manifests', () => {
     }
   });
 
+  it('declares browser matcher types alongside the app browser test runner', () => {
+    const app = readPackageJson<PackageManifest>('src/app/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const range = app.devDependencies?.['@vitest/browser'];
+    const browser = lock.packages['node_modules/@vitest/browser'];
+
+    expect(range, 'browser smoke tests reference @vitest/browser/matchers types').toBeDefined();
+    expect(range).toBe(app.devDependencies?.vitest);
+    expect(range).toBe(app.devDependencies?.['@vitest/browser-playwright']);
+    expect(lock.packages['src/app'].devDependencies?.['@vitest/browser']).toBe(range);
+    expect(browser?.version).toBeDefined();
+    expect(satisfies(browser.version!, range!)).toBe(true);
+    expect(browser.version).toBe(lock.packages['node_modules/vitest'].version);
+  });
+
   it('declares concrete Docusaurus type and theme imports alongside the docs build', () => {
     const site = readPackageJson<PackageManifest>('site/package.json');
     const lock = readPackageJson<PackageLockManifest>('package-lock.json');
