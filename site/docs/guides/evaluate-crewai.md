@@ -405,7 +405,7 @@ Promptfoo kicks off the evaluation job you set up.
 
 - It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py).
 - It feeds in the job requirements prompt and collects the structured output.
-- It checks the results against your YAML assertions, including the `candidates` list and each candidate's required fields.
+- It checks the results against your YAML assertions, including the output shape and `candidates` list.
 - It shows a clear table: did the agent PASS or FAIL?
 
 In this example, you can see:
