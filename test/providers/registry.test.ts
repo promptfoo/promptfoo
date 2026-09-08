@@ -57,6 +57,34 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 
 describe('Provider Registry', () => {
   it.each([
+    ['cohere-main/embed-english-v3.0', 'embedding', 'TrueFoundryEmbeddingProvider'],
+    ['tenant/vector-index:stable', 'embedding', 'TrueFoundryEmbeddingProvider'],
+    ['embedding-team/chat-alias:stable', 'chat', 'TrueFoundryProvider'],
+    ['openai-main/text-embedding-3-large', undefined, 'TrueFoundryEmbeddingProvider'],
+    ['tenant/chat-alias', undefined, 'TrueFoundryProvider'],
+  ])('selects TrueFoundry task for %s with task %s', async (modelName, task, className) => {
+    const providerPath = `truefoundry:${modelName}`;
+    const factory = providerMap.find((entry) => entry.test(providerPath));
+    const provider = await factory!.create(
+      providerPath,
+      { config: { task, apiBaseUrl: 'https://tenant.example/gateway' } },
+      { basePath: '.', options: {}, env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' } },
+    );
+    expect(provider.constructor.name).toBe(className);
+    expect(provider).toHaveProperty('modelName', modelName);
+    expect(provider.id()).toBe(providerPath);
+    expect(provider).toHaveProperty('config.apiBaseUrl', 'https://tenant.example/gateway');
+  });
+
+  it('rejects invalid TrueFoundry task configuration through the registry', async () => {
+    const providerPath = 'truefoundry:tenant/model';
+    const factory = providerMap.find((entry) => entry.test(providerPath));
+    await expect(
+      factory!.create(providerPath, { config: { task: 'image' } }, { basePath: '.', options: {} }),
+    ).rejects.toThrow('TrueFoundry config.task must be "chat" or "embedding"');
+  });
+
+  it.each([
     ['localai:chat:served-model:q4:latest', 'LocalAiChatProvider'],
     ['localai:completion:served-model:q4:latest', 'LocalAiCompletionProvider'],
     ['localai:embedding:served-model:q4:latest', 'LocalAiEmbeddingProvider'],
