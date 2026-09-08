@@ -359,8 +359,8 @@ export class TraceStore {
       const cutoffCondition = traceCreatedBefore(cutoffTime);
 
       // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
-      const { spansDeleted, tracesDeleted } = await db.transaction(async (tx) => {
-        const spansResult = await tx
+      await db.transaction(async (tx) => {
+        await tx
           .delete(spansTable)
           .where(
             sql`${spansTable.traceId} in (
@@ -371,19 +371,10 @@ export class TraceStore {
           )
           .run();
 
-        const tracesResult = await tx.delete(tracesTable).where(cutoffCondition).run();
-
-        return {
-          spansDeleted: spansResult.rowsAffected,
-          tracesDeleted: tracesResult.rowsAffected,
-        };
+        await tx.delete(tracesTable).where(cutoffCondition).run();
       });
 
-      logger.debug('[TraceStore] Pruned traces older than retention period', {
-        retentionDays,
-        tracesDeleted,
-        spansDeleted,
-      });
+      logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to delete old traces: ${error}`);
       throw error;
