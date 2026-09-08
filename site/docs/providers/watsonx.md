@@ -232,7 +232,7 @@ providers:
 
 ### Cost estimates
 
-Cost estimates use model metadata from the same configured `serviceUrl`, API version, and authenticated client as generation. Metadata is cached in memory for up to five minutes per client. If metadata is unavailable or a pricing tier is unrecognized, the response omits `cost` and still returns the generated output.
+Cost estimates use pricing metadata for the configured service and account. If metadata is unavailable or a pricing tier is unrecognized, the response omits `cost` and still returns the generated output.
 
 For account-specific pricing, set `inputCost` and `outputCost` in USD per token, or set `cost` for a shared input/output rate. These values override the built-in tier prices; an explicit zero is supported. Estimates do not determine whether your account can use a model.
 
