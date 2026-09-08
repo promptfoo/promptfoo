@@ -68,8 +68,10 @@ providers:
     label: External Tools
     config:
       tools: file://external_tools.yaml
-  - id: groq:llama-4-scout-17b-16e-instruct
+  - id: groq:openai/gpt-oss-120b
     config:
+      reasoning_effort: low
+      max_completion_tokens: 4096
       tools:
         - type: function
           function:
