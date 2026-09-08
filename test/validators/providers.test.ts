@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
+import { InputsSchema } from '../../src/contracts/shared';
+import {
+  ApiProviderSchema,
+  ProviderOptionsSchema,
+  ProviderSchema,
+} from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
 describe('ProviderOptionsSchema', () => {
+  it('uses the canonical input schema for configured and callable providers', () => {
+    expect(ProviderOptionsSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    expect(ApiProviderSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    const inputs = { question: 'User question', context: { type: 'text', description: 'Context' } };
+    expect(ProviderOptionsSchema.parse({ inputs }).inputs).toEqual(inputs);
+    expect(
+      ApiProviderSchema.parse({ id: () => 'local', callApi: async () => ({}), inputs }).inputs,
+    ).toEqual(inputs);
+  });
+
+  it.each([{ 'invalid-name': 'question' }, { question: 42 }, { question: { type: 'unknown' } }])(
+    'rejects invalid input contracts: %j',
+    (inputs) => {
+      expect(ProviderOptionsSchema.safeParse({ inputs }).success).toBe(false);
+      expect(
+        ApiProviderSchema.safeParse({ id: () => 'local', callApi: async () => ({}), inputs })
+          .success,
+      ).toBe(false);
+    },
+  );
   it('should filter unknown keys without erroring', () => {
     const input = {
       id: 'test-provider',
