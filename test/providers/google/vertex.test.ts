@@ -195,6 +195,7 @@ describe('Vertex cache bypass for non-Gemini models', () => {
       'Llama fresh',
     ],
   ] as const)('bypasses cache on %s', async (model, data, expected) => {
+    vi.mocked(getCache).mockClear();
     const request = mockVertexRequest(data);
     const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
     const response = await provider.callApi('hello', {
@@ -206,7 +207,31 @@ describe('Vertex cache bypass for non-Gemini models', () => {
     expect(request).toHaveBeenCalledOnce();
     expect(mockCacheGet).not.toHaveBeenCalled();
     expect(mockCacheSet).not.toHaveBeenCalled();
+    expect(getCache).not.toHaveBeenCalled();
   });
+
+  it.each(['claude-3-5-sonnet-v2@20241022', 'chat-bison', 'llama-3.3-70b-instruct-maas'])(
+    'uses shared replay accounting for cached %s',
+    async (model) => {
+      mockCacheGet.mockResolvedValue(
+        JSON.stringify({ output: 'replayed', tokenUsage: { prompt: 2, completion: 3, total: 5 } }),
+      );
+      const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
+      const result = await provider.callApi('hello');
+      expect(result).toMatchObject({
+        output: 'replayed',
+        cached: true,
+        tokenUsage: {
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          cached: 5,
+          numRequests: 0,
+          incurredTokenUsage: {},
+        },
+      });
+    },
+  );
 });
 
 describe('VertexChatProvider.callGeminiApi', () => {
