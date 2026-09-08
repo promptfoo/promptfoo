@@ -622,7 +622,10 @@ describe('VercelAiProvider', () => {
       try {
         const { streamText } = await import('ai');
         const caller = new AbortController();
-        const draining = Promise.withResolvers<void>();
+        let resolveDraining!: () => void;
+        const draining = new Promise<void>((resolve) => {
+          resolveDraining = resolve;
+        });
         const closed = vi.fn();
         vi.mocked(isCacheEnabled).mockReturnValue(true);
         vi.mocked(streamText).mockImplementationOnce(
@@ -633,7 +636,7 @@ describe('VercelAiProvider', () => {
                 const aborted = new Promise<void>((resolve) =>
                   abortSignal!.addEventListener('abort', () => resolve(), { once: true }),
                 );
-                draining.resolve();
+                resolveDraining();
                 await aborted;
                 closed();
                 abortSignal!.throwIfAborted();
@@ -645,7 +648,7 @@ describe('VercelAiProvider', () => {
         });
 
         const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
-        await draining.promise;
+        await draining;
         if (stop === 'caller abort') {
           caller.abort();
         } else {
