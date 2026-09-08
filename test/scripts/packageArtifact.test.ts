@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -98,5 +98,49 @@ describe('package artifact packing', () => {
     const destination = path.join(root, 'output');
     expect(() => packPackageArtifact(root, destination)).toThrow('Expected the promptfoo package');
     expect(fs.existsSync(destination)).toBe(false);
+  });
+});
+
+describe('standalone artifact tooling', () => {
+  const script = path.resolve(__dirname, '../../scripts/preparePackageArtifactTest.mjs');
+
+  it.each([0, 2])('rejects %i archives before creating a tooling directory', (count) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-tool-prepare-'));
+    directories.push(root);
+    for (let index = 0; index < count; index++) {
+      fs.writeFileSync(path.join(root, `${index}.tgz`), 'fixture');
+    }
+    const result = spawnSync(
+      process.execPath,
+      [script, '--artifact-directory', root, '--temp-root', root],
+      { encoding: 'utf8' },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Expected exactly one downloaded package archive');
+    expect(fs.readdirSync(root)).toHaveLength(count);
+  });
+
+  it('prepares only the pinned test tools and preserves a selected archive with spaces', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact tools with spaces '));
+    directories.push(root);
+    const tarball = path.join(root, 'selected archive.tgz');
+    fs.writeFileSync(tarball, 'selected bytes');
+    const output = JSON.parse(
+      execFileSync(process.execPath, [script, '--artifact-directory', root, '--temp-root', root], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_OUTPUT: '' },
+      }),
+    );
+    expect(output.tarball).toBe(tarball);
+    expect(fs.readFileSync(tarball, 'utf8')).toBe('selected bytes');
+    const manifest = JSON.parse(fs.readFileSync(path.join(output.tooling, 'package.json'), 'utf8'));
+    expect(manifest.private).toBe(true);
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(['semver', 'tsx', 'typescript']);
+    for (const version of Object.values(manifest.dependencies)) {
+      expect(version).toMatch(/^\d+\.\d+\.\d+/);
+    }
+    for (const excluded of ['src', 'dist', 'drizzle', 'node_modules', 'package-lock.json']) {
+      expect(fs.existsSync(path.join(output.tooling, excluded))).toBe(false);
+    }
   });
 });
