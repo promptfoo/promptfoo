@@ -1145,6 +1145,40 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it('aborts an in-flight OAuth refresh before waiting for teardown', async () => {
+      const refreshStarted = createDeferred<void>();
+      let refreshSignal: AbortSignal | undefined;
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({ accessToken: 'expiring', expiresAt: Date.now() + 30_000 })
+        .mockImplementationOnce((_auth, _url, signal: AbortSignal) => {
+          refreshSignal = signal;
+          refreshStarted.resolve();
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'fixture-client',
+            clientSecret: 'fixture-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+      const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
+      await refreshStarted.promise;
+      await mcpClient.cleanup();
+      expect(refreshSignal?.aborted).toBe(true);
+      expect(mcpClient.connectedServers).toEqual([]);
+      await call;
+    });
+
     it('closes a pending handshake and rejects a late connection', async () => {
       const entered = createDeferred<void>();
       const handshake = createDeferred<void>();

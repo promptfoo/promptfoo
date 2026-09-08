@@ -227,6 +227,25 @@ describe('discoverTokenEndpoint', () => {
     vi.clearAllMocks();
   });
 
+  it('stops discovery on abort without probing fallback URLs', async () => {
+    const controller = new AbortController();
+    mockFetch.mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const discovery = discoverTokenEndpoint(
+      'https://abort-fixture.example.net/realms/test',
+      controller.signal,
+    );
+    controller.abort(new Error('fixture cleanup'));
+    await expect(discovery).rejects.toThrow('fixture cleanup');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('should discover token endpoint from root well-known URL', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -240,6 +259,7 @@ describe('discoverTokenEndpoint', () => {
     expect(result).toBe('https://auth.example.com/oauth/token');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://mcp.example.com/.well-known/oauth-authorization-server',
+      { signal: undefined },
     );
   });
 
@@ -261,16 +281,19 @@ describe('discoverTokenEndpoint', () => {
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       'https://example.com/realms/test/.well-known/oauth-authorization-server',
+      { signal: undefined },
     );
     // Then RFC 8414 path-aware
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
       'https://example.com/.well-known/oauth-authorization-server/realms/test',
+      { signal: undefined },
     );
     // Then root
     expect(mockFetch).toHaveBeenNthCalledWith(
       3,
       'https://example.com/.well-known/oauth-authorization-server',
+      { signal: undefined },
     );
   });
 

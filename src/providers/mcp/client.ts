@@ -115,6 +115,7 @@ export class MCPClient {
   // Lock mechanism to prevent concurrent token refresh per server
   private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
   private shuttingDown = false;
+  private oauthAbortController = new AbortController();
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -150,6 +151,9 @@ export class MCPClient {
 
   async initialize(): Promise<void> {
     this.shuttingDown = false;
+    if (this.oauthAbortController.signal.aborted) {
+      this.oauthAbortController = new AbortController();
+    }
     if (!this.config.enabled) {
       return;
     }
@@ -244,7 +248,11 @@ export class MCPClient {
           // Fetch token using configured tokenUrl or OAuth discovery
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(
+            oauthAuth,
+            server.url,
+            this.oauthAbortController.signal,
+          );
           this.assertActive();
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
@@ -621,6 +629,7 @@ export class MCPClient {
 
   async cleanup(): Promise<void> {
     this.shuttingDown = true;
+    this.oauthAbortController.abort();
     await Promise.all([...this.pendingConnections].map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
