@@ -1122,8 +1122,8 @@ The Responses API stores conversation state by default. Set `store: false` on ev
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: Sol is $5.50 input /
-$33 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
+GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
+$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
 remain available for at least 30 minutes. Place
 `prompt_cache_breakpoint: { mode: explicit }` on a stable
