@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -15,7 +17,6 @@ import {
   severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   formatPolicyIdentifierAsMetric,
   isValidPolicyObject,
@@ -25,7 +26,6 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { Download, ScrollText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from '../utils/color';
