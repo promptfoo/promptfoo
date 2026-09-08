@@ -274,6 +274,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
+    if (this.modelName === 'gemini-omni-1.1-flash') {
+      config.vertexai = false;
+    }
     const passthroughPreviousInteractionId =
       config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
     if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {

@@ -1098,7 +1098,10 @@ describe('GoogleInteractionsProvider', () => {
         env,
       });
 
-      const result = await provider.callApi('Describe a quiet garden');
+      const result = await provider.callApi('Describe a quiet garden', {
+        prompt: { raw: 'Describe a quiet garden', label: 'garden', config: { vertexai: true } },
+        vars: {},
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('[Video:');
