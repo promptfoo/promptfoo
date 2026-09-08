@@ -188,6 +188,13 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
     ) {
       overridden = true;
     }
+    const declaration = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
+    if (declaration) {
+      const capabilities = declaration.get?.call(provider) ?? declaration.value;
+      if (Array.isArray(capabilities)) {
+        return capabilities.includes(capability);
+      }
+    }
     if (hasDeclaration) {
       const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
