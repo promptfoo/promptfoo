@@ -331,13 +331,17 @@ The Slack provider supports testing other Slack bots in their native environment
        config:
          channel: C123456789
          timeout: 10000
-         responseStrategy: first
-         # Optional: format messages to mention the bot
-         messageFormatter: |
-           @your-bot-to-test {{prompt}}
+         responseStrategy: user
+         waitForUser: U_YOUR_BOT_ID
+
+   prompts:
+     - '<@U_YOUR_BOT_ID> What can you help me with?'
    ```
 
 3. **Filter responses to only capture the target bot**:
+
+   Set `waitForUser` to the bot's user ID (`U...`), not its app ID or `bot_id`.
+
    ```yaml
    providers:
      - id: slack
@@ -345,7 +349,7 @@ The Slack provider supports testing other Slack bots in their native environment
          channel: C123456789
          timeout: 10000
          responseStrategy: user
-         userId: U_YOUR_BOT_ID # The bot's user ID
+         waitForUser: U_YOUR_BOT_ID # The bot's user ID
    ```
 
 ### Example: Testing a Customer Support Bot
@@ -425,10 +429,10 @@ prompts:
 
 #### 3. Load Testing
 
-Use multiple parallel evaluations to test bot performance:
+Use a sequential run as a baseline in a shared channel. Concurrent load tests require isolated channels so prompts do not collect the same response:
 
 ```bash
-promptfoo eval -c bot-test-config.yaml -j 10
+promptfoo eval -c bot-test-config.yaml -j 1
 ```
 
 #### 4. A/B Testing Different Bots

@@ -33,8 +33,8 @@ providers:
 
 ### Configuration Options
 
-- `temperature` - Range `(0.0, 1.0]`, cannot be 0
-- `max_completion_tokens` - Maximum completion tokens; the OpenAI-compatible API allows up to `2048`. Legacy `max_tokens` config is translated to this field for compatibility.
+- `temperature` - Range `[0, 2]`, with a vendor default of `1` when omitted
+- `max_completion_tokens` - Maximum completion tokens. Legacy `max_tokens` config is translated to this field for compatibility. Limits depend on the model; see the [MiniMax API reference](https://platform.minimax.io/docs/api-reference/text-openai-api).
 - `apiBaseUrl` - Optional custom MiniMax-compatible proxy endpoint
 - `top_p`
 - `tools` and `tool_choice` - Use these for tool calling. MiniMax rejects the deprecated `function_call` parameter.
@@ -47,12 +47,13 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 
 - Flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
 - Multimodal: supports text, image, and video input
-- Input: $0.12/1M (cache hit), $0.6/1M (cache miss)
-- Output: $2.4/1M
+- Standard tier, up to 512K input tokens: $0.06/1M cached input, $0.30/1M uncached input, and $1.20/1M output
+- Standard tier, above 512K input tokens: $0.12/1M cached input, $0.60/1M uncached input, and $2.40/1M output
+- Priority admission costs 1.5 times the standard tier; see [pay-as-you-go pricing](https://platform.minimax.io/docs/guides/pricing-paygo)
 
 :::note
 
-M3 is the default and costs roughly 2x M2.7 per token. For cost-sensitive workloads, pin `minimax:MiniMax-M2.7` (or `MiniMax-M2.7-highspeed`) explicitly.
+M3 is the default. Compare the [current API prices](https://platform.minimax.io/docs/pricing/overview) for your model, context length, and service tier before choosing a model for cost-sensitive workloads. Subscription Token Plans use a separate billing system.
 
 :::
 

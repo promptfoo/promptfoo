@@ -1,3 +1,4 @@
+import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   assertGroqResponsesServiceTier,
@@ -5,7 +6,6 @@ import {
   isGroqReasoningModel,
 } from './util';
 
-import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqResponsesProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -28,6 +28,11 @@ const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 export class GroqResponsesProvider extends OpenAiResponsesProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
+  }
+
+  override getApiKey(): string | undefined {
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
+    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
   }
 
   protected isReasoningModel(): boolean {
@@ -57,9 +62,9 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: GROQ_API_BASE_URL,
-      } as unknown as OpenAiCompletionOptions,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
+      },
     });
   }
 

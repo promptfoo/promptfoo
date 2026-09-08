@@ -7,6 +7,7 @@ import { OpenAiCompletionProvider } from '../../src/providers/openai/completion'
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
+import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -133,6 +134,15 @@ describe('Provider Registry', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    it('keeps a provider-scoped Comet API key for image requests', async () => {
+      const provider = await registry.create('cometapi:image:test-model', {
+        ...mockContext,
+        env: { COMETAPI_KEY: 'suite-key' },
+        options: { env: { COMETAPI_KEY: 'provider-key' } },
+      });
+      expect((provider as CometApiImageProvider).getApiKey()).toBe('provider-key');
     });
 
     describe('getProviderFactories boundary contract', () => {

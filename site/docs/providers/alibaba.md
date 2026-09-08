@@ -39,7 +39,7 @@ If you're using the Alibaba Cloud Beijing region console, switch the base URL to
 
 ## Supported Models
 
-The Alibaba provider includes support for the following model formats:
+The built-in Alibaba provider implements OpenAI-compatible Chat Completions and text embeddings. The catalog below also lists separate [realtime](https://www.alibabacloud.com/help/en/model-studio/omni), [speech recognition](https://www.alibabacloud.com/help/en/model-studio/qwen-asr-realtime-interaction-process), and [image generation](https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference) services. Listing a model here does not add those endpoints to this provider. Choose a model supported by your selected endpoint and region.
 
 ### Qwen 3 Flagship
 

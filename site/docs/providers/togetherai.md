@@ -22,7 +22,15 @@ providers:
       temperature: 0.7
 ```
 
-The provider requires an API key stored in the `TOGETHER_API_KEY` environment variable.
+Set `TOGETHER_API_KEY`, or configure `apiKey` directly. Use `apiKeyEnvar` to select a different process environment variable. Provider `env` overrides take precedence only for registered keys such as `TOGETHER_API_KEY`; custom names in provider `env` are not retained by config validation.
+
+Connection options such as `apiBaseUrl`, `apiHost`, and `headers` configure the transport. Model parameters are sent to Together AI, and explicit `passthrough` fields override top-level model parameters.
+
+### Embeddings
+
+The `togetherai:embedding:<model>` route sends embedding requests to Together AI's default API. Together AI currently lists no [serverless embedding models](https://docs.together.ai/docs/serverless/models#embedding-models); check the [dedicated model catalog](https://docs.together.ai/docs/dedicated-endpoints/models) for deployment availability.
+
+Dedicated deployments use a separate base URL and an endpoint string as the model. For a dedicated embedding deployment, use `openai:embedding:<your-project-slug/endpoint-name>` with `config.apiBaseUrl: https://api-inference.together.ai/v1` and `config.apiKeyEnvar: TOGETHER_API_KEY`. See Together AI's [dedicated inference request guide](https://docs.together.ai/docs/dedicated-endpoints/requests).
 
 ## Key Features
 
