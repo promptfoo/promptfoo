@@ -95,6 +95,7 @@ export class ResponsesProcessor {
         cached,
         data,
         suppressReasoningOutput: options.suppressReasoningOutput,
+        abortSignal: options.abortSignal,
       };
 
       const processedOutput = await this.processOutput(data.output, context);
@@ -143,6 +144,7 @@ export class ResponsesProcessor {
 
       return result;
     } catch (err) {
+      options.abortSignal?.throwIfAborted();
       return {
         error: `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
       };
@@ -264,6 +266,8 @@ export class ResponsesProcessor {
       functionResult = await this.config.functionCallbackHandler.processCalls(
         item,
         context.config.functionToolCallbacks,
+        undefined,
+        { abortSignal: context.abortSignal },
       );
     }
 
@@ -305,6 +309,8 @@ export class ResponsesProcessor {
           const functionResult = await this.config.functionCallbackHandler.processCalls(
             contentItem,
             context.config.functionToolCallbacks,
+            undefined,
+            { abortSignal: context.abortSignal },
           );
           content = functionResult;
         } else if (contentItem.type === 'refusal') {

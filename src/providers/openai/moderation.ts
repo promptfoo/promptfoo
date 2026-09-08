@@ -10,7 +10,7 @@ import {
   type ModerationFlag,
   type ProviderModerationResponse,
 } from '../../types/providers';
-import { getRequestTimeoutMs } from '../shared';
+import { awaitProviderOperation, getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
 
@@ -277,8 +277,11 @@ export class OpenAiModerationProvider
     });
 
     if (useCache) {
-      const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
+      const cache = getCache();
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
@@ -332,10 +335,15 @@ export class OpenAiModerationProvider
       const response = parseOpenAIModerationResponse(data);
 
       if (useCache) {
-        const cache = await getCache();
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        const cache = getCache();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return handleApiError(err);

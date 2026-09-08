@@ -25,6 +25,30 @@ describe('ResponsesProcessor', () => {
   });
 
   describe('processResponseOutput', () => {
+    it.each([
+      { type: 'function_call', name: 'wait', arguments: '{"id":1}' },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'function_call', name: 'wait', arguments: '{"id":1}' }],
+      },
+    ])('passes cancellation to callback processing for %j', async (item) => {
+      const controller = new AbortController();
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue('done');
+      await processor.processResponseOutput(
+        { output: [item] },
+        { functionToolCallbacks: { wait: vi.fn() } },
+        false,
+        { abortSignal: controller.signal },
+      );
+      expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        { abortSignal: controller.signal },
+      );
+    });
+
     it('should process simple text output', async () => {
       const mockData = {
         id: 'resp_test123',
@@ -115,6 +139,8 @@ describe('ResponsesProcessor', () => {
       expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
         mockData.output[0],
         undefined,
+        undefined,
+        { abortSignal: undefined },
       );
     });
 
