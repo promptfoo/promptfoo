@@ -298,7 +298,7 @@ jobs:
       - name: Install isolated artifact tooling
         working-directory: ${{ steps.prepare.outputs.tooling }}
         # TypeScript's native compiler needs its optional platform package.
-        run: npm install --ignore-scripts --include=optional --no-audit --no-fund --registry=https://registry.npmjs.org/
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund --registry=https://registry.npmjs.org/
       - name: Test the downloaded package
         working-directory: ${{ steps.prepare.outputs.tooling }}
         env:
