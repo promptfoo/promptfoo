@@ -7,7 +7,9 @@ const { ZodType } = packageRequire('zod');
 async function main() {
   assert(api.AssertionSchema instanceof ZodType, 'Keep CommonJS dependency export conditions');
   assert.equal(Object.isExtensible(api), true);
-  assert.equal(Object.getOwnPropertyDescriptor(api, 'evaluate').writable, true);
+  const evaluateDescriptor = Object.getOwnPropertyDescriptor(api, 'evaluate');
+  assert(evaluateDescriptor, 'Keep the CommonJS evaluate export');
+  assert.equal(evaluateDescriptor.writable, true);
   const { checkEvaluate } = await import('./evaluate.mjs');
   await checkEvaluate(api, 'cjs');
 }
