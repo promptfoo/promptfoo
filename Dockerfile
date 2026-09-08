@@ -52,9 +52,24 @@ COPY . .
 WORKDIR /app
 RUN npm run build
 
+# Install a separate runtime tree: the app and docs workspaces are build inputs,
+# and their dependencies must not be copied into the final image. Keep optional
+# native packages and peers, and retain esbuild for user TypeScript modules via tsx.
+FROM base AS production-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+# npm treats a dependency declared in both devDependencies and optionalDependencies
+# as development-only. Normalize only this stage's manifest so --omit=dev retains
+# those runtime SDKs; npm ci still uses the unchanged lockfile. The final image
+# keeps the original package.json from the builder.
+RUN --mount=type=cache,target=/root/.npm \
+    npm pkg delete devDependencies && \
+    npm ci --omit=dev --workspaces=false --install-links --include=peer --ignore-scripts && \
+    npm rebuild ./node_modules/esbuild
+
 FROM base AS server
 WORKDIR /app
-COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules
+COPY --from=production-deps --chown=promptfoo:promptfoo /app/node_modules ./node_modules
 COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json
 COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
