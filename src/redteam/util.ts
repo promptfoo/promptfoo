@@ -360,7 +360,7 @@ const REFUSAL_RISK_PATTERNS: Array<{ signal: string; pattern: RegExp }> = [
 ];
 
 const REFUSAL_CONTINUATION_PATTERN =
-  /(?:\b(?:but|however|though|instead|yet)\b|[.!?:;\-—–]\s+\S|(?:\r?\n|\u2028|<br\s*\/?>)\s*\S)/;
+  /(?:\b(?:but|however|though|instead|yet)\b|[.!?:;\-—–][ \t]+\S|(?:\r?\n|\u2028|<br[ \t]*\/?>)[ \t]*\S)/;
 const REFUSAL_ONLY_PREAMBLE_PATTERN =
   /^(?:i(?:'m| am) sorry|i apologize)(?:[, ]+but)?[, ]+i (?:cannot|can't|won't)\b[^.!?\n]*[.!?]?$/;
 
