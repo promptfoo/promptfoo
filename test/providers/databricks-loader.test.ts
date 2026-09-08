@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { loadApiProvider } from '../../src/providers';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -7,10 +8,28 @@ vi.mock('../../src/cache', async (importOriginal) => ({
   fetchWithCache: vi.fn(),
 }));
 
+let originalConfig: typeof cliState.config;
+
+function expectRequest(url: string, token: string) {
+  expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  const [actualUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+  expect(actualUrl).toBe(url);
+  expect(request?.headers).toMatchObject({ Authorization: `Bearer ${token}` });
+}
+
 beforeEach(() => {
+  originalConfig = cliState.config;
+  cliState.config = undefined;
   vi.mocked(fetchWithCache).mockReset();
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: { choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }] },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
 });
 afterEach(() => {
+  cliState.config = originalConfig;
   vi.resetAllMocks();
   vi.unstubAllEnvs();
 });
@@ -54,13 +73,86 @@ describe('Databricks loader request configuration', () => {
     },
   );
 
-  it('uses per-provider Databricks workspace env overrides', async () => {
+  it.each(['process', 'registered suite'])(
+    'keeps the %s workspace and token paired when provider env also supplies a pair',
+    async (source) => {
+      vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
+      vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
+      if (source === 'registered suite') {
+        cliState.config = {
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
+            DATABRICKS_TOKEN: 'suite-token',
+          },
+        };
+      }
+      const provider = await loadApiProvider('databricks:customer-endpoint', {
+        options: {
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+            DATABRICKS_TOKEN: 'provider-token',
+          },
+        },
+      });
+
+      expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+      const expectedSource = source === 'registered suite' ? 'suite' : 'process';
+      expectRequest(
+        `https://${expectedSource}.example.test/serving-endpoints/chat/completions`,
+        `${expectedSource}-token`,
+      );
+    },
+  );
+
+  it('uses the registered suite workspace and token over the process pair', async () => {
+    vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
+    vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
+    cliState.config = {
+      env: {
+        DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
+        DATABRICKS_TOKEN: 'suite-token',
+      },
+    };
+    const provider = await loadApiProvider('databricks:customer-endpoint');
+    expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+    expectRequest('https://suite.example.test/serving-endpoints/chat/completions', 'suite-token');
+  });
+
+  it('keeps explicit workspace and credentials ahead of environment values', async () => {
+    vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
+    vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
     const provider = await loadApiProvider('databricks:customer-endpoint', {
-      env: { DATABRICKS_WORKSPACE_URL: 'https://suite.example.test' },
-      options: { env: { DATABRICKS_WORKSPACE_URL: 'https://provider.example.test' } },
+      options: {
+        env: {
+          DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+          DATABRICKS_TOKEN: 'provider-token',
+        },
+        config: { workspaceUrl: 'https://configured.example.test', apiKey: 'configured-token' },
+      },
     });
-    expect((provider as unknown as { getApiUrl(): string }).getApiUrl()).toBe(
-      'https://provider.example.test/serving-endpoints',
+    expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+    expectRequest(
+      'https://configured.example.test/serving-endpoints/chat/completions',
+      'configured-token',
+    );
+  });
+
+  it('preserves custom apiKeyEnvar precedence alongside the workspace', async () => {
+    vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
+    vi.stubEnv('AZURE_API_KEY', 'custom-process-token');
+    const provider = await loadApiProvider('databricks:customer-endpoint', {
+      options: {
+        env: {
+          DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+          AZURE_API_KEY: 'custom-provider-token',
+        },
+        config: { apiKeyEnvar: 'AZURE_API_KEY' },
+      },
+    });
+    expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+    expectRequest(
+      'https://process.example.test/serving-endpoints/chat/completions',
+      'custom-process-token',
     );
   });
 
@@ -75,9 +167,11 @@ describe('Databricks loader request configuration', () => {
     const provider = await loadApiProvider('databricks:external-endpoint', {
       env: {
         DATABRICKS_TOKEN: 'fixture-suite',
-        DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
       },
-      options: { id: 'customer-chat', config: { isPayPerToken: true } },
+      options: {
+        id: 'customer-chat',
+        config: { isPayPerToken: true, workspaceUrl: 'https://configured.example.test' },
+      },
     });
     expect(provider.id()).toBe('customer-chat');
     expect(await provider.callApi('hello')).toHaveProperty(

@@ -57,9 +57,7 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
 
   constructor(modelName: string, providerOptions: DatabricksMosaicAiProviderOptions) {
     const workspaceUrl =
-      providerOptions.config?.workspaceUrl ||
-      providerOptions.env?.DATABRICKS_WORKSPACE_URL ||
-      getEnvString('DATABRICKS_WORKSPACE_URL');
+      providerOptions.config?.workspaceUrl || getEnvString('DATABRICKS_WORKSPACE_URL');
 
     if (!workspaceUrl) {
       throw new Error(
