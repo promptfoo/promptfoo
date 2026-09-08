@@ -3,7 +3,10 @@ import { matchesModeration } from '../../src/matchers/moderation';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -45,6 +48,19 @@ describe('matchesModeration', () => {
     vi.restoreAllMocks();
     restoreProcessEnv();
     restoreProcessEnv = () => {};
+  });
+
+  it('forwards the evaluator abort signal to the moderation provider', async () => {
+    const abortSignal = new AbortController().signal;
+    const provider = new ReplicateModerationProvider('fixture/model');
+    const call = vi.spyOn(provider, 'callModerationApi').mockResolvedValue(mockModerationResponse);
+    await withProviderCallExecutionContext({ abortSignal }, () =>
+      matchesModeration(
+        { userPrompt: 'test prompt', assistantResponse: 'test response' },
+        { provider },
+      ),
+    );
+    expect(call).toHaveBeenCalledWith('test prompt', 'test response', undefined, { abortSignal });
   });
 
   it('should skip moderation when assistant response is empty', async () => {
