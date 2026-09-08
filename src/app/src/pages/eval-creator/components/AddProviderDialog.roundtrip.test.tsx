@@ -1,0 +1,164 @@
+import { useRedTeamConfig } from '@app/pages/redteam/setup/hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '@app/pages/redteam/setup/hooks/useRedTeamTargetConfigValidation';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import AddProviderDialog from './AddProviderDialog';
+
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({ recordEvent: vi.fn() }),
+}));
+vi.mock('@app/pages/redteam/setup/components/Targets/CommonConfigurationOptions', () => ({
+  default: () => null,
+}));
+// Keep the dialog, selector, form and validation real; replace only the editor widget.
+vi.mock('react-simple-code-editor', () => ({
+  default: ({
+    value,
+    onValueChange,
+  }: {
+    value: string;
+    onValueChange: (value: string) => void;
+  }) => (
+    <textarea
+      aria-label="Provider configuration JSON"
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    />
+  ),
+}));
+
+async function replaceText(
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
+}
+
+function resetStores() {
+  act(() => {
+    useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+    useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
+  });
+}
+
+const cases = [
+  ...[
+    { label: 'Llamafile', type: 'llamafile' },
+    { label: 'vLLM', type: 'vllm' },
+    { label: 'Text Generation WebUI', type: 'text-generation-webui' },
+  ].flatMap((target) =>
+    [true, false].map((keepType) => ({
+      ...target,
+      keepType,
+      id: 'openai:chat:tenant/private-served-model:Q4_K_M',
+      config: {
+        apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+        apiKey: 'private-server-test-key',
+        stop: ['<end>'],
+        passthrough: { chat_template_kwargs: { enable_thinking: false } },
+      },
+    })),
+  ),
+  {
+    label: 'AWS Bedrock Agents',
+    type: 'bedrock-agent',
+    keepType: true,
+    id: 'bedrock:agents:AGENT123',
+    config: { agentAliasId: 'ALIAS456', region: 'eu-west-1' },
+  },
+];
+
+describe('eval provider configuration round trips', () => {
+  beforeEach(resetStores);
+  afterEach(() => {
+    resetStores();
+    vi.clearAllMocks();
+  });
+
+  it.each(cases)(
+    'keeps $label editable after saving and reopening (saved type: $keepType)',
+    async ({ label, type, keepType, id, config }) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const onClose = vi.fn();
+      const view = renderWithProviders(
+        <AddProviderDialog open onClose={onClose} onSave={onSave} />,
+      );
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+        JSON.stringify(config),
+      );
+      await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(onSave).toHaveBeenCalledOnce();
+      const saved = JSON.parse(JSON.stringify(onSave.mock.calls[0][0]));
+      expect(saved).toMatchObject({ id, config });
+      // External/older YAML can carry a compatible endpoint without the UI hint.
+      if (!keepType) {
+        delete saved.config.type;
+      }
+      view.unmount();
+      onSave.mockClear();
+      renderWithProviders(
+        <AddProviderDialog open onClose={onClose} onSave={onSave} initialProvider={saved} />,
+      );
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(id);
+      expect(
+        JSON.parse(
+          (
+            screen.getByRole('textbox', {
+              name: 'Provider configuration JSON',
+            }) as HTMLTextAreaElement
+          ).value,
+        ),
+      ).toEqual(saved.config);
+
+      if (!keepType) {
+        await user.click(screen.getByRole('button', { name: 'Back' }));
+        await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+        expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(id);
+        expect(
+          JSON.parse(
+            (
+              screen.getByRole('textbox', {
+                name: 'Provider configuration JSON',
+              }) as HTMLTextAreaElement
+            ).value,
+          ),
+        ).toMatchObject(saved.config);
+      }
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+        '{"invalid":}',
+      );
+      expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+      expect(onSave).not.toHaveBeenCalled();
+      const edited =
+        type === 'bedrock-agent'
+          ? { ...config, agentAliasId: 'ALIAS789' }
+          : {
+              ...config,
+              stop: ['<new-end>'],
+              passthrough: { chat_template_kwargs: { enable_thinking: true } },
+            };
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+        JSON.stringify(edited),
+      );
+      await user.click(screen.getByRole('button', { name: 'Format' }));
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(onSave).toHaveBeenCalledOnce();
+      expect(onSave.mock.calls[0][0]).toMatchObject({ id, label: saved.label, config: edited });
+    },
+  );
+});

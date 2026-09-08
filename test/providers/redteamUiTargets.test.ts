@@ -7,6 +7,7 @@ import { loadApiProvider } from '../../src/providers';
 import { mockProcessEnv } from '../util/utils';
 
 const { send, subscribe } = vi.hoisted(() => ({ send: vi.fn(), subscribe: vi.fn() }));
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),

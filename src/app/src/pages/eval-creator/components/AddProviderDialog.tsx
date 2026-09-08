@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { getProviderType } from '@app/pages/redteam/setup/components/Targets/helpers';
 import ProviderConfigEditor from '@app/pages/redteam/setup/components/Targets/ProviderConfigEditor';
 import ProviderTypeSelector from '@app/pages/redteam/setup/components/Targets/ProviderTypeSelector';
 import type { ProviderOptions as RedteamProviderOptions } from '@app/pages/redteam/setup/types';
@@ -35,7 +36,7 @@ export default function AddProviderDialog({
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderOptions | undefined>(initialProvider);
   const [providerType, setProviderType] = useState<string | undefined>(
-    initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
+    initialProvider ? getProviderTypeFromId(initialProvider.id, initialProvider.config) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState(false);
@@ -55,7 +56,7 @@ export default function AddProviderDialog({
     if (open) {
       if (initialProvider) {
         setProvider(initialProvider);
-        setProviderType(getProviderTypeFromId(initialProvider.id));
+        setProviderType(getProviderTypeFromId(initialProvider.id, initialProvider.config));
         setStep('configure');
       } else {
         // Use placeholder ID to prevent ProviderTypeSelector from auto-selecting HTTP
@@ -196,7 +197,10 @@ export default function AddProviderDialog({
   );
 }
 
-export function getProviderTypeFromId(id: string | undefined): string | undefined {
+export function getProviderTypeFromId(
+  id: string | undefined,
+  config?: Record<string, unknown>,
+): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }
@@ -205,13 +209,13 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return 'codex-security';
   }
   if (id.startsWith('openai:')) {
-    return 'openai';
+    return getProviderType(id, config);
   }
   if (id.startsWith('anthropic:')) {
     return 'anthropic';
   }
   if (id.startsWith('bedrock:')) {
-    return 'bedrock';
+    return getProviderType(id, config);
   }
   if (id.startsWith('bedrock-agent:')) {
     return 'bedrock-agent';
