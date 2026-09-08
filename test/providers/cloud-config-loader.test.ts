@@ -81,6 +81,37 @@ describe('cloud provider loader configuration', () => {
     });
   });
 
+  it.each([
+    { apiKey: undefined, scopedKey: 'fixture-scoped', expected: 'fixture-scoped' },
+    { apiKey: 'fixture-explicit', scopedKey: 'fixture-scoped', expected: 'fixture-explicit' },
+    { apiKey: undefined, scopedKey: undefined, expected: 'fixture-process' },
+  ])(
+    'pairs the Voyage destination with its selected key: $expected',
+    async ({ apiKey, scopedKey, expected }) => {
+      vi.stubEnv('VOYAGE_API_KEY', 'fixture-process');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{ embedding: [0.1, 0.2] }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = (await loadApiProvider('voyage:private:embedding', {
+        options: {
+          config: { apiKey, apiKeyEnvar: 'VOYAGE_API_KEY' },
+          env: {
+            VOYAGE_API_KEY: scopedKey,
+            VOYAGE_API_BASE_URL: 'https://scoped-voyage.example.test/v1',
+          },
+        },
+      })) as ApiEmbeddingProvider;
+
+      await provider.callEmbeddingApi('hello');
+      const [url, init] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://scoped-voyage.example.test/v1/embeddings');
+      expect(init?.headers).toMatchObject({ Authorization: `Bearer ${expected}` });
+    },
+  );
+
   it('uses provider Voyage env overrides and preserves HTTP errors', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { error: { message: 'Fixture rate limit' } },
