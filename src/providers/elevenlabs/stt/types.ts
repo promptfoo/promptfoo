@@ -22,7 +22,7 @@ export interface ElevenLabsSTTConfig extends ElevenLabsBaseConfig {
 /**
  * Available STT models
  */
-export type STTModel = 'scribe_v1';
+export type STTModel = 'scribe_v1' | 'scribe_v2';
 
 /**
  * Supported audio formats

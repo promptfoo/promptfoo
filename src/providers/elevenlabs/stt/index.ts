@@ -50,7 +50,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     this.env = options.env;
 
     this.config = {
-      modelId: config?.modelId || 'scribe_v1',
+      modelId: config?.modelId || 'scribe_v2',
       language: config?.language,
       diarization: config?.diarization || false,
       maxSpeakers: config?.maxSpeakers,
@@ -280,11 +280,11 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     };
 
     if (this.config.language) {
-      additionalFields.language = this.config.language;
+      additionalFields.language_code = this.config.language;
     }
 
     if (this.config.diarization) {
-      additionalFields.enable_diarization = true;
+      additionalFields.diarize = true;
       if (this.config.maxSpeakers) {
         additionalFields.num_speakers = this.config.maxSpeakers;
       }
@@ -308,6 +308,8 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
+          // Older requests used different language and diarization field names.
+          requestVersion: 2,
           modelId: this.config.modelId,
           language: this.config.language,
           diarization: this.config.diarization,
