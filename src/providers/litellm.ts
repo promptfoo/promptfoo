@@ -47,12 +47,12 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
         providerType === 'embedding' ? 'embedding' : 'text'
       ],
     );
-    if ('cleanup' in provider && typeof Object.getPrototypeOf(this).cleanup !== 'function') {
+    if ('cleanup' in provider && !('cleanup' in Object.getPrototypeOf(this))) {
       this.cleanup = provider.cleanup.bind(provider);
     }
     if (
       'validateFunctionToolCall' in provider &&
-      typeof Object.getPrototypeOf(this).validateFunctionToolCall !== 'function'
+      !('validateFunctionToolCall' in Object.getPrototypeOf(this))
     ) {
       this.validateFunctionToolCall = provider.validateFunctionToolCall.bind(provider);
     }

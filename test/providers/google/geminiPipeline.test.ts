@@ -30,6 +30,33 @@ it('rejects malformed Vertex candidates but preserves finish-only frames', () =>
   ).toMatchObject({ kind: 'content', output: 'partial' });
 });
 
+it('retains terminal AI Studio safety ratings without dropping streamed output', () => {
+  const parsed = parseGeminiContent(
+    [
+      { candidates: [{ content: { parts: [{ text: 'partial' }] } }] },
+      {
+        candidates: [
+          {
+            finishReason: 'MAX_TOKENS',
+            safetyRatings: [
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', probability: 'HIGH', blocked: false },
+            ],
+          },
+        ],
+      },
+    ] as GeminiApiResponse,
+    'ai-studio',
+  );
+  expect(parsed).toMatchObject({
+    kind: 'content',
+    output: 'partial',
+    candidate: {
+      safetyRatings: [{ probability: 'HIGH' }],
+      content: { parts: [{ text: 'partial' }] },
+    },
+  });
+});
+
 it.each([
   [
     'AI Studio',
