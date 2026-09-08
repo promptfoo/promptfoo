@@ -215,6 +215,7 @@ jobs:
       - name: Test Package Artifact
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
+          npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
         run: npm run test:package-artifact
 
       - name: Test Package Artifact Without Optional Dependencies

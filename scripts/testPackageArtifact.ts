@@ -718,15 +718,15 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     assertInstalledRefParserTransport(installedPackageDir);
-    const consumerRequire = createRequire(path.join(consumerDir, 'package.json'));
+    const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
     for (const optionalPackage of [
       '@playwright/browser-chromium/package.json',
       '@anthropic-ai/claude-agent-sdk',
     ]) {
       if (values.profile === 'omit-optional') {
-        assert.throws(() => consumerRequire.resolve(optionalPackage), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => packageRequire.resolve(optionalPackage), { code: 'MODULE_NOT_FOUND' });
       } else {
-        assert(consumerRequire.resolve(optionalPackage).startsWith(consumerDir));
+        assert(packageRequire.resolve(optionalPackage).startsWith(consumerDir));
       }
     }
 
