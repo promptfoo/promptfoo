@@ -46,7 +46,11 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
       ...config,
       apiBaseUrl,
       // Use placeholder API key since Helicone Gateway handles authentication
-      apiKey: config.apiKey || getEnvString('HELICONE_API_KEY') || 'placeholder-api-key',
+      apiKey:
+        config.apiKey ||
+        options.env?.HELICONE_API_KEY ||
+        getEnvString('HELICONE_API_KEY') ||
+        'placeholder-api-key',
     };
 
     // Call parent constructor with the model and modified config

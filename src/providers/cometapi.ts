@@ -81,7 +81,7 @@ export class CometApiImageProvider extends OpenAiImageProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return getEnvString('COMETAPI_KEY');
+    return this.env?.COMETAPI_KEY || getEnvString('COMETAPI_KEY');
   }
 
   getApiUrlDefault(): string {
