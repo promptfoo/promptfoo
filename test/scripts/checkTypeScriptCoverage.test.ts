@@ -283,6 +283,18 @@ describe('package TypeScript coverage', () => {
     );
   });
 
+  it('identifies the declaring solution when a nested reference path is missing', () => {
+    write('packages/solution/tsconfig.json', {
+      files: [],
+      references: [{ path: './missing' }],
+    });
+    write('tsconfig.json', { files: [], references: [{ path: './packages/solution' }] });
+
+    expect(() => findMissingRootTypeScriptFiles(repositoryRoot)).toThrow(
+      /packages\/solution\/tsconfig\.json.*error TS6053.*missing/,
+    );
+  });
+
   it.each([
     { compilerOptions: {}, diagnostic: 'must have setting "composite": true' },
     { compilerOptions: { composite: true, noEmit: true }, diagnostic: 'may not disable emit' },
