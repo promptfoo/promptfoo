@@ -146,7 +146,7 @@ Contains your provider configuration and metadata:
   'id' => 'file://my_provider.rb',
   'config' => {
     # Your custom configuration from promptfooconfig.yaml
-    'model_name' => 'gpt-3.5-turbo',
+    'model' => 'gpt-4.1-mini',
     'temperature' => 0.7,
     'max_tokens' => 100,
 
@@ -307,7 +307,7 @@ def call_api(prompt, options, context)
   request['Authorization'] = "Bearer #{ENV['OPENAI_API_KEY']}"
 
   request.body = JSON.generate({
-    model: config['model'] || 'gpt-3.5-turbo',
+    model: config['model'] || 'gpt-4.1-mini',
     messages: messages,
     temperature: config['temperature'] || 0.7,
     max_tokens: config['max_tokens'] || 150

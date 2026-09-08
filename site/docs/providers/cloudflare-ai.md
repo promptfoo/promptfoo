@@ -1,11 +1,11 @@
 ---
 sidebar_label: Cloudflare Workers AI
-description: Configure Cloudflare Workers AI's edge-based inference platform with Mistral-7B for low-latency LLM testing and evaluation at the network edge using OpenAI-compatible APIs
+description: Configure Cloudflare Workers AI chat and embedding models for evals with account-scoped authentication, exact model IDs, and OpenAI-compatible requests.
 ---
 
 # Cloudflare Workers AI
 
-This provider supports the [models](https://developers.cloudflare.com/workers-ai/models/) provided by Cloudflare Workers AI, a serverless edge inference platform that runs AI models closer to users for low-latency responses.
+This provider connects to Cloudflare Workers AI [text-generation and embedding models](https://developers.cloudflare.com/workers-ai/models/) through its OpenAI-compatible API.
 
 The provider uses Cloudflare's OpenAI-compatible API endpoints, so you can migrate between OpenAI and Cloudflare AI or use them interchangeably.
 
@@ -54,17 +54,16 @@ providers:
 
 ## OpenAI Compatibility
 
-This provider leverages Cloudflare's OpenAI-compatible endpoints:
+Cloudflare documents these [OpenAI-compatible endpoints](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/):
 
 - **Chat completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
-- **Text completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/completions`
 - **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings`
 
-All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`. Many models also support capabilities like function calling, batch processing, and multimodal inputs.
+Supported parameters and capabilities vary by model. Check the model's Cloudflare documentation before configuring sampling options, tools, or multimodal inputs.
 
 ## Provider Types
 
-The Cloudflare AI provider supports three different provider types:
+Use the `chat` or `embedding` provider type for the documented endpoints. The legacy `completion` type is described below.
 
 ### Chat Completion
 
@@ -79,13 +78,9 @@ providers:
 
 ### Text Completion
 
-For completion-style tasks:
+The legacy `cloudflare-ai:completion:<model>` selector sends requests to `/ai/v1/completions`. Cloudflare's current compatibility documentation does not establish support for this endpoint. Use a `cloudflare-ai:chat:<model>` selector for new text-generation configurations, including code generation.
 
-```yaml
-providers:
-  - cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
-  - cloudflare-ai:completion:@cf/microsoft/phi-2
-```
+[Phi-2](https://developers.cloudflare.com/workers-ai/models/phi-2/) was deprecated on May 30, 2026 and should no longer be used for onboarding.
 
 ### Embeddings
 
@@ -140,7 +135,7 @@ providers:
       frequency_penalty: 0.1
       presence_penalty: 0.1
 
-  - id: cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
+  - id: cloudflare-ai:chat:@cf/qwen/qwen2.5-coder-32b-instruct
     config:
       accountId: your_account_id_here
       temperature: 0.2

@@ -34,8 +34,10 @@ hyperbolic:image:<model_name>
 ### Audio Generation (TTS)
 
 ```
-hyperbolic:audio:<model_name>
+hyperbolic:audio
 ```
+
+This calls Hyperbolic's fixed Melo TTS endpoint. The local provider identity defaults to `hyperbolic:audio:Melo-TTS`. An optional suffix is retained for compatibility and does not select a different remote model.
 
 ## Available Models
 
@@ -71,7 +73,9 @@ Choose a current model ID from Hyperbolic's [image API documentation](https://do
 
 ### Audio Generation Models
 
-Choose a current model ID from Hyperbolic's [audio API documentation](https://docs.hyperbolic.ai/inference/audio-apis).
+- `hyperbolic:audio` - Melo TTS text-to-speech endpoint
+
+Hyperbolic has announced an [upcoming Melo TTS sunset](https://www.hyperbolic.ai/docs/inference/audio-apis) without a removal date. The existing `hyperbolic:audio:Melo-TTS` route remains compatible.
 
 ## Configuration
 
@@ -124,11 +128,18 @@ providers:
 
 #### Audio Generation Options
 
-| Parameter  | Description             |
-| ---------- | ----------------------- |
-| `voice`    | Voice selection for TTS |
-| `speed`    | Speech speed multiplier |
-| `language` | Language for TTS        |
+| Parameter       | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| `language`      | Language code (default: `EN`)                                            |
+| `speaker`       | Language-specific speaker, such as `EN-US`, `EN-BR`, `EN-INDIA`, `EN-AU` |
+| `speed`         | Speech speed multiplier (0.1–5, default: 1)                              |
+| `sdp_ratio`     | Prosody variation (0–1)                                                  |
+| `noise_scale`   | Speech variation (0–1)                                                   |
+| `noise_scale_w` | Timing variation (0–1)                                                   |
+
+The prompt supplies the required `text` field. Prompt-level configuration overrides these provider options. The [native audio API](https://www.hyperbolic.ai/docs/inference/audio-apis) returns base64-encoded MP3 audio and does not document `model` or `voice` parameters. Existing explicit `config.model` and `config.voice` values are still forwarded for compatibility with custom endpoints; changing the route suffix never adds a `model` field.
+
+For a custom audio endpoint, set `apiBaseUrl` to its base URL, including any version prefix and omitting the trailing slash. The provider appends `/audio/generation`. Custom endpoints retain the legacy WAV output metadata and $0.001 per 1,000-character estimate; these defaults do not establish the custom service's format or pricing.
 
 ## Example Usage
 
@@ -164,9 +175,21 @@ pin a complete image config here.
 
 ### Audio Generation Example
 
-Choose an ID from the current audio API documentation, then use the
-`hyperbolic:audio:<model_name>` provider format. Confirm the ID in your account before running an
-eval.
+```yaml
+prompts:
+  - 'Welcome to Hyperbolic AI. We are excited to help you build amazing applications.'
+providers:
+  - id: hyperbolic:audio
+    config:
+      language: 'EN'
+      speaker: 'EN-US'
+      speed: 1.0
+
+tests:
+  - assert:
+      - type: javascript
+        value: typeof output === 'string' && output.length > 0
+```
 
 ### Vision-Language Model Example
 
@@ -203,7 +226,7 @@ See the [image API documentation](https://docs.hyperbolic.ai/inference/image-api
 
 ### Audio Models
 
-See the [audio API documentation](https://docs.hyperbolic.ai/inference/audio-apis) for current pricing.
+- **Melo TTS**: promptfoo estimates $5.00 per 1M characters for Hyperbolic's native endpoint, following its [audio pricing documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing).
 
 ## Getting Started
 

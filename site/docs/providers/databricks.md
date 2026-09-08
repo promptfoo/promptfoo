@@ -5,7 +5,7 @@ description: Configure Databricks Foundation Model APIs with hosted and custom e
 
 # Databricks Foundation Model APIs
 
-The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
+The `databricks:` provider sends chat requests through Databricks' OpenAI-compatible Foundation Model APIs. It supports pay-per-token, provisioned, and external chat endpoints. Use the exact serving endpoint name as the provider suffix; custom endpoint names are workspace-specific identities.
 
 ## Overview
 
@@ -42,13 +42,14 @@ providers:
       workspaceUrl: https://your-workspace.cloud.databricks.com
 ```
 
-The pay-per-token catalog changes over time. Current examples include:
+Example pay-per-token chat endpoints include:
 
-- `databricks-meta-llama-3-3-70b-instruct` - Meta's Llama model
-- `databricks-claude-sonnet-4-6` - Anthropic Claude model with text and image input
+- `databricks-meta-llama-3-3-70b-instruct` - Meta Llama 3.3 70B Instruct
+- `databricks-claude-sonnet-4-6` - Anthropic Claude Sonnet 4.6
 
-Check the [Databricks Foundation Model APIs catalog](https://docs.databricks.com/aws/en/machine-learning/model-serving/foundation-model-overview)
-before pinning an endpoint name in a long-lived config. The `databricks:` adapter uses the Chat Completions interface; the platform also hosts embeddings, but those require a compatible embedding adapter and the embedding endpoint configuration.
+Check the [current model catalog](https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/supported-models) and [retirement policy](https://docs.databricks.com/aws/en/machine-learning/retired-models-policy) for availability. The pay-per-token offerings for Claude 3.7 Sonnet and DBRX have retired; this does not rename custom endpoints in your workspace.
+
+Databricks also offers embedding models such as `databricks-gte-large-en`, but the `databricks:` provider is chat-only. Embedding requests require a separate integration with the [Databricks embeddings API](https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/api-reference#embeddings-api).
 
 ### Provisioned Throughput Endpoints
 
@@ -97,7 +98,6 @@ providers:
       # Standard OpenAI parameters
       temperature: 0.7
       max_tokens: 2000
-      top_p: 0.9
 
       # Usage tracking for cost attribution
       usageContext:

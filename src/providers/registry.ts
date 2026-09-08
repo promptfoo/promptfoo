@@ -275,7 +275,7 @@ export const providerMap: ProviderFactory[] = [
       const { OpenCodeSDKProvider } = await import('./opencode-sdk');
 
       // opencode:sdk or opencode - uses OpenCode's configured default model
-      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
+      // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
         id: providerPath,

@@ -16,6 +16,8 @@ To run a model, specify the task type and model name. Supported task types inclu
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
 
+A model repository on the Hub is a model artifact, not a guarantee that an Inference Provider serves it. Check the model card's Inference Providers section for chat routing; task providers use [HF Inference](https://huggingface.co/docs/inference-providers/providers/hf-inference) by default and require support for the selected task. For models without that support, deploy a compatible [inference endpoint](#inference-endpoints) and configure `apiEndpoint`; keep the model's labels, embedding dimensions, and preprocessing consistent with your eval.
+
 ## Chat models (recommended)
 
 For LLM chat models, use the `huggingface:chat` provider which connects to HuggingFace's OpenAI-compatible `/v1/chat/completions` endpoint:
@@ -206,7 +208,7 @@ Once the endpoint is created, take the `Endpoint URL` shown on the page:
 
 ![huggingface inference endpoint url](/img/docs/huggingface-inference-endpoint.png)
 
-Then set up your promptfoo config like this:
+Set `HF_INFERENCE_ENDPOINT` to that URL and use a token authorized for the deployment. The endpoint must implement the task selected in the provider ID. Then set up your promptfoo config like this:
 
 ```yaml
 description: 'HF private inference endpoint'
@@ -217,7 +219,7 @@ prompts:
 providers:
   - id: huggingface:text-generation:gemma-7b-it
     config:
-      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
+      apiEndpoint: '{{env.HF_INFERENCE_ENDPOINT}}'
       # apiKey: abc123   # Or set HF_API_TOKEN environment variable
 
 tests:
@@ -240,7 +242,7 @@ providers:
 
 ## Authentication
 
-If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
+Hosted Inference Providers require a token with [Inference Providers permissions](https://huggingface.co/docs/inference-providers/tasks/text-classification). Private datasets and dedicated endpoints require the corresponding access permissions. Set the `HF_TOKEN` environment variable with your token:
 
 ```bash
 export HF_TOKEN=your_token_here

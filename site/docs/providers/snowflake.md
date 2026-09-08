@@ -1,17 +1,18 @@
 ---
 sidebar_label: Snowflake Cortex
-description: "Connect to AI models through Snowflake Cortex's OpenAI-compatible REST API with access to Claude, GPT, Mistral, and Llama models"
+description: 'Configure Snowflake Cortex text generation through its REST API with native model IDs, bearer-token authentication, and account-specific model availability.'
 ---
 
 # Snowflake Cortex
 
-[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) is Snowflake's AI and ML platform that provides access to various LLM models through an [OpenAI-compatible](/docs/providers/openai/) REST API. Cortex offers LLMs including Claude, GPT, Mistral, and Llama models without requiring a dedicated warehouse.
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) provides access to language models without requiring a dedicated warehouse. The `snowflake:` provider sends chat requests to `/api/v2/cortex/inference:complete`. This differs from Snowflake's newer OpenAI-compatible `/api/v2/cortex/v1/chat/completions` endpoint.
 
 ## Setup
 
 1. Obtain your Snowflake account identifier (format: `orgname-accountname`)
 2. Generate a bearer token (JWT, OAuth, or programmatic access token)
 3. Ensure you have the `SNOWFLAKE.CORTEX_USER` database role
+4. Check [model availability in your region](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql-regional-availability) and your account's model access settings
 
 ## Provider Format
 
@@ -19,13 +20,17 @@ The Snowflake Cortex provider uses this format:
 
 - `snowflake:<model_name>` - Connects to Snowflake Cortex using the specified model name
 
+Use the exact Snowflake model ID. The examples below use `claude-sonnet-4-6`, which Snowflake documents for the [existing REST endpoint](https://docs.snowflake.com/en/user-guide/snowflake-cortex/complete-structured-outputs#rest-api-example). Availability still depends on your account and region.
+
+For new configurations, avoid legacy models such as `mistral-large2` and `llama3.1-70b`: Snowflake restricts them to accounts with prior usage under its [August 2026 model lifecycle policy](https://docs.snowflake.com/en/release-notes/bcr-bundles/un-bundled/bcr-august-model-deprecations). Existing account-specific model selections must be checked against that policy before changing them.
+
 ## Configuration
 
 ### Basic Configuration
 
 ```yaml
 providers:
-  - id: snowflake:mistral-large2
+  - id: snowflake:claude-sonnet-4-6
     config:
       accountIdentifier: 'myorg-myaccount'
       apiKey: 'your-bearer-token'
@@ -44,22 +49,21 @@ Then use the provider without specifying credentials:
 
 ```yaml
 providers:
-  - id: snowflake:mistral-large2
+  - id: snowflake:claude-sonnet-4-6
 ```
 
 ### With Additional Parameters
 
-Snowflake Cortex supports OpenAI-compatible parameters:
+For text chat, configure generation parameters such as:
 
 ```yaml
 providers:
-  - id: snowflake:mistral-large2
+  - id: snowflake:claude-sonnet-4-6
     config:
       accountIdentifier: 'myorg-myaccount'
       apiKey: 'your-bearer-token'
       temperature: 0.7
       max_tokens: 1024
-      top_p: 0.9
 ```
 
 ### Custom Base URL
@@ -68,7 +72,7 @@ Override the default base URL if needed:
 
 ```yaml
 providers:
-  - id: snowflake:claude-3-5-sonnet
+  - id: snowflake:claude-sonnet-4-6
     config:
       apiBaseUrl: 'https://custom.snowflakecomputing.com'
       apiKey: 'your-bearer-token'
@@ -76,14 +80,9 @@ providers:
 
 ## Features
 
-Snowflake Cortex supports:
+These examples cover text chat through the existing REST endpoint. Cortex capabilities such as tools, vision, structured output, and cross-region inference depend on the model, endpoint, and account configuration; a platform capability does not imply support through every provider route.
 
-- **Tool Calling** - Function calling and tool use
-- **Structured Output** - JSON schema validation
-- **Streaming** - Real-time token streaming (via API)
-- **Image Input** - Vision capabilities for select models
-- **Content Filtering** - Built-in guardrails
-- **Cross-Region Inference** - Models available across Snowflake regions
+In particular, Snowflake's [structured-output REST example](https://docs.snowflake.com/en/user-guide/snowflake-cortex/complete-structured-outputs#rest-api-example) uses `response_format` with `type: json` and `schema`. Do not assume that the newer OpenAI-compatible endpoint's `json_schema` format works unchanged with the `snowflake:` provider.
 
 ## Authentication
 
@@ -97,21 +96,13 @@ Authentication is handled via Bearer tokens in the Authorization header. Snowfla
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Compare Snowflake Cortex models'
+description: 'Evaluate Snowflake Cortex text responses'
 
 prompts:
   - 'Explain {{topic}} in simple terms'
 
 providers:
-  - id: snowflake:claude-3-5-sonnet
-    config:
-      temperature: 0.7
-      max_tokens: 1024
-  - id: snowflake:mistral-large2
-    config:
-      temperature: 0.7
-      max_tokens: 1024
-  - id: snowflake:llama-3.1-70b
+  - id: snowflake:claude-sonnet-4-6
     config:
       temperature: 0.7
       max_tokens: 1024

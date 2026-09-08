@@ -38,7 +38,7 @@ Use the `nvidia:` prefix followed by the full model id as listed on the model ca
 providers:
   - nvidia:meta/llama-3.3-70b-instruct
   - nvidia:qwen/qwen2.5-coder-32b-instruct
-  - nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
 
 Standard OpenAI-compatible parameters are passed through:
@@ -81,10 +81,14 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 256
-  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
     config:
-      temperature: 0.2
-      max_tokens: 256
+      temperature: 1
+      top_p: 0.95
+      max_tokens: 1024
+      passthrough:
+        chat_template_kwargs:
+          enable_thinking: false
 
 prompts:
   - 'Summarise the following in one sentence: {{passage}}'
@@ -98,6 +102,10 @@ tests:
       - type: icontains-any
         value: [light, energy, glucose]
 ```
+
+The Nemotron configuration follows its [model-specific sampling guidance](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b/modelcard) and disables reasoning for this short summarization task. Additional request fields such as `chat_template_kwargs` go under `config.passthrough`. If you enable reasoning, increase `max_tokens` to leave room for both reasoning and the final answer; the [hosted example](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b) uses 16384.
+
+These examples use a model in NVIDIA's [hosted chat catalog](https://docs.api.nvidia.com/nim/reference/llm-apis). Self-hosted NIM deployments can use their own served model identifiers.
 
 If you want a model-graded assertion, point `llm-rubric` at a NIM-hosted grader so the example stays self-contained:
 
