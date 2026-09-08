@@ -301,6 +301,19 @@ describe('SlackProvider', () => {
       expect(result.error).toBe('Slack API rate limit exceeded. Please try again later.');
     });
 
+    it.each([
+      ['channel_not_found', 'Channel U456 not found. Please check the channel ID.'],
+      ['not_in_channel', 'Bot is not in channel U456. Please invite the bot first.'],
+    ])('uses the requested target for %s post errors', async (error, message) => {
+      const dmProvider = new SlackProvider({ config: { channel: 'U456' } });
+      mockWebClient.chat.postMessage.mockRejectedValue(
+        new WebAPIPlatformError({ ok: false, error }),
+      );
+
+      expect(await dmProvider.callApi('Test prompt')).toEqual({ error: message });
+      expect(mockWebClient.conversations.history).not.toHaveBeenCalled();
+    });
+
     it('should use custom message formatter if provided', async () => {
       provider = new SlackProvider({
         config: {
@@ -336,6 +349,33 @@ describe('SlackProvider', () => {
   });
 
   describe('response strategies', () => {
+    describe.each(['first', 'user', 'timeout'] as const)(
+      '%s polling errors',
+      (responseStrategy) => {
+        it.each([
+          ['channel_not_found', 'Channel D789 not found. Please check the channel ID.'],
+          ['not_in_channel', 'Bot is not in channel D789. Please invite the bot first.'],
+        ])('uses the returned conversation for %s', async (error, message) => {
+          const provider = new SlackProvider({
+            config: { channel: 'U456', responseStrategy, waitForUser: 'U456', timeout: 1000 },
+          });
+          mockWebClient.chat.postMessage.mockResolvedValue({
+            ok: true,
+            channel: 'D789',
+            ts: '1234567890.123456',
+          });
+          mockWebClient.conversations.history.mockRejectedValue(
+            new WebAPIPlatformError({ ok: false, error }),
+          );
+
+          expect(await provider.callApi('Test prompt')).toEqual({ error: message });
+          expect(mockWebClient.conversations.history).toHaveBeenCalledWith(
+            expect.objectContaining({ channel: 'D789' }),
+          );
+        });
+      },
+    );
+
     it.each(['first', 'user', 'timeout'] as const)(
       'collects %s responses from the conversation returned for a user target',
       async (responseStrategy) => {

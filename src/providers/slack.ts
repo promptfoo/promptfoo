@@ -2,11 +2,11 @@ import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/w
 import logger from '../logger';
 import { fetchWithProviderProxy } from './fetch';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../types/index';
 
@@ -86,6 +86,7 @@ export class SlackProvider implements ApiProvider {
     const channel = config.channel!;
     const timeout = config.timeout || 60000;
     const responseStrategy = config.responseStrategy || 'first';
+    let responseChannel = channel;
 
     try {
       // Format the message if a custom formatter is provided
@@ -107,7 +108,7 @@ export class SlackProvider implements ApiProvider {
 
       const messageTs = postResult.ts;
       // User targets open a DM whose conversation ID is returned by Slack.
-      const responseChannel = postResult.channel || channel;
+      responseChannel = postResult.channel || channel;
 
       // Handle different response collection strategies
       let responseText: string;
@@ -168,9 +169,11 @@ export class SlackProvider implements ApiProvider {
         const slackError = error.data.error;
         switch (slackError) {
           case 'channel_not_found':
-            return { error: `Channel ${channel} not found. Please check the channel ID.` };
+            return { error: `Channel ${responseChannel} not found. Please check the channel ID.` };
           case 'not_in_channel':
-            return { error: `Bot is not in channel ${channel}. Please invite the bot first.` };
+            return {
+              error: `Bot is not in channel ${responseChannel}. Please invite the bot first.`,
+            };
           case 'missing_scope':
             return { error: 'Bot token is missing required scopes. Please check permissions.' };
           case 'ratelimited':
