@@ -15,7 +15,8 @@ Colocated tests and ambient declaration files do not count as runtime source.
 ## Declared responsibility and observed usage
 
 `architecture/dependency-ownership.json` assigns each manifest an accountable
-component role: `root/runtime`, `app/browser`, or `site/docs-build`. This role owns
+component role: `root/runtime`, `contracts/portable-contracts`, `app/browser`, or
+`site/docs-build`. This role owns
 review of the declarations in that manifest, including dependencies shared with
 other components. It is deliberately separate from a candidate source layer or
 an individual contributor's identity. Add an owner when introducing a workspace.

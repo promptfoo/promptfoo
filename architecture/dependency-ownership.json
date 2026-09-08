@@ -1,6 +1,7 @@
 {
   "manifestOwners": {
     "package.json": "root/runtime",
+    "packages/contracts/package.json": "contracts/portable-contracts",
     "src/app/package.json": "app/browser",
     "site/package.json": "site/docs-build"
   },
