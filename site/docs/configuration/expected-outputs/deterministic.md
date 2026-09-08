@@ -331,6 +331,52 @@ assert:
     value: 'file://path/to/expected.json'
 ```
 
+#### Unicode normalization
+
+`equals` and `contains` compare raw strings, so an answer that is correct but
+differs from the expected value only in Unicode form scores 0. The commonest case
+is an accented character written as one codepoint in one place and as a letter
+plus a combining mark in the other: `café` and `café` look identical
+and are not equal.
+
+Set `normalizeUnicode` to compare normalized forms:
+
+```yaml
+assert:
+  - type: equals
+    value: 'café'
+    normalizeUnicode: true
+```
+
+`true` means **NFC** — canonical normalization, which only composes or decomposes
+sequences that Unicode defines as the same character. It is meaning-preserving
+and safe to turn on.
+
+The compatibility forms must be named explicitly:
+
+```yaml
+assert:
+  - type: contains
+    value: 'file'
+    normalizeUnicode: NFKC # also folds ligatures, non-breaking spaces, full-width forms
+```
+
+**Use `NFKC` and `NFKD` deliberately.** They fold characters that merely look
+related, and some of those distinctions are the answer:
+
+| Value | Under NFKC | What is lost                |
+| ----- | ---------- | --------------------------- |
+| `x²`  | `x2`       | the exponent                |
+| `½`   | `1⁄2`      | one character becomes three |
+| `Ⅳ`   | `IV`       | a Roman numeral             |
+| `Ａ`  | `A`        | full-width form             |
+
+With `normalizeUnicode: NFKC`, an `equals` assertion expecting `x²` passes on
+output of `x2`. That is occasionally what you want and is never the default.
+
+Accepted values are `true`, `false`, `NFC`, `NFD`, `NFKC` and `NFKD`. Omitted, no
+normalization is applied and comparison is byte-for-byte as before.
+
 ### Is-JSON
 
 The `is-json` assertion checks if the LLM output is a valid JSON string.
