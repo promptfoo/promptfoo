@@ -61,7 +61,7 @@ describe('assertIsolatedConsumerRoot', () => {
     const nodeModules = directory('external/node_modules');
 
     expect(() => assertIsolatedConsumerRoot(consumer, checkout)).toThrow(
-      `Consumer root has an ancestor node_modules entry: ${nodeModules}`,
+      `Consumer root has an ancestor node_modules entry: ${fs.realpathSync(nodeModules)}`,
     );
   });
 
