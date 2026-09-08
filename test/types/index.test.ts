@@ -67,6 +67,13 @@ describe('AssertionSchema', () => {
     });
   });
 
+  it('should validate character-count and its inverse', () => {
+    expect(
+      AssertionSchema.safeParse({ type: 'character-count', value: { min: 1, max: 10 } }).success,
+    ).toBe(true);
+    expect(AssertionSchema.safeParse({ type: 'not-character-count', value: 5 }).success).toBe(true);
+  });
+
   it('should validate "not-" prefixed assertion types', () => {
     const notPrefixedAssertion = {
       type: 'not-contains',

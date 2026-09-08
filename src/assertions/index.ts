@@ -102,7 +102,7 @@ import {
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleWordCount } from './wordCount';
+import { handleCharacterCount, handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
@@ -233,6 +233,7 @@ const ASSERTION_HANDLERS: Record<
   'agent-rubric': handleAgentRubric,
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
+  'character-count': handleCharacterCount,
   classifier: handleClassifier,
   contains: handleContains,
   'contains-all': handleContainsAll,

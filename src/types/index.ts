@@ -606,6 +606,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'agent-rubric',
   'answer-relevance',
   'bleu',
+  'character-count',
   'classifier',
   'contains',
   'contains-all',
