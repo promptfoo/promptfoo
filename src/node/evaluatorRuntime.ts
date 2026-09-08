@@ -4,6 +4,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
 import { preserveTracingCredentialReferences } from '../util/sanitizer';
 import { EvalEvaluationStore } from './evaluationStore';
+import { createNodeTracingLifecycle } from './tracingLifecycle';
 
 import type {
   EvaluatorResultWriter,
@@ -76,6 +77,8 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
     );
     return runtimeTestSuite;
   },
+
+  createTracingLifecycle: createNodeTracingLifecycle,
 
   createEvaluationStore(evaluation) {
     return new EvalEvaluationStore(evaluation);

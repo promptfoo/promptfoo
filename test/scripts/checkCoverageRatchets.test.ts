@@ -125,6 +125,8 @@ describe('coverage ratchets', () => {
     'src/assertions/contains.ts',
     'src/evaluator/engine.ts',
     'src/evaluator/progress.ts',
+    'src/node/tracingLifecycle.ts',
+    'src/tracing/otelSdk.ts',
     'src/node/evaluateForCli.ts',
     'src/node/evaluatorProgress.ts',
   ])('enforces coverage floors for modified critical backend path %s', (file) => {

@@ -22,12 +22,12 @@ import type {
 vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
-const mockInitializeOtel = vi.hoisted(() => vi.fn());
+const mockAcquireOtel = vi.hoisted(() => vi.fn());
 const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('../../src/tracing/otelSdk', () => ({
   flushOtel: mockFlushOtel,
-  initializeOtel: mockInitializeOtel,
+  acquireOtel: mockAcquireOtel,
   shutdownOtel: mockShutdownOtel,
 }));
 
@@ -76,6 +76,10 @@ describe('evaluator trace integration', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockAcquireOtel.mockResolvedValue(async () => {
+      await mockFlushOtel();
+      await mockShutdownOtel();
+    });
     (getTraceStore as Mock).mockReturnValue(mockTraceStore);
   });
 
@@ -183,10 +187,11 @@ describe('evaluator trace integration', () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
     const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      createTracingLifecycle: nodeEvaluatorRuntime.createTracingLifecycle,
       createEvaluationStore: nodeEvaluatorRuntime.createEvaluationStore,
       createResultWriters: vi.fn().mockReturnValue([writer]),
     };
-    mockInitializeOtel.mockImplementationOnce(() => {
+    mockAcquireOtel.mockImplementationOnce(() => {
       throw new Error('otel unavailable');
     });
 
@@ -226,7 +231,7 @@ describe('evaluator trace integration', () => {
       {},
     );
 
-    expect(mockInitializeOtel).toHaveBeenCalledOnce();
+    expect(mockAcquireOtel).toHaveBeenCalledOnce();
     expect(mockFlushOtel).toHaveBeenCalledOnce();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
   });
