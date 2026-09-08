@@ -71,7 +71,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
@@ -220,7 +220,7 @@ providers:
   - id: huggingface:text-generation:gemma-7b-it
     config:
       apiEndpoint: '{{env.HF_INFERENCE_ENDPOINT}}'
-      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+      # apiKey: abc123   # Or set HF_TOKEN environment variable
 
 tests:
   - vars:

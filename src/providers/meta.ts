@@ -485,7 +485,15 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 

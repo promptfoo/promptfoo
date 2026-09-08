@@ -15,7 +15,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol' },
   { value: 'openai:gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra' },
   { value: 'openai:gpt-5.6-luna', label: 'OpenAI GPT-5.6 Luna' },
-  { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-5.5' },
+  { value: 'openai:gpt-5.5', label: 'OpenAI GPT-5.5' },
   { value: 'openai:gpt-5.5-pro', label: 'OpenAI GPT-5.5 Pro' },
   { value: 'openai:gpt-5.4', label: 'OpenAI GPT-5.4' },
   { value: 'openai:gpt-5.4-mini', label: 'OpenAI GPT-5.4 Mini' },

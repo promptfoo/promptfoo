@@ -50,17 +50,27 @@ controls, which promptfoo removes automatically. Configure reasoning with
 
 - `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `vertex:gemini-3.1-pro-preview-customtools` - Custom-tools variant with the same pricing as Gemini 3.1 Pro
-- `vertex:gemini-3.1-flash-lite` - GA cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `vertex:gemini-3.1-flash-lite` - GA cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output on the global endpoint; non-global endpoints add 10%)
 
 **Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
+
+Promptfoo defaults the Gemini 3 models above to the `global` endpoint. An explicit `config.region`,
+`GOOGLE_CLOUD_LOCATION`, or `VERTEX_REGION` still takes precedence. Check each model's
+[supported regions](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models)
+before selecting a non-global endpoint. For current GA Gemini 3 models, see Google's
+[global and non-global pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 
 **Gemini 2.5:**
 
 - `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 1M context
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
+
+:::warning Vertex model retirement
+Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes) for current Gemini 2.5 retirement dates. Test a supported replacement for each affected target and any explicitly configured grading provider.
+:::
 
 ### Claude Models
 
@@ -97,7 +107,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 **Claude 4.8:**
 
-- `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+- `vertex:claude-opus-4-8` - Claude 4.8 Opus for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
 
 **Claude Opus 5:**
 
@@ -105,7 +115,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 **Claude Sonnet 5:**
 
-- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Adaptive thinking is on by default, and promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Global input/output pricing is $2/$10 per million tokens and prompt-cache read/5-minute write/1-hour write pricing is $0.20/$2.50/$4.00. Regional and multi-region endpoints add 10%.
 
 **Claude 4.7:**
 
@@ -120,7 +130,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 - `vertex:claude-opus-4-5@20251101` - Claude 4.5 Opus for agentic coding, agents, and computer use
 - `vertex:claude-sonnet-4-5@20250929` - Claude 4.5 Sonnet for agents, coding, and computer use
-- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for fast, cost-effective use cases
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku for lower-latency use cases
 
 **Claude 4:**
 
@@ -146,25 +156,16 @@ Meta's Llama models are available through Vertex AI with the following versions:
 
 **Llama 4:**
 
-- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout (17B active, 109B total with 16 experts) for retrieval and reasoning with 10M context
-- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick (17B active, 400B total with 128 experts) with 1M context, natively multimodal
+- `vertex:llama-4-scout-17b-16e-instruct-maas` - Llama 4 Scout with a 1,310,720-token context window
+- `vertex:llama-4-maverick-17b-128e-instruct-maas` - Llama 4 Maverick with a 524,288-token context window
 
 **Llama 3.3:**
 
 - `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
-- `vertex:llama-3.3-8b-instruct-maas` - Llama 3.3 8B for efficient text generation
 
-**Llama 3.2:**
+Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
 
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Llama 3.2 90B with vision capabilities
-
-**Llama 3.1:**
-
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B
-
-Note: All Llama models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal with support for both text and image inputs.
+See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
 
 #### Llama Configuration Example
 
@@ -172,7 +173,7 @@ Note: All Llama models support built-in safety features through Llama Guard. Lla
 providers:
   - id: vertex:llama-3.3-70b-instruct-maas
     config:
-      region: us-central1 # Llama models are only available in this region
+      region: us-central1 # Llama 3 models use this region
       temperature: 0.7
       maxOutputTokens: 1024
       llamaConfig:
@@ -180,17 +181,14 @@ providers:
           enabled: true # Llama Guard is enabled by default
           llama_guard_settings: {} # Optional custom settings
 
-  - id: vertex:llama4-scout-instruct-maas
+  - id: vertex:llama-4-scout-17b-16e-instruct-maas
     config:
-      region: us-central1
+      region: us-east5 # Llama 4 models use this region
       temperature: 0.7
       maxOutputTokens: 2048
-      llamaConfig:
-        safetySettings:
-          enabled: true
 ```
 
-By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+By default, supported Llama 3 models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
 
 ### Gemma Models (Open Models)
 
@@ -223,16 +221,20 @@ Upgrading between embedding model families changes the vector space, so re-embed
 ### Image Generation Models
 
 :::note
-Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
+For Vertex Imagen requests, use the [Imagen adapter](/docs/providers/google#image-generation-models) with `google:image:<model>` and `config.projectId`; model availability depends on your Vertex project and region. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
 :::
 
 ### Video Generation Models
 
 Use the `vertex:video:` prefix for Veo on Vertex AI:
 
-- `vertex:video:veo-3.1-generate-001` (GA)
-- `vertex:video:veo-3.1-fast-generate-001` (GA)
+- `vertex:video:veo-3.1-generate-001`
+- `vertex:video:veo-3.1-fast-generate-001`
 - `vertex:video:veo-3.1-lite-generate-001` (Preview)
+
+Promptfoo reports successful Veo 3.1 generations using Google's video-with-audio price for the
+generated duration and resolution. See the [Veo pricing table](/docs/providers/google#video-generation-models-veo)
+for the current per-second rates.
 
 ```yaml
 providers:
@@ -247,7 +249,7 @@ providers:
 
 #### Video Extension
 
-The current Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to an MP4 video through a Cloud Storage URI, base64-encoded data, or a local `file://` path:
+The Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to a Cloud Storage URI (`gs://`) for an MP4 video:
 
 ```yaml
 providers:
@@ -261,7 +263,7 @@ prompts:
   - 'Continue the camera movement toward the mountains'
 ```
 
-Vertex video extensions add a fixed 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests, including when an older config supplies it. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Existing configs may also pass a Vertex operation name such as `projects/.../operations/...` through `sourceVideo`, which promptfoo sends as `video.operationName`.
+Vertex video extensions add a fixed 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests, including when configured. Local paths, base64 data, Gemini video URIs, and operation IDs are unsupported.
 
 ## Model Capabilities
 
@@ -269,7 +271,7 @@ Vertex video extensions add a fixed 7 seconds to the source video. Promptfoo omi
 
 ### Gemini Model Specifications
 
-Current Gemini models on Vertex AI (2.5 and 3.x):
+Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
 - Output context: up to 65K tokens for Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
@@ -446,7 +448,7 @@ Promptfoo automatically loads environment variables from your shell or a `.env` 
 ```bash
 # .env
 GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_LOCATION=global # Use a location supported by your selected model
 GOOGLE_API_KEY=your-api-key  # For express mode
 ```
 
@@ -501,15 +503,15 @@ providers:
 
 The following environment variables can be used to configure the Vertex AI provider:
 
-| Variable                         | Description                         | Default        | Required |
-| -------------------------------- | ----------------------------------- | -------------- | -------- |
-| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
-| `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
-| `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
-| `VERTEX_API_HOST`                | Override API host (e.g., for proxy) | Auto-generated | No       |
-| `VERTEX_API_VERSION`             | API version                         | `v1`           | No       |
+| Variable                         | Description                          | Default        | Required |
+| -------------------------------- | ------------------------------------ | -------------- | -------- |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID              | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region or multi-region for Vertex AI | Model-specific | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode             | None           | No\*     |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials  | None           | No\*     |
+| `VERTEX_PUBLISHER`               | Model publisher                      | `google`       | No       |
+| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)  | Auto-generated | No       |
+| `VERTEX_API_VERSION`             | API version                          | `v1`           | No       |
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
@@ -517,9 +519,8 @@ The following environment variables can be used to configure the Vertex AI provi
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
-- `us`, `eu` - Multi-region endpoints for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default, most models available
+- `global` - Default for the Gemini 3 models listed above
+- `us-central1` - Common for older Gemini models and Llama 3
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -544,7 +545,8 @@ providers:
 
 After completing authentication, create a simple evaluation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - vertex:gemini-2.5-flash
@@ -575,7 +577,8 @@ promptfoo eval
 
 Compare different models available on Vertex AI:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Google models
   - id: vertex:gemini-2.5-pro
@@ -583,14 +586,9 @@ providers:
       region: us-central1
 
   # Claude models (require specific region)
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  - id: vertex:claude-sonnet-4-5@20250929
     config:
       region: us-east5
-
-  # Llama models
-  - id: vertex:llama-3.3-70b-instruct-maas
-    config:
-      region: us-central1
 
 prompts:
   - 'Write a Python function to {{task}}'
@@ -710,20 +708,20 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text and vision tasks (Llama 3.2 and all Llama 4 models)
-- Built-in safety with Llama Guard (enabled by default)
-- Available in `us-central1` region
+- Support for text tasks with Llama 3.3 and text and vision tasks with all Llama 4 models
+- Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
+- Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
 - Quota limits vary by model version
 - Requires specific endpoint format for API calls
 - Only supports unary (non-streaming) responses in promptfoo
 
 #### Llama Model Considerations
 
-- **Regional Availability**: Llama models are available only in `us-central1` region
-- **Guard Integration**: All Llama models use Llama Guard for content safety by default
+- **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
+- **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
 - **Specific Endpoint**: Uses a different API endpoint than other Vertex models
-- **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
-- **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
+- **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
+- **Vision Support**: All current Llama 4 models support image input
 
 ### Claude Model Features
 
@@ -764,7 +762,7 @@ defaultTest:
 | `apiVersion`                       | API version                                                        | `v1`                                 |
 | `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
 | `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                                      | `us-central1`                        |
+| `region`                           | GCloud region or multi-region                                      | Model/auth-specific                  |
 | `publisher`                        | Model publisher                                                    | `google`                             |
 | `context`                          | Model context                                                      | None                                 |
 | `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
@@ -1351,7 +1349,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Feature                  | Supported | Notes                                                                                     |
 | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
 | Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                                    |
-| Embeddings               | ✅        | All embedding models                                                                      |
+| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`                                                   |
 | Function calling / Tools | ✅        | Including MCP tools                                                                       |
 | Search grounding         | ✅        | Google Search integration                                                                 |
 | Safety settings          | ✅        | Full configuration                                                                        |
@@ -1360,11 +1358,11 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported                                                         |
 | Caching API              | ⚠️        | Reference existing caches with `passthrough.cachedContent`; creation/manage not supported |
 | Implicit cache usage     | ✅        | Cached tokens and their cost are tracked                                                  |
-| Live/Realtime API        | ❌        | WebSocket-based live API not supported                                                    |
+| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                                |
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
-| Image generation         | ⚠️        | Use `google:image:` provider instead                                                      |
+| Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
+These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 

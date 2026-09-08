@@ -109,42 +109,76 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 ### OpenAI Models
 
-| Category             | Models                                                                                                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GPT-5 Series**     | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
-| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                                                       |
-| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                                                                                                                      |
-| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                                                                                                                 |
-| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                                                                                                                                                                                      |
-| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                                                                                                                     |
-| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                                                                                                                    |
+| Category             | Models                                                                                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GPT-5 Series**     | `gpt-chat-latest`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.3-codex`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-codex` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                                                                         |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`                                                                                                                                                                                                                                           |
+| **Realtime**         | `gpt-realtime`, `gpt-realtime-1.5`, `gpt-realtime-2`, `gpt-realtime-2.1`, `gpt-realtime-2.1-mini`                                                                                                                                                                 |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                                                                                                                                   |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `codex-mini-latest`                                                                                                                                                    |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                                                                                                                                       |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                                                                                                                                      |
 
 ### Third-Party Models (Azure AI Foundry)
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anthropic Claude** | `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
-| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                                                                                                 |
-| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                                         |
-| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                                              |
-| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                                         |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                       |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                         |
-| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                                        |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                            |
+| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-mythos-5` (gated Preview; Microsoft Entra ID only), `claude-mythos-preview` (gated research Preview), `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-opus-4-5`, `claude-opus-4-1` (retirement date August 5, 2026; migrate to `claude-opus-4-8`), `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-4-Scout-17B-16E-Instruct`, `Llama-3.3-70B-Instruct`                                                                                                                                                                                                                                                                                                                                                                               |
+| **DeepSeek**         | `DeepSeek-R1` (Legacy; retirement date August 13, 2026), `DeepSeek-V3.2`, `DeepSeek-V3.2-Speciale`, `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`                                                                                                                                                                                                                                                                                                                                         |
+| **Mistral**          | `Mistral-Large-3`, `mistral-medium-3-5` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Cohere**           | `cohere-command-a`, `Cohere-command-a-plus-05-2026` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                                                                                                        |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **xAI Grok**         | `grok-4`, `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-code-fast-1`; Preview: `grok-4.3`, `grok-4-20-reasoning`, `grok-4-20-non-reasoning`                                                                                                                                                                                                                                                                                                                      |
+| **MoonshotAI Kimi**  | `Kimi-K2.5`, `Kimi-K2.6`, `Kimi-K2.7-Code` (Preview)                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 For the complete list of models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
+[Azure's model lifecycle schedule](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule)
+lists `grok-3`, `grok-3-mini`, `grok-4-fast-reasoning`, and
+`grok-4-fast-non-reasoning` as retired on May 1, 2026. Their replacements are `grok-4`,
+`grok-4-1-fast-reasoning`, and `grok-4-1-fast-non-reasoning`. Azure also retired
+`Cohere-command-r-08-2024` and `Cohere-command-r-plus-08-2024` on May 12, 2026. Promptfoo keeps
+cost entries for those retired IDs so historical deployments can still report cost, but new
+deployments should use the current IDs above. Promptfoo does not assign a built-in price to the
+`grok-4-20-*` Preview models because the Azure Retail Prices API does not expose an unambiguous
+matching meter. `Kimi-K2.7-Code` is also left unpriced until Azure publishes an unambiguous meter.
+Azure retired the `gpt-5.1-chat`, `gpt-5.2-chat`, and `gpt-5.3-chat` versions by June 29, 2026 in favor of
+`gpt-chat-latest`. Promptfoo retains their cost metadata only for historical results.
+
+### GPT-chat-latest on Azure
+
+This model uses fixed reasoning. Promptfoo omits configurable reasoning effort while retaining
+reasoning-model token and sampling controls. For an opaque deployment name, set `modelName: gpt-chat-latest`
+so these rules apply. See [Microsoft's model documentation](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure).
+
+Azure's exact product and model ID is `gpt-chat-latest`, not `gpt-5-chat-latest` or OpenAI's
+`chat-latest` API alias. Azure publishes dates as model versions, separately from the deployment name you choose. Promptfoo accepts arbitrary deployment names; recognizable `<model>-<version>` names can also match built-in cost metadata.
+
+[Microsoft's retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule) lists:
+
+| Preview version | Retirement date    |
+| --------------- | ------------------ |
+| `2026-05-05`    | August 5, 2026     |
+| `2026-05-28`    | August 28, 2026    |
+| `2026-06-24`    | September 24, 2026 |
+| `2026-08-06`    | December 2, 2026   |
+
+Use a version available to your Azure resource. Historical cost metadata does not establish that a retired version remains served.
+
 ### GPT-5.6 on Azure
 
-Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule) lists `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` model version `2026-07-09` as generally available. Azure documents Global Standard availability worldwide and Data Zone Standard availability in the US and EU; check the [current region matrix](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability) before deploying.
+Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule) lists `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` model version `2026-07-09` as generally available. Azure documents Global Standard availability worldwide and Data Zone Standard availability in the US, EU, and APAC; check the [current region matrix](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability) before deploying.
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (each family's mini and 1.5 variants included). For the models Azure publishes priority rates for (the GPT-5.6 family and several GPT-5.1–5.5 snapshots), cost estimates apply the priority multiplier when the request carries `service_tier: priority` — set it under `passthrough` for `azure:chat`/`azure:completion`, or as the top-level `service_tier` option for `azure:responses`. Audio-capable models report separate text and audio-token costs, and cached input tokens are billed at the catalog's discounted cache-read rates across the supported model families.
+The Azure pricing table also recognizes current dated snapshots for `gpt-5.5`, GPT-5.2 and GPT-5.3 Codex, `gpt-chat-latest`, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (each family's mini and 1.5 variants included). Historical cost metadata remains for retired GPT-5.2 and GPT-5.3 chat deployments. For the models Azure publishes priority rates for (the GPT-5.6 family and several GPT-5.1–5.5 snapshots), cost estimates apply the priority multiplier when the request carries `service_tier: priority` — set it under `passthrough` for `azure:chat`/`azure:completion`, or as the top-level `service_tier` option for `azure:responses`. Audio-capable models report separate text and audio-token costs, and cached input tokens are billed at the catalog's discounted cache-read rates across the supported model families.
 
 ### Azure Realtime API
 
@@ -163,7 +197,7 @@ Realtime prompts can include `input_image` parts in the user message. The previe
 
 ## Azure Responses API
 
-The Azure OpenAI Responses API is a stateful API that brings together the best capabilities from chat completions and assistants API in one unified experience. It provides advanced features like MCP servers, code interpreter, and background tasks.
+The Azure OpenAI Responses API is a stateful API that brings together capabilities from chat completions and assistants API in one unified experience. It provides features like MCP servers, code interpreter, and background tasks.
 
 ### Using the Responses API
 
@@ -195,10 +229,10 @@ providers:
 
 The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
-- **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
+- **GPT-5 Series**: `gpt-chat-latest`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.3-codex`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
-- **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
+- **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `codex-mini-latest`
 - **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
 
 Use your Azure deployment name in promptfoo, even if it differs from the underlying model ID.
@@ -382,21 +416,32 @@ config:
 
 ### Complete Responses API Example
 
-Here's a comprehensive example using multiple Azure Responses API features:
+Here's an example using multiple Azure Responses API features:
 
-```yaml
-# promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Responses API evaluation
 
 providers:
-  # Using the new azure:responses alias (recommended)
+  # Using the azure:responses alias (recommended)
   - id: azure:responses:gpt-4.1-deployment
     label: azure-gpt-4.1
     config:
       temperature: 0.7
       max_output_tokens: 2000
       instructions: 'You are a helpful AI assistant.'
-      response_format: file://./response-format.json
+      response_format:
+        type: json_schema
+        name: structured_output
+        schema:
+          type: object
+          properties:
+            result:
+              type: string
+            confidence:
+              type: number
+          required: [result, confidence]
+          additionalProperties: false
       tools:
         - type: code_interpreter
           container:
@@ -416,12 +461,11 @@ providers:
       max_output_tokens: 4000
 
 prompts:
-  - 'Analyze this data and provide insights: {{data}}'
-  - 'Write a Python function to solve: {{problem}}'
+  - '{{task}}'
 
 tests:
   - vars:
-      data: 'Sales increased by 25% in Q3 compared to Q2'
+      task: 'Analyze this data and provide insights: Sales increased by 25% in Q3 compared to Q2'
     assert:
       - type: contains
         value: 'growth'
@@ -429,10 +473,13 @@ tests:
         value: '25%'
 
   - vars:
-      problem: 'Calculate fibonacci sequence up to n terms'
+      task: 'Write a Python function to solve: Calculate fibonacci sequence up to n terms'
     assert:
       - type: javascript
-        value: 'output.includes("def fibonacci") || output.includes("function fibonacci")'
+        value: |
+          const text = typeof output === 'string' ? output : output.result;
+          return typeof text === 'string' &&
+            (text.includes('def fibonacci') || text.includes('function fibonacci'));
       - type: contains
         value: 'recursive'
 ```
@@ -472,7 +519,7 @@ config:
 
 ### Responses API Limitations
 
-- Web search tool support is still in development
+- Web search tool support is in development
 - PDF file upload with `purpose: user_data` requires workaround (use `purpose: assistants`)
 - Background mode requires `store: true`
 - Some features may have region-specific availability
@@ -552,7 +599,7 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-small
 
 This deployment will automatically be used whenever embeddings are required, such as for similarity comparisons or dataset generation. You can also override the embedding provider in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -658,7 +705,7 @@ The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not 
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -701,7 +748,7 @@ tests:
 
 When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Azure deployments for each type using the **provider type map** pattern:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -724,7 +771,7 @@ The `similar` assertion type requires an embedding model such as `text-embedding
 
 For example, override the embedding deployment in your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -867,7 +914,8 @@ providers:
 
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Configure different reasoning efforts based on test variables
 prompts:
   - 'Solve this complex math problem: {{problem}}'
@@ -972,7 +1020,7 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and Anthropic list pricing (note that Bedrock regional/geo endpoints and non-global Vertex regions carry a 10% premium for Claude 5 models):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-4-8
     config:
@@ -983,11 +1031,17 @@ providers:
 
 Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseUrl` to the `https://…/anthropic` prefix shown above.
 
+:::warning
+`claude-mythos-5` is a gated research Preview and Azure documents Microsoft Entra ID as its only
+authentication method. The API-key example above does not apply to that deployment. Request access
+and confirm an Entra-authenticated Messages path before selecting it.
+:::
+
 ### Option 2: Azure OpenAI-compatible chat endpoint
 
 The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:claude-opus-4-7
     config:
@@ -1045,6 +1099,7 @@ command has no flag for it yet, so create the deployment via the REST API
 ### Claude Configuration Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Claude evaluation
 
 providers:
@@ -1071,7 +1126,7 @@ tests:
 
 Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
     config:
@@ -1083,23 +1138,20 @@ providers:
 Available Llama models include:
 
 - `Llama-4-Maverick-17B-128E-Instruct-FP8` - Llama 4 Maverick (128 experts)
-- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout (16 experts)
+- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout (16 experts; Azure Marketplace)
 - `Llama-3.3-70B-Instruct` - Llama 3.3 70B
-- `Meta-Llama-3.1-405B-Instruct` - Llama 3.1 405B
-- `Meta-Llama-3.1-70B-Instruct` - Llama 3.1 70B
-- `Meta-Llama-3.1-8B-Instruct` - Llama 3.1 8B
 
 ## Using DeepSeek Models
 
-Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning models, these require specific configuration:
+Azure AI supports DeepSeek reasoning models such as DeepSeek V4 Pro. These require specific configuration:
 
 1. Set `isReasoningModel: true`
 2. Use `max_completion_tokens` instead of `max_tokens`
 3. Set API version to '2025-04-01-preview' (or later)
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: azure:chat:DeepSeek-R1
+  - id: azure:chat:DeepSeek-V4-Pro
     config:
       apiHost: 'your-deployment-name.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
@@ -1114,7 +1166,7 @@ For model-graded assertions, you can configure your `defaultTest` to use the sam
 defaultTest:
   options:
     provider:
-      id: azure:chat:DeepSeek-R1
+      id: azure:chat:DeepSeek-V4-Pro
       config:
         apiHost: 'your-deployment-name.services.ai.azure.com'
         apiVersion: '2025-04-01-preview'
@@ -1123,6 +1175,10 @@ defaultTest:
 ```
 
 Adjust `reasoning_effort` to control response quality vs. speed: `low` for faster responses, `medium` for balanced performance (default), or `high` for more thorough reasoning on complex tasks.
+
+Azure lists `DeepSeek-R1` as Legacy until August 13, 2026, with `DeepSeek-V4-Pro` as its
+replacement. `DeepSeek-R1-0528` and `DeepSeek-V3.1` retired July 13, 2026. Promptfoo retains
+historical pricing metadata for those IDs so saved evaluation results can still report cost.
 
 ## Using Microsoft MAI Models
 
@@ -1182,7 +1238,7 @@ MAI text models run through the standard `azure:chat` provider. **Availability i
 
 promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:mai-thinking-1
     config:
@@ -1302,7 +1358,8 @@ This archived configuration used a `file_search` tool, the `tool_resources.file_
 
 This archived eval shows the former Azure OpenAI assistant configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -1479,7 +1536,8 @@ In that example, the request tells the runtime that file search is available, bu
 
 Here's a complete example configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Azure Foundry Agent evaluation'
 
 providers:
@@ -1511,7 +1569,7 @@ tests:
 
 ### Error Handling
 
-The Azure Foundry Agent provider includes comprehensive error handling:
+The Azure Foundry Agent provider includes error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
 - **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
@@ -1612,7 +1670,8 @@ providers:
 
 ### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - azure:video:my-video-deployment
 
@@ -1622,7 +1681,8 @@ prompts:
 tests:
   - vars: {}
     assert:
-      - type: is-video
+      - type: javascript
+        value: context.providerResponse?.video?.format === 'mp4'
 ```
 
 ### Environment Variables

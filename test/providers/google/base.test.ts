@@ -65,7 +65,10 @@ vi.mock('../../../src/providers/google/auth', () => ({
     determineVertexMode: vi.fn().mockReturnValue(false),
     validateAndWarn: vi.fn(),
     getApiKey: vi.fn().mockReturnValue({ apiKey: 'test-key', source: 'config' }),
-    resolveRegion: vi.fn().mockReturnValue('us-central1'),
+    resolveRegion: vi.fn(
+      (config: { region?: string }, _env, _hasApiKey, defaultRegion?: string) =>
+        config.region || defaultRegion || 'us-central1',
+    ),
     resolveProjectId: vi.fn().mockResolvedValue('test-project'),
   },
 }));
@@ -118,6 +121,12 @@ describe('GoogleGenericProvider', () => {
     mockMcpInstance.cleanup.mockReset().mockResolvedValue(undefined);
     // Reset utility mocks
     vi.mocked(maybeLoadToolsFromExternalFile).mockReset().mockResolvedValue([]);
+    vi.mocked(GoogleAuthManager.resolveRegion)
+      .mockReset()
+      .mockImplementation(
+        (config: { region?: string }, _env, _hasApiKey, defaultRegion?: string) =>
+          config.region || defaultRegion || 'us-central1',
+      );
   });
 
   afterEach(() => {
@@ -241,6 +250,22 @@ describe('GoogleGenericProvider', () => {
       });
 
       expect(provider.getRegion()).toBe('europe-west1');
+    });
+
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-pro-preview-customtools',
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash-preview',
+    ])('should default Vertex %s to the global endpoint in API key mode', (modelName) => {
+      vi.mocked(GoogleAuthManager.determineVertexMode).mockReturnValue(true);
+
+      const provider = new TestGoogleProvider(modelName);
+
+      expect(provider.getRegion()).toBe('global');
     });
   });
 
@@ -567,7 +592,7 @@ describe('GoogleGenericProvider', () => {
     it('never executes a configured callback when function calling is disabled', async () => {
       const callback = vi.fn().mockResolvedValue('should not execute');
       const provider = new TestGoogleProvider('gemini-3.6-flash');
-      const output = JSON.stringify({ functionCall: { name: 'test_function', args: {} } });
+      const output = [{ functionCall: { name: 'test_function', willContinue: true } }];
 
       expect(
         await provider['executeFunctionToolCallbacks'](
@@ -578,6 +603,66 @@ describe('GoogleGenericProvider', () => {
       ).toBe(output);
       expect(callback).not.toHaveBeenCalled();
     });
+
+    it.each([
+      {
+        missing: 'both streaming options',
+        config: {},
+        fragment: { partialArgs: [{ jsonPath: '$.value', numberValue: 2 }] },
+      },
+      {
+        missing: 'argument streaming opt-in',
+        config: { streaming: true },
+        fragment: { willContinue: true },
+      },
+      {
+        missing: 'streaming transport opt-in',
+        config: { toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } } },
+        fragment: { partialArgs: [{ jsonPath: '$.value', numberValue: 2 }] },
+      },
+    ])(
+      'rejects argument fragments before any callback when missing $missing',
+      async ({ config, fragment }) => {
+        const callback = vi.fn().mockResolvedValue('should not execute');
+        const provider = new TestGoogleProvider('gemini-3.6-flash');
+        const output = [
+          { functionCall: { name: 'test_function', args: { value: 1 } } },
+          { functionCall: { name: 'test_function', args: { value: 2 }, ...fragment } },
+        ];
+
+        await expect(
+          provider['executeFunctionToolCallbacks'](
+            output,
+            { ...config, functionToolCallbacks: { test_function: callback } },
+            false,
+          ),
+        ).rejects.toThrow(
+          'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+        );
+        expect(callback).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { name: 'test_function' },
+      { name: 'test_function', willContinue: false },
+      { name: 'test_function', args: {}, partialArgs: [], willContinue: false },
+    ])(
+      'executes complete parameterless calls without argument streaming: %j',
+      async (functionCall) => {
+        const callback = vi.fn().mockResolvedValue('complete');
+        const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+        const result = await provider['executeFunctionToolCallbacks'](
+          [{ functionCall }],
+          { functionToolCallbacks: { test_function: callback } },
+          false,
+        );
+
+        expect(result).toBe('complete');
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+      },
+    );
 
     it('should preserve a single structured callback result', async () => {
       const callback = vi.fn().mockResolvedValue({ status: 'ok', values: [1, 2] });

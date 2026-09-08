@@ -1,4 +1,4 @@
-# compare-deepseek-r1-vs-openai-o1 (DeepSeek-R1 vs OpenAI o1 Comparison)
+# compare-deepseek-r1-vs-openai-o1 (DeepSeek V4 Pro vs OpenAI GPT-5.6)
 
 You can run this example with:
 
@@ -7,7 +7,7 @@ npx promptfoo@latest init --example compare-deepseek-r1-vs-openai-o1
 cd compare-deepseek-r1-vs-openai-o1
 ```
 
-This example demonstrates how to benchmark DeepSeek's R1 model against OpenAI's o1 model using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy subjects.
+This example demonstrates how to benchmark DeepSeek V4 Pro against OpenAI GPT-5.6 using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy subjects.
 
 ## Prerequisites
 

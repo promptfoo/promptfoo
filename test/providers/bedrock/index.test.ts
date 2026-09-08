@@ -818,6 +818,18 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
+    it('preserves disabled thinking and the non-thinking cap for Claude Sonnet 5', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'us.anthropic.claude-sonnet-5',
+      );
+
+      expect(params.thinking).toEqual({ type: 'disabled' });
+      expect(params.max_tokens).toBe(1024);
+    });
+
     it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(
       'omits forced tool choice for Claude Fable 5: %j',
       async (tool_choice) => {
@@ -3478,7 +3490,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-fable-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3497,24 +3509,25 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
-  it('maps Claude Opus 5 across the base and regional inference profiles', () => {
-    // Verified via `aws bedrock list-inference-profiles`: Opus 5 exposes base +
-    // us./eu./global. only — unlike Opus 4.7/4.8 there is no `jp.` profile.
+  it('maps Claude Opus 5 across its Runtime inference profiles', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
+    expect(getHandlerForModel('anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
-    // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
+    // Sonnet 5 exposes base + us./eu./au./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-sonnet-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3785,14 +3798,15 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.7 models correctly', async () => {
-    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    // Base model ID (no -v1 suffix for 4.7+).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
-    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    // Cross-region inference profiles (verified via the AWS model card).
+    // Opus 4.7 uses `jp.`/`au.`/`global.` instead of the older `apac.` prefix.
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3806,11 +3820,12 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Base model ID (no -v1 suffix, mirroring Opus 4.7).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles mirror the Opus 4.7 set (`us.`/`eu.`/`jp.`/`global.`,
-    // no older `apac.` prefix).
+    // Cross-region inference profiles mirror the Opus 4.7 set
+    // (`us.`/`eu.`/`jp.`/`au.`/`global.`, with no older `apac.` prefix).
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-8']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3831,8 +3846,10 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Global cross-region inference
     expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
 
-    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
-    // so it's handled separately via NovaSonicProvider in registry.ts
+    // Nova 2 Sonic supports only InvokeModelWithBidirectionalStream. It must not appear in the
+    // ordinary InvokeModel mapping, and AWS publishes no geo inference profile for it.
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-sonic-v1:0']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-sonic-v1:0']).toBeUndefined();
   });
 });
 
@@ -3887,6 +3904,30 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each([
+    ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.6', 2, 6, 0.5],
+  ])('prices %s InvokeModel cached input once', async (modelId, input, output, cacheRead) => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 500,
+        total_tokens: 1500,
+        prompt_tokens_details: { cached_tokens: 200 },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider(modelId, { config: { region: 'us-east-1' } });
+    const response = await provider.callApi('hello');
+    expect(response.output).toBe('ok');
+    expect(response.tokenUsage?.prompt).toBe(1000);
+    expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
+  });
+
   it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
@@ -3908,6 +3949,33 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
 
+  it('bills one-hour cache writes from Claude Runtime responses at 2x input', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 500,
+        cache_creation_input_tokens: 100,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 60,
+          ephemeral_1h_input_tokens: 40,
+        },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('global.anthropic.claude-fable-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00555, 8);
+  });
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
@@ -5066,6 +5134,13 @@ const OPENAI_COMPAT_MODEL_IDS = [
 ] as const;
 
 describe('getHandlerForModel routing for OpenAI-compatible families', () => {
+  it.each(['anthropic.claude-opus-4-7', 'anthropic.claude-opus-4-8', 'anthropic.claude-opus-5'])(
+    'keeps IAM-native bare model %s on InvokeModel routes',
+    (modelName) => {
+      expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    },
+  );
+
   it.each([
     'us.zai.glm-5',
     'global.zai.glm-5',

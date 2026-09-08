@@ -7,8 +7,11 @@ prompts:
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
-      # Promptfoo requests 8 seconds for AI Studio; Veo adds a fixed 7 seconds.
+      vertexai: false
+      # Use metadata.sourceVideoUri from a previous Veo generation response
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
+      resolution: '720p'
+      durationSeconds: 8 # Gemini request setting; Veo adds 7 seconds
 
 tests:
   - vars:
@@ -21,6 +24,6 @@ tests:
       - type: is-valid-video
 
 # To use this:
-# 1. Save a previously Veo-generated video locally.
-# 2. Replace YOUR_SOURCE_VIDEO.mp4 with its path.
-# 3. Set GOOGLE_API_KEY or GEMINI_API_KEY.
+# 1. First generate a video using promptfooconfig.yaml
+# 2. Copy metadata.sourceVideoUri from the generation response above
+# 3. Run this config within two days of the original generation

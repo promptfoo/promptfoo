@@ -22,7 +22,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
-  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
@@ -67,6 +67,17 @@ import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
+function getOneHourCacheWriteTokens(
+  cacheDetails?: ReadonlyArray<{ ttl?: string; inputTokens?: number }>,
+): number {
+  return (
+    cacheDetails?.reduce(
+      (total, detail) => total + (detail.ttl === '1h' ? (detail.inputTokens ?? 0) : 0),
+      0,
+    ) ?? 0
+  );
+}
+
 /**
  * Configuration options for the Bedrock Converse API provider
  * Extends base BedrockOptions with Converse-specific parameters
@@ -98,7 +109,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
     latency: 'standard' | 'optimized';
   };
   serviceTier?: {
-    type: 'priority' | 'default' | 'flex';
+    type: 'priority' | 'default' | 'flex' | 'reserved';
   };
 
   // Tool configuration
@@ -964,7 +975,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
     const dropForcedToolChoice =
-      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      isClaudeFableOrMythos5Model(this.modelName) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
@@ -1015,8 +1026,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
     // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
     // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
-    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
-    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    // temperature/top_p/top_k, so strip them from the raw fields too; the shared normalizer
+    // then converts enabled -> adaptive and drops disabled on always-on adaptive models.
     if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
@@ -1418,6 +1429,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const totalTokens = usage?.totalTokens;
     const cacheReadTokens = usage?.cacheReadInputTokens;
     const cacheWriteTokens = usage?.cacheWriteInputTokens;
+    const cacheWrite1hTokens = getOneHourCacheWriteTokens(usage?.cacheDetails);
 
     const tokenUsage: Partial<TokenUsage> = {
       prompt: promptTokens,
@@ -1435,6 +1447,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheWriteTokens,
       this.getRegion(),
       this.config.serviceTier,
+      cacheWrite1hTokens,
     );
 
     // Build metadata
@@ -1686,6 +1699,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         totalTokens?: number;
         cacheReadInputTokens?: number;
         cacheWriteInputTokens?: number;
+        cacheDetails?: Array<{
+          ttl?: string;
+          inputTokens?: number;
+        }>;
       } = {};
 
       // Track tool use blocks being streamed
@@ -1790,6 +1807,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.cacheWriteInputTokens,
         this.getRegion(),
         this.config.serviceTier,
+        getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 
       // Surface MCP failures via the response `error` field. If the model also

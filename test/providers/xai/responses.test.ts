@@ -81,6 +81,54 @@ describe('XAIResponsesProvider', () => {
     vi.resetAllMocks();
   });
 
+  it('accepts xAI priority processing and rejects non-xAI service tiers', async () => {
+    const priorityProvider = new XAIResponsesProvider('grok-4.5', {
+      config: { service_tier: 'priority' },
+    });
+    expect((await priorityProvider.getRequestBody('hello')).body.service_tier).toBe('priority');
+
+    const invalidProvider = new XAIResponsesProvider('grok-4.5', {
+      config: { service_tier: 'flex' as any },
+    });
+    await expect(invalidProvider.getRequestBody('hello')).rejects.toThrow(
+      'Invalid xAI service_tier "flex"',
+    );
+  });
+
+  it('lets a prompt service tier override the provider passthrough service tier', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { passthrough: { service_tier: 'priority' } },
+    });
+
+    const { body } = await provider.getRequestBody('hello', {
+      vars: {},
+      prompt: {
+        raw: 'hello',
+        label: 'hello',
+        config: { service_tier: 'default' },
+      },
+    });
+
+    expect(body.service_tier).toBe('default');
+  });
+
+  it('does not validate an inherited invalid passthrough tier when the prompt overrides it', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { passthrough: { service_tier: 'flex' } },
+    });
+
+    const { body } = await provider.getRequestBody('hello', {
+      vars: {},
+      prompt: {
+        raw: 'hello',
+        label: 'hello',
+        config: { service_tier: 'priority' },
+      },
+    });
+
+    expect(body.service_tier).toBe('priority');
+  });
+
   it('calls maybeLoadToolsFromExternalFile when tools are configured', async () => {
     const tools = [
       { type: 'code_execution' },
@@ -358,6 +406,31 @@ describe('XAIResponsesProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.cost).toBeCloseTo(0.000025, 8);
+  });
+
+  it('applies the confirmed priority premium to Responses fallback pricing', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData('grok-4.5'),
+        service_tier: 'priority',
+        usage: {
+          input_tokens: 100_000,
+          output_tokens: 100_000,
+          total_tokens: 200_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { apiKey: 'test-key', service_tier: 'priority' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeCloseTo(1.6, 10);
   });
 
   it('prefers billed cost ticks over calculated cost when reasoning tokens are present', async () => {

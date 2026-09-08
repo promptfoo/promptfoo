@@ -12,7 +12,7 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS, looksLikeClaudeModelId } from './anthropic/util';
+import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -82,7 +82,11 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
+import {
+  assertOpenAiApiModel,
+  assertOpenAiModelEndpointCompatibility,
+  getRetiredOpenAiModelRoute,
+} from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -135,6 +139,66 @@ const OPENAI_BARE_RESPONSES_MODELS = new Set([
   'gpt-5.6-terra',
   'gpt-5.6-luna',
 ]);
+
+const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
+const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
+  'chat',
+  'completion',
+  'embedding',
+  'embeddings',
+  'responses',
+  'speech',
+  'tts',
+]);
+const OPENAI_FIXED_MODEL_ROUTES = new Set(['moderation', 'realtime', 'transcription']);
+
+function getEffectiveOpenAiApiModel(
+  modelType: string,
+  modelName: string,
+  configuredModel: string | undefined,
+  passthroughModel: unknown,
+): string {
+  if (OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType)) {
+    return configuredModel || modelName || modelType;
+  }
+
+  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
+  const explicitRouteUsesConfiguredModel =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || OPENAI_FIXED_MODEL_ROUTES.has(modelType);
+  const providerOverridesModelFromConfig =
+    modelType === 'speech' ||
+    modelType === 'tts' ||
+    OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+    retiredRoute === 'tts';
+  const selectedModel = providerOverridesModelFromConfig
+    ? configuredModel || modelName || modelType
+    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
+
+  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+    return selectedModel;
+  }
+
+  const bareModelUsesPassthrough =
+    !modelName &&
+    (OPENAI_BARE_RESPONSES_MODELS.has(modelType) ||
+      OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
+      OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
+      OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
+      OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+      retiredRoute === 'chat' ||
+      retiredRoute === 'responses' ||
+      retiredRoute === 'tts' ||
+      (!retiredRoute &&
+        !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) &&
+        !OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) &&
+        !OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)));
+
+  const routeUsesPassthrough =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || bareModelUsesPassthrough;
+  return routeUsesPassthrough && typeof passthroughModel === 'string'
+    ? passthroughModel
+    : selectedModel;
+}
 
 export const providerMap: ProviderFactory[] = [
   {
@@ -288,8 +352,7 @@ export const providerMap: ProviderFactory[] = [
       // released after this build works without waiting for a catalog entry. The
       // provider still logs `Using unknown Anthropic model`, and Anthropic returns
       // not_found_error if the id is not real.
-      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
+      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) || looksLikeClaudeModelId(modelType)) {
         return new AnthropicMessagesProvider(modelType, providerOptions);
       }
 
@@ -395,7 +458,12 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
-        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+        // Azure path segments are user-chosen deployment names, not model IDs. Keep only the
+        // two legacy fail-fast cases here instead of applying OpenAI's model-ID routing set.
+        if (
+          deploymentName === 'gpt-realtime-whisper' ||
+          deploymentName === 'gpt-realtime-translate'
+        ) {
           throw new Error(
             deploymentName === 'gpt-realtime-whisper'
               ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
@@ -493,14 +561,17 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, {
+          ...context.env,
+          ...providerOptions.env,
+        });
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -960,11 +1031,24 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+      const assistantModel =
+        modelType === 'assistant' && typeof providerOptions.config?.modelName === 'string'
+          ? providerOptions.config.modelName.trim() || undefined
+          : undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const effectiveApiModel = getEffectiveOpenAiApiModel(
+        modelType,
+        modelName,
+        configuredModel,
+        passthrough?.model,
+      );
+      const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
-        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexModel = modelName || configuredModel;
+        assertOpenAiModelEndpointCompatibility(codexModel);
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexAppServerProvider({
           ...providerOptions,
@@ -984,8 +1068,9 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
-        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
+        assertOpenAiModelEndpointCompatibility(codexModel);
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,
@@ -999,24 +1084,22 @@ export const providerMap: ProviderFactory[] = [
           env: context.env,
         });
       }
-      const requestedApiModel = modelName || configuredModel || modelType;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
-        const apiHost =
-          providerOptions.config?.apiHost ||
-          providerOptions.env?.OPENAI_API_HOST ||
-          getEnvString('OPENAI_API_HOST');
-        const apiUrl = apiHost
-          ? `https://${apiHost}/v1`
+      if (
+        !['agents', 'chatkit'].includes(modelType) &&
+        (modelType !== 'assistant' || assistantModel)
+      ) {
+        const configApiHost = providerOptions.config?.apiHost;
+        const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+        const apiUrl = configApiHost
+          ? `https://${configApiHost}/v1`
           : providerOptions.config?.apiBaseUrl ||
+            (envApiHost ? `https://${envApiHost}/v1` : undefined) ||
             providerOptions.env?.OPENAI_API_BASE_URL ||
             providerOptions.env?.OPENAI_BASE_URL ||
             getEnvString('OPENAI_API_BASE_URL') ||
             getEnvString('OPENAI_BASE_URL') ||
             'https://api.openai.com/v1';
-        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
-          assertOpenAiApiModel(candidate, apiUrl);
-        }
+        assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
@@ -1044,7 +1127,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-realtime-1.5',
+          modelName || configuredModel || 'gpt-realtime-2.1',
           providerOptions,
         );
       }
@@ -1079,11 +1162,29 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
         return new OpenAiTtsProvider(modelType, providerOptions);
       }
+      if (modelType === 'gpt-transcribe') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(modelType, providerOptions);
+      }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      // assertOpenAiApiModel above rejects retired IDs for api.openai.com. Preserve the
+      // historical endpoint family for custom OpenAI-compatible gateways that still serve them.
+      switch (getRetiredOpenAiModelRoute(modelType)) {
+        case 'chat':
+          return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'tts':
+          return new OpenAiTtsProvider(modelType, providerOptions);
+        case 'realtime':
+          return new OpenAiRealtimeProvider(modelType, providerOptions);
+        case 'responses':
+          return new OpenAiResponsesProvider(modelType, providerOptions);
+        case 'moderation':
+          return new OpenAiModerationProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
         try {
@@ -1295,16 +1396,9 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('cometapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const { createCometApiProvider } = await import('./cometapi');
-      return createCometApiProvider(providerPath, {
-        ...providerOptions,
-        env: context.env,
-      });
+      return createCometApiProvider(providerPath, providerOptions);
     },
   },
   {

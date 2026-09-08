@@ -1,7 +1,9 @@
+import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+import { assertGroqChatServiceTier, groqSupportsTemperature, isGroqReasoningModel } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
+import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -22,6 +24,11 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
+  override getApiKey(): string | undefined {
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
+    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
+  }
+
   protected isReasoningModel(): boolean {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
@@ -39,9 +46,9 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: GROQ_API_BASE_URL,
-      },
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
+      } as unknown as OpenAiCompletionOptions,
     });
   }
 
@@ -68,6 +75,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     if (groqConfig.search_settings) {
       body.search_settings = groqConfig.search_settings;
     }
+
+    assertGroqChatServiceTier(body.service_tier);
 
     return { body, config };
   }

@@ -12,7 +12,7 @@ description: 'Configure Snowflake Cortex text generation through its REST API wi
 1. Obtain your Snowflake account identifier (format: `orgname-accountname`)
 2. Generate a bearer token (JWT, OAuth, or programmatic access token)
 3. Ensure you have the `SNOWFLAKE.CORTEX_USER` database role
-4. Check [model availability in your region](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql-regional-availability) and your account's model access settings
+4. Check [model availability in your region](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api#model-availability) and your account's model access settings
 
 ## Provider Format
 
@@ -28,8 +28,7 @@ For new configurations, avoid legacy models such as `mistral-large2` and `llama3
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: snowflake:claude-sonnet-4-6
     config:

@@ -27,6 +27,7 @@ import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
+import { getVertexModelDefaultRegion } from './shared';
 import {
   normalizeTools,
   resolveGoogleToolConfig,
@@ -427,7 +428,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   getRegion(): string {
     const hasApiKey = Boolean(this.getApiKey());
-    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey);
+    const modelDefaultRegion = this.isVertexMode
+      ? getVertexModelDefaultRegion(this.modelName)
+      : undefined;
+    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey, modelDefaultRegion);
   }
 
   /**
@@ -616,9 +620,22 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const streamsFunctionCallArguments =
       config.streaming === true &&
       toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true;
+    const nativeFunctionCalls = parts.flatMap((part) =>
+      part?.functionCall ? [part.functionCall] : [],
+    );
+    if (
+      !streamsFunctionCallArguments &&
+      nativeFunctionCalls.some(
+        (call) => call.willContinue === true || (call.partialArgs?.length ?? 0) > 0,
+      )
+    ) {
+      throw new Error(
+        'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+      );
+    }
     const functionCalls = streamsFunctionCallArguments
       ? assembleStreamedFunctionCalls(parts)
-      : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+      : nativeFunctionCalls;
     if (!functionCalls?.length) {
       return output;
     }

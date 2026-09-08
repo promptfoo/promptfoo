@@ -640,6 +640,20 @@ describe('MetaResponsesProvider', () => {
 });
 
 describe('MetaResponsesProvider request body shaping', () => {
+  it('preserves Meta reasoning capabilities for a passthrough model override', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: {
+        passthrough: { model: 'muse-spark-1.2' },
+        reasoning_effort: 'xhigh',
+      },
+    });
+
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+
+    expect(body.model).toBe('muse-spark-1.2');
+    expect(body.reasoning).toEqual({ effort: 'xhigh' });
+    expect(body.max_output_tokens).toBeUndefined();
+  });
   it.each([0, null, undefined, 512])(
     'preserves canonical Responses passthrough cap %s and removes chat aliases',
     async (cap) => {

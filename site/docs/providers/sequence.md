@@ -1,6 +1,6 @@
 ---
 sidebar_label: Sequence
-description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
+description: 'Chain multiple AI providers sequentially to create evaluation workflows with data transformation and routing'
 ---
 
 # Sequence Provider
@@ -36,23 +36,23 @@ The Sequence Provider:
 
 Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:chat:gpt-4
-  - id: sequence
-    config:
-      inputs:
-        - 'What is {{prompt}}?'
-        - 'What are the potential drawbacks of {{prompt}}?'
-        - 'Can you summarize the pros and cons of {{prompt}}?'
-      separator: "\n\n=== Next Response ===\n\n"
+  - openai:chat:gpt-5-mini
 
 prompts:
   - 'artificial intelligence'
 
 tests:
-  - vars:
-      prompt: artificial intelligence
+  - provider:
+      id: sequence
+      config:
+        inputs:
+          - 'What is {{prompt}}?'
+          - 'What are the potential drawbacks of {{prompt}}?'
+          - 'Can you summarize the pros and cons of {{prompt}}?'
+        separator: "\n\n=== Next Response ===\n\n"
     assert:
       - type: contains
         value: drawbacks

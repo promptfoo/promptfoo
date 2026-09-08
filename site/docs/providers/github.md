@@ -27,7 +27,6 @@ The GitHub Models provider is compatible with all the options provided by the [O
 
 - **Unified API**: Access models from multiple providers through a single endpoint
 - **OpenAI-compatible**: Use familiar OpenAI SDK and API patterns
-- **Enterprise-ready**: Fully supported and billable for production use
 - **GitHub Actions support**: Use GITHUB_TOKEN directly in workflows
 
 ## Authentication
@@ -40,30 +39,21 @@ export GITHUB_TOKEN=your_github_token
 
 ## Available Models
 
-GitHub Models provides access to industry-leading AI models from various providers. Models are regularly updated and added frequently.
+GitHub changes the catalog independently of promptfoo. Query the catalog API with your token to
+verify a model ID before adding it to a long-lived config:
+
+```bash
+curl -L \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2026-03-10" \
+  https://models.github.ai/catalog/models
+```
 
 ### Model Categories
 
-**Language Models**
-
-- OpenAI GPT-4.1 series (gpt-5, gpt-5-mini, gpt-5-nano)
-- OpenAI GPT-4o series (gpt-4o, gpt-5-mini)
-- OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
-- Anthropic Claude series (claude-4-opus, claude-4-sonnet, claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
-- Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)
-- Meta Llama series (llama-4-behemoth, llama-4-maverick, llama-4-scout, llama-3.3-70b-instruct)
-- xAI Grok series (grok-4, grok-3, grok-3-mini)
-- DeepSeek models (deepseek-r1, deepseek-v3)
-
-**Specialized Models**
-
-- Code generation: Mistral Codestral models
-- Reasoning: DeepSeek-R1, Microsoft Phi-4 series, Grok-4 (256K context)
-- Multimodal: Vision-capable models from various providers, Llama 4 series
-- Fast inference: Flash and mini model variants
-- Long context: Llama 4 Scout (10M tokens), Llama 4 Maverick (1M tokens), Llama 4 Behemoth
-
-For the most up-to-date list of available models, visit the [GitHub Models marketplace](https://github.com/marketplace/models/).
+The response includes each model's exact `id`, modalities, capabilities, limits, and rate-limit
+tier. You can also browse the [GitHub Models marketplace](https://github.com/marketplace/models/).
 
 ## Configuration Examples
 
@@ -76,57 +66,41 @@ providers:
 
 ### With Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
+  - id: github:openai/gpt-5-mini # Uses GITHUB_TOKEN env var
     config:
-      temperature: 0.7
-      max_tokens: 4096
+      max_completion_tokens: 4096
       # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
 ### Multiple Models
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: github-fast
-    provider: github:openai/gpt-5-nano
-    config:
-      temperature: 0.5
+  - id: github:openai/gpt-5-nano
 
-  - id: github-balanced
-    provider: github:openai/gpt-5-mini
-    config:
-      temperature: 0.6
+  - id: github:openai/gpt-5-mini
 
-  - id: github-smart
-    provider: github:openai/gpt-5
-    config:
-      temperature: 0.7
+  - id: github:openai/gpt-5
 
-  - id: github-multimodal
-    provider: github:meta/llama-4-maverick
+  - id: github:meta/llama-4-maverick-17b-128e-instruct-fp8
     config:
       temperature: 0.8
 
-  - id: github-reasoning
-    provider: github:xai/grok-4
+  - id: github:deepseek/deepseek-r1
     config:
       temperature: 0.7
 ```
 
 ## Model Selection Guidelines
 
-Choose models based on your specific needs:
+Use the catalog response rather than a static recommendation. In particular, compare:
 
-- **Best Overall**: GPT-4.1 or Claude 4 Opus - Superior coding, instruction following, and long-context understanding
-- **Fast & Cheap**: GPT-4.1-nano - Lowest latency and cost while maintaining strong capabilities
-- **Balanced**: GPT-4.1-mini or Claude 4 Sonnet - Good performance with lower cost than full models
-- **Extended Context**: Llama 4 Scout (10M tokens) for processing entire codebases or multiple documents
-- **Code Generation**: Codestral series for specialized code tasks
-- **Reasoning**: DeepSeek-R1, o-series models, or Grok-4 for complex reasoning tasks
-- **Long Context**: Models with extended context windows for processing large documents
-- **Multimodal**: Vision-capable models for text and image processing, including Llama 4 series
+- `supported_input_modalities` and `supported_output_modalities`
+- `capabilities`, such as streaming or tool calling
+- `limits.max_input_tokens` and `limits.max_output_tokens`
+- `rate_limit_tier`
 
 Visit the [GitHub Models marketplace](https://github.com/marketplace/models/) to compare model capabilities and pricing.
 
@@ -219,8 +193,8 @@ const results = await evalRecord.toEvaluateSummary();
 const specializedModelsEvalRecord = await promptfoo.evaluate({
   providers: [
     'github:azureml-mistral/Codestral-2501', // Code generation
-    'github:deepseek/deepseek-r1', // Advanced reasoning
-    'github:xai/grok-4', // Powerful reasoning and analysis
+    'github:deepseek/deepseek-r1', // Reasoning model
+    'github:xai/grok-4', // Reasoning and analysis
     'github:meta/llama-4-scout', // Extended context (10M tokens)
   ],
   prompts: ['Implement {{algorithm}} with optimal time complexity'],

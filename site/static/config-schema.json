@@ -272,6 +272,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },
@@ -305,6 +308,9 @@
         "GITHUB_TOKEN": {
           "type": "string"
         },
+        "GOOGLE_CLOUD_PROJECT": {
+          "type": "string"
+        },
         "GOOGLE_API_HOST": {
           "type": "string"
         },
@@ -312,6 +318,9 @@
           "type": "string"
         },
         "GOOGLE_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_LOCATION": {
           "type": "string"
         },
         "GOOGLE_PROJECT_ID": {
@@ -513,6 +522,9 @@
           "type": "string"
         },
         "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "TOGETHER_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1732,6 +1744,9 @@
                     "COMETAPI_KEY": {
                       "type": "string"
                     },
+                    "COHERE_API_BASE_URL": {
+                      "type": "string"
+                    },
                     "COHERE_API_KEY": {
                       "type": "string"
                     },
@@ -1765,6 +1780,9 @@
                     "GITHUB_TOKEN": {
                       "type": "string"
                     },
+                    "GOOGLE_CLOUD_PROJECT": {
+                      "type": "string"
+                    },
                     "GOOGLE_API_HOST": {
                       "type": "string"
                     },
@@ -1772,6 +1790,9 @@
                       "type": "string"
                     },
                     "GOOGLE_API_KEY": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_LOCATION": {
                       "type": "string"
                     },
                     "GOOGLE_PROJECT_ID": {
@@ -1973,6 +1994,9 @@
                       "type": "string"
                     },
                     "SLACK_BOT_TOKEN": {
+                      "type": "string"
+                    },
+                    "TOGETHER_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {

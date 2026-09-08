@@ -35,21 +35,11 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
-Google AI Studio / Gemini API:
-
-| Provider ID                                  | Description                          | Generation duration |
-| -------------------------------------------- | ------------------------------------ | ------------------- |
-| `google:video:veo-3.1-generate-preview`      | Veo 3.1 with video extension support | 4, 6, 8s            |
-| `google:video:veo-3.1-fast-generate-preview` | Faster Veo 3.1 generation            | 4, 6, 8s            |
-| `google:video:veo-3.1-lite-generate-preview` | Lower-cost Veo 3.1 generation        | 4, 6, 8s            |
-
-Vertex AI:
-
-| Provider ID                              | Description          | Generation duration |
-| ---------------------------------------- | -------------------- | ------------------- |
-| `vertex:video:veo-3.1-generate-001`      | Veo 3.1 GA           | 4, 6, 8s            |
-| `vertex:video:veo-3.1-fast-generate-001` | Faster Veo 3.1 GA    | 4, 6, 8s            |
-| `vertex:video:veo-3.1-lite-generate-001` | Lite Veo 3.1 Preview | 4, 6, 8s            |
+| Model                           | Description                                          | Duration |
+| ------------------------------- | ---------------------------------------------------- | -------- |
+| `veo-3.1-generate-preview`      | Veo 3.1 with extension, references, and 4k           | 4, 6, 8s |
+| `veo-3.1-fast-generate-preview` | Faster Veo 3.1 with extension, references, and 4k    | 4, 6, 8s |
+| `veo-3.1-lite-generate-preview` | Veo 3.1 Lite Preview without extension or references | 4, 6, 8s |
 
 ## Running the Example
 
@@ -59,17 +49,19 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option             | Type   | Description                                             |
-| ------------------ | ------ | ------------------------------------------------------- |
-| `aspectRatio`      | string | `16:9` (default) or `9:16`                              |
-| `resolution`       | string | `720p` (default) or `1080p`                             |
-| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8 |
-| `personGeneration` | string | `allow_adult` or `dont_allow`                           |
-| `negativePrompt`   | string | Concepts to avoid                                       |
-| `image`            | string | Source image for image-to-video                         |
-| `lastImage`        | string | End frame for interpolation                             |
-| `sourceVideo`      | string | Base64/`file://`, plus `gs://` for Vertex AI            |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)  |
+| Option             | Type   | Description                                                                                                                     |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`                                                                                                      |
+| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k requires Veo 3.1 or 3.1 Fast                                                             |
+| `durationSeconds`  | number | 4, 6, or 8 for generation; use 8 for references or Gemini API 1080p/4k output. See Video Extension for fixed extension duration |
+| `personGeneration` | string | Veo 3.1: `allow_all` for text, `allow_adult` for image-based modes; EU, UK, Switzerland, and MENA support only `allow_adult`    |
+| `negativePrompt`   | string | Concepts to avoid                                                                                                               |
+| `image`            | string | Source image for image-to-video                                                                                                 |
+| `lastImage`        | string | End frame for interpolation                                                                                                     |
+| `extendVideoId`    | string | Deprecated alias for `sourceVideo`                                                                                              |
+| `sourceVideo`      | string | Prior Gemini URI, or `gs://` URI when using Vertex AI                                                                           |
+| `storageUri`       | string | Vertex-only output destination such as `gs://bucket/veo-output/`; the returned `gcsUri` is exposed as `metadata.sourceVideoUri` |
+| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)                                                                          |
 
 ## Features
 
@@ -83,7 +75,14 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend a previously Veo-generated video with Google AI Studio by passing a base64 or `file://` source video and setting `durationSeconds: 8`; Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`).
+Extend a previously generated Veo video by passing its original Gemini URI to the Gemini API
+(see `promptfooconfig-extension.yaml`). This configuration requires `GOOGLE_API_KEY` or
+`GEMINI_API_KEY`; use the prior response's `metadata.sourceVideoUri` within two days of the
+original generation. Downloaded files and base64 bytes cannot be used for Gemini extension.
+
+For Vertex AI, configure `storageUri: gs://bucket/prefix/` on the source generation. Promptfoo
+downloads the output to its blob store and preserves the returned `gs://` object URI in
+`metadata.sourceVideoUri`; pass that value as `sourceVideo` in the next Vertex generation.
 
 ## Notes
 
@@ -92,7 +91,6 @@ Extend a previously Veo-generated video with Google AI Studio by passing a base6
 - Use `--no-cache` flag to force regeneration
 - Videos are served via the local server for viewing in the UI
 - Veo models use long-running operations with polling for completion
-- `google:video:*` uses Google AI Studio by default
-- Use `vertex:video:*` with the current model IDs above for explicit Vertex AI routing
-- Google AI Studio does not accept Vertex operation IDs for extension
-- Current Vertex AI Veo 3.1 models support extension through `sourceVideo`; use a Vertex operation name, `gs://` URI, base64 data, or a `file://` path. Promptfoo omits `durationSeconds` from Vertex extension requests; Veo adds a fixed 7 seconds to the source video.
+- `google:video:*` uses Google AI Studio by default and auto-detects Vertex AI when project-based auth is configured
+- Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` for explicit Vertex AI routing
+- Gemini API extensions use 720p output and an 8-second request setting, whether `durationSeconds` is omitted or configured. Vertex extension requests omit `durationSeconds`, including when configured. Both APIs add a fixed 7 seconds to the source video.

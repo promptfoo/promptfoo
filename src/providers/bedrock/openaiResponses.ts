@@ -7,23 +7,19 @@ import {
 } from './mantle';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[1];
 type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[2];
 
 /**
- * OpenAI's frontier models on Amazon Bedrock (GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4, ...)
- * are NOT served
- * through the native `InvokeModel` / `Converse` APIs that back the rest of the `bedrock:`
- * provider. They are only available through Bedrock's OpenAI-compatible **Responses API**
- * on the regional "mantle" endpoint:
+ * Route bare OpenAI frontier model IDs on Bedrock to the regional Mantle Responses API:
  *
  *   https://bedrock-mantle.<region>.api.aws/openai/v1/responses
  *
- * This module routes those model ids to promptfoo's OpenAI Responses provider pointed at
- * that endpoint, so `bedrock:openai.gpt-5.6-sol` produces output identical to the OpenAI
- * Platform `openai:responses:gpt-5.6-sol` provider. The open-weight `gpt-oss` models, by
- * contrast, are served via `InvokeModel` and continue to use the standard Bedrock path.
+ * GPT-5.6 also supports Runtime Converse with inference profile IDs and Mantle Chat
+ * Completions through their explicit selectors; those use separate adapters.
+ * Open-weight `gpt-oss` models can use the standard InvokeModel path.
  */
 
 /** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
@@ -42,7 +38,7 @@ const BEDROCK_GPT_5_6_REGIONS: Record<string, readonly string[]> = {
   'openai.gpt-5.6-luna': ['us-east-1', 'us-east-2', 'us-west-2'],
 };
 
-/** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
+/** Default region for xAI Grok on Bedrock; used when none is configured. */
 export const DEFAULT_BEDROCK_GROK_REGION = 'us-west-2';
 
 /**
@@ -66,22 +62,41 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * provider's GPT-5 detection (`gpt-5*` / `/gpt-5`) and billing lookups don't recognize.
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
- * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * uses OpenAI regional-processing rates, which are 10% above first-party rates.
+ * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model`. The billing
+ * lookup keeps a Bedrock-only marker for GPT-5.6 so AWS's rates survive customer proxies.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(/^openai\./, '');
+  }
+
   protected override getGenAISystem(): string {
     return 'bedrock';
   }
 
   /**
-   * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
-   * detection and the OpenAI billing tables match. The request still sends the real
-   * `this.modelName` (e.g. `openai.gpt-5.6-sol`) as the model id. Only bare `openai.` ids reach
-   * this provider (see the routing predicates in `mantle.ts`), so no region prefix is expected.
+   * Normalize the Bedrock provider prefix so capability detection and billing tables match. The
+   * request still sends the real `this.modelName` (for example, `openai.gpt-5.6-sol`) as the model
+   * id. No region prefix is expected because mantle routing receives bare provider model IDs.
    */
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^openai\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
+  }
+
+  /**
+   * Keep Bedrock GPT-5.6 and Grok 4.3 billing distinct even when `apiBaseUrl` points to a
+   * customer proxy. Older Bedrock-hosted OpenAI models still use the first-party OpenAI rate
+   * table.
+   */
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const modelName =
+      typeof passthroughModel === 'string'
+        ? this.normalizeCapabilityModelName(passthroughModel)
+        : this.getCapabilityModelName();
+    return /^gpt-5\.6(?:-|$)/.test(modelName) || modelName === 'grok-4.3'
+      ? `bedrock:${modelName}`
+      : modelName;
   }
 
   /**
@@ -108,6 +123,30 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     // so bypass it instead of persisting a derivative of the Bedrock bearer token.
     return true;
   }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockOpenAiResponsesBodyContext,
+    callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (isBedrockGrokModel(this.modelName)) {
+      return result;
+    }
+
+    const serviceTier = result.config.service_tier;
+    if (serviceTier === null) {
+      delete (result.body as Record<string, unknown>).service_tier;
+      return result;
+    }
+    if (serviceTier !== undefined && serviceTier !== 'default') {
+      throw new Error(
+        `Amazon Bedrock model "${this.modelName}" supports only the standard inference tier; ` +
+          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
+      );
+    }
+    return result;
+  }
 }
 
 /**
@@ -120,19 +159,30 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
  *   the inherited OpenAI Responses temperature default is omitted when the caller does not set
  *   one.
  *
- * Cost is not computed for Grok: the Responses billing tables are keyed on OpenAI model names,
- * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
+ * Grok billing uses AWS's Bedrock-specific rates rather than the direct xAI rate table.
  */
 export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider {
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(/^xai\./, '');
+  }
+
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^xai\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   protected isReasoningModel(): boolean {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   protected supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 

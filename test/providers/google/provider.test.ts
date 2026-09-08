@@ -148,6 +148,15 @@ describe('GoogleProvider', () => {
       expect((provider as any).isVertexMode).toBe(true);
     });
 
+    it('should detect Vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      });
+
+      expect(provider.id()).toBe('vertex:gemini-pro');
+      expect((provider as any).isVertexMode).toBe(true);
+    });
+
     it('should detect Vertex mode from credentials presence', () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {
@@ -1276,6 +1285,38 @@ describe('GoogleProvider', () => {
       expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
+    it.each([
+      { partialArgs: [{ jsonPath: '$.location', stringValue: 'Boston' }] },
+      { willContinue: true },
+    ])('rejects an incomplete native call before any callback executes: %j', async (fragment) => {
+      const callback = vi.fn();
+      const provider = new GoogleProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { functionCall: { name: 'get_weather', args: { location: 'Paris' } } },
+                  { functionCall: { name: 'get_weather', ...fragment } },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.error).toContain('Streamed function-call arguments require');
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('should return undefined cost for cached responses', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: { apiKey: 'test-key' },
@@ -1429,7 +1470,7 @@ describe('GoogleProvider', () => {
 
       expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
       expect(result.cost).toBeCloseTo(
-        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
       const requestBody = JSON.parse(
@@ -1769,6 +1810,45 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('honors a passthrough snake-case NONE beside camel-case retrieval settings', async () => {
+      const callback = vi.fn();
+      const provider = new GoogleProvider('gemini-3.5-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleSearch: {} }, 'file://tools.mjs:getTools'] as any,
+          functionToolCallbacks: { get_weather: callback },
+          passthrough: {
+            toolConfig: { retrievalConfig: { languageCode: 'en' } },
+            tool_config: { function_calling_config: { mode: 'NONE' } },
+          },
+        },
+      });
+      const parts = [{ functionCall: { name: 'get_weather', args: {} } }];
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        [{ googleSearch: {} }],
+        undefined,
+      );
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({
+        retrievalConfig: { languageCode: 'en' },
+        functionCallingConfig: { mode: 'NONE' },
+      });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+      expect(callback).not.toHaveBeenCalled();
+      expect(response.output).toEqual(parts);
     });
 
     it('should preserve non-function tools loaded from data files when disabled', async () => {

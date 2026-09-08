@@ -5,7 +5,7 @@ description: Run local LLM inference with Transformers.js for embeddings and tex
 
 # Transformers.js
 
-The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a new WebGPU backend, broader model support (8B+ parameter models), and improved performance.
+The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a WebGPU backend, broader model support (8B+ parameter models), and improved performance.
 
 ## Installation
 
@@ -59,13 +59,13 @@ These options apply to both embedding and text generation providers:
 providers:
   - id: transformers:feature-extraction:Xenova/bge-small-en-v1.5
     config:
-      prefix: 'query: ' # Required for BGE, E5 models
-      pooling: mean # 'mean', 'cls', 'first_token', 'eos', 'last_token', 'none'
+      prefix: 'Represent this sentence for searching relevant passages: ' # BGE retrieval queries
+      pooling: cls # BGE v1.5 uses the CLS token embedding
       normalize: true # L2 normalize embeddings
       dtype: q8
 ```
 
-**Model prefixes:** BGE and E5 models require `prefix: 'query: '` for queries or `prefix: 'passage: '` for documents. MiniLM models need no prefix.
+**Model prefixes:** Follow the model card for your embedding model. [BGE v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) uses the instruction above for retrieval queries; documents need no prefix. [E5 v2](https://huggingface.co/intfloat/e5-small-v2) uses `prefix: 'query: '` for queries and `prefix: 'passage: '` for documents. MiniLM models need no prefix.
 
 :::tip
 `transformers:embeddings:<model>` is an alias for `transformers:feature-extraction:<model>`.
@@ -126,7 +126,7 @@ assert:
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
-- **WebGPU:** v4 includes a new WebGPU runtime written in C++ with significantly improved performance. Use `device: webgpu` on supported systems.
+- **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
 
 ## Troubleshooting

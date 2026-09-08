@@ -1041,7 +1041,12 @@ describe('OpenAICodexAppServerProvider', () => {
           threadId: 'thr_bedrock_noleak',
           turnId: 'turn_bedrock_noleak',
           tokenUsage: {
-            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+            last: {
+              inputTokens: 2_000,
+              cachedInputTokens: 500,
+              cacheWriteInputTokens: 0,
+              outputTokens: 1_000,
+            },
           },
         },
       });
@@ -4942,13 +4947,14 @@ describe('OpenAICodexAppServerProvider', () => {
           last: {
             inputTokens: 100,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 50,
             reasoningOutputTokens: 12,
-            cacheWriteInputTokens: 10,
           },
           total: {
             inputTokens: 200,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 75,
             reasoningOutputTokens: 12,
           },

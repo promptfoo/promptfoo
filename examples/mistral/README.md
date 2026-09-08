@@ -1,6 +1,6 @@
 # mistral (Mistral AI Chat Models)
 
-This example demonstrates Mistral AI's chat models, including Magistral reasoning models, current multimodal models, and shows how to use Mistral models for evaluation grading and embeddings.
+This example demonstrates Mistral AI's current chat and reasoning models, including multimodal models, and shows how to use Mistral models for evaluation grading and embeddings.
 
 You can run this example with:
 
@@ -17,9 +17,9 @@ This example requires:
 
 ## What This Example Shows
 
-- **Mathematical Reasoning**: AIME2024 competition problems with Magistral Medium
+- **Mathematical Reasoning**: AIME2024 competition problems with Mistral Medium 3.5
 - **Model Comparison**: Compare Mistral's different model capabilities
-- **Reasoning Models**: Showcase Magistral Medium (native reasoning) vs. Mistral Small 4
+- **Reasoning Models**: Compare Mistral Medium 3.5 and Mistral Small 4 with reasoning enabled
 - **Chat Capabilities**: General conversation and task completion
 - **Mistral-powered Evaluation**: Use Mistral models for grading instead of OpenAI
 - **Mistral Embeddings**: Use Mistral's embedding model for similarity checks
@@ -28,13 +28,13 @@ This example requires:
 
 ### Reasoning Models
 
-- **Magistral Medium** (`magistral-medium-latest` → `magistral-medium-2509`): Native reasoning model ($2/$5 per 1M tokens, 128k context) — the reasoning showcase in these examples.
+- **Mistral Medium 3.5** (`mistral-medium-3-5`): Current multimodal model with adjustable reasoning ($1.50/$7.50 per 1M tokens, 256k context) — the reasoning showcase in these examples.
 
-> Mistral folded Magistral Small into **Mistral Small 4**: the `magistral-small-latest` alias now resolves to `mistral-small-2603` (a hybrid model, $0.15/$0.60 per 1M), so these examples use the canonical `mistral-small-latest` id. Enable Small 4's reasoning mode with `reasoning_effort: high`. The standalone `magistral-small-2509` snapshot is deprecated (retires 2026-07-31).
+> `magistral-small-latest` still resolves to the deprecated `magistral-small-2509` native-reasoning snapshot. These examples use the current **Mistral Small 4** alias, `mistral-small-latest` (a hybrid model, $0.15/$0.60 per 1M). Enable Small 4's reasoning mode with `reasoning_effort: high`.
 
 ### Chat Models
 
-- **Mistral Medium 3.5** (`mistral-medium-latest` → `mistral-medium-2604`): Frontier agentic/coding multimodal model ($1.50/$7.50 per 1M, 256k context)
+- **Mistral Medium 3.5** (`mistral-medium-latest` / `mistral-medium-3-5`): Frontier agentic/coding multimodal model ($1.50/$7.50 per 1M, 256k context)
 - **Mistral Large 3** (`mistral-large-latest` → `mistral-large-2512`): General-purpose multimodal model ($0.50/$1.50 per 1M, 256k context)
 - **Mistral Small 4** (`mistral-small-latest` → `mistral-small-2603`): Hybrid instruct/reasoning/coding model ($0.15/$0.60 per 1M, 256k context)
 

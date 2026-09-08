@@ -17,7 +17,7 @@ Two endpoints are supported:
 
 ## Setup
 
-1. Create an API key at [app.quiver.ai](https://app.quiver.ai/settings/api-keys)
+1. Create an API key in the [QuiverAI Developer Platform](https://platform.quiver.ai/api-keys).
 2. Set the environment variable:
 
 ```bash
@@ -26,7 +26,7 @@ export QUIVERAI_API_KEY=your-api-key
 
 ## Models
 
-Run `GET /v1/models` for the live list. The currently released Arrow models are:
+Run `GET /v1/models` for the live list. These Arrow models use the supported SVG endpoints:
 
 | Model         | Provider id              | Use case                                                                |
 | ------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ Run `GET /v1/models` for the live list. The currently released Arrow models are:
 | Arrow 1.1 Max | `quiverai:arrow-1.1-max` | Higher fidelity for dense illustrations, logos, and technical drawings. |
 | Arrow 1.0     | `quiverai:arrow-1.0`     | Previous-generation model retained for parity.                          |
 
-The default model is `arrow-1.1`.
+The default model is `arrow-1.1`. Arrow 2 uses a separate, organization-gated `/v1/responses` API with token billing and is not supported by these SVG routes. See [QuiverAI API pricing](https://docs.quiver.ai/api/pricing).
 
 ## Provider format
 
@@ -91,6 +91,7 @@ When `n > 1`, multiple SVGs are joined with double newlines and ordered by the r
 The vectorize endpoint converts a raster image (PNG, JPEG, WebP) to SVG. The image can come from the prompt or from `config.image`.
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: quiverai:vectorize:arrow-1.1
     config:
@@ -151,7 +152,7 @@ Streaming is on by default. The provider receives `generating`, `reasoning`, and
 
 ## Billing and metadata
 
-QuiverAI bills in **credits**, not USD. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
+The Arrow 1 models supported by this provider bill in **credits**. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
 
 ```ts
 result.metadata.responseId; // server-generated request/output id
@@ -234,6 +235,7 @@ module.exports = GptImageToQuiverPipeline;
 ```
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Centered icon of {{subject}}, flat vector illustration, bold shapes, minimal palette, clear silhouette.'
 
@@ -261,12 +263,13 @@ tests:
 A complete working example, including red-panda-themed prompts and side-by-side Arrow 1.1 / Arrow 1.1 Max configs, lives at [`examples/provider-quiverai/promptfooconfig.pipeline.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai). In the May 2026 verification run behind this example, Arrow 1.1 debited 15 credits per vectorize and Arrow 1.1 Max debited 20 — both surfaced via `metadata.credits` so you can budget per eval. Read the live `GET /v1/models` response for current `pricing_credits`.
 
 :::tip
-Each pipeline call hits two providers serially, so individual evaluations take longer than a pure generation run. Lower `--max-concurrency` if you start hitting QuiverAI's per-minute rate limit, and prefer `stream: false` on the vectorize step when you want response caching across re-runs.
+Each pipeline call hits two providers serially, so individual evals take longer than a pure generation run. Lower `--max-concurrency` if you start hitting QuiverAI's per-minute rate limit, and prefer `stream: false` on the vectorize step when you want response caching across re-runs.
 :::
 
 ## Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Create a simple SVG icon of: {{subject}}'
 

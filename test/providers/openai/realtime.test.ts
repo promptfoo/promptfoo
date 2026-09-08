@@ -43,6 +43,25 @@ describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+  it('rejects a Codex-only model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-5.3-codex-spark', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('only available through openai:codex-sdk');
+  });
+
+  it('rejects a retired model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('has been retired');
+  });
+
   const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
   const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
   const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
@@ -180,9 +199,9 @@ describe('OpenAI Realtime Provider', () => {
         voice: 'alloy' as const,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
-      expect(provider.modelName).toBe('gpt-4o-realtime-preview');
+      expect(provider.modelName).toBe('gpt-realtime-1.5');
       expect(provider.config).toEqual(expect.objectContaining(config));
       expect(provider.config.maintainContext).toBe(true); // Default value
     });
@@ -233,8 +252,29 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it.each(['gpt-transcribe', 'gpt-live-transcribe'])(
+      'rejects %s through the conversational realtime provider',
+      (modelName) => {
+        expect(() => new OpenAiRealtimeProvider(modelName)).toThrow(
+          /separate Realtime session endpoint/,
+        );
+      },
+    );
+
+    it.each(['gpt-transcribe', 'gpt-live-transcribe'])(
+      'allows custom Realtime gateways to define their own %s model',
+      (modelName) => {
+        expect(
+          () =>
+            new OpenAiRealtimeProvider(modelName, {
+              config: { apiBaseUrl: 'https://gateway.example/v1' },
+            }),
+        ).not.toThrow();
+      },
+    );
+
     it('returns ProviderResponse.error instead of a placeholder when the API yields nothing', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { modalities: ['text'], maintainContext: false },
       });
 
@@ -300,7 +340,7 @@ describe('OpenAI Realtime Provider', () => {
 
     it('should use default missing API key error message', async () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         env: {
           OPENAI_API_KEY: undefined,
         },
@@ -312,7 +352,7 @@ describe('OpenAI Realtime Provider', () => {
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
       mockProcessEnv({ CUSTOM_REALTIME_API_KEY: undefined });
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: {
           apiKeyEnvar: 'CUSTOM_REALTIME_API_KEY',
         },
@@ -336,12 +376,12 @@ describe('OpenAI Realtime Provider', () => {
         max_response_output_tokens: 100,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         type: 'realtime',
-        model: 'gpt-4o-realtime-preview',
+        model: 'gpt-realtime-1.5',
         output_modalities: ['text'],
         instructions: 'Test instructions',
         audio: {
@@ -379,12 +419,12 @@ describe('OpenAI Realtime Provider', () => {
         max_response_output_tokens: 'inf' as const,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         type: 'realtime',
-        model: 'gpt-4o-realtime-preview',
+        model: 'gpt-realtime-1.5',
         output_modalities: ['audio'],
         instructions: 'Test instructions',
         audio: {
@@ -622,7 +662,7 @@ describe('OpenAI Realtime Provider', () => {
     ] as const)(
       'normalizes max_response_output_tokens=%s to %s in the session body',
       async (maxResponseOutputTokens, expected) => {
-        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
           config: {
             modalities: ['text'],
             max_response_output_tokens: maxResponseOutputTokens as any,
@@ -642,7 +682,7 @@ describe('OpenAI Realtime Provider', () => {
         maintainContext: true,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -795,7 +835,7 @@ describe('OpenAI Realtime Provider', () => {
         maintainContext: true,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -954,7 +994,7 @@ describe('OpenAI Realtime Provider', () => {
         maintainContext: true,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -1004,7 +1044,7 @@ describe('OpenAI Realtime Provider', () => {
         voice: 'alloy' as const,
       };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
@@ -2315,7 +2355,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { modalities: ['text'], maintainContext: true },
       });
       const persistentConnection = createPersistentMockWebSocket(provider);
@@ -2355,7 +2395,7 @@ describe('OpenAI Realtime Provider', () => {
       // Regression test for the concurrency race that caused the shipped
       // promptfooconfig-conversation.yaml example to fail 100% at default
       // concurrency=4 with "WebSocket is not open: readyState 0 (CONNECTING)".
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { modalities: ['text'], maintainContext: true },
       });
 
@@ -2866,7 +2906,7 @@ describe('OpenAI Realtime Provider', () => {
 
   describe('Cleanup', () => {
     it('should properly clean up resources', () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
 
       // Create a properly typed mock
       const cleanupMockWs = {
@@ -2947,7 +2987,7 @@ describe('OpenAI Realtime Provider', () => {
     };
 
     it('uses default OpenAI base for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.directWebSocketRequest('hi');
 
       // Trigger open to allow client to send
@@ -2959,7 +2999,7 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers['X-OpenAI-Originator']).toBe('promptfoo');
     });
@@ -3237,7 +3277,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('normalizes invalid max_response_output_tokens in session.update', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { max_response_output_tokens: -1 },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3278,7 +3318,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('rejects direct WebSocket requests when loading tools fails during open', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { tools: 'file://missing-tools.yaml' as any },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3305,7 +3345,7 @@ describe('OpenAI Realtime Provider', () => {
       });
 
       it('handles direct WebSocket tool config preload rejections before open', async () => {
-        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
           config: { tools: 'file://missing-tools.yaml' as any },
         });
         const promise = provider.directWebSocketRequest('hi');
@@ -3320,7 +3360,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3333,14 +3373,13 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'wss://my-custom-api.com/v1/realtime?model=' +
-          encodeURIComponent('gpt-4o-realtime-preview'),
+        'wss://my-custom-api.com/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
     });
 
     it('converts custom http apiBaseUrl to ws for direct WebSocket', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'http://localhost:8080/v1' },
       });
       const promise = provider.directWebSocketRequest('hi');
@@ -3353,7 +3392,7 @@ describe('OpenAI Realtime Provider', () => {
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
-        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-realtime-1.5'),
       );
       expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
     });
@@ -3374,7 +3413,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('uses apiBaseUrl for client-secret socket URL', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
       });
       const promise = provider.webSocketRequest('secret123', 'hi');
@@ -3409,7 +3448,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('normalizes response-level tools for client-secret requests', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: {
           tools: [
             {

@@ -202,6 +202,7 @@ The Anthropic provider supports several options to customize the behavior of the
 Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -260,7 +261,7 @@ providers:
 
 The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -371,7 +372,7 @@ providers:
 
 ##### Combined Web Search and Web Fetch
 
-You can use both tools together for comprehensive web information gathering:
+You can use both tools together for web information gathering:
 
 ```yaml
 providers:
@@ -430,7 +431,7 @@ providers:
 
 The Anthropic Messages provider can connect to any [MCP server](https://modelcontextprotocol.io) — stdio, SSE, or streamable HTTP — and execute the model's `tool_use` blocks against that server, feeding the `tool_result` back into the conversation until Claude produces a final reply.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
@@ -482,6 +483,7 @@ Claude supports prompt caching to optimize API usage and reduce costs for repeti
 Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -529,6 +531,7 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -649,7 +652,7 @@ is a separate research-preview rate that promptfoo does not encode. To track it,
 `inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
 rates, because it is applied as both the input and the output per-token price.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-5
     config:
@@ -672,12 +675,17 @@ controls at the model level:
 - **Manual thinking budgets convert to adaptive.** A legacy
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+- **Adaptive thinking is on by default.** Requests without a `thinking` field still use
+  adaptive thinking. Pass `thinking: { type: 'disabled' }` to turn it off, and leave enough
+  `max_tokens` headroom for thinking plus the visible response.
 
 Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 per million output**, with no long-context surcharge above 200K tokens. Anthropic made these rates permanent on August 10, 2026, canceling the planned September increase. See [Anthropic's pricing documentation](https://platform.claude.com/docs/en/about-claude/pricing). The newer tokenizer can produce more tokens for the same text, so compare total request costs when migrating from Sonnet 4.6.
 
 ### Claude Opus 4.8 notes
 
-Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+Opus 4.8 is a previous-generation Opus model that builds directly on Opus 4.7. For current
+Opus-tier workloads, use Opus 5. Opus 4.8 supports the same feature set as Opus 4.7, so the guidance below applies
+unchanged. Promptfoo handles the model-level differences automatically:
 
 - **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
 - **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.
@@ -700,7 +708,7 @@ The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Verte
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Adaptive thinking (recommended for Claude Opus 4.7)
   - id: anthropic:messages:claude-opus-4-7
@@ -790,7 +798,7 @@ Example response with thinking enabled:
 
 By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -985,7 +993,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider: anthropic:messages:claude-sonnet-4-5-20250929

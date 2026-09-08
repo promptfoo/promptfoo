@@ -8,7 +8,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   clampMaxTokensForThinkingBudget,
   getTokenUsage,
-  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
@@ -16,8 +16,9 @@ import {
   parseMessages,
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
+import { requiresBedrockAnthropicMessagesModel } from './anthropicMessages';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockInvokeModelCost } from './pricing';
+import { calculateBedrockInvokeModelCost, isBedrockGrok46Profile } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -271,10 +272,7 @@ interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   };
 }
 
-type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
-
 type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
-type TextMediaType = 'text/plain' | 'application/json';
 
 interface AudioConfiguration {
   readonly mediaType: AudioMediaType;
@@ -286,26 +284,43 @@ interface AudioConfiguration {
 }
 
 interface TextConfiguration {
-  readonly contentType: ContentType;
-  readonly mediaType: TextMediaType;
+  readonly mediaType: 'text/plain';
 }
 
 export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
-    max_new_tokens?: number;
+    maxTokens?: number;
     temperature?: number;
-    top_p?: number;
-    top_k?: number;
-    stopSequences?: string[];
+    topP?: number;
+  };
+  turnDetectionConfiguration?: {
+    endpointingSensitivity?: 'HIGH' | 'MEDIUM' | 'LOW';
   };
   audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
   audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
     mediaType: 'audio/lpcm';
-    voiceId?: 'matthew' | 'tiffany' | 'amy';
+    voiceId?:
+      | 'matthew'
+      | 'tiffany'
+      | 'amy'
+      | 'olivia'
+      | 'lupe'
+      | 'carlos'
+      | 'ambre'
+      | 'florian'
+      | 'lennart'
+      | 'beatrice'
+      | 'lorenzo'
+      | 'tina'
+      | 'carolina'
+      | 'leo'
+      | 'kiara'
+      | 'arjun';
   };
   textInputConfiguration?: TextConfiguration;
-  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
-    mediaType: 'text/plain';
+  textOutputConfiguration?: TextConfiguration;
+  toolUseOutputConfiguration?: {
+    mediaType: 'application/json';
   };
   toolConfig?: {
     tools?: {
@@ -315,18 +330,19 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
         inputSchema: {
           json: {
             type: 'object';
-            properties: {
-              [propertyName: string]: {
-                description: string;
-                type: string;
-              };
-            };
+            properties: Record<string, unknown>;
             required: string[];
           };
         };
       };
     }[];
-    toolChoice?: 'any' | 'auto' | string; // Tool name
+    toolChoice?: {
+      any?: Record<string, never>;
+      auto?: Record<string, never>;
+      tool?: {
+        name: string;
+      };
+    };
   };
   /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
   sessionTimeout?: number;
@@ -1644,11 +1660,11 @@ export const BEDROCK_MODEL = {
       // Like the sampling-param drop above, the forced-tool-choice and
       // disabled-thinking drops below normalize silently — the Converse and
       // Anthropic Messages providers surface the one-time warnings.
-      const alwaysOnAdaptiveThinking = modelName
-        ? isAlwaysOnAdaptiveThinkingClaudeModel(modelName)
+      const forcedToolChoiceIncompatible = modelName
+        ? isClaudeFableOrMythos5Model(modelName)
         : false;
       const toolChoice =
-        alwaysOnAdaptiveThinking &&
+        forcedToolChoiceIncompatible &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
@@ -2338,7 +2354,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
+  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2404,6 +2420,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
+  // AU geo inference profiles
+  'au.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -2413,7 +2435,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2441,7 +2462,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2552,10 +2572,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
-  // Claude Opus 5 global cross-region inference profile. Verified via
-  // `aws bedrock list-inference-profiles`: Opus 5 exposes base + `us.`/`eu.`/`global.`
-  // only — unlike Opus 4.7/4.8 there is no `jp.` profile (the JP regions surface just
-  // `global.`), and no older `apac.` prefix.
+  // Claude Opus 5 global cross-region inference profile. Runtime exposes the bare ID plus
+  // `us.`/`eu.`/`au.`/`global.` profiles.
   'global.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // Claude Fable 5 base, global, and geo inference profiles.
@@ -2567,19 +2585,29 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
+function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
+  const mythosMatch = /^(?:[^.]+\.)?(anthropic\.claude-mythos-(?:5|preview))$/.exec(modelName);
+  if (mythosMatch) {
+    return mythosMatch[1];
+  }
+  if (requiresBedrockAnthropicMessagesModel(modelName)) {
+    return modelName;
+  }
+  return undefined;
+}
+
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
-  const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
+  const messagesOnlyModel = getCanonicalMessagesOnlyModel(modelName);
   if (messagesOnlyModel) {
-    // Mythos has no geo/global inference profiles, so always point at the bare
-    // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
-    // bounce the user into the factory's prefixed-Mythos rejection.
+    // Mythos has no geo/global inference profiles. Point at the canonical Anthropic Messages
+    // provider rather than suggesting a direct InvokeModel ID.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:${messagesOnlyModel[1]}" instead.`,
+        `InvokeModel. Load it as "bedrock:${messagesOnlyModel}" instead.`,
     );
   }
 
@@ -2920,19 +2948,26 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
       // Claude's displayed prompt count includes cache reads and writes. Billing
       // needs the API's uncached input count because cache tokens are priced separately.
+      const cacheReadInputTokens =
+        tokenUsage.completionDetails?.cacheReadInputTokens ??
+        (isBedrockGrok46Profile(this.modelName)
+          ? coerceStrToNum(output.usage?.prompt_tokens_details?.cached_tokens)
+          : coerceStrToNum(output.usage?.cache_read_input_tokens));
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : tokenUsage.prompt;
+          : isBedrockGrok46Profile(this.modelName) && tokenUsage.prompt !== undefined
+            ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
+            : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
         billablePromptTokens,
         tokenUsage.completion,
-        tokenUsage.completionDetails?.cacheReadInputTokens ??
-          coerceStrToNum(output.usage?.cache_read_input_tokens),
+        cacheReadInputTokens,
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
           coerceStrToNum(output.usage?.cache_creation_input_tokens),
         region,
+        coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
       );
 
       return {

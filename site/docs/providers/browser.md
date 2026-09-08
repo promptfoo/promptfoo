@@ -42,7 +42,7 @@ The browser provider requires Playwright and the stealth plugin. Install these p
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
-Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
+Note: promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
 
@@ -338,7 +338,7 @@ Note: All string values in the config support Nunjucks templating. This means yo
 
 ### Browser Support
 
-While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider currently only implements Chromium support. This includes:
+While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider only implements Chromium support. This includes:
 
 - **Chrome** - Google's browser
 - **Edge** - Microsoft's Chromium-based browser
@@ -392,7 +392,7 @@ The easiest way to create browser automation scripts is to record your interacti
 
 #### Chrome Extension (Recommended)
 
-The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is particularly helpful for quickly generating selectors:
+The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is helpful for quickly generating selectors:
 
 1. Install the extension from the Chrome Web Store
 2. Navigate to your target website
@@ -401,7 +401,7 @@ The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/de
 5. Stop recording and copy the generated selectors/code
 6. Adapt the code for promptfoo's browser provider format
 
-This extension is especially useful because it:
+This extension is useful because it:
 
 - Shows selectors in real-time as you hover over elements
 - Generates multiple selector options (CSS, text, XPath)
@@ -566,7 +566,7 @@ providers:
 
 ## Example: Testing a Login Flow
 
-Here's a complete example testing a login workflow:
+Here's a template for testing a login workflow against your own application:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -607,19 +607,15 @@ providers:
             selector: '.welcome-message'
           name: welcomeText
 
-      transformResponse: |
-        return {
-          output: extracted.welcomeText,
-          success: extracted.welcomeText.includes('Welcome')
-        };
+      transformResponse: '({ output: extracted.welcomeText })'
 
 tests:
   - vars:
       username: 'testuser'
       password: 'testpass123'
     assert:
-      - type: javascript
-        value: output.success === true
+      - type: contains
+        value: 'Welcome'
 ```
 
 ## Troubleshooting
