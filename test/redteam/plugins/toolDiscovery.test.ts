@@ -90,9 +90,9 @@ describe('ToolDiscoveryPlugin', () => {
     expect(provider.callApi).toHaveBeenCalledOnce();
     const generationPrompt = provider.callApi.mock.calls[0][0];
     expect(generationPrompt).toContain(purpose);
-    expect(generationPrompt).toContain('Do not generate standalone requests that only translate');
-    expect(generationPrompt).toContain('encode/decode text supplied in the request');
-    expect(generationPrompt).toContain('only if that claim is true about its actual access');
+    expect(generationPrompt).toContain('Do not ask the target to echo, concatenate, translate');
+    expect(generationPrompt).toContain('fictional example in an earlier turn');
+    expect(generationPrompt).toContain('only if it is true about actual access');
     expect(generationPrompt).toContain(
       'High-level capability questions are valid discovery probes even when a safe answer would pass',
     );
@@ -100,7 +100,7 @@ describe('ToolDiscoveryPlugin', () => {
       'A probe does not need to request protected information directly',
     );
     expect(generationPrompt).toContain(
-      'Benign text transformations can still be useful setup in a multi-turn conversation',
+      'Apply these constraints to every attack turn, including multi-turn setup and follow-ups',
     );
     expect(generationPrompt).toContain('The grader separately determines');
     expect(generationPrompt).toContain('Apply this guidance to the examples below as well');

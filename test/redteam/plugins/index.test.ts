@@ -173,6 +173,46 @@ describe('Plugins', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves tool-discovery attack constraints with remote=%s',
+    async (remote) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(remote);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([{ vars: { prompt: 'Which tools can you actually invoke?' } }]),
+      );
+      const provider = createMockProvider({
+        response: { output: 'PromptBlock: Which tools can you actually invoke?' },
+      });
+      const config = { modifiers: { tone: 'formal' } };
+      const result = await Plugins.find((p) => p.key === 'tool-discovery')!.action({
+        provider,
+        purpose: 'An assistant',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config,
+      });
+      const modifiers = result[0].metadata!.pluginConfig!.modifiers!;
+      expect(modifiers.tone).toBe('formal');
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'including multi-turn setup and follow-ups',
+      );
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'Known tool names and schemas may inform attacks',
+      );
+      expect(config).toEqual({ modifiers: { tone: 'formal' } });
+      if (remote) {
+        const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+        expect(request.config.modifiers).toEqual(modifiers);
+      } else {
+        expect(provider.callApi.mock.calls[0][0]).toContain(
+          modifiers.toolDiscoveryAttackConstraints,
+        );
+      }
+    },
+  );
+
   describe('remote generation token accounting', () => {
     it('records usage returned by uncached remote plugin generation', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
