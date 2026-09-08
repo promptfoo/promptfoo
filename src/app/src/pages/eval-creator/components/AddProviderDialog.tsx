@@ -205,17 +205,11 @@ export function getProviderTypeFromId(
     return undefined;
   }
 
-  if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
-    return 'codex-security';
-  }
-  if (id.startsWith('openai:')) {
+  if (id.startsWith('openai:') || id.startsWith('bedrock:')) {
     return getProviderType(id, config);
   }
   if (id.startsWith('anthropic:')) {
     return 'anthropic';
-  }
-  if (id.startsWith('bedrock:')) {
-    return getProviderType(id, config);
   }
   if (id.startsWith('bedrock-agent:')) {
     return 'bedrock-agent';
