@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -9,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { satisfies } from 'semver';
-import { shouldCopyDrizzlePath } from './postbuild';
+import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -39,7 +40,6 @@ type ArtifactEvalOutput = {
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const drizzleDir = path.join(ROOT, 'drizzle');
 // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
 // with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
@@ -72,18 +72,6 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
-
-function listFiles(rootDir: string): string[] {
-  return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = path.join(rootDir, entry.name);
-
-    if (entry.isDirectory()) {
-      return listFiles(fullPath);
-    }
-
-    return [path.relative(ROOT, fullPath).split(path.sep).join('/')];
-  });
-}
 
 function run(
   command: string,
@@ -170,28 +158,13 @@ function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {
   return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
 }
 
-function assertPackagedFiles(packResult: PackResult): void {
+function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
-  const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter(shouldCopyDrizzlePath)
-    .map((file) => `dist/${file}`)
-    .filter((file) => !packagedPaths.has(file));
-  const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
-    .filter((file) => !packagedPaths.has(file));
-
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
-  assert.deepEqual(
-    missingDrizzleFiles,
-    [],
-    `Missing packaged Drizzle files: ${missingDrizzleFiles.join(', ')}`,
-  );
-  assert.deepEqual(
-    missingWebAppFiles,
-    [],
-    `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
-  );
+  if (compareSource) {
+    assertBuiltAssetsPackaged(ROOT, packResult.files);
+  }
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
     'Source maps should be excluded from the package',
@@ -642,8 +615,17 @@ async function main(): Promise<void> {
     options: {
       profile: { type: 'string', default: 'default' },
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+      tarball: { type: 'string' },
     },
   });
+  const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
+  if (suppliedTarball) {
+    assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
+    assert(fs.statSync(suppliedTarball).isFile(), '--tarball must be an existing file');
+  }
+  const originalHash = suppliedTarball
+    ? createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex')
+    : undefined;
   assert(
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
@@ -660,10 +642,10 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    // npm's dry-run inspects the supplied archive without repacking it or running hooks.
+    const packOutput = suppliedTarball
+      ? runNpm(['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'], ROOT)
+      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -674,9 +656,9 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult);
+    assertPackagedFiles(packResult, !suppliedTarball);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
@@ -759,6 +741,17 @@ async function main(): Promise<void> {
       console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
     }
     assertInstalledWebApp(installedPackageDir);
+    const installedMigrations = path.join(installedPackageDir, 'dist', 'drizzle');
+    const journal = JSON.parse(
+      fs.readFileSync(path.join(installedMigrations, 'meta', '_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    assert(journal.entries.length > 0, 'Expected installed migration journal entries');
+    for (const { tag } of journal.entries) {
+      assert(
+        fs.statSync(path.join(installedMigrations, `${tag}.sql`)).isFile(),
+        `Missing installed migration: ${tag}`,
+      );
+    }
 
     for (const binName of ['promptfoo', 'pf']) {
       if (values.profile === 'omit-optional') {
@@ -783,7 +776,16 @@ async function main(): Promise<void> {
       await runInstalledCompressionEval(consumerDir, configDir);
     }
 
-    console.log(`Verified installed package artifact (${values.profile}): ${packResult.filename}`);
+    if (suppliedTarball) {
+      assert.equal(
+        createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex'),
+        originalHash,
+        'The tested tarball changed during validation',
+      );
+    }
+    console.log(
+      `Verified installed package artifact (${values.profile}): ${path.basename(tarballPath)}`,
+    );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

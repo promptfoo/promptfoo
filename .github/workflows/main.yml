@@ -212,17 +212,25 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Pack Package Artifact
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
       - name: Test Package Artifact
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
           npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
-        run: npm run test:package-artifact
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
 
       - name: Test Package Artifact Without Optional Dependencies
         if: matrix.node == '24.x'
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact -- --profile omit-optional
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional
 
   style-check:
     name: Style Check
