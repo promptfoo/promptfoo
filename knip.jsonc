@@ -52,7 +52,6 @@
     "src/app": {
       "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
-      "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
       "ignoreDependencies": [
         // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
         "lightningcss",
@@ -74,12 +73,9 @@
       "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
-        "@docusaurus/types",
-        "@docusaurus/theme-common",
         "@theme/*",
         "@mui/*",
         "@generated/*",
-        "@docusaurus/plugin-content-blog",
         "@swc/core",
         // Transitive pins for the Docusaurus build; never imported directly.
         "dompurify",
@@ -91,14 +87,11 @@
     }
   },
   "ignoreBinaries": [
-    // System tools invoked via child_process, plus the npm bin script.
+    // System tools invoked by package scripts and subprocesses.
     "act",
-    "dist/src/entrypoint.js",
     "ffmpeg",
-    "gh",
     "go",
     "modelaudit",
-    "python3",
     "ruby",
     "security"
   ],
