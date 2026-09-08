@@ -58,7 +58,7 @@ Replace the file paths in `promptfooconfig.yaml` with your actual audio files.
 ### Diarization (Speaker Identification)
 
 - `gpt-4o-transcribe-diarize`: Identifies different speakers in the audio
-- Can specify number of speakers or provide speaker labels
+- Supports automatic chunking and optional paired known-speaker references
 - Output includes timestamps and speaker attribution
 
 ### Configuration Options
@@ -67,6 +67,8 @@ Replace the file paths in `promptfooconfig.yaml` with your actual audio files.
 - `prompt`: Provide context to improve transcription accuracy
 - `temperature`: Control randomness (0-1)
 - `timestamp_granularities`: Get word or segment-level timestamps
+- `chunking_strategy`: Split long diarized audio (`auto` or `server_vad`)
+- `known_speaker_names` and `known_speaker_references`: Pair up to four speaker names with 2-10 second audio data URLs
 
 ## Cost Information
 

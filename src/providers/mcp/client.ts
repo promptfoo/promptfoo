@@ -5,6 +5,7 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -33,6 +34,16 @@ interface OAuthServerConfig {
   serverKey: string;
   serverConfig: MCPServerConfig;
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+}
+
+/**
+ * Environment for a spawned stdio MCP server: the promptfoo process environment with
+ * the server's own `env` map layered on top. Per-server values win so a config can
+ * override an inherited variable (e.g. a scoped token) without unsetting the rest.
+ */
+function getStdioEnv(server: MCPServerConfig): Record<string, string> {
+  const parentEnv = process.env as Record<string, string>;
+  return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
 /**
@@ -136,14 +147,23 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const usedKeys = new Set(this.clients.keys());
     for (const server of servers) {
-      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
-      await this.connectToServer(server);
+      const baseKey = server.name || server.url || server.path || server.command || 'default';
+      let serverKey = baseKey;
+      for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
+        serverKey = `${baseKey}:${suffix}`;
+      }
+      usedKeys.add(serverKey);
+      logger.info(`connecting to server ${serverKey}`);
+      await this.connectToServer(server, serverKey);
     }
   }
 
-  private async connectToServer(server: MCPServerConfig): Promise<void> {
-    const serverKey = server.name || server.url || server.path || 'default';
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey = server.name || server.url || server.path || 'default',
+  ): Promise<void> {
     const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',
@@ -155,13 +175,13 @@ export class MCPClient {
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
-      if (server.command && server.args) {
+      if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
-          args: server.args,
-          env: process.env as Record<string, string>,
+          args: server.args ?? [],
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.path) {
@@ -185,7 +205,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
-          env: process.env as Record<string, string>,
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
@@ -262,7 +282,7 @@ export class MCPClient {
           logger.debug('Connected using SSE transport');
         }
       } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
+        throw new Error('Either command or path or url must be specified for MCP server');
       }
 
       // Ping server to verify connection if configured
@@ -414,11 +434,20 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
-    await this.connectToServer(oauthConfig.serverConfig);
+    await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
+      this.callToolInternal(name, args),
+    );
+  }
+
+  private async callToolInternal(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
     const disconnectedServers: string[] = [];
 

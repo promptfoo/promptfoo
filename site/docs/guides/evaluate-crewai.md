@@ -43,8 +43,8 @@ promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10+
-- Node.js `^20.20.0` or `>=22.22.0`
-- OpenAI API access (for GPT-5, GPT-5-mini, or other models)
+- Node.js `>=22.22.0`
+- OpenAI API access for GPT-4.1, the model selected by this example
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -77,7 +77,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`.
+In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `>=22.22.0`.
 
 **Why do we need these?**
 
@@ -197,12 +197,12 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, Task
+from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
@@ -216,8 +216,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY  # ✅ Make sure to pass the API key
+        llm=LLM(model=model, api_key=OPENAI_API_KEY)
     )
 
     task = Task(
@@ -248,7 +247,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-5'):
+async def run_recruitment_agent(prompt, model='openai/gpt-4.1'):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -309,7 +308,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-5")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
@@ -334,26 +333,31 @@ if __name__ == "__main__":
     print("Provider result:", json.dumps(result, indent=2))
 ```
 
+CrewAI receives the model through `Agent(llm=LLM(...))`. Use its `provider/model`
+format, such as `openai/gpt-4.1`, for the custom provider’s `config.model` field.
+
 ### Edit `promptfooconfig.yaml`
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-```python
-description: "CrewAI Recruitment Agent Evaluation"
+```yaml
+description: 'CrewAI Recruitment Agent Evaluation'
 
 # 📝 Define the input prompts (using variable placeholder)
 prompts:
-  - "{{job_requirements}}"
+  - '{{job_requirements}}'
 
 # ⚙️ Define the provider — here we point to our local agent.py
 providers:
-  - id: file://./agent.py  # Local file provider (make sure path is correct!)
+  - id: file://./agent.py # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
+    config:
+      model: openai/gpt-4.1
 
 # ✅ Define default tests to check the agent output shape and content
 defaultTest:
   assert:
-    - type: is-json  # Ensure output is valid JSON
+    - type: is-json # Ensure output is valid JSON
       value:
         type: object
         properties:
@@ -366,18 +370,16 @@ defaultTest:
                   type: string
                 experience:
                   type: string
-          summary:
-            type: string
-        required: ['candidates', 'summary']  # Both fields must be present
+        required: ['candidates']
 
 # 🧪 Specific test case to validate basic output behavior
 tests:
-  - description: "Basic test for RoR and React candidates"
+  - description: 'Basic test for RoR and React candidates'
     vars:
-      job_requirements: "List top candidates with RoR and React"
+      job_requirements: 'List top candidates with RoR and React'
     assert:
-      - type: python  # Custom Python check
-        value: "'candidates' in output and isinstance(output['candidates'], list) and 'summary' in output"
+      - type: python # Custom Python check
+        value: "'candidates' in output and isinstance(output['candidates'], list)"
 ```
 
 **What did we just do?**
