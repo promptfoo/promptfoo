@@ -1,5 +1,5 @@
-import { generateIdFromPrompt } from '../models/prompt';
 import { VALID_FILE_EXTENSIONS } from './constants';
+import { generateIdFromPrompt } from './id';
 
 import type { Prompt } from '../types/index';
 
