@@ -72,7 +72,7 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
 
-For file transcription, see the [current provider limitations](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
+For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
 <Link id="gpt-51" />
 <Link id="available-models" />
@@ -820,9 +820,20 @@ The binary GPT-4o mini TTS response does not provide token usage, so Promptfoo l
 <Link id="transcription-configuration-options" />
 <Link id="diarization-example" />
 
-OpenAI recommends `gpt-transcribe` for files and `gpt-live-transcribe` for live audio. The built-in `openai:transcription:*` provider still uses the older model-specific request formats: it sends `verbose_json` for an unrecognized model and does not expose the new `languages` or `keywords` fields. Changing its model ID alone is not a supported migration to these models.
+Use `openai:transcription:gpt-transcribe` for recorded audio. The prompt is the path to an audio file. Supply expected languages and literal terms as arrays:
 
-For a new transcription integration, wrap OpenAI's current SDK request in a [custom provider](/docs/providers/custom-api/) and follow the [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/transcription). Existing Whisper and GPT-4o transcription users should check the [deprecation schedule](https://developers.openai.com/api/docs/deprecations#2026-08-26-transcription-models).
+```yaml
+providers:
+  - id: openai:transcription:gpt-transcribe
+    config:
+      languages: [en, fr]
+      keywords: [AC-42, premium plan]
+      prompt: A customer support call.
+```
+
+`gpt-transcribe` uses `languages` instead of `language`. Keywords must be non-empty, single-line strings without `<` or `>`. Detected languages appear in `metadata.languages`; cost uses the API's duration when available. See the [complete transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription).
+
+Keep `gpt-4o-transcribe-diarize` for speaker labels and `whisper-1` for word timestamps. `gpt-live-transcribe` uses a dedicated Realtime transcription session, which this file-upload provider does not implement. See the [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/transcription) and [deprecation schedule](https://developers.openai.com/api/docs/deprecations#2026-08-26-transcription-models) for migration details.
 
 ## Realtime {#realtime-api-models}
 

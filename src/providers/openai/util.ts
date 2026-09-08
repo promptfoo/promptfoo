@@ -811,6 +811,10 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
   {
+    id: 'gpt-transcribe',
+    cost: { perMinute: 0.0045 },
+  },
+  {
     id: 'gpt-4o-transcribe',
     cost: {
       input: 2.5 / 1e6, // text tokens

@@ -1,56 +1,27 @@
 # openai-audio-transcription (OpenAI Audio Transcription Example)
 
-You can run this example with:
+Compare GPT Transcribe with Whisper and GPT-4o transcription models using the included Moon landing recording.
+
+## Run the example
+
+From the repository root:
 
 ```bash
-npx promptfoo@latest init --example openai-audio-transcription
-cd openai-audio-transcription
-```
-
-A simple example showing how to evaluate OpenAI's audio transcription models (Whisper and GPT-4o) with promptfoo.
-
-## Quick Start
-
-```bash
-# Create this example
-npx promptfoo@latest init --example openai-audio-transcription
-
-# Set your API key
 export OPENAI_API_KEY=your-key-here
-
-# Add your audio files to test (see below)
-# Then run the evaluation
-promptfoo eval
-
-# View the results
-promptfoo view
+npm run local -- eval -c examples/openai-audio-transcription/promptfooconfig.yaml --no-cache -o transcription-results.json
 ```
 
-## What's in this Example
-
-- Tests multiple transcription models (Whisper, GPT-4o, GPT-4o Mini)
-- Compares standard transcription vs. diarization (speaker identification)
-- Configures language detection and custom prompts
-- Tests with different audio file formats
+Review the exported results for transcription text, assertion scores, detected languages, and cost when the API returns enough usage information.
 
 ## Audio Files
 
-This example expects audio files in the example directory. You'll need to provide your own audio files for testing. Supported formats include:
-
-- MP3
-- MP4
-- MPEG
-- MPGA
-- M4A
-- WAV
-- WEBM
-
-Replace the file paths in `promptfooconfig.yaml` with your actual audio files.
+`sample-audio.mp3` contains Neil Armstrong's Moon landing quote. To test another recording, change `audio_file` and the assertions in `promptfooconfig.yaml`. File paths are relative to the directory where you run the command. Supported formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WebM.
 
 ## Key Features
 
 ### Standard Transcription Models
 
+- `gpt-transcribe`: File transcription with language and keyword hints
 - `whisper-1`: OpenAI's original Whisper model
 - `gpt-4o-transcribe`: GPT-4o optimized for transcription
 - `gpt-4o-mini-transcribe`: Faster, more cost-effective option
@@ -63,10 +34,12 @@ Replace the file paths in `promptfooconfig.yaml` with your actual audio files.
 
 ### Configuration Options
 
-- `language`: Specify the language (e.g., 'en', 'es', 'fr')
+- `languages`: Expected input languages for GPT Transcribe, such as `[en, fr]`
+- `keywords`: Literal terms for GPT Transcribe; each must be a non-empty line without `<` or `>`
+- `language`: A single language hint for older models, such as `en`
 - `prompt`: Provide context to improve transcription accuracy
-- `temperature`: Control randomness (0-1)
-- `timestamp_granularities`: Get word or segment-level timestamps
+- `temperature`: Control randomness for older transcription models (0-1)
+- `timestamp_granularities`: Get word or segment-level timestamps with Whisper
 - `chunking_strategy`: Split long diarized audio (`auto` or `server_vad`)
 - `known_speaker_names` and `known_speaker_references`: Pair up to four speaker names with 2-10 second audio data URLs
 
@@ -74,6 +47,7 @@ Replace the file paths in `promptfooconfig.yaml` with your actual audio files.
 
 Transcription models charge per minute of audio:
 
+- `gpt-transcribe`: $0.0045/minute when duration is available
 - `whisper-1`: $0.006/minute
 - `gpt-4o-transcribe`: $0.006/minute
 - `gpt-4o-mini-transcribe`: $0.003/minute
@@ -81,5 +55,5 @@ Transcription models charge per minute of audio:
 
 ## Documentation
 
-- [OpenAI Audio API Documentation](https://platform.openai.com/docs/guides/audio)
+- [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/speech-to-text)
 - [promptfoo OpenAI Provider Documentation](https://promptfoo.dev/docs/providers/openai)
