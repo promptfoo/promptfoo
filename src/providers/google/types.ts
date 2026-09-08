@@ -157,9 +157,19 @@ export interface CompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
-  /** Previous Gemini Interactions API ID for conversational video editing. */
+  /**
+   * Route this model through the Gemini Interactions API instead of the legacy
+   * `generateContent` endpoint. Equivalent to the `google:interactions:<model>`
+   * provider id, but keeps the provider id (and eval history) unchanged.
+   */
+  interactions?: boolean;
+  /** Previous Gemini Interactions API ID to continue server-side history from. */
   previousInteractionId?: string;
-  /** Keep a Gemini interaction available for subsequent editing turns. */
+  /**
+   * Persist the interaction server-side so it can be referenced by
+   * `previousInteractionId`. Promptfoo defaults this to `false` (Google's API
+   * defaults to `true` with 55-day paid retention).
+   */
   store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format

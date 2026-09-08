@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini Interactions API (default) vs the legacy generateContent transport
+
+providers:
+  # Interactions is the default for google: chat models - nothing to configure.
+  - id: google:gemini-3.6-flash
+    label: interactions-default
+
+  # Opt back out to the legacy transport.
+  - id: google:gemini-3.6-flash
+    label: generateContent
+    config:
+      interactions: false
+
+  # Explicit route. Equivalent to `interactions: true`, but changes the provider id.
+  - id: google:interactions:gemini-3.6-flash
+    label: interactions-explicit
+
+prompts:
+  - 'Answer in one word: what is the capital of {{country}}?'
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      country: Japan
+    assert:
+      - type: contains
+        value: Tokyo
