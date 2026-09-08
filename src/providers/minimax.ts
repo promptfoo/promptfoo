@@ -10,8 +10,8 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
-  ProviderResponse,
 } from '../types/index';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const MINIMAX_API_BASE_URL = 'https://api.minimax.io/v1';
@@ -112,9 +112,10 @@ export function calculateMiniMaxCost(
     model.cost.longContext && promptTokens! > model.cost.longContext.threshold
       ? model.cost.longContext
       : model.cost;
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
-  const cacheReadCost = config.cacheReadCost ?? modelCost.cache_read;
+  const tierMultiplier = modelName === 'MiniMax-M3' && config.service_tier === 'priority' ? 1.5 : 1;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * tierMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * tierMultiplier;
+  const cacheReadCost = config.cacheReadCost ?? modelCost.cache_read * tierMultiplier;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
   const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
@@ -212,8 +213,21 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
       );
     }
 
-    // MiniMax's OpenAI-compatible API accepts max_completion_tokens, not max_tokens.
-    const maxCompletionTokens = config.max_completion_tokens ?? config.max_tokens;
+    // Normalize explicit token limits without letting a provider-level alias
+    // override a prompt-level limit. Passthrough wins within each layer.
+    const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
+    const promptPassthrough = promptConfig.passthrough as
+      | { max_completion_tokens?: unknown; max_tokens?: unknown }
+      | undefined;
+    const maxCompletionTokens =
+      promptPassthrough?.max_completion_tokens ??
+      promptPassthrough?.max_tokens ??
+      promptConfig.max_completion_tokens ??
+      promptConfig.max_tokens ??
+      config.passthrough?.max_completion_tokens ??
+      config.passthrough?.max_tokens ??
+      config.max_completion_tokens ??
+      config.max_tokens;
     if (maxCompletionTokens === undefined) {
       delete body.max_completion_tokens;
     } else {
@@ -221,8 +235,8 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     }
     delete body.max_tokens;
 
-    // The base provider defaults temperature to 0, but MiniMax requires (0, 1].
-    if (config.temperature === undefined) {
+    // Let MiniMax apply its sampling default unless temperature is configured.
+    if (config.temperature === undefined && config.passthrough?.temperature === undefined) {
       delete body.temperature;
     }
 
@@ -230,60 +244,46 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     // OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY whenever
     // those env vars are set, regardless of MiniMax config. Strip them so OpenAI
     // sampling defaults configured for another provider don't leak into MiniMax.
-    if (config.top_p === undefined) {
+    if (config.top_p === undefined && config.passthrough?.top_p === undefined) {
       delete body.top_p;
     }
-    if (config.presence_penalty === undefined) {
+    if (
+      config.presence_penalty === undefined &&
+      config.passthrough?.presence_penalty === undefined
+    ) {
       delete body.presence_penalty;
     }
-    if (config.frequency_penalty === undefined) {
+    if (
+      config.frequency_penalty === undefined &&
+      config.passthrough?.frequency_penalty === undefined
+    ) {
       delete body.frequency_penalty;
     }
 
     return result;
   }
 
-  override async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error) {
-      return response;
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return 0;
     }
-
-    // The inherited OpenAI adapter normalizes MiniMax prompt-cache usage into token metadata.
-    let cachedTokens = response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0;
-    if (cachedTokens === 0 && typeof response.raw === 'string') {
-      try {
-        const rawData = JSON.parse(response.raw);
-        if (typeof rawData?.usage?.prompt_tokens_details?.cached_tokens === 'number') {
-          cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-        }
-      } catch (err) {
-        logger.debug(`Failed to parse raw response for cache info: ${err}`);
-      }
-    } else if (cachedTokens === 0 && typeof response.raw === 'object' && response.raw !== null) {
-      const rawData = response.raw;
-      if (typeof rawData?.usage?.prompt_tokens_details?.cached_tokens === 'number') {
-        cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-      }
-    }
-
-    // Calculate cost with cache information
-    if (response.tokenUsage && !response.cached) {
-      response.cost = calculateMiniMaxCost(
-        this.modelName,
-        this.config || {},
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-    }
-
-    return response;
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const modelName = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
+    return calculateMiniMaxCost(
+      modelName,
+      {
+        ...config,
+        service_tier:
+          (data.service_tier ?? config.service_tier) === 'priority' ? 'priority' : undefined,
+      },
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      data.usage?.prompt_tokens_details?.cached_tokens,
+    );
   }
 }
 
