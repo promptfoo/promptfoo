@@ -91,7 +91,9 @@ providers:
               numberOfResults: 5
               overrideSearchType: HYBRID # or SEMANTIC
               filter:
-                category: 'technical'
+                equals:
+                  key: category
+                  value: 'technical'
         - knowledgeBaseId: KB_ID_2
 
       # Action Groups (Tools)
@@ -175,6 +177,8 @@ Connect agents to knowledge bases for RAG capabilities:
 
 Configure the knowledge-base association on the deployed agent first. Entries with `retrievalConfiguration` override retrieval settings for the request. Legacy entries containing only `knowledgeBaseId` use the deployed settings and are omitted from the request's session overrides.
 
+Use the AWS [RetrievalFilter](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalFilter.html) operator format for metadata filters. Flat metadata maps are rejected locally. Combine conditions with `andAll` or `orAll`.
+
 ```yaml
 config:
   knowledgeBaseConfigurations:
@@ -184,8 +188,13 @@ config:
           numberOfResults: 10
           overrideSearchType: HYBRID
           filter:
-            documentType: 'manual'
-            product: 'widget-pro'
+            andAll:
+              - equals:
+                  key: documentType
+                  value: 'manual'
+              - equals:
+                  key: product
+                  value: 'widget-pro'
 ```
 
 ### Action Groups (Tools)
