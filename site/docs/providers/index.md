@@ -60,7 +60,6 @@ providers:
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
-| [GitHub](./github.md)                                   | GitHub Models - OpenAI, Anthropic, Google, and more              | `github:openai/gpt-5` or `github:anthropic/claude-3.7-sonnet`                                                         |
 | [Google AI Studio](./google.md)                         | Gemini models, Live API, Imagen image generation, and Veo video  | `google:gemini-2.5-pro`, `google:image:imagen-4.0-generate-preview-06-06`, `google:video:veo-3.1-generate-preview`    |
 | [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`, `vertex:video:veo-3.1-generate-preview`                           |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
@@ -379,3 +378,7 @@ Local config takes precedence, allowing you to:
 - Customize labels and other metadata locally
 
 All fields from the cloud provider are preserved unless explicitly overridden.
+
+## Retired providers
+
+[GitHub Models](./github.md) retired on July 30, 2026. Its inference API is unavailable; choose another provider with its own credentials. GitHub Copilot is a separate service.
