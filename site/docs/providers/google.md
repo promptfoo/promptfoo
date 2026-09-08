@@ -350,19 +350,21 @@ If you need Vertex authentication or additional embedding models, see the [Verte
 
 ### Image Generation Models
 
-Imagen models are available through both **Google AI Studio** and **Vertex AI**. Use the `google:image:` prefix:
+The `google:image:` prefix selects the Imagen adapter. Native Gemini API Imagen access reached its [announced shutdown date](https://ai.google.dev/gemini-api/docs/imagen) on August 17, 2026. For native image generation, use a [Gemini image model](#gemini-native-image-generation-models) instead. The Imagen IDs and prices below are historical. Google also lists June 30, 2026 as the [Vertex AI discontinuation date](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/imagen/4-0-generate) for the three Imagen 4 models.
 
-#### Imagen 4 Models (Available in both Google AI Studio and Vertex AI)
+#### Imagen 4 Models {#imagen-4-models-available-in-both-google-ai-studio-and-vertex-ai}
 
 - `google:image:imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
 - `google:image:imagen-4.0-generate-001` - Standard quality ($0.04/image)
 - `google:image:imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
 
 :::warning
-Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and recommends [`gemini-3.1-flash-image`](#gemini-native-image-generation-models) as the replacement. The earlier `imagen-4.0-*-preview-06-06` ids are already shut down.
+The [native Imagen migration](https://ai.google.dev/gemini-api/docs/imagen#migration-to-nano-banana) changes both the request and response format. Use the `google:gemini-3.1-flash-image` route, not `google:image:gemini-3.1-flash-image`: Gemini image generation uses `generateContent` and content parts, while the Imagen adapter uses `predict` and `predictions`. The native shutdown date does not establish Vertex model availability.
 :::
 
 #### Imagen 3 Models (Vertex AI only)
+
+These are historical Vertex IDs. Google lists the [Imagen 3 generate, fast and capability models as discontinued on June 30, 2026](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes).
 
 - `google:image:imagen-3.0-generate-002` - Imagen 3.0 ($0.04/image)
 - `google:image:imagen-3.0-generate-001` - Imagen 3.0 ($0.04/image)
@@ -370,26 +372,26 @@ Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and r
 
 #### Authentication Options
 
-**Option 1: Google AI Studio** (Quick start, limited features)
+**Option 1: Google AI Studio** (Legacy Imagen configuration)
 
 ```bash
 export GOOGLE_API_KEY=your-api-key
 ```
 
 - ✅ Simpler setup with API key
-- ✅ Supports Imagen 4 models
+- ❌ Native Imagen models reached their announced shutdown date; use the Gemini image route above
 - ❌ No support for Imagen 3 models
 - ❌ No support for `seed` or `addWatermark` parameters
 
-**Option 2: Vertex AI** (Full features)
+**Option 2: Vertex AI** (Legacy Imagen configuration)
 
 ```bash
 gcloud auth application-default login
 export GOOGLE_PROJECT_ID=your-project-id
 ```
 
-- ✅ All Imagen models supported
-- ✅ All configuration parameters supported
+- ✅ Imagen models available to your Vertex project and region
+- ✅ Vertex Imagen parameters supported by the selected model
 - ❌ Requires Google Cloud project with billing
 
 The provider automatically selects the appropriate API based on available credentials.

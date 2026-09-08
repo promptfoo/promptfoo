@@ -223,7 +223,7 @@ Upgrading between embedding model families changes the vector space, so re-embed
 ### Image Generation Models
 
 :::note
-Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
+For Vertex Imagen requests, use the [Imagen adapter](/docs/providers/google#image-generation-models) with `google:image:<model>` and `config.projectId`; model availability depends on your Vertex project and region. For native Gemini image generation, use [Google AI Studio](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image`.
 :::
 
 ### Video Generation Models
@@ -1207,22 +1207,22 @@ For more details, see:
 
 The Vertex AI provider supports core functionality for LLM evaluation:
 
-| Feature                  | Supported | Notes                                  |
-| ------------------------ | --------- | -------------------------------------- |
-| Chat completions         | ✅        | Full support for Gemini, Claude, Llama |
-| Embeddings               | ✅        | All embedding models                   |
-| Function calling / Tools | ✅        | Including MCP tools                    |
-| Search grounding         | ✅        | Google Search integration              |
-| Safety settings          | ✅        | Full configuration                     |
-| Structured output        | ✅        | JSON schema support                    |
-| Streaming                | ✅        | Optional via `streaming: true`         |
-| Files API                | ❌        | Upload/manage files not supported      |
-| Caching API              | ❌        | Context caching not supported          |
-| Live/Realtime API        | ❌        | WebSocket-based live API not supported |
-| Video generation         | ✅        | Use `vertex:video:` provider           |
-| Image generation         | ⚠️        | Use `google:image:` provider instead   |
+| Feature                  | Supported | Notes                                              |
+| ------------------------ | --------- | -------------------------------------------------- |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama             |
+| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`            |
+| Function calling / Tools | ✅        | Including MCP tools                                |
+| Search grounding         | ✅        | Google Search integration                          |
+| Safety settings          | ✅        | Full configuration                                 |
+| Structured output        | ✅        | JSON schema support                                |
+| Streaming                | ✅        | Optional via `streaming: true`                     |
+| Files API                | ❌        | Upload/manage files not supported                  |
+| Caching API              | ❌        | Context caching not supported                      |
+| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider         |
+| Video generation         | ✅        | Use `vertex:video:` provider                       |
+| Image generation         | ⚠️        | Imagen via `google:image:` with `config.projectId` |
 
-For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
+These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 
