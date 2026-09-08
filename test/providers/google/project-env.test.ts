@@ -47,6 +47,22 @@ afterEach(() => {
 });
 
 describe('scoped Google cloud project resolution', () => {
+  it('keeps process-selected AI Studio mode with a scoped project', async () => {
+    mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'false' });
+    const provider = new GoogleVideoProvider(
+      'veo-3.1-generate-preview',
+      ProviderOptionsSchema.parse({
+        env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      }),
+    );
+
+    const result = await provider.callApi('A quiet garden');
+
+    expect(result.error).toContain('requires an API key');
+    expect(auth.request).not.toHaveBeenCalled();
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   it.each([undefined, false])(
     'routes scoped video project over process value with vertexai=%j',
     async (vertexai) => {
@@ -58,6 +74,7 @@ describe('scoped Google cloud project resolution', () => {
         env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
       });
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', options);
+      expect(provider.requiresApiKey()).toBe(vertexai === false);
 
       const result = await provider.callApi('A quiet garden');
 
@@ -131,6 +148,7 @@ describe('scoped Google cloud project resolution', () => {
         env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
       });
       const provider = new Provider(model, options);
+      expect(provider.requiresApiKey()).toBe(true);
 
       await provider.callApi('Draw a circle');
 
@@ -148,6 +166,7 @@ describe('scoped Google cloud project resolution', () => {
           env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
         });
         const provider = new Provider(model, options);
+        expect(provider.requiresApiKey()).toBe(false);
 
         const result = await provider.callApi('Draw a circle');
 

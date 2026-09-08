@@ -167,6 +167,10 @@ export class GoogleVideoProvider implements ApiProvider {
     return `[Google Video Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return !this.isVertexMode();
+  }
+
   private getLocation(): string {
     return (
       this.config.region ||
@@ -836,8 +840,9 @@ export class GoogleVideoProvider implements ApiProvider {
       };
     } else if (!this.getApiKey(effectiveConfig)) {
       try {
+        const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
         const adcProjectId =
-          effectiveConfig.vertexai === false
+          effectiveConfig.vertexai === false || useVertexEnv === 'false' || useVertexEnv === '0'
             ? undefined
             : await resolveProjectId(effectiveConfig, this.env);
         if (adcProjectId) {

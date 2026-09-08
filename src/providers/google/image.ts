@@ -92,9 +92,11 @@ export class GoogleImageProvider implements ApiProvider {
     return `[Google Image Generation Provider ${this.modelName}]`;
   }
 
-  /**
-   * Helper method to get Google client with credentials support
-   */
+  requiresApiKey(): boolean {
+    return !determineGoogleVertexMode(this.config, this.env);
+  }
+
+  /** Helper method to get Google client with credentials support. */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({ credentials });
