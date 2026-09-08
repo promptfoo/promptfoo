@@ -1,14 +1,47 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import {
   getGeminiTokenUsage,
   parseGeminiContent,
   prepareGeminiRequest,
 } from '../../../src/providers/google/gemini';
+import { GoogleProvider } from '../../../src/providers/google/provider';
+import { VertexChatProvider } from '../../../src/providers/google/vertex';
 
 import type { CompletionOptions } from '../../../src/providers/google/types';
 import type { GeminiApiResponse } from '../../../src/providers/google/util';
 
 const facades = ['ai-studio', 'unified', 'vertex'] as const;
+
+it.each([
+  [
+    'AI Studio',
+    () => new AIStudioChatProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } }),
+  ],
+  ['unified', () => new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } })],
+  ['Vertex', () => new VertexChatProvider('gemini-2.5-flash', { config: {} })],
+] as const)('%s forwards cancellation to tool loading', async (_name, createProvider) => {
+  const provider = createProvider();
+  const controller = new AbortController();
+  const tools = vi
+    .spyOn(provider as any, 'getAllTools')
+    .mockRejectedValue(new Error('tool boundary'));
+  try {
+    await provider
+      .callApi(
+        'hello',
+        { prompt: { raw: 'hello', label: 'fixture' }, vars: {} },
+        { abortSignal: controller.signal },
+      )
+      .catch(() => undefined);
+    expect(tools).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+  } finally {
+    tools.mockRestore();
+  }
+});
 
 describe.each(facades)('%s shared Gemini pipeline', (facade) => {
   it('retains content when streaming ends with an empty STOP and usage-only frame', () => {

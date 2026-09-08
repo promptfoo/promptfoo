@@ -300,7 +300,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       context,
       'ai-studio',
       false,
-      (toolOptions) => this.getAllTools(context, toolOptions),
+      (toolOptions) =>
+        this.getAllTools(context, { ...toolOptions, abortSignal: options?.abortSignal }),
     );
 
     let data;

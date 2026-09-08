@@ -567,7 +567,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       context,
       'vertex',
       true,
-      (toolOptions) => this.getAllTools(context, toolOptions),
+      (toolOptions) =>
+        this.getAllTools(context, { ...toolOptions, abortSignal: options?.abortSignal }),
     );
 
     const useCache = isCacheEnabled() && !shouldBustProviderCache(context);

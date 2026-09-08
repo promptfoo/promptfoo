@@ -342,7 +342,8 @@ export class GoogleProvider extends GoogleGenericProvider {
       context,
       'unified',
       this.isVertexMode,
-      (toolOptions) => this.getAllTools(context, toolOptions),
+      (toolOptions) =>
+        this.getAllTools(context, { ...toolOptions, abortSignal: options?.abortSignal }),
     );
 
     let data: GeminiApiResponse;
