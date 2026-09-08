@@ -325,13 +325,17 @@ The Slack provider is excellent for testing other Slack bots in their native env
        config:
          channel: C123456789
          timeout: 10000
-         responseStrategy: first
-         # Optional: format messages to mention the bot
-         messageFormatter: |
-           @your-bot-to-test {{prompt}}
+         responseStrategy: user
+         waitForUser: U_YOUR_BOT_ID
+
+   prompts:
+     - '<@U_YOUR_BOT_ID> What can you help me with?'
    ```
 
 3. **Filter responses to only capture the target bot**:
+
+   Set `waitForUser` to the bot's user ID (`U...`), not its app ID or `bot_id`.
+
    ```yaml
    providers:
      - id: slack
@@ -339,7 +343,7 @@ The Slack provider is excellent for testing other Slack bots in their native env
          channel: C123456789
          timeout: 10000
          responseStrategy: user
-         userId: U_YOUR_BOT_ID # The bot's user ID
+         waitForUser: U_YOUR_BOT_ID # The bot's user ID
    ```
 
 ### Example: Testing a Customer Support Bot
@@ -354,15 +358,13 @@ providers:
       channel: C_TEST_CHANNEL
       timeout: 15000
       responseStrategy: user
-      userId: U_SUPPORT_BOT_ID
-      messageFormatter: |
-        <@U_SUPPORT_BOT_ID> {{prompt}}
+      waitForUser: U_SUPPORT_BOT_ID
 
 prompts:
-  - 'How do I reset my password?'
-  - 'What are your business hours?'
-  - 'I need to speak to a human'
-  - "My order hasn't arrived yet, order #12345"
+  - '<@U_SUPPORT_BOT_ID> How do I reset my password?'
+  - '<@U_SUPPORT_BOT_ID> What are your business hours?'
+  - '<@U_SUPPORT_BOT_ID> I need to speak to a human'
+  - "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
 
 tests:
   - vars:
@@ -423,10 +425,10 @@ prompts:
 
 #### 3. Load Testing
 
-Use multiple parallel evaluations to test bot performance:
+Run sequentially in a shared channel so overlapping prompts do not collect the same response:
 
 ```bash
-promptfoo eval -c bot-test-config.yaml -j 10
+promptfoo eval -c bot-test-config.yaml -j 1
 ```
 
 #### 4. A/B Testing Different Bots
@@ -439,13 +441,15 @@ providers:
     label: bot-v1
     config:
       channel: C_CHANNEL_V1
-      userId: U_BOT_V1
+      responseStrategy: user
+      waitForUser: U_BOT_V1
 
   - id: slack
     label: bot-v2
     config:
       channel: C_CHANNEL_V2
-      userId: U_BOT_V2
+      responseStrategy: user
+      waitForUser: U_BOT_V2
 
 prompts:
   - "What's your return policy?"
@@ -532,8 +536,6 @@ providers:
     config:
       responseStrategy: 'first'
       timeout: 180000 # 3 minutes
-      formatMessage: (prompt) =>
-        `📋 *Customer Service Evaluation*\n\n${prompt}\n\n_How would you respond to this customer?_`
 
 prompts:
   - |
