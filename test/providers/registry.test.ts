@@ -84,6 +84,23 @@ describe('Provider Registry', () => {
       vi.clearAllMocks();
     });
 
+    it.each([
+      ['cerebras:model', 'CEREBRAS_API_KEY'],
+      ['deepseek:deepseek-chat', 'DEEPSEEK_API_KEY'],
+      ['perplexity:sonar', 'PERPLEXITY_API_KEY'],
+      ['togetherai:model', 'TOGETHER_API_KEY'],
+      ['truefoundry:model', 'TRUEFOUNDRY_API_KEY'],
+      ['llamaapi:chat:model', 'LLAMA_API_KEY'],
+    ] as const)('forwards %s provider-scoped %s through the factory', async (id, key) => {
+      const provider = await registry.create(id, {
+        options: { env: { [key]: 'scoped-key' } },
+        env: { [key]: 'suite-key' },
+      });
+      expect((provider as unknown as { env?: Record<string, string> }).env?.[key]).toBe(
+        'scoped-key',
+      );
+    });
+
     describe('getProviderFactories boundary contract', () => {
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`

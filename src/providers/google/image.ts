@@ -6,6 +6,7 @@ import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   getGoogleClient,
   loadCredentials,
   resolveProjectId,
@@ -111,16 +112,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID;
-
-    if (projectId) {
-      // Use Vertex AI if project ID is available
+    if (determineGoogleVertexMode(this.config, this.env)) {
       return this.callVertexApi(prompt);
     }
 

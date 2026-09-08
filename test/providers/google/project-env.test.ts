@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import { resolveProjectId } from '../../../src/providers/google/auth';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
@@ -21,6 +22,10 @@ vi.mock('google-auth-library', () => ({
 }));
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
 
 let restoreEnv: () => void;
 
@@ -43,8 +48,9 @@ afterEach(() => {
 
 describe('scoped Google cloud project resolution', () => {
   it.each([undefined, false])(
-    'routes scoped-only video project with vertexai=%j',
+    'routes scoped video project over process value with vertexai=%j',
     async (vertexai) => {
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'process-project' });
       auth.request.mockRejectedValue(new Error('Local video route fixture'));
       vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Local video route fixture'));
       const options = ProviderOptionsSchema.parse({
@@ -112,6 +118,27 @@ describe('scoped Google cloud project resolution', () => {
       },
     },
   ])('$name request', ({ Provider, model, url, response }) => {
+    it('honors explicit AI Studio mode despite a scoped project', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: response,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {},
+      });
+      const options = ProviderOptionsSchema.parse({
+        config: { apiKey: 'fixture-key', vertexai: false },
+        env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      });
+      const provider = new Provider(model, options);
+
+      await provider.callApi('Draw a circle');
+
+      expect(auth.request).not.toHaveBeenCalled();
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        'generativelanguage.googleapis.com',
+      );
+    });
     it.each(['adc-project', undefined])(
       'uses the parsed scoped project when ADC reports %j',
       async (adcProject) => {

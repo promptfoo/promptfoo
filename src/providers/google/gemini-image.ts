@@ -5,6 +5,7 @@ import { toDataUri } from '../../util/dataUrl';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
@@ -154,15 +155,7 @@ export class GeminiImageProvider implements ApiProvider {
       return { error: sizeError };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID;
-
-    if (projectId) {
+    if (determineGoogleVertexMode(this.config, this.env)) {
       return this.callVertexApi(prompt, context);
     }
 

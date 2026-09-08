@@ -814,10 +814,10 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        getEnvString('GOOGLE_CLOUD_PROJECT') ||
-        getEnvString('GOOGLE_PROJECT_ID') ||
         this.env?.GOOGLE_CLOUD_PROJECT ||
-        this.env?.GOOGLE_PROJECT_ID;
+        getEnvString('GOOGLE_CLOUD_PROJECT') ||
+        this.env?.GOOGLE_PROJECT_ID ||
+        getEnvString('GOOGLE_PROJECT_ID');
 
       if (!projectId) {
         try {
