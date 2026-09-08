@@ -126,13 +126,14 @@ const webSearchProviderFactory = createLazyProvider(
     }),
 );
 
-const redteamProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) =>
+const redteamProviderFactory = {
+  // Recreate request-scoped attack providers so ambient keys and settings can rotate.
+  getInstance: (env?: EnvOverrides) =>
     new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
       env,
       config: { temperature: getDefaultRedteamTemperature(env) },
     }),
-);
+};
 
 /**
  * Gets all default Anthropic providers with the given environment overrides

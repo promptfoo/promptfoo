@@ -1,77 +1,26 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { getDefaultRedteamTemperature } from '../redteamDefaults';
+import { GITHUB_MODELS_RETIREMENT_MESSAGE } from './index';
 
-import type { EnvOverrides } from '../../types/env';
+class RetiredGitHubProvider extends OpenAiChatCompletionProvider {
+  async callApi(
+    ..._args: Parameters<OpenAiChatCompletionProvider['callApi']>
+  ): ReturnType<OpenAiChatCompletionProvider['callApi']> {
+    return { error: GITHUB_MODELS_RETIREMENT_MESSAGE };
+  }
+}
 
-// GitHub Models default providers
-// Using OpenAI-compatible API with GitHub's endpoint
+// Preserve the exported provider objects for existing consumers, but never call the retired API.
 const githubConfig = {
   apiBaseUrl: 'https://models.github.ai/inference',
   apiKeyEnvar: 'GITHUB_TOKEN',
 };
 
-export const DefaultGitHubGradingProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+export const DefaultGitHubGradingProvider = new RetiredGitHubProvider('openai/gpt-5', {
   config: githubConfig,
 });
-
-export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
-  config: {
-    ...githubConfig,
-    response_format: { type: 'json_object' },
-  },
+export const DefaultGitHubGradingJsonProvider = new RetiredGitHubProvider('openai/gpt-5', {
+  config: { ...githubConfig, response_format: { type: 'json_object' } },
 });
-
-export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
-  config: githubConfig,
-});
-
-function getGitHubRedteamConfig(env?: EnvOverrides) {
-  return {
-    ...githubConfig,
-    apiKey: env?.GITHUB_TOKEN,
-    temperature: getDefaultRedteamTemperature(env),
-  };
-}
-
-function createGitHubRedteamProvider(env?: EnvOverrides) {
-  return new OpenAiChatCompletionProvider('openai/gpt-5', {
-    env,
-    config: getGitHubRedteamConfig(env),
-  });
-}
-
-function createGitHubRedteamJsonProvider(env?: EnvOverrides) {
-  return new OpenAiChatCompletionProvider('openai/gpt-5', {
-    env,
-    config: {
-      ...getGitHubRedteamConfig(env),
-      response_format: { type: 'json_object' },
-    },
-  });
-}
-
-export const DefaultGitHubRedteamProvider = createGitHubRedteamProvider();
-
-export const DefaultGitHubRedteamJsonProvider = createGitHubRedteamJsonProvider();
-
-export function getGitHubRedteamProviders(env?: EnvOverrides) {
-  return {
-    redteamProvider: createGitHubRedteamProvider(env),
-    redteamJsonProvider: createGitHubRedteamJsonProvider(env),
-  };
-}
-
-// Fast model for quick evaluations
-export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano', {
-  config: githubConfig,
-});
-
-// Balanced model for general use
-export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini', {
-  config: githubConfig,
-});
-
-// Reasoning model for complex evaluations
-export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('openai/o4-mini', {
+export const DefaultGitHubSuggestionsProvider = new RetiredGitHubProvider('openai/gpt-5', {
   config: githubConfig,
 });

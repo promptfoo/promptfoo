@@ -37,6 +37,15 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai');
     });
 
+    it('should prefer an explicit API base URL over an environment API host', () => {
+      mockProcessEnv({ OPENAI_API_HOST: 'wrong.example' });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'http://127.0.0.1:15500/proxy/openai/v1' },
+      });
+
+      expect(customProvider.getApiUrl()).toBe('http://127.0.0.1:15500/proxy/openai/v1');
+    });
+
     it('should get organization', () => {
       expect(provider.getOrganization()).toBe('test-org');
     });
@@ -59,6 +68,32 @@ describe('OpenAI Provider', () => {
         }),
       ).toMatchObject({
         [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
+    });
+
+    // These two cases assert the FULL header object with toEqual on purpose: the bug
+    // being guarded is a *duplicate* case-variant header sneaking into the output, so
+    // the test must fail if any extra key (e.g. a second canonical-case header) appears.
+    // toMatchObject would allow such an extra key through and miss the regression.
+    it('should treat originator overrides case-insensitively', () => {
+      expect(
+        provider.getOpenAiRequestHeaders({
+          'x-openai-originator': 'custom-originator',
+        }),
+      ).toEqual({
+        'x-openai-originator': 'custom-originator',
+        'OpenAI-Organization': 'test-org',
+      });
+    });
+
+    it('should treat organization header overrides case-insensitively', () => {
+      expect(
+        provider.getOpenAiRequestHeaders({
+          'openai-organization': 'custom-org',
+        }),
+      ).toEqual({
+        'X-OpenAI-Originator': 'promptfoo',
+        'openai-organization': 'custom-org',
       });
     });
 

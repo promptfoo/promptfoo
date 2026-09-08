@@ -10,12 +10,12 @@ const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
  * Groq Chat Completions API Provider
  *
  * Extends OpenAI Chat Completions provider with Groq-specific configuration.
- * Supports reasoning models (DeepSeek R1, GPT-OSS, Qwen) with temperature control.
+ * Supports reasoning models (GPT-OSS, Qwen) with temperature control.
  *
  * Usage:
- *   groq:llama-3.3-70b-versatile
  *   groq:openai/gpt-oss-120b
- *   groq:qwen/qwen3-32b
+ *   groq:openai/gpt-oss-20b
+ *   groq:qwen/qwen3.6-27b
  */
 export class GroqProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {

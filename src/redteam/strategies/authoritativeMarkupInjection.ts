@@ -21,7 +21,9 @@ export async function addAuthoritativeMarkupInjectionTestCases(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/AuthoritativeMarkupInjection`,
+        metric: assertion.metric
+          ? `${assertion.metric}/AuthoritativeMarkupInjection`
+          : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,

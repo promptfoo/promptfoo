@@ -25,11 +25,24 @@ type XaiImageOptions = OpenAiSharedOptions & {
   response_format?: 'url' | 'b64_json';
   user?: string;
   aspect_ratio?: string;
-  quality?: 'low' | 'medium' | 'high';
+  quality?: 'low' | 'medium' | 'high' | 'auto';
   resolution?: '1k' | '2k';
   image?: { url: string };
   images?: { url: string }[];
   mask?: { url: string };
+};
+
+/**
+ * Per-image price for grok-imagine-image-2.0, keyed by `${quality}_${resolution}`.
+ * Unlike the other Imagine models it prices per tier rather than at a flat rate.
+ * Sourced from the `pricing` array of xAI's `/v1/models/grok-imagine-image-2.0`
+ * (USD ticks at $1e-10 each), verified live 2026-08-31.
+ */
+const IMAGINE_IMAGE_2_0_COSTS: Record<string, number> = {
+  low_1k: 0.04,
+  low_2k: 0.06,
+  medium_1k: 0.06,
+  medium_2k: 0.08,
 };
 
 export class XAIImageProvider extends OpenAiImageProvider {
@@ -86,6 +99,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       'grok-imagine-image': 'grok-imagine-image',
       // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
+      'grok-imagine-image-2.0': 'grok-imagine-image-2.0',
       'grok-imagine-image-quality': 'grok-imagine-image-quality',
       // xAI exposes dated and -latest aliases for the quality model; route them to
       // the canonical slug so fallback pricing and request routing stay consistent.
@@ -112,18 +126,33 @@ export class XAIImageProvider extends OpenAiImageProvider {
     n: number = 1,
     resolution: XaiImageOptions['resolution'] = '1k',
     sourceImageCount: number = 0,
+    quality?: XaiImageOptions['quality'],
   ): number {
     // grok-imagine-image-pro is redirected to the quality model after
     // 2026-05-15; any other unrecognized grok-imagine-* slug (e.g. a future
     // alias promptfoo has not indexed) is priced at the quality tier too,
-    // rather than falling through to legacy grok-2-image pricing.
+    // rather than falling through to legacy grok-2-image pricing. Models with
+    // their own pricing table are excluded so they are not swept into that bucket.
     const pricingModel =
-      model.startsWith('grok-imagine-') && model !== 'grok-imagine-image'
+      model.startsWith('grok-imagine-') &&
+      model !== 'grok-imagine-image' &&
+      model !== 'grok-imagine-image-2.0'
         ? 'grok-imagine-image-quality'
         : model;
 
     if (pricingModel === 'grok-imagine-image') {
       return 0.02 * n + 0.002 * sourceImageCount;
+    }
+    if (pricingModel === 'grok-imagine-image-2.0') {
+      // `auto` and an unset quality both bill at the `low` tier, matching the $0.04
+      // xAI charged for a default 1k request. Anything else (e.g. `high`, which the
+      // API rejects) falls back to the most expensive tier so an estimate never
+      // undercharges. xAI publishes no separate source-image surcharge for this
+      // model, so it mirrors the quality tier's rate.
+      const tier = !quality || quality === 'auto' || quality === 'low' ? 'low' : 'medium';
+      const perImage =
+        IMAGINE_IMAGE_2_0_COSTS[`${tier}_${resolution}`] ?? IMAGINE_IMAGE_2_0_COSTS.medium_2k;
+      return perImage * n + 0.01 * sourceImageCount;
     }
     if (pricingModel === 'grok-imagine-image-quality') {
       const perImage = resolution === '2k' ? 0.07 : 0.05;
@@ -238,6 +267,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
             config.n || 1,
             config.resolution,
             this.countSourceImages(config),
+            config.quality,
           ));
       const images = buildStructuredImageOutputs(data);
 

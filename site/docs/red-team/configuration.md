@@ -39,6 +39,33 @@ shared.
 promptfoo redteam run --tag ci.run-id="$CI_RUN_ID" --tag git.sha="$GIT_SHA"
 ```
 
+### Generation token accounting
+
+Generated configurations include `metadata.generation`, which identifies when the test suite was
+created and, when available, records the model requests and tokens used to create it:
+
+```yaml
+metadata:
+  generation:
+    id: 4d2f4d7f-9b99-4a51-85c5-7fc5f6c03f88
+    generatedAt: '2026-08-17T12:00:00.000Z'
+    tokenUsage:
+      total: 1200
+      prompt: 900
+      completion: 300
+      numRequests: 4
+```
+
+Generation usage includes system-purpose extraction, entity extraction, attack-goal extraction,
+and test generation. A failed request still increments `numRequests` when its token count is
+unavailable. Reusing a complete cached response adds neither requests nor newly consumed tokens;
+provider-side prompt caching during an actual model request still counts that request.
+
+`promptfoo redteam run` attributes generation tokens to the evaluation only when it generated the
+suite during that run. Running an existing generated suite does not charge its historical
+generation usage again. `metadata.generationAccounting` is reserved for internally persisted
+current-run accounting and should not be added to reusable configurations.
+
 ## Configuration Structure
 
 The red team configuration uses the following YAML structure:
@@ -602,7 +629,7 @@ The severity levels affect:
 - Issue prioritization in vulnerability tables
 - Dashboard statistics and metrics
 
-See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants.ts#L553) for a list of default severity levels.
+See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants/metadata.ts#L504) for a list of default severity levels.
 
 ### Strategies
 
@@ -804,7 +831,7 @@ The `redteam.provider` field allows you to specify a provider configuration for 
 
 ### Automatic Provider Selection
 
-For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a strong default model from that provider. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
+For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a default model from that provider. Each generation request keeps its own configuration environment when requests run concurrently. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
 
 | Credential or environment variable                 | Vendor           | Default red team model     |
 | :------------------------------------------------- | :--------------- | :------------------------- |
@@ -816,7 +843,6 @@ For local attack generation, if `redteam.provider` is not set and Promptfoo dete
 | `XAI_API_KEY`                                      | xAI              | `grok-4.3`                 |
 | Azure OpenAI credentials and deployment variables  | Azure OpenAI     | Your configured deployment |
 | Codex login or `CODEX_API_KEY`                     | OpenAI Codex SDK | Codex default provider     |
-| `GITHUB_TOKEN`                                     | GitHub Models    | `openai/gpt-5`             |
 
 ### Overriding the Provider
 

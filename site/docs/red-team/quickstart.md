@@ -29,7 +29,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`
+- Install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`
 - Optional but recommended: Configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Local attack generation will select a strong model from that provider automatically.
 
 ## Initialize the project

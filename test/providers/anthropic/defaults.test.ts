@@ -5,6 +5,7 @@ import {
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
@@ -40,6 +41,24 @@ describe('Anthropic Default Providers', () => {
       expect(providers1.gradingProvider).toBe(providers2.gradingProvider);
       expect(providers1.gradingJsonProvider).toBe(providers2.gradingJsonProvider);
       expect(providers1.llmRubricProvider).toBe(providers2.llmRubricProvider);
+    });
+
+    it('refreshes ambient redteam credentials and temperature between requests', () => {
+      mockProcessEnv({
+        ANTHROPIC_API_KEY: 'fixture-first',
+        PROMPTFOO_JAILBREAK_TEMPERATURE: '0.11',
+      });
+      const first = getAnthropicProviders().redteamProvider as AnthropicMessagesProvider;
+      mockProcessEnv({
+        ANTHROPIC_API_KEY: 'fixture-second',
+        PROMPTFOO_JAILBREAK_TEMPERATURE: '0.91',
+      });
+      const second = getAnthropicProviders().redteamProvider as AnthropicMessagesProvider;
+      expect(first).not.toBe(second);
+      expect(first).toHaveProperty('apiKey', 'fixture-first');
+      expect(second).toHaveProperty('apiKey', 'fixture-second');
+      expect(first.config.temperature).toBe(0.11);
+      expect(second.config.temperature).toBe(0.91);
     });
 
     it('should initialize providers lazily', () => {

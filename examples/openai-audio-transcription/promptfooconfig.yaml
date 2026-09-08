@@ -24,8 +24,12 @@ providers:
   # Diarization - identifies different speakers
   - id: openai:transcription:gpt-4o-transcribe-diarize
     config:
-      num_speakers: 2 # Optional: expected number of speakers
-      # speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+      chunking_strategy: auto # Required for inputs longer than 30 seconds
+      # Optional: identify up to four known speakers with matching 2-10 second audio data URLs.
+      # known_speaker_names: ['Alice', 'Bob']
+      # known_speaker_references:
+      #   - 'data:audio/wav;base64,<alice-reference>'
+      #   - 'data:audio/wav;base64,<bob-reference>'
 
 tests:
   # Test with Neil Armstrong's famous moon landing quote

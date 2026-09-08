@@ -38,7 +38,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
@@ -49,7 +49,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
@@ -59,7 +59,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is valid xml                                                |
+| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
@@ -104,6 +104,9 @@ assert:
     value: 'The expected substring'
 ```
 
+Both assertions accept string or number values. Numbers are converted to strings, so `value: 0`
+matches output containing `0`.
+
 ### Contains-All
 
 The `contains-all` assertion checks if the LLM output contains all of the specified values.
@@ -135,6 +138,20 @@ assert:
 ```
 
 For case insensitive matching, use `icontains-any`.
+
+Use the structured assertion form in YAML configs:
+
+```yaml
+assert:
+  - type: contains-all
+    value:
+      - '1,000'
+      - in stock
+```
+
+This checks for the two values `1,000` and `in stock`.
+
+Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns use comma-separated values. Quote values containing commas; see [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for escaping details.
 
 ### Regex
 
@@ -257,12 +274,14 @@ It will fail for:
 
 ### Contains-Sql
 
-This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+This assertion ensures that the output is either valid SQL or contains a code block with valid SQL.
 
 ```yaml
 assert:
   - type: contains-sql
 ```
+
+Fenced SQL can use an optional `sql` language tag. MySQL backtick-quoted identifiers, such as ``SELECT `id` FROM `users`;``, are supported inside the fence.
 
 See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
 
@@ -371,7 +390,7 @@ assert:
 
 ### Is-XML
 
-The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+The `is-xml` assertion checks if the entire LLM output is a supported well-formed XML document. It can also verify the presence of specific elements within the XML structure.
 
 Example:
 
@@ -380,7 +399,7 @@ assert:
   - type: is-xml
 ```
 
-This basic usage checks if the output is valid XML.
+This basic usage checks if the output is a supported well-formed XML document.
 
 You can also specify required elements:
 
@@ -393,12 +412,12 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
 
 #### How it works
 
-1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
-2. If parsing succeeds, it's considered valid XML.
+1. The assertion validates that the entire output is one supported well-formed XML document, then parses it with fast-xml-parser.
+2. If validation and parsing succeed, it's considered valid XML for `is-xml`.
 3. If `value` is specified:
    - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
@@ -446,16 +465,18 @@ Fails for: `<root><parent><child></child></parent></root>` (missing grandchild e
 
 #### Inverse assertion
 
-You can use the `not-is-xml` assertion to check if the output is not valid XML:
+You can use the `not-is-xml` assertion to check if the output is not a supported well-formed XML document:
 
 ```yaml
 assert:
   - type: not-is-xml
 ```
 
-This will pass for non-XML content and fail for valid XML content.
+This will pass for non-XML content and XML outside Promptfoo's supported `is-xml` subset, and fail for supported well-formed XML content.
 
-Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+Note: The `is-xml` assertion requires the entire output to be a supported well-formed XML document. For checking XML content within a larger text, use the `contains-xml` assertion.
+
+`is-xml` rejects documents with a DTD internal subset because Promptfoo cannot safely validate the subset's declarations and entity replacement text. External resources are not loaded during validation.
 
 ### Contains-XML
 
@@ -471,7 +492,7 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 ### Is-SQL
 
-The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
 Example:
 
@@ -658,6 +679,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenAI Codex Security, by recording the selected native scan or finding-validation operation.
 - OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
@@ -777,7 +799,7 @@ With the configuration above:
 | `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
 | `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped. A `defaults` entry always requires the observed value to equal the declared default — even a default of `"*"` is matched literally. To tolerate an argument regardless of its value, such as a pagination cursor or other agent-generated token, list it under [`ignore`](#trajectory-tool-args-match-ignore) instead.
 
 :::note
 
@@ -787,7 +809,7 @@ Stripping runs before matching in both modes, but `partial` mode already ignores
 
 #### Ignoring arguments {#trajectory-tool-args-match-ignore}
 
-Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a pagination `cursor`, a volatile `request_id`, or an `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
 
 ```yaml
 tests:
@@ -815,6 +837,32 @@ With the configuration above:
 `ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
 
 An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
+
+Combine `defaults` with `ignore` when a tool mixes arguments that should be pinned to a known default with arguments the agent chooses freely:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+          ignore:
+            - cursor
+```
+
+| Observed tool arguments                  | Outcome | Reason                                                       |
+| ---------------------------------------- | ------- | ------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                     |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both values equal their declared defaults                    |
+| `{ status: 'Q', cursor: 'abc123' }`      | pass    | `cursor` is ignored regardless of value                      |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1)            |
+| `{ status: 'Q', delete_database: true }` | fail    | hallucinated extra is not in `args`, `defaults`, or `ignore` |
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
@@ -1093,7 +1141,7 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1210,6 +1258,10 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 
 ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
+:::note
+ROUGE is scored case-insensitively (inputs are lowercased before comparison), consistent with the other text-overlap metrics (BLEU, GLEU, METEOR). A difference in capitalization — for example `The Cat Sat` vs `the cat sat` — does not lower the score.
+:::
+
 Example:
 
 ```yaml
@@ -1300,6 +1352,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
+
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
 
 **When to use GLEU:**
 
@@ -1612,7 +1666,7 @@ tests:
 The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
-- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
 
 :::note
 Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
@@ -1913,4 +1967,4 @@ assert:
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
 - [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
-- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs
+- [Guardrails](/docs/configuration/expected-outputs/guardrails) - Evaluating target-reported guardrail decisions

@@ -1,5 +1,6 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
+import { isBedrockMantleResponsesModel, isRejectedPrefixedGrokId } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -11,39 +12,108 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
-      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's OpenAI-compatible
-      // Responses API on the regional mantle endpoint — never the native InvokeModel/Converse
-      // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
-      // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
-      // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
+      // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
+      // Runtime, including an explicit Messages route with US/global profiles.
+      const isLegacyType = modelType === 'converse' || modelType === 'completion';
+      const anthropicModel =
+        modelType === 'messages'
+          ? modelName
+          : splits.length === 2
+            ? splits[1]
+            : isLegacyType
+              ? modelName
+              : undefined;
+      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
+      if (prefixedMythosModel) {
+        throw new Error(
+          `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
+            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
+        );
+      }
+      if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
+        const {
+          createBedrockAnthropicMessagesProvider,
+          isBedrockAnthropicMessagesModel,
+          requiresBedrockAnthropicMessagesModel,
+        } = await import('../bedrock/anthropicMessages');
+        if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
+          throw new Error(
+            `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
+              `${modelType === 'converse' ? 'Converse' : 'InvokeModel'}. Use ` +
+              `"bedrock:${anthropicModel}" or "bedrock:messages:${anthropicModel}".`,
+          );
+        }
+        if (
+          isBedrockAnthropicMessagesModel(anthropicModel) &&
+          (modelType === 'messages' || requiresBedrockAnthropicMessagesModel(anthropicModel))
+        ) {
+          return createBedrockAnthropicMessagesProvider(anthropicModel, {
+            ...providerOptions,
+            id: providerOptions.id ?? providerPath,
+          });
+        }
+      }
+      if (modelType === 'messages') {
+        throw new Error(
+          `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
+            `provider. Use a us. or global. inference profile for Fable/Mythos 5.1. ` +
+            `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
+            `anthropic.claude-fable-5-1 (GovCloud West).`,
+        );
+      }
+
+      // Bare and explicit Converse/InvokeModel aliases for OpenAI frontier models (gpt-5.x)
+      // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
+      // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
+      // aliases before the per-type handlers so
+      // `bedrock:openai.gpt-5.6-sol`, `bedrock:xai.grok-4.3`, and the explicit
+      // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
+      // gpt-oss models fall through to InvokeModel/Converse below.
       //
-      // Only those three forms carry a frontier model id, so restrict the candidate to the
-      // bare id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
-      // `converse:`/`completion:` forms. Frontier ids contain no colon, so the bare form is
-      // always two segments. This prevents sub-typed forms whose id merely contains `openai.`
+      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.6-sol`, exactly two
+      // segments) and the explicit `converse:`/`completion:` aliases. Responses ids contain no
+      // colon, so the bare form is always two segments. This prevents sub-typed forms whose id
+      // merely contains the prefix
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
-      const candidateOpenAiModel =
+      const candidateResponsesModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.length === 2
             ? splits[1]
             : undefined;
-      // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
-      // behind a cheap `openai.` prefix check, like every other handler import below, so the
-      // common non-OpenAI bedrock: models don't load it at construction. The prefix is a
-      // necessary condition; isBedrockOpenAiResponsesModel remains the source of truth for the
-      // frontier-vs-gpt-oss decision (a gpt-oss id passes the prefix gate but is rejected there
-      // and falls through to InvokeModel below).
-      if (candidateOpenAiModel?.startsWith('openai.')) {
-        const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } =
-          await import('../bedrock/openaiResponses');
-        if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
-          return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
-            ...providerOptions,
-            id: providerOptions.id ?? providerPath,
-          });
-        }
+      // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
+      // simply invalid, but Grok 4.6 publishes real inference profiles that the native
+      // InvokeModel/Converse APIs serve with ordinary AWS credentials, so those fall through to
+      // the handlers below. An explicit `bedrock:mantle:` request is rejected either way.
+      const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
+      if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
+        throw new Error(
+          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
+            `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
+            `such as "bedrock:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
+        );
+      }
+      // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
+      // ordinary bedrock: models do not load the Responses stack at construction. The predicate
+      // also excludes gpt-oss ids, which must fall through to InvokeModel below.
+      if (candidateResponsesModel && isBedrockMantleResponsesModel(candidateResponsesModel)) {
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+      // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
+      // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models
+      // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
+      // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
+      if (modelType === 'mantle') {
+        const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
+        return createBedrockMantleChatProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
       }
 
       // Handle Converse API
