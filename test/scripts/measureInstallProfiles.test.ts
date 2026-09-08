@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSamples, validateEvalOutput } from '../../scripts/measureInstallProfiles';
+import {
+  parseRegistryUrl,
+  summarizeSamples,
+  validateEvalCommand,
+  validateEvalOutput,
+} from '../../scripts/measureInstallProfiles';
 
 const sample = (elapsedMs: number, code: number | null = 0, timedOut = false) => ({
   elapsedMs,
@@ -32,6 +37,33 @@ const output = (overrides = {}) => ({
 });
 
 describe('install profile measurements', () => {
+  it.each([
+    'https://registry.example/?token=fixture-secret',
+    'https://registry.example/#fixture-secret',
+    'https://user:fixture-secret@registry.example/',
+  ])('rejects credential-bearing registry URLs before recording them', (registry) => {
+    expect(() => parseRegistryUrl(registry)).toThrow(
+      'Registry URL must not contain credentials, query strings, or fragments',
+    );
+  });
+
+  it('retains registry paths and rejects non-HTTP registry protocols', () => {
+    expect(parseRegistryUrl('https://registry.example/api/npm/').href).toBe(
+      'https://registry.example/api/npm/',
+    );
+    expect(() => parseRegistryUrl('file:///registry')).toThrow('Registry must use http(s)');
+  });
+
+  it.each([true, false])(
+    'rejects timed-out evals even with the expected exit code: %s',
+    (success) => {
+      const code = success ? 0 : 100;
+      expect(() => validateEvalCommand({ code, timedOut: true }, success)).toThrow('timed out');
+      expect(() => validateEvalCommand({ code, timedOut: false }, success)).not.toThrow();
+      expect(() => validateEvalCommand({ code: 1, timedOut: false }, success)).toThrow('exit code');
+    },
+  );
+
   it('keeps raw failures and first-process timing separate from successful sample statistics', () => {
     const samples = [sample(20, 1), sample(4), sample(100, null, true), sample(2), sample(3)];
     expect(summarizeSamples(samples)).toEqual({

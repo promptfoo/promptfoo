@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { describeDirectDependencies, inventoryTree } from './installProfileInventory';
+import { assertIsolatedConsumerRoot } from './installProfileIsolation';
+import { npmInvocation, terminateProcessTree } from './installProfileProcess';
 
 type CommandResult = {
   code: number | null;
@@ -75,6 +77,26 @@ export function summarizeSamples(samples: Sample[]) {
     maxMs: values.at(-1) ?? null,
     samples,
   };
+}
+
+export function parseRegistryUrl(value: string): URL {
+  const registry = new URL(value);
+  assert(['https:', 'http:'].includes(registry.protocol), 'Registry must use http(s)');
+  // Retained reports include this URL. Reject token-bearing query/fragment forms
+  // as well as URL userinfo before writing any evidence or invoking npm.
+  assert(
+    !registry.username && !registry.password && !registry.search && !registry.hash,
+    'Registry URL must not contain credentials, query strings, or fragments',
+  );
+  return registry;
+}
+
+export function validateEvalCommand(
+  command: Pick<CommandResult, 'code' | 'timedOut'>,
+  expectedSuccess: boolean,
+): void {
+  assert(!command.timedOut, 'Evaluation command timed out');
+  assert.equal(command.code, expectedSuccess ? 0 : 100, 'Unexpected eval exit code');
 }
 
 export function validateEvalOutput(output: unknown, expectedSuccess: boolean): EvalRow[] {
@@ -176,6 +198,7 @@ async function run(
   const err = fs.openSync(stderr, 'w');
   const started = performance.now();
   let timedOut = false;
+  let terminationError: unknown;
   try {
     return await new Promise((resolve, reject) => {
       const child = spawn(command, args, {
@@ -184,19 +207,14 @@ async function run(
         stdio: ['ignore', out, err],
         detached: process.platform !== 'win32',
       });
-      // On POSIX also stop lifecycle-script descendants, so timed-out installs cannot
-      // continue changing the tree while it is being measured. No shell is involved.
+      // Finish terminating lifecycle-script descendants before collecting evidence.
       const timer = setTimeout(() => {
         timedOut = true;
-        if (process.platform !== 'win32' && child.pid) {
-          try {
-            process.kill(-child.pid, 'SIGKILL');
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-              child.kill('SIGKILL');
-            }
-          }
-        } else {
+        try {
+          assert(child.pid, 'Missing process ID for timed-out command');
+          terminateProcessTree(child.pid);
+        } catch (error) {
+          terminationError = error;
           child.kill('SIGKILL');
         }
       }, timeoutMs);
@@ -206,6 +224,14 @@ async function run(
       });
       child.once('close', (code, signal) => {
         clearTimeout(timer);
+        if (terminationError) {
+          reject(
+            new Error('Unable to terminate timed-out process tree; measurement stopped', {
+              cause: terminationError,
+            }),
+          );
+          return;
+        }
         resolve({ code, signal, timedOut, elapsedMs: performance.now() - started, stdout, stderr });
       });
     });
@@ -252,7 +278,7 @@ async function probeConsumer(consumer: string, logs: string, env: NodeJS.Process
       const probe = probes[(iteration + offset) % probes.length];
       const sample = await run(
         process.execPath,
-        probe.args,
+        ['--no-global-search-paths', ...probe.args],
         consumer,
         env,
         path.join(logs, `${probe.name}-${iteration}`),
@@ -288,6 +314,7 @@ async function probeConsumer(consumer: string, logs: string, env: NodeJS.Process
     const command = await run(
       process.execPath,
       [
+        '--no-global-search-paths',
         entrypoint,
         'eval',
         '--config',
@@ -306,7 +333,7 @@ async function probeConsumer(consumer: string, logs: string, env: NodeJS.Process
       path.join(logs, name),
     );
     try {
-      assert.equal(command.code, expectedSuccess ? 0 : 100, 'Unexpected eval exit code');
+      validateEvalCommand(command, expectedSuccess);
       const rows = validateEvalOutput(
         JSON.parse(fs.readFileSync(exported, 'utf8')),
         expectedSuccess,
@@ -357,29 +384,35 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
     '--profiles must contain unique default and/or omit-optional entries',
   );
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const npm = npmInvocation();
   // Respect a configured registry (e.g. a company mirror) without copying any
   // other npm configuration or credentials into the isolated consumer.
-  const registry = new URL(
+  const registry = parseRegistryUrl(
     values.registry ??
-      execFileSync(npm, ['config', 'get', 'registry'], {
+      execFileSync(npm.command, [...npm.prefix, 'config', 'get', 'registry'], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
       }).trim(),
   );
-  assert(['https:', 'http:'].includes(registry.protocol), 'Registry must use http(s)');
-  assert(!registry.username && !registry.password, 'Registry URL must not contain credentials');
   const tarball = path.resolve(values.tarball);
   assert(fs.statSync(tarball).isFile(), 'Tarball must be a file');
   const output = path.resolve(values.output);
-  fs.mkdirSync(output); // Fail rather than overwrite previous evidence.
+  const checkoutRoot = fileURLToPath(new URL('../', import.meta.url));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-install-profiles-'));
+  assertIsolatedConsumerRoot(work, checkoutRoot);
+  fs.mkdirSync(output); // Fail rather than overwrite previous evidence.
   // Copy the exact artifact once; retained consumer lockfiles refer to these stable bytes.
   const artifact = path.join(work, 'promptfoo.tgz');
   fs.copyFileSync(tarball, artifact);
   const env = environment(work);
-  const npmVersion = await run(npm, ['--version'], work, env, path.join(output, 'npm-version'));
-  assert.equal(npmVersion.code, 0, 'Unable to determine npm version');
+  const npmVersion = await run(
+    npm.command,
+    [...npm.prefix, '--version'],
+    work,
+    env,
+    path.join(output, 'npm-version'),
+  );
+  assert(npmVersion.code === 0 && !npmVersion.timedOut, 'Unable to determine npm version');
   const version = fs.readFileSync(npmVersion.stdout, 'utf8').trim();
   assert(version.startsWith('11.'), `Use npm major 11 (found ${version})`);
   const manifest = {
@@ -411,6 +444,8 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
       profileOrder: profiles,
       npmCache: 'fresh initially; shared across resolution and profiles',
       osCache: 'uncontrolled; fresh Node processes only',
+      moduleResolution:
+        'real-path ancestor isolation; Node global search paths disabled for probes',
       work,
       consumerOverrides: false,
       dependencyResolution:
@@ -424,15 +459,22 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   const save = () => writeJson(path.join(output, 'report.json'), report);
   save();
   report.resolution = await run(
-    npm,
-    ['install', '--package-lock-only', '--ignore-scripts', '--registry', registry.href],
+    npm.command,
+    [
+      ...npm.prefix,
+      'install',
+      '--package-lock-only',
+      '--ignore-scripts',
+      '--registry',
+      registry.href,
+    ],
     resolution,
     env,
     path.join(output, 'resolve'),
     20 * 60_000,
   );
   save();
-  if (report.resolution.code !== 0) {
+  if (report.resolution.code !== 0 || report.resolution.timedOut) {
     return false;
   }
   const lockfile = path.join(resolution, 'package-lock.json');
@@ -444,6 +486,7 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
     const consumer = path.join(work, profile);
     const logs = path.join(output, profile);
     fs.mkdirSync(consumer);
+    assertIsolatedConsumerRoot(consumer, checkoutRoot);
     fs.mkdirSync(logs);
     const profileEnv = environment(consumer);
     // Reuse only the explicit measurement cache, never the user's npm cache.
@@ -459,8 +502,8 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
       ...(scripts ? [] : ['--ignore-scripts']),
     ];
     const install = await run(
-      npm,
-      installArgs,
+      npm.command,
+      [...npm.prefix, ...installArgs],
       consumer,
       profileEnv,
       path.join(logs, 'install'),
@@ -506,8 +549,8 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
       continue;
     }
     const tree = await run(
-      npm,
-      ['ls', '--all', '--json'],
+      npm.command,
+      [...npm.prefix, 'ls', '--all', '--json'],
       consumer,
       profileEnv,
       path.join(logs, 'npm-ls'),

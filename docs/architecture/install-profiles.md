@@ -26,12 +26,17 @@ runs lifecycle scripts by default, including supported native/browser downloads.
 `--no-install-scripts` is an explicit inventory experiment and must not be reported
 as normal installation acceptance. `--profiles default` or
 `--profiles omit-optional` selects one profile. The default registry comes from the invoking npm configuration; `--registry URL`
-selects one explicitly. Other user npm settings and credentials are not inherited.
+selects one explicitly. Other user npm settings and credentials are not inherited. Registry URLs containing
+userinfo, query strings, or fragments are rejected before evidence is written.
 
 The tool retains its temporary consumers and cache; their path is recorded in
 `report.json`. Nothing deletes shared caches or databases. Consumer commands use
 explicit config/cache paths and disable telemetry and update checks. They do not
 inherit provider credentials, `NODE_PATH`, `NODE_OPTIONS`, or other npm settings.
+Temporary roots are resolved through symlinks and must be outside the checkout,
+without an ancestor `node_modules` directory. If `TMPDIR` selects an unsafe root,
+the tool rejects it before writing reports or installing. Node probes also disable
+global module search paths so undeclared dependencies cannot come from the host.
 Outbound proxy settings are preserved without recording their values. Explicit
 asset-cache paths cover the documented browser/model tooling; this is not a
 sandbox for arbitrary dependency lifecycle scripts.
@@ -67,7 +72,10 @@ The report records:
   output, success, score, and error evidence; exit status alone is insufficient.
 
 A failed install, dependency-tree check, startup probe, or eval makes the tool exit
-nonzero. Completed evidence remains available. Partial inventories after install
+nonzero. Every command timeout is a failure, including a timeout that races with
+an expected exit code. Timeout cleanup terminates process groups on POSIX and
+uses `taskkill /T /F` on Windows; unsuccessful cleanup stops measurement before
+an inventory can be trusted. Completed evidence remains available. Partial inventories after install
 failure are diagnostic; they cannot establish a smaller usable profile.
 
 ## Comparison rules
