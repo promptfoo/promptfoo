@@ -605,7 +605,21 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports multiple provider formats including OpenAI Chat and Responses, Anthropic, and Google/Vertex.
+This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
+
+For example, this OpenAI Responses item matches `value: [get_weather]`:
+
+```json
+{
+  "type": "function_call",
+  "id": "fc_1",
+  "call_id": "call_1",
+  "name": "get_weather",
+  "arguments": "{\"city\":\"NYC\"}"
+}
+```
+
+Responses providers serialize calls this way when `functionToolCallbacks` is not configured, so no output transform is needed. The assertion compares tool names only; it does not validate arguments.
 
 The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
 
@@ -1827,7 +1841,7 @@ tests:
 
 ### Classifier
 
-The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+The `classifier` assertion runs the LLM output through a compatible HuggingFace text-classification or token-classification endpoint. A model on the Hub must also be hosted for the required task, or deployed to your own endpoint. This is useful for:
 
 - Sentiment analysis
 - Toxicity detection
@@ -1845,12 +1859,15 @@ assert:
     threshold: 0.5
 ```
 
-Example for PII detection (using negation):
+Example for PII detection (using negation). The gated `bigcode/starpii` model currently has no Inference Provider deployment; set `HF_STARPII_ENDPOINT` to a compatible token-classification endpoint you have deployed. See [classifier setup](./classifier.md#pii-detection-example).
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     threshold: 0.75
 ```
 

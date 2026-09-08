@@ -83,14 +83,14 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
-  // Handle OpenAI Responses function_call: { type: 'function_call', name: '...' }
-  if (obj.type === 'function_call' && typeof obj.name === 'string') {
+  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
+  if (obj.type === 'tool_use' && typeof obj.name === 'string') {
     names.add(obj.name);
     return names;
   }
 
-  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
-  if (obj.type === 'tool_use' && typeof obj.name === 'string') {
+  // OpenAI Responses API single item: { type: 'function_call', name: '...' }
+  if (obj.type === 'function_call' && typeof obj.name === 'string') {
     names.add(obj.name);
     return names;
   }

@@ -324,12 +324,6 @@ const allProviderOptions = [
     tag: 'providers',
   },
   {
-    value: 'github',
-    label: 'GitHub Models',
-    description: 'AI models via GitHub',
-    tag: 'providers',
-  },
-  {
     value: 'cloudflare-ai',
     label: 'Cloudflare AI',
     description: 'Edge AI inference',
@@ -820,15 +814,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'fal',
-      );
-    } else if (value === 'github') {
-      setProvider(
-        {
-          id: 'github:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'github',
       );
     } else if (value === 'hyperbolic') {
       setProvider(

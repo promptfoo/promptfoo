@@ -517,4 +517,32 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(1);
     });
   });
+
+  describe('OpenAI Responses API function_call items', () => {
+    const singleCall = {
+      type: 'function_call',
+      id: 'fc_1',
+      call_id: 'call_1',
+      name: 'get_weather',
+      arguments: '{"city":"NYC"}',
+    };
+
+    it('recognizes a single function_call object', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('recognizes a JSON-stringified single function_call (Responses providers serialize calls)', () => {
+      const result = handleToolCallF1(createParams(JSON.stringify(singleCall), ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('still scores zero when the function_call name does not match', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['book_flight']));
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+  });
 });
