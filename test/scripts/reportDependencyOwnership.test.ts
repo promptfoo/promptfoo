@@ -82,6 +82,48 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('covers executable site docs and blog components as workspace source without parsing Markdown', () => {
+    json('package.json', { dependencies: { motion: '1' }, workspaces: ['site'] });
+    json('site/package.json', { name: 'docs', devDependencies: { react: '1' } });
+    write(
+      'site/docs/components/Demo.tsx',
+      "import { motion } from 'motion/react'; export const Demo = () => <motion.div />;",
+    );
+    write('site/docs/_shared/data.ts', "import 'shared-data';");
+    write(
+      'site/blog/components/Icon.js',
+      "import { Star } from 'lucide-react'; export const Icon = () => <Star />;",
+    );
+    write('site/docs/example.md', "# This is not JavaScript\nimport 'markdown-only';");
+    write('site/blog/post.mdx', "# This is not JavaScript\nimport 'mdx-only';");
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'lucide-react',
+        manifest: 'site/package.json',
+        references: [
+          expect.objectContaining({ file: 'site/blog/components/Icon.js', scope: 'source' }),
+        ],
+      }),
+      expect.objectContaining({
+        dependency: 'motion',
+        manifest: 'site/package.json',
+        declaredElsewhere: ['package.json'],
+        references: [
+          expect.objectContaining({ file: 'site/docs/components/Demo.tsx', scope: 'source' }),
+        ],
+      }),
+      expect.objectContaining({
+        dependency: 'shared-data',
+        manifest: 'site/package.json',
+        references: [
+          expect.objectContaining({ file: 'site/docs/_shared/data.ts', scope: 'source' }),
+        ],
+      }),
+    ]);
+    expect(report.runtimeDeclarationGaps).toEqual([]);
+  });
+
   it('does not accept inherited object keys as declared package names', () => {
     write('src/index.ts', "import 'constructor'; import 'toString';");
     const report = reportDependencyOwnership(root, config);
@@ -271,6 +313,30 @@ describe('dependency ownership report', () => {
       'Annotation has no declaration: package.json: removed',
     ]);
     expect(report.undeclaredUsages).toEqual([]);
+    expect(report.computedImports[0].fileAnnotations).toEqual([]);
+  });
+
+  it('excludes annotations with missing evidence from computed import and declaration metadata', () => {
+    write('src/index.ts', 'import(candidate);');
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root/runtime' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'shared',
+          disposition: 'computed-loader',
+          reason: 'A removed evidence file invalidates this annotation.',
+          evidence: ['src/index.ts', 'missing.ts'],
+        },
+      ],
+    });
+    const report = reportDependencyOwnership(root, config);
+    expect(report.annotationErrors).toEqual(['Missing annotation evidence: missing.ts']);
+    expect(report.computedImports[0].fileAnnotations).toEqual([]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')).toMatchObject({
+      references: [],
+      annotations: [],
+    });
   });
 
   it('rejects malformed annotations and source parse failures', () => {

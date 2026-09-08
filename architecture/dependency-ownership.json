@@ -81,6 +81,13 @@
       "disposition": "build",
       "reason": "The debug logger optionally loads development source-map support and deliberately catches its absence in production builds. Keep this development-only behavior.",
       "evidence": ["src/logger.ts"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "@types/ws",
+      "disposition": "build",
+      "reason": "Provides ambient ws types for WebSocket provider compilation. Imports name ws rather than @types/ws, so literal source scanning cannot attribute this package. Retain the production declaration pending a separate public and SDK declaration-reach check.",
+      "evidence": ["src/providers/websocket.ts", "package.json"]
     }
   ]
 }

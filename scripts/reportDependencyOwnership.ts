@@ -115,7 +115,10 @@ function scopeFor(file: string, manifest: string): Scope {
   if (/(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)\.[^.]+$/.test(relative)) {
     return 'test';
   }
-  return relative.startsWith('src/') ? 'source' : 'build';
+  return relative.startsWith('src/') ||
+    (manifest === 'site/package.json' && /^(?:docs|blog)\//.test(relative))
+    ? 'source'
+    : 'build';
 }
 
 function staticSpecifier(node: Node): string | undefined {
@@ -138,6 +141,9 @@ function discoverFiles(repoRoot: string, manifests: string[]) {
       `${root}src/**/*.${extensions}`,
       `${root}scripts/**/*.${extensions}`,
       `${root}.storybook/**/*.${extensions}`,
+      ...(manifest === 'site/package.json'
+        ? [`${root}docs/**/*.${extensions}`, `${root}blog/**/*.${extensions}`]
+        : []),
     ]) {
       for (const file of globSync(pattern, { cwd: repoRoot, nodir: true, ignore: ignored }).map(
         normalizePath,
@@ -186,7 +192,9 @@ export function reportDependencyOwnership(
       annotationErrors.push(`Unknown manifest owner: ${manifest}`);
     }
   }
+  const validAnnotations: Ledger['annotations'] = [];
   for (const annotation of ledger.annotations) {
+    const errorCount = annotationErrors.length;
     const pkg = packages.get(annotation.manifest);
     if (
       !pkg ||
@@ -200,6 +208,9 @@ export function reportDependencyOwnership(
       if (!fs.existsSync(path.join(repoRoot, evidence))) {
         annotationErrors.push(`Missing annotation evidence: ${evidence}`);
       }
+    }
+    if (annotationErrors.length === errorCount) {
+      validAnnotations.push(annotation);
     }
   }
 
@@ -254,7 +265,7 @@ export function reportDependencyOwnership(
           file,
           line: source.slice(0, node.start).split('\n').length,
           expression: source.slice(node.start, node.end),
-          fileAnnotations: ledger.annotations
+          fileAnnotations: validAnnotations
             .filter(
               (annotation) =>
                 annotation.disposition === 'computed-loader' && annotation.evidence.includes(file),
@@ -332,16 +343,9 @@ export function reportDependencyOwnership(
     }).visit(result.program);
   }
 
-  for (const annotation of ledger.annotations.filter(
+  for (const annotation of validAnnotations.filter(
     (entry) => entry.disposition === 'computed-loader',
   )) {
-    const pkg = packages.get(annotation.manifest);
-    if (
-      !pkg ||
-      !sections.some((section) => Object.hasOwn(pkg[section] ?? {}, annotation.dependency))
-    ) {
-      continue;
-    }
     for (const file of annotation.evidence.filter((evidence) => files.has(evidence))) {
       record(annotation.manifest, annotation.dependency, {
         file,
@@ -359,7 +363,7 @@ export function reportDependencyOwnership(
     const dependencies = new Set(sections.flatMap((section) => Object.keys(pkg[section] ?? {})));
     return [...dependencies].sort().map((dependency) => {
       const refs = usages.get(`${manifest}:${dependency}`) ?? [];
-      const annotations = ledger.annotations.filter(
+      const annotations = validAnnotations.filter(
         (entry) => entry.manifest === manifest && entry.dependency === dependency,
       );
       return {

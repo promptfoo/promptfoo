@@ -54,7 +54,9 @@ The scanner discovers root `workspaces` entries, including glob patterns, and
 reads each workspace's manifest. It scans `src/`, `scripts/`, `.storybook/`, and
 JavaScript/TypeScript files directly in each package root. This includes app and
 site build configuration, JavaScript with JSX, and source `.d.ts`/`.d.mts`/`.d.cts`
-files. It excludes installed packages, generated runtime bundles, mocks, and
+files. Executable JavaScript/TypeScript components and shared data under
+`site/docs/` and `site/blog/` are also scanned as site source. It excludes
+installed packages, generated runtime bundles, mocks, and
 build/cache output. Tests outside those source roots, Markdown/MDX, CSS imports,
 package-script shell commands, and custom loader functions are not parsed.
 
@@ -95,7 +97,9 @@ Annotations explain uses that direct import scanning cannot establish: computed
 loaders, native/install assets, peers, compatibility pins, build tooling, and
 public declaration requirements. Each names an existing manifest declaration,
 a disposition, a reason, and existing evidence paths. Stale declarations or
-missing evidence make the command fail. Evidence paths are review pointers, not
+missing evidence make the command fail and exclude the invalid annotation from
+computed-import metadata, declaration annotations, and synthesized usage references.
+Evidence paths are review pointers, not
 automated proof that the explanation remains true.
 
 Computed-loader annotations add references with `kind: "annotation"` and
