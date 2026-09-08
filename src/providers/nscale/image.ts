@@ -57,7 +57,6 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       config: {
         ...nscaleConfig,
         apiBaseUrl: nscaleConfig.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-        apiKey: NscaleImageProvider.getApiKey(options),
       } as OpenAiImageProvider['config'],
     });
   }
@@ -90,7 +89,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
    * @returns The API key or service token, or undefined if not found
    */
   getApiKey(): string | undefined {
-    return this.config?.apiKey || NscaleImageProvider.getApiKey({ config: this.config });
+    return NscaleImageProvider.getApiKey({ config: this.config, env: this.env });
   }
 
   /**
