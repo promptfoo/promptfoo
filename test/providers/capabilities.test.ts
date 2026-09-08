@@ -2,11 +2,14 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { getAndCheckProvider } from '../../src/matchers/providers';
+import { AwsBedrockEmbeddingProvider } from '../../src/providers/bedrock';
+import { CohereEmbeddingProvider } from '../../src/providers/cohere';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import {
   type ApiProvider,
@@ -62,6 +65,14 @@ it('does not treat the OpenAI embedding text stub as an implemented capability',
   await expect(getAndCheckProvider('text', provider, null, 'rubric')).rejects.toThrow(
     'not a valid text provider',
   );
+});
+
+it.each([
+  ['Bedrock', () => new AwsBedrockEmbeddingProvider('fixture')],
+  ['Cohere', () => new CohereEmbeddingProvider('fixture')],
+  ['Voyage', () => new VoyageEmbeddingProvider('fixture')],
+])('does not treat the built-in %s text stub as an override', (_name, create) => {
+  expect(hasProviderCapability(create(), 'callApi')).toBe(false);
 });
 
 it('recognizes a subclass implementation that replaces an inherited text stub', async () => {
@@ -278,6 +289,10 @@ it('forwards cleanup and function validation with the delegate as receiver', asy
   expect(cleanup).toHaveBeenCalledOnce();
   expect(validate.mock.contexts[0]).toBe(cleanup.mock.contexts[0]);
   expect(cleanup.mock.contexts[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
+});
+
+it('constructs the backward-compatible LiteLLM provider without options', () => {
+  expect(new LiteLLMProvider('fixture').id()).toBe('litellm:fixture');
 });
 
 it('retains MCP tools and cleanup ownership when a LiteLLM wrapper is reused', async () => {

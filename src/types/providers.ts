@@ -178,14 +178,17 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
     const hasDeclaration =
       prototype.constructor &&
       Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
-    // A capability map (LiteLLM) declares shared forwarding stubs, not implementations.
+    // A declaring class owns its stubs; an override can replace one on a subclass.
+    const declaredCapabilities = (
+      prototype.constructor as { declaredProviderCapabilities?: unknown } | undefined
+    )?.declaredProviderCapabilities;
+    const parentCapabilities = (
+      Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
+    )?.declaredProviderCapabilities;
     if (
       Object.prototype.hasOwnProperty.call(prototype, capability) &&
       (!hasDeclaration ||
-        Array.isArray(
-          (prototype.constructor as { declaredProviderCapabilities?: unknown })
-            .declaredProviderCapabilities,
-        ))
+        (Array.isArray(declaredCapabilities) && Array.isArray(parentCapabilities)))
     ) {
       overridden = true;
     }
