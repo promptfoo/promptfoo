@@ -20,7 +20,6 @@ import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHa
 import { calculateBedrockInvokeModelCost } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -2969,7 +2968,11 @@ export class AwsBedrockEmbeddingProvider
 
   constructor(
     modelName: string,
-    options: { config?: BedrockEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: BedrockEmbeddingOptions;
+      id?: string;
+      env?: AwsBedrockGenericProvider['env'];
+    } = {},
   ) {
     super(modelName, options);
   }
