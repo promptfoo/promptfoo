@@ -145,6 +145,23 @@ describe('callback execution records', () => {
     expect(loadFile).toHaveBeenCalledTimes(2);
   });
 
+  it('recovers a completed predecessor when the newer load fails later', async () => {
+    const cache = {};
+    const first = createDeferred<Function>();
+    const second = createDeferred<Function>();
+    const loadFile = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const call = (reference: string) =>
+      executeCallback({ ...identity, reference, cache, loadFile });
+    const oldCall = call('file://first.js');
+    const newCall = call('file://second.js');
+    first.resolve(() => 'first');
+    expect((await oldCall).output).toBe('first');
+    second.reject(new Error('new load failed'));
+    expect(await newCall).toMatchObject({ isError: true });
+    expect((await call('file://first.js')).output).toBe('first');
+    expect(loadFile).toHaveBeenCalledTimes(2);
+  });
+
   it.each([undefined, null, ''])(
     'treats missing callback reference %s as absent',
     async (reference) => {

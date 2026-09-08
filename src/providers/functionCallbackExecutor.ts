@@ -4,12 +4,18 @@ import { withGenAIToolSpan } from './tracing';
 import type { CallbackExecutionRecord } from './functionCallbackTypes';
 
 type Callback = (args: string, context?: unknown) => unknown;
+type CallbackLoad = {
+  previous?: CallbackLoad;
+  callback?: Function;
+  reference?: unknown;
+  failed?: boolean;
+};
 
 // Keep existing per-provider caches compatible, but invalidate a name when a
 // prompt changes its configured function or file reference. Weak ownership lets
 // cleanup/replacement of a provider release this metadata too.
 const callbackReferences = new WeakMap<Record<string, Function>, Map<string, unknown>>();
-const callbackLoads = new WeakMap<Record<string, Function>, Map<string, symbol>>();
+const callbackLoads = new WeakMap<Record<string, Function>, Map<string, CallbackLoad>>();
 
 /** Load and execute once, preserving the caller's loading and invocation policy. */
 export async function executeCallback({
@@ -51,8 +57,7 @@ export async function executeCallback({
         loads = new Map();
         callbackLoads.set(cache, loads);
       }
-      const previousLoad = loads.get(name);
-      const load = Symbol(name);
+      const load: CallbackLoad = { previous: loads.get(name) };
       loads.set(name, load);
       let callback = cache[name];
       if (!callback || references.get(name) !== reference) {
@@ -78,11 +83,23 @@ export async function executeCallback({
           }
           resolved = true;
         } finally {
-          if (!resolved && loads.get(name) === load) {
-            if (previousLoad) {
-              loads.set(name, previousLoad);
-            } else {
-              loads.delete(name);
+          if (!resolved) {
+            load.failed = true;
+            if (loads.get(name) === load) {
+              let previous = load.previous;
+              while (previous?.failed) {
+                previous = previous.previous;
+              }
+              if (previous) {
+                loads.set(name, previous);
+                if (previous.callback) {
+                  cache[name] = previous.callback;
+                  references.set(name, previous.reference);
+                  previous.previous = undefined;
+                }
+              } else {
+                loads.delete(name);
+              }
             }
           }
         }
@@ -90,6 +107,11 @@ export async function executeCallback({
           cache[name] = callback;
           references.set(name, reference);
         }
+      }
+      load.callback = callback;
+      load.reference = reference;
+      if (loads.get(name) === load) {
+        load.previous = undefined;
       }
       signal?.throwIfAborted();
       const result = await awaitProviderOperation(
