@@ -245,13 +245,17 @@ describe('GoogleVideoProvider', () => {
     it('should return error when Google AI Studio API key is missing', async () => {
       mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-      mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+      mockResolveProjectId.mockResolvedValue('scoped-project');
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { vertexai: false },
+        env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      });
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Google AI Studio');
       expect(result.error).toContain('GOOGLE_API_KEY');
+      expect(mockResolveProjectId).not.toHaveBeenCalled();
     });
 
     it('should return error when Vertex project ID is missing and ADC fails', async () => {

@@ -836,7 +836,10 @@ export class GoogleVideoProvider implements ApiProvider {
       };
     } else if (!this.getApiKey(effectiveConfig)) {
       try {
-        const adcProjectId = await resolveProjectId(effectiveConfig, this.env);
+        const adcProjectId =
+          effectiveConfig.vertexai === false
+            ? undefined
+            : await resolveProjectId(effectiveConfig, this.env);
         if (adcProjectId) {
           effectiveConfig = {
             ...effectiveConfig,
