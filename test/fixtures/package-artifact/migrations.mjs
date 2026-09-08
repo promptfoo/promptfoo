@@ -52,8 +52,7 @@ async function runPersistedEvaluation() {
   );
 }
 
-async function checkMigrations() {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-artifact-migrations-'));
+async function checkMigrations(tempDir) {
   const configDir = path.join(tempDir, 'config');
   const oldMigrationsDir = path.join(tempDir, 'old-migrations');
   const outputPath = path.join(tempDir, 'evaluation.json');
@@ -163,8 +162,8 @@ async function checkMigrations() {
     client.close();
     client = undefined;
 
-    // The child exercises public migration selection and persistence, then releases all
-    // native handles before this process inspects and removes its own temporary database.
+    // Each evaluation process releases its native handles before the checking process
+    // inspects the database. The outer supervisor owns cleanup after all of them exit.
     const runNode = (args) =>
       execFileSync(process.execPath, args, {
         cwd: path.dirname(fileURLToPath(import.meta.url)),
@@ -283,13 +282,27 @@ async function checkMigrations() {
     );
   } finally {
     client?.close();
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
 if (process.argv[2] === '--evaluate') {
   await runPersistedEvaluation();
+} else if (process.argv[2] === '--check') {
+  assert.equal(process.argv.length, 4, 'Expected the owned migration directory');
+  await checkMigrations(process.argv[3]);
 } else {
   assert.equal(process.argv.length, 2, 'Unexpected migration fixture arguments');
-  await checkMigrations();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-artifact-migrations-'));
+  try {
+    // libSQL transactions can retain native connections after client.close(). Keep every
+    // database handle in a child so Windows permits deletion when that process exits.
+    execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--check', tempDir], {
+      cwd: path.dirname(fileURLToPath(import.meta.url)),
+      env: { ...platformEnv, NODE_PATH: '' },
+      stdio: 'inherit',
+      timeout: 60_000,
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
 }

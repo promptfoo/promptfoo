@@ -144,3 +144,44 @@ describe('standalone artifact tooling', () => {
     }
   });
 });
+
+describe('installed migration fixture lifetime', () => {
+  it('loads native bindings in a child and cleans owned state when that child fails', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-lifetime-'));
+    directories.push(root);
+    const temporary = path.join(root, 'temporary');
+    const packageDir = path.join(root, 'node_modules', 'promptfoo');
+    const nativeDir = path.join(root, 'node_modules', '@libsql', 'client');
+    fs.mkdirSync(temporary);
+    fs.mkdirSync(path.join(packageDir, 'dist', 'src'), { recursive: true });
+    fs.mkdirSync(nativeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({ name: 'promptfoo', exports: './dist/src/index.cjs' }),
+    );
+    fs.writeFileSync(path.join(packageDir, 'dist', 'src', 'index.cjs'), 'module.exports = {};');
+    fs.cpSync(path.resolve(__dirname, '../../drizzle'), path.join(packageDir, 'dist', 'drizzle'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(nativeDir, 'index.js'),
+      `require('node:fs').writeFileSync(__dirname + '/native-pid', String(process.pid));
+throw new Error('artifact-native-binding-sentinel');`,
+    );
+    const fixture = path.join(root, 'migrations.mjs');
+    fs.copyFileSync(
+      path.resolve(__dirname, '../fixtures/package-artifact/migrations.mjs'),
+      fixture,
+    );
+    const result = spawnSync(process.execPath, [fixture], {
+      encoding: 'utf8',
+      env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('artifact-native-binding-sentinel');
+    expect(Number(fs.readFileSync(path.join(nativeDir, 'native-pid'), 'utf8'))).not.toBe(
+      result.pid,
+    );
+    expect(fs.readdirSync(temporary)).toEqual([]);
+  });
+});
