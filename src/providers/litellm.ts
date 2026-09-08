@@ -9,7 +9,6 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -119,8 +118,8 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    return this.embeddingProvider.callEmbeddingApi(text);
+  callEmbeddingApi(...args: Parameters<ApiEmbeddingProvider['callEmbeddingApi']>) {
+    return this.embeddingProvider.callEmbeddingApi(...args);
   }
 }
 
