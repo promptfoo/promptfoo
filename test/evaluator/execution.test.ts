@@ -18,7 +18,7 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
-import { sleep } from '../../src/util/time';
+import * as time from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
@@ -98,8 +98,33 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(sleep).toHaveBeenCalledWith(100);
+    expect(time.sleep).toHaveBeenCalledWith(100);
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('interrupts a post-provider delay when the evaluation is cancelled', async () => {
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'delayed-provider',
+      delay: 10_000,
+      callApi: vi.fn().mockResolvedValue({ output: 'ready' }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('hello')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const delay = vi.spyOn(time, 'sleepWithAbort');
+    const pending = evaluate(suite, evalRecord, { abortSignal: controller.signal });
+    try {
+      await vi.waitFor(() => expect(delay).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled post-provider delay'));
+      await pending.catch(() => undefined);
+    } finally {
+      controller.abort();
+      delay.mockRestore();
+    }
   });
 
   it('evaluates with no provider delay', async () => {
@@ -120,7 +145,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(sleep).not.toHaveBeenCalled();
+    expect(time.sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -631,7 +656,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(sleep).not.toHaveBeenCalled();
+    expect(time.sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
