@@ -10,6 +10,8 @@ describe('ResultsChartsSection', () => {
         isRedteamEval
         resultsChartsScores={[0.2, 0.8]}
         resultsChartsUnavailableReasons={[]}
+        showCharts={null}
+        toggleShowCharts={() => {}}
       >
         {(chartsToggleButton) => (
           <>
