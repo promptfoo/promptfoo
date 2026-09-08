@@ -1,5 +1,16 @@
 const MAX_JSON_LENGTH = 100_000;
 
+function appendJsonObject(objects: object[], value: string, start: number, end: number): void {
+  try {
+    const parsed: unknown = JSON.parse(value.slice(start, end + 1));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      objects.push(parsed);
+    }
+  } catch {
+    // Reject malformed evidence at the verifier boundary.
+  }
+}
+
 /** Extract strict JSON objects embedded in unstructured text. */
 export function extractJsonObjects(value: string): object[] {
   if (value.length > MAX_JSON_LENGTH) {
@@ -29,14 +40,7 @@ export function extractJsonObjects(value: string): object[] {
         start = index;
       }
     } else if (character === '}' && depth > 0 && --depth === 0) {
-      try {
-        const parsed: unknown = JSON.parse(value.slice(start, index + 1));
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          objects.push(parsed);
-        }
-      } catch {
-        // Reject malformed evidence at the verifier boundary.
-      }
+      appendJsonObject(objects, value, start, index);
     }
   }
 
