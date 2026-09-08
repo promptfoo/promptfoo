@@ -18,6 +18,7 @@ describe('Eval API schemas', () => {
       totalCount: 1,
       filteredCount: 1,
       filteredMetrics: null,
+      nonEmptyPromptIndices: [0],
       config: {},
       author: null,
       version: 4,
@@ -27,6 +28,7 @@ describe('Eval API schemas', () => {
 
     expect(parsed.table.head).toBe(head);
     expect(parsed.table.body).toBe(body);
+    expect(parsed.nonEmptyPromptIndices).toEqual([0]);
   });
 
   it('rejects table responses where version is not a number', () => {
