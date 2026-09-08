@@ -187,29 +187,7 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
       );
     }
 
-    if (!pinsSamplingParams(modelName)) {
-      return result;
-    }
-
     const { body, config } = result;
-    if (config.temperature === undefined && config.passthrough?.temperature === undefined) {
-      delete body.temperature;
-    }
-    if (config.top_p === undefined && config.passthrough?.top_p === undefined) {
-      delete body.top_p;
-    }
-    if (
-      config.presence_penalty === undefined &&
-      config.passthrough?.presence_penalty === undefined
-    ) {
-      delete body.presence_penalty;
-    }
-    if (
-      config.frequency_penalty === undefined &&
-      config.passthrough?.frequency_penalty === undefined
-    ) {
-      delete body.frequency_penalty;
-    }
     // Moonshot's canonical field is max_completion_tokens (max_tokens is a
     // deprecated alias). Honor an explicit value on either field — prompt-level
     // config beats provider-level regardless of which alias each layer used —
@@ -228,11 +206,35 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
       config.passthrough?.max_tokens ??
       config.max_completion_tokens ??
       config.max_tokens;
-    delete body.max_tokens;
-    if (maxTokens === undefined) {
-      delete body.max_completion_tokens;
-    } else {
-      body.max_completion_tokens = maxTokens;
+    if (maxTokens !== undefined || pinsSamplingParams(modelName)) {
+      delete body.max_tokens;
+      if (maxTokens === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = maxTokens;
+      }
+    }
+
+    if (!pinsSamplingParams(modelName)) {
+      return result;
+    }
+    if (config.temperature === undefined && config.passthrough?.temperature === undefined) {
+      delete body.temperature;
+    }
+    if (config.top_p === undefined && config.passthrough?.top_p === undefined) {
+      delete body.top_p;
+    }
+    if (
+      config.presence_penalty === undefined &&
+      config.passthrough?.presence_penalty === undefined
+    ) {
+      delete body.presence_penalty;
+    }
+    if (
+      config.frequency_penalty === undefined &&
+      config.passthrough?.frequency_penalty === undefined
+    ) {
+      delete body.frequency_penalty;
     }
     return result;
   }

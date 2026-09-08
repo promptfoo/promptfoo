@@ -98,6 +98,30 @@ describe('Moonshot effective model policy', () => {
     ).rejects.toThrow('kimi-k2.6 does not support reasoning_effort');
   });
 
+  it.each([
+    [{ max_completion_tokens: 2000 }, {}, 2000],
+    [{ max_tokens: 2000 }, { max_completion_tokens: 7 }, 7],
+    [
+      { max_completion_tokens: 2000 },
+      { passthrough: { model: 'moonshot-v1-8k', max_tokens: 9 } },
+      9,
+    ],
+  ])(
+    'preserves explicit token limits for legacy model overrides',
+    async (config, promptConfig, expected) => {
+      const { body } = await makeProvider('moonshot', {
+        ...config,
+        passthrough: { model: 'moonshot-v1-8k' },
+      }).getOpenAiBody('Hello', promptContext(promptConfig));
+      expect(body).toMatchObject({
+        model: 'moonshot-v1-8k',
+        temperature: 0,
+        max_completion_tokens: expected,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
   it('does not apply Kimi sampling rules to an overridden legacy model', async () => {
     const { body } = await makeProvider('moonshot', {
       passthrough: { model: 'moonshot-v1-private' },
@@ -107,7 +131,11 @@ describe('Moonshot effective model policy', () => {
 });
 
 describe('MiniMax effective billing', () => {
-  function reply(cached = false, serviceTier?: 'priority' | 'default') {
+  function reply(
+    cached = false,
+    serviceTier?: 'priority' | 'default',
+    cacheUsage: Record<string, unknown> = { prompt_tokens_details: { cached_tokens: 40 } },
+  ) {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
         choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }],
@@ -115,7 +143,7 @@ describe('MiniMax effective billing', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
-          prompt_tokens_details: { cached_tokens: 40 },
+          ...cacheUsage,
         },
         ...(serviceTier ? { service_tier: serviceTier } : {}),
       },
@@ -162,6 +190,47 @@ describe('MiniMax effective billing', () => {
       (512001 * 0.6 * 1.5) / 1e6,
       12,
     );
+  });
+
+  it.each([
+    { prompt_tokens_details: { cached_tokens: 40 } },
+    { input_tokens_details: { cached_tokens: 40 } },
+    { cached_tokens: 40 },
+  ])('preserves normalized cached-token billing for %j', async (cacheUsage) => {
+    reply(false, undefined, cacheUsage);
+    const result = await makeProvider('minimax', { apiKey: 'fixture' }).callApi('Hello');
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(40);
+    expect(result.cost).toBeCloseTo(0.0000804, 14);
+  });
+
+  it('preserves an explicit native zero before alternate cache counters', async () => {
+    reply(false, undefined, { prompt_tokens_details: { cached_tokens: 0 }, cached_tokens: 40 });
+    const result = await makeProvider('minimax', { apiKey: 'fixture' }).callApi('Hello');
+    expect(result.cost).toBeCloseTo(0.00009, 14);
+  });
+
+  it.each([
+    [{ inputCost: 0.01, outputCost: 0.02, cacheReadCost: 0.001 }, 40, 1.64],
+    [{ inputCost: 0.01, outputCost: 0.02 }, 0, 2],
+    [{ inputCost: 0.01, outputCost: 0.02 }, 40, 2],
+    [{ cost: 0.0001, cacheReadCost: 0 }, 40, 0.011],
+    [{ inputCost: 0, outputCost: 0, cacheReadCost: 0 }, 40, 0],
+  ])(
+    'honors custom pricing for an unlisted effective alias',
+    async (config, cachedTokens, expected) => {
+      reply(false, 'priority', { input_tokens_details: { cached_tokens: cachedTokens } });
+      const result = await makeProvider('minimax', { apiKey: 'fixture' }).callApi(
+        'Hello',
+        promptContext({ ...config, passthrough: { model: 'private-minimax-deployment' } }),
+      );
+      expect(result.cost).toBeCloseTo(expected, 14);
+    },
+  );
+
+  it('leaves unlisted aliases without sufficient rates unpriced', () => {
+    expect(
+      calculateMiniMaxCost('private-deployment', { inputCost: 0.01 }, 100, 50),
+    ).toBeUndefined();
   });
 
   it('retains zero incremental cost on a promptfoo cache hit', async () => {

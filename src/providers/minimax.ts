@@ -1,7 +1,8 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost, clampCachedTokens } from './shared';
+import { getOpenAICompletionTokenDetails } from './openai/util';
+import { clampCachedTokens } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -102,20 +103,23 @@ export function calculateMiniMaxCost(
   }
 
   const model = MINIMAX_CHAT_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return calculateCost(modelName, config, promptTokens, completionTokens, MINIMAX_CHAT_MODELS);
-  }
-
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens!);
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
   const modelCost =
-    model.cost.longContext && promptTokens! > model.cost.longContext.threshold
+    model?.cost.longContext && promptTokens! > model.cost.longContext.threshold
       ? model.cost.longContext
-      : model.cost;
+      : model?.cost;
   const tierMultiplier = modelName === 'MiniMax-M3' && config.service_tier === 'priority' ? 1.5 : 1;
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * tierMultiplier;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * tierMultiplier;
-  const cacheReadCost = config.cacheReadCost ?? modelCost.cache_read * tierMultiplier;
+  const inputCost =
+    config.inputCost ?? config.cost ?? (modelCost && modelCost.input * tierMultiplier);
+  const outputCost =
+    config.outputCost ?? config.cost ?? (modelCost && modelCost.output * tierMultiplier);
+  // Explicit rates also price private deployment aliases without a model-table entry.
+  if (inputCost === undefined || outputCost === undefined) {
+    return undefined;
+  }
+  const cacheReadCost =
+    config.cacheReadCost ?? (modelCost && modelCost.cache_read * tierMultiplier) ?? inputCost;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
   const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
@@ -282,7 +286,7 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
       },
       data.usage?.prompt_tokens,
       data.usage?.completion_tokens,
-      data.usage?.prompt_tokens_details?.cached_tokens,
+      getOpenAICompletionTokenDetails(data.usage ?? {})?.cacheReadInputTokens,
     );
   }
 }
