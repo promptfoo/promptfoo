@@ -91,7 +91,9 @@ describe('GPT-6 Astra Responses billing', () => {
       const result = await provider.callApi('Summarize the job.');
 
       const [, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
-      expect(JSON.parse(options?.body as string).service_tier).toBe(passthrough);
+      expect(JSON.parse(options?.body as string).service_tier).toBe(
+        passthrough === 'fast' ? 'priority' : passthrough,
+      );
       expect(result.error).toBeUndefined();
       expect(result.cost).toBeCloseTo(cost, 10);
     },

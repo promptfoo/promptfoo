@@ -671,9 +671,6 @@ describe('calculateOpenAICost', () => {
 
   it('keeps current audio and realtime models routable until their January 20, 2027 shutdown', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
-    expect(
-      OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-mini-audio-preview-2024-12-17'),
-    ).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
     expect(
@@ -696,11 +693,19 @@ describe('calculateOpenAICost', () => {
     }
   });
 
-  it('excludes July 23 shutdowns from current model registries while retaining billing', () => {
-    for (const model of ['gpt-4o-search-preview', 'gpt-4o-mini-search-preview']) {
-      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(true);
-    }
+  it.each([
+    'gpt-4o-mini-audio-preview-2024-12-17',
+    'gpt-4o-mini-search-preview',
+    'gpt-4o-search-preview',
+    'gpt-5-chat',
+  ])('keeps legacy discovery exclusion %s separate from confirmed shutdowns', (model) => {
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(RETIRED_OPENAI_MODEL_IDS.has(model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+  });
 
+  it('excludes July 23 shutdowns from current model registries while retaining billing', () => {
     for (const model of [
       'gpt-4o-search-preview-2025-03-11',
       'gpt-4o-mini-search-preview-2025-03-11',
@@ -739,7 +744,8 @@ describe('calculateOpenAICost', () => {
       'o4-mini-deep-research',
       'o4-mini-deep-research-2025-06-26',
     ]) {
-      expect(OPENAI_DEEP_RESEARCH_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(OPENAI_DEEP_RESEARCH_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
       expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
     }
   });
@@ -750,7 +756,6 @@ describe('calculateOpenAICost', () => {
     }
     for (const model of retiredResponsesModelIds) {
       expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
-      expect(OPENAI_DEEP_RESEARCH_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     }
     expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some(({ id }) => id === 'gpt-realtime-mini-2025-10-06')).toBe(
@@ -1212,5 +1217,84 @@ describe('formatOpenAiError', () => {
     expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
+  });
+});
+
+describe('OpenAI model catalogs', () => {
+  const activeModels = [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_RESPONSES_ONLY_MODELS,
+    ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+  ].map((candidate) => candidate.id);
+
+  // Confirmed shutdowns and legacy discovery exclusions retained from the current-main catalog.
+  it.each([
+    'chatgpt-4o-latest',
+    'codex-mini-latest',
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+    'gpt-3.5-turbo-0301',
+    'gpt-3.5-turbo-0613',
+    'gpt-3.5-turbo-16k-0613',
+    'gpt-4-0125-preview',
+    'gpt-4-0314',
+    'gpt-4-1106-vision-preview',
+    'gpt-4-32k',
+    'gpt-4-32k-0314',
+    'gpt-4-32k-0613',
+    'gpt-4-turbo-preview',
+    'gpt-4-vision-preview',
+    'gpt-4o-mini-search-preview',
+    'gpt-4o-mini-search-preview-2025-03-11',
+    'gpt-4o-search-preview',
+    'gpt-4o-search-preview-2025-03-11',
+    'gpt-5-chat',
+    'gpt-5-chat-latest',
+    'gpt-5-codex',
+    'gpt-5.1-chat-latest',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.3-chat-latest',
+    'gpt-audio-mini-2025-10-06',
+    'gpt-realtime-mini-2025-10-06',
+    'o1-mini',
+    'o1-mini-2024-09-12',
+    'o1-preview',
+    'o1-preview-2024-09-12',
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
+  ])('does not advertise retired or legacy model %s', (model) => {
+    expect(activeModels).not.toContain(model);
+    // Removing suggestions must not erase historical cost estimates.
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-1106',
+    'gpt-3.5-turbo-instruct',
+    'babbage-002',
+    'davinci-002',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4.1-nano',
+    'gpt-4o-2024-05-13',
+    'o1',
+    'o1-pro',
+    'o3-mini',
+    'o4-mini',
+    'gpt-5-2025-08-07',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-12-15',
+    'gpt-realtime-mini',
+    'gpt-realtime-mini-2025-12-15',
+  ])('retains model %s before its announced shutdown', (model) => {
+    expect(activeModels).toContain(model);
   });
 });

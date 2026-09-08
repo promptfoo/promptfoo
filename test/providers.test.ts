@@ -497,14 +497,12 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load OpenAI GPT-5.3 chat latest provider', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-5.3-chat-latest');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'gpt-5.3-chat-latest',
-      expect.any(Object),
-    );
-    expect(provider).toBeDefined();
-  });
+  it.each(['gpt-5.2-chat-latest', 'gpt-5.3-chat-latest'])(
+    'rejects the retired first-party chat alias %s',
+    async (model) => {
+      await expect(loadApiProvider(`openai:chat:${model}`)).rejects.toThrow('has been retired');
+    },
+  );
 
   it('should load OpenAI GPT-5.4 chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-5.4');

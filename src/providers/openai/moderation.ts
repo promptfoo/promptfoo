@@ -15,9 +15,6 @@ import type {
 const OPENAI_MODERATION_AND_RETIRED_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
-  { id: 'text-moderation-latest', maxTokens: 32768, capabilities: ['text'] },
-  { id: 'text-moderation-stable', maxTokens: 32768, capabilities: ['text'] },
-  { id: 'text-moderation-007', maxTokens: 32768, capabilities: ['text'] },
 ];
 const OPENAI_MODERATION_MODELS = OPENAI_MODERATION_AND_RETIRED_MODELS.filter(
   ({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id),

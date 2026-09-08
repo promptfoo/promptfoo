@@ -80,6 +80,9 @@ type OpenAIModelInfo = {
  * current first-party routing registries. Do not add models before their shutdown date.
  */
 export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
+  // Additional current-main shutdowns, reconciled with the published lifecycle catalog.
+  'gpt-5.2-chat-latest',
+  'gpt-5.3-chat-latest',
   // Retired before 2026.
   'gpt-3.5-turbo-0301',
   'gpt-3.5-turbo-0613',
@@ -133,8 +136,19 @@ export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
   'o4-mini-deep-research-2025-06-26',
 ]);
 
+// Preserve current-main discovery exclusions without inferring an exact shutdown from a
+// missing catalog entry. These IDs may still be used with explicitly configured endpoints.
+const LEGACY_OPENAI_DISCOVERY_EXCLUSIONS = new Set([
+  'gpt-4o-mini-audio-preview-2024-12-17',
+  'gpt-4o-mini-search-preview',
+  'gpt-4o-search-preview',
+  'gpt-5-chat',
+]);
+
 function excludeRetiredModels(models: OpenAIModelInfo[]): OpenAIModelInfo[] {
-  return models.filter(({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id));
+  return models.filter(
+    ({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id) && !LEGACY_OPENAI_DISCOVERY_EXCLUSIONS.has(id),
+  );
 }
 
 // Models served by /v1/audio/speech, not Chat Completions.
@@ -768,9 +782,8 @@ const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     },
   })),
 ];
-export const OPENAI_DEEP_RESEARCH_MODELS = excludeRetiredModels(
-  OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS,
-);
+// Historical billing compatibility export; these IDs are excluded from current discovery.
+export const OPENAI_DEEP_RESEARCH_MODELS = OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS;
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
 export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [

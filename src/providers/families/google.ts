@@ -123,7 +123,18 @@ export const googleProviderFactories: ProviderFactory[] = [
         }
         validateGoogleModelRoute(modelName, serviceType, true);
 
-        if (serviceType === 'live') {
+        if (serviceType === 'interactions' && modelName === GEMINI_ROBOTICS_STANDARD_MODEL) {
+          const { GoogleInteractionsProvider } = await import('../google/interactions');
+          return new GoogleInteractionsProvider(modelName, {
+            ...providerOptions,
+            id: providerPath,
+            env: providerOptions.env ?? context.env,
+            config: {
+              ...(context.basePath && { basePath: context.basePath }),
+              ...providerOptions.config,
+            },
+          });
+        } else if (serviceType === 'live') {
           // This is a Live API request
           const { GoogleLiveProvider } = await import('../google/live');
           return new GoogleLiveProvider(modelName, providerOptions);

@@ -119,7 +119,6 @@ providers:
   - truefoundry:openai-main/gpt-4o
   - truefoundry:openai-main/gpt-4o-mini
   - truefoundry:openai-main/o1
-  - truefoundry:openai-main/o1-mini
 ```
 
 ### Anthropic Models

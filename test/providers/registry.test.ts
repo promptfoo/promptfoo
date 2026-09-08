@@ -1930,6 +1930,35 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each(['google', 'palm'])(
+      'preserves the standard Robotics model and options for explicit %s:interactions:',
+      async (prefix) => {
+        const providerPath = `${prefix}:interactions:gemini-robotics-er-2-preview`;
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const { GoogleInteractionsProvider } = await import(
+          '../../src/providers/google/interactions'
+        );
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
+        expect((provider as GoogleInteractionsProvider).modelName).toBe(
+          'gemini-robotics-er-2-preview',
+        );
+        expect((provider as GoogleInteractionsProvider).config.basePath).toBe('/test');
+        expect(provider.id()).toBe(providerPath);
+        const explicit = await factory!.create(
+          providerPath,
+          { config: { basePath: '/explicit', apiKey: 'test-key' } },
+          bareContext,
+        );
+        expect((explicit as GoogleInteractionsProvider).config).toMatchObject({
+          basePath: '/explicit',
+          apiKey: 'test-key',
+        });
+      },
+    );
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
