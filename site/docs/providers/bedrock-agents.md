@@ -33,7 +33,10 @@ Most configs only need `agentId` (from the provider ID) and `agentAliasId`. The 
 
 :::
 
-The provider exposes the main `InvokeAgent` options:
+The provider exposes the main [`InvokeAgent` options](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+Legacy inference, guardrail, prompt override, action-group, and input filtering settings
+shown below are accepted for compatibility but are omitted from runtime requests by
+the AWS SDK. Configure those settings on the deployed agent.
 
 ```yaml
 providers:
@@ -202,28 +205,17 @@ config:
 
 ### Guardrails
 
-Apply content filtering and safety measures:
-
-```yaml
-config:
-  guardrailConfiguration:
-    guardrailId: 'content-filter-001'
-    guardrailVersion: '2'
-```
+Configure guardrails on the deployed agent. The AWS `InvokeAgent` API does not accept
+`guardrailConfiguration`, so setting that provider option does not apply a guardrail.
+Promptfoo cannot infer whether a guardrail ran from configuration alone; inspect the agent trace.
+The same runtime limitation applies to inference settings, prompt overrides, and action-group definitions.
 
 ### Inference Control
 
-Fine-tune agent response generation:
-
-```yaml
-config:
-  inferenceConfig:
-    temperature: 0.3 # Lower for more deterministic responses
-    topP: 0.95
-    topK: 40
-    maximumLength: 4096
-    stopSequences: ['END_RESPONSE', "\n\n"]
-```
+Set inference parameters when creating or updating the deployed agent. `InvokeAgent`
+does not accept per-request `inferenceConfig`, `promptOverrideConfiguration`, or
+`actionGroups` definitions. Existing provider configuration keys are retained for
+compatibility, but the AWS SDK omits these fields from runtime requests.
 
 ### Trace Information
 
@@ -291,11 +283,6 @@ The provider returns responses with the following structure:
     sessionId?: string;     // Session identifier
     memoryId?: string;      // Memory type used
     trace?: Array<any>;     // Execution traces (if enableTrace: true)
-    guardrails?: {          // Guardrail application info
-      applied: boolean;
-      guardrailId: string;
-      guardrailVersion: string;
-    };
   };
   cached?: boolean;         // Whether response was cached
   error?: string;           // Error message if failed

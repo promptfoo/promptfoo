@@ -20,6 +20,7 @@ import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHa
 import { calculateBedrockInvokeModelCost } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -2956,10 +2957,23 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+interface BedrockEmbeddingOptions extends BedrockOptions {
+  input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+}
+
 export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  declare config: BedrockEmbeddingOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: BedrockEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+  }
+
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');
   }
@@ -2968,6 +2982,7 @@ export class AwsBedrockEmbeddingProvider
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
+          input_type: this.config.input_type ?? 'search_document',
         }
       : {
           inputText: text,
@@ -2996,9 +3011,16 @@ export class AwsBedrockEmbeddingProvider
       const data = JSON.parse(response.body.transformToString());
       // Titan Text API returns embeddings in the `embedding` field
       // Cohere API returns embeddings in the `embeddings` field
-      const embedding = data?.embedding || data?.embeddings;
-      if (!embedding) {
-        throw new Error('No embedding found in AWS Bedrock API response');
+      const embeddings = data?.embeddings?.float ?? data?.embeddings;
+      const embedding =
+        data?.embedding ??
+        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
+      if (
+        !Array.isArray(embedding) ||
+        embedding.length === 0 ||
+        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        throw new Error('No valid embedding found in AWS Bedrock API response');
       }
       return {
         embedding,

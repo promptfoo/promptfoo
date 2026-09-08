@@ -255,20 +255,21 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Build the session state from configuration
    */
   private buildSessionState(): SessionState | undefined {
-    if (!this.config.sessionState) {
+    if (!this.config.sessionState && !this.config.knowledgeBaseConfigurations) {
       return undefined;
     }
 
     // Build session state according to AWS SDK types
     // Note: Using partial typing due to AWS SDK type constraints
     const sessionState: SessionState = {
-      sessionAttributes: this.config.sessionState.sessionAttributes,
-      promptSessionAttributes: this.config.sessionState.promptSessionAttributes,
-      invocationId: this.config.sessionState.invocationId,
+      sessionAttributes: this.config.sessionState?.sessionAttributes,
+      promptSessionAttributes: this.config.sessionState?.promptSessionAttributes,
+      invocationId: this.config.sessionState?.invocationId,
+      knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
     } as SessionState;
 
     // Handle returnControlInvocationResults if present
-    if (this.config.sessionState.returnControlInvocationResults) {
+    if (this.config.sessionState?.returnControlInvocationResults) {
       (sessionState as any).returnControlInvocationResults =
         this.config.sessionState.returnControlInvocationResults;
     }
@@ -416,18 +417,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       sessionState: this.buildSessionState(),
       memoryId: this.config.memoryId,
 
-      // Advanced configurations - using type assertions for preview features
-      // The AWS SDK types may not be fully up to date with all Bedrock Agents features
-      // These configurations are validated by AWS at runtime
+      // Legacy configuration keys are retained for compatibility, but the SDK
+      // omits these control-plane settings from InvokeAgent requests.
       ...(inferenceConfig && { inferenceConfig }),
       ...(this.config.guardrailConfiguration && {
         guardrailConfiguration: this.config.guardrailConfiguration,
       }),
       ...(this.config.promptOverrideConfiguration && {
         promptOverrideConfiguration: this.config.promptOverrideConfiguration as any,
-      }),
-      ...(this.config.knowledgeBaseConfigurations && {
-        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations as any,
       }),
       ...(this.config.actionGroups && {
         actionGroups: this.config.actionGroups as any,
@@ -441,7 +438,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock-agent:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
+    const cacheKey = `bedrock-agent:v2:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,
@@ -493,13 +491,6 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           ...(responseSessionId && { sessionId: responseSessionId }),
           ...(trace && { trace }),
           ...(this.config.memoryId && { memoryId: this.config.memoryId }),
-          ...(this.config.guardrailConfiguration && {
-            guardrails: {
-              applied: true,
-              guardrailId: this.config.guardrailConfiguration.guardrailId,
-              guardrailVersion: this.config.guardrailConfiguration.guardrailVersion,
-            },
-          }),
         },
       };
 

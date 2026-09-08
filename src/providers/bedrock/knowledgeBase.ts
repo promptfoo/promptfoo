@@ -176,6 +176,21 @@ export class AwsBedrockKnowledgeBaseProvider
       };
     }
 
+    const { temperature, max_tokens, top_p, top_k } = this.kbConfig;
+    const textInferenceConfig = {
+      ...(temperature !== undefined && { temperature }),
+      ...(max_tokens !== undefined && { maxTokens: max_tokens }),
+      ...(top_p !== undefined && { topP: top_p }),
+    };
+    if (Object.keys(textInferenceConfig).length > 0 || top_k !== undefined) {
+      knowledgeBaseConfiguration.generationConfiguration = {
+        ...(Object.keys(textInferenceConfig).length > 0 && {
+          inferenceConfig: { textInferenceConfig },
+        }),
+        ...(top_k !== undefined && { additionalModelRequestFields: { top_k } }),
+      };
+    }
+
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
@@ -203,7 +218,8 @@ export class AwsBedrockKnowledgeBaseProvider
     };
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    const cacheKey = `bedrock-kb:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    // Earlier cached results did not apply configured generation parameters.
+    const cacheKey = `bedrock-kb:v2:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,

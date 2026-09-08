@@ -1585,6 +1585,11 @@ When loading image files as variables, promptfoo automatically converts them to 
 
 ## Embeddings
 
+Cohere embedding models require an input type. Promptfoo defaults to `search_document`;
+set `config.input_type: search_query` when embedding retrieval queries. The embedding
+provider returns a single numeric vector for each input text. Titan continues to use
+its separate `inputText` request format.
+
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
 
 ```yaml
@@ -1830,8 +1835,10 @@ Configuration options include:
 
 - `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
 - `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
-- `temperature`: Controls randomness in response generation (default: 0.0)
+- `temperature`: Controls randomness in response generation (uses the model default when omitted)
 - `max_tokens`: Maximum number of tokens in the generated response
+- `top_p`: Nucleus sampling probability
+- `top_k`: Model-specific top-k sampling, forwarded as an additional model request field when supported by the selected model
 - `numberOfResults`: Number of chunks to retrieve from the knowledge base (optional, uses AWS default when not specified)
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication

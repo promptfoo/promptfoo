@@ -91,7 +91,7 @@ function buildAgentCacheKey({
   sessionId?: string;
   sessionState?: Record<string, unknown>;
 }) {
-  return `bedrock-agent:${agentId}:${agentAliasId}:${region}:${sha256(
+  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
     JSON.stringify({
       prompt,
       actionGroups,
@@ -150,6 +150,55 @@ describe('AwsBedrockAgentsProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it('places knowledge-base retrieval overrides in sessionState without explicit session attributes', async () => {
+    const knowledgeBaseConfigurations = [
+      {
+        knowledgeBaseId: 'kb-123',
+        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } },
+      },
+    ];
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        region: 'us-east-1',
+        knowledgeBaseConfigurations,
+        guardrailConfiguration: { guardrailId: 'configured-only', guardrailVersion: '1' },
+      },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('A quiet garden'));
+    const result = await provider.callApi('Describe the garden');
+    expect(result.output).toBe('A quiet garden');
+    expect(mockSend.mock.calls[0][0].sessionState.knowledgeBaseConfigurations).toEqual(
+      knowledgeBaseConfigurations,
+    );
+    expect(mockSend.mock.calls[0][0]).not.toHaveProperty('knowledgeBaseConfigurations');
+    expect(result.metadata).not.toHaveProperty('guardrails');
+  });
+
+  it('does not replay legacy cached guardrail claims', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockImplementation(async (key: string) =>
+      key.startsWith('bedrock-agent:v2:')
+        ? null
+        : JSON.stringify({
+            output: 'legacy response',
+            metadata: { guardrails: { applied: true } },
+          }),
+    );
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh response'));
+
+    const result = await provider.callApi('Describe a quiet garden');
+
+    expect(result.output).toBe('fresh response');
+    expect(result.metadata).not.toHaveProperty('guardrails');
+    expect(result.cached).not.toBe(true);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
   it('should hash prompt and config values while reusing the same cache key', async () => {
