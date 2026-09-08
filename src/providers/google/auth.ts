@@ -497,7 +497,7 @@ export class GoogleAuthManager {
     // Check for non-SDK env vars and warn
     const vertexProjectId = env?.VERTEX_PROJECT_ID || getEnvString('VERTEX_PROJECT_ID');
     const googleProjectId = env?.GOOGLE_PROJECT_ID || getEnvString('GOOGLE_PROJECT_ID');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
 
     if (vertexProjectId && !config.projectId) {
       logger.debug(
