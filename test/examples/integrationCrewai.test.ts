@@ -14,6 +14,7 @@ const CANDIDATES = {
 const CHECK_EXAMPLE = String.raw`
 import importlib.util
 import json
+import os
 import sys
 from types import ModuleType, SimpleNamespace
 
@@ -25,7 +26,17 @@ class LLM:
         if settings.get("error") == "llm":
             raise RuntimeError("fixture LLM initialization failed")
         self.model = model
+        # Native CrewAI providers resolve their own environment credentials when
+        # no explicit key is supplied. Unknown model paths stay opaque here.
+        key_variable = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+        }.get(model.split("/", 1)[0])
         self.api_key = api_key
+        if self.api_key is None and key_variable:
+            self.api_key = os.getenv(key_variable)
+        if key_variable and self.api_key is None:
+            raise ValueError(f"{key_variable} is required")
 
 class Agent:
     def __init__(self, llm=None, **kwargs):
@@ -68,13 +79,24 @@ describe('integration-crewai example', () => {
     pythonPath = await validatePythonPath(configured ?? 'python', Boolean(configured));
   });
 
-  function runExample(settings: Record<string, unknown>) {
+  function runExample(
+    settings: Record<string, unknown>,
+    credentials: { OPENAI_API_KEY?: string; ANTHROPIC_API_KEY?: string } = {
+      OPENAI_API_KEY: 'fixture-key',
+    },
+  ) {
     const result = spawnSync(
       pythonPath,
       ['-c', CHECK_EXAMPLE, EXAMPLE_PATH, JSON.stringify(settings)],
       {
         encoding: 'utf8',
-        env: { ...process.env, OPENAI_API_KEY: 'fixture-key', PYTHONDONTWRITEBYTECODE: '1' },
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: undefined,
+          ANTHROPIC_API_KEY: undefined,
+          ...credentials,
+          PYTHONDONTWRITEBYTECODE: '1',
+        },
         timeout: 5000,
       },
     );
@@ -109,6 +131,29 @@ describe('integration-crewai example', () => {
       error: 'An unexpected error occurred: fixture kickoff failed',
       raw: '',
     });
+  });
+
+  it.each([undefined, 'fixture-openai-key'])(
+    'uses the configured provider credentials when the OpenAI key is %s',
+    (openaiKey) => {
+      const result = runExample(
+        { config: { model: 'anthropic/claude-sonnet-4-6' }, output: CANDIDATES },
+        { OPENAI_API_KEY: openaiKey, ANTHROPIC_API_KEY: 'fixture-anthropic-key' },
+      );
+      expect(result.response).toEqual({ output: CANDIDATES });
+      expect(result.observed).toEqual({
+        model: 'anthropic/claude-sonnet-4-6',
+        api_key: 'fixture-anthropic-key',
+        inputs: { job_requirements: 'Find a Ruby engineer' },
+      });
+    },
+  );
+
+  it('reports missing credentials for the default OpenAI model', () => {
+    const result = runExample({ output: CANDIDATES }, {});
+    expect(result.response.error).toContain('OPENAI_API_KEY');
+    expect(result.response).not.toHaveProperty('output');
+    expect(result.observed).toEqual({});
   });
 
   it('surfaces LLM initialization failures as provider errors', () => {
