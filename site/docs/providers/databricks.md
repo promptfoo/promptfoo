@@ -46,10 +46,9 @@ The pay-per-token catalog changes over time. Current examples include:
 
 - `databricks-meta-llama-3-3-70b-instruct` - Meta's Llama model
 - `databricks-claude-sonnet-4-6` - Anthropic Claude model with text and image input
-- `databricks-gte-large-en` - Text embeddings model
 
 Check the [Databricks Foundation Model APIs catalog](https://docs.databricks.com/aws/en/machine-learning/model-serving/foundation-model-overview)
-before pinning an endpoint name in a long-lived config.
+before pinning an endpoint name in a long-lived config. The `databricks:` adapter uses the Chat Completions interface; the platform also hosts embeddings, but those require a compatible embedding adapter and the embedding endpoint configuration.
 
 ### Provisioned Throughput Endpoints
 
@@ -80,12 +79,11 @@ providers:
 
 The Databricks provider extends the [OpenAI configuration options](/docs/providers/openai#configuring-parameters) with these Databricks-specific features:
 
-| Parameter         | Description                                                                                   | Default |
-| ----------------- | --------------------------------------------------------------------------------------------- | ------- |
-| `workspaceUrl`    | Databricks workspace URL. Can also be set via `DATABRICKS_WORKSPACE_URL` environment variable | -       |
-| `isPayPerToken`   | Whether this is a pay-per-token endpoint (true) or custom deployed endpoint (false)           | false   |
-| `usageContext`    | Optional metadata for usage tracking and cost attribution                                     | -       |
-| `aiGatewayConfig` | AI Gateway features configuration (safety filters, PII handling)                              | -       |
+| Parameter       | Description                                                                                   | Default |
+| --------------- | --------------------------------------------------------------------------------------------- | ------- |
+| `workspaceUrl`  | Databricks workspace URL. Can also be set via `DATABRICKS_WORKSPACE_URL` environment variable | -       |
+| `isPayPerToken` | Legacy classification; both values use the OpenAI-compatible chat endpoint                    | false   |
+| `usageContext`  | Optional metadata for usage tracking and cost attribution                                     | -       |
 
 ### Advanced Configuration
 
@@ -106,12 +104,11 @@ providers:
         project: 'customer-support'
         team: 'engineering'
         environment: 'production'
-
-      # AI Gateway features (if enabled on endpoint)
-      aiGatewayConfig:
-        enableSafety: true
-        piiHandling: 'mask' # Options: none, block, mask
 ```
+
+Configure safety filters and PII handling on the [Databricks serving endpoint](https://docs.databricks.com/aws/en/ai-gateway/configure-ai-gateway-endpoints#configure-ai-guardrails-in-the-ui). The legacy `aiGatewayConfig` option does not enable these controls.
+
+Both pay-per-token and custom chat endpoints use `/serving-endpoints/chat/completions`, with the serving endpoint name in the `model` field.
 
 ## Environment Variables
 

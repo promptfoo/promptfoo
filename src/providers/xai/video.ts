@@ -40,11 +40,23 @@ import type {
 // Types
 // =============================================================================
 
-export type XaiVideoModel =
-  | 'grok-imagine-video'
-  | 'grok-imagine-video-1.5'
-  | 'grok-imagine-video-1.5-preview'
-  | 'grok-imagine-video-1.5-2026-05-30';
+export type XaiVideoModel = 'grok-imagine-video' | 'grok-imagine-video-1.5';
+
+/**
+ * Maps the non-canonical video slugs xAI publishes (dated and -preview aliases, as
+ * listed by `/v1/models`) to their canonical id, so pricing and request routing stay
+ * consistent when a caller targets an alias. Verified live 2026-08-31. Canonical ids
+ * need no entry — `resolveVideoModel` passes through anything it does not find here.
+ */
+const VIDEO_MODEL_ALIASES: Record<string, XaiVideoModel> = {
+  'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5',
+  'grok-imagine-video-1.5-2026-05-30': 'grok-imagine-video-1.5',
+};
+
+/** Resolve a user-supplied slug to a canonical model id, preserving unknown slugs. */
+export function resolveVideoModel(modelName: string): XaiVideoModel {
+  return VIDEO_MODEL_ALIASES[modelName] ?? (modelName as XaiVideoModel);
+}
 
 export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
 
@@ -264,11 +276,12 @@ function canUsePersistentCache(modelName: XaiVideoModel, config: XaiVideoOptions
 export function calculateVideoCost(
   seconds: number,
   cached: boolean = false,
-  options: XaiVideoCostOptions = {},
+  options: XaiVideoCostOptions | string = {},
 ): number {
   if (cached) {
     return 0;
   }
+  options = typeof options === 'string' ? { modelName: options } : options;
 
   const modelName = options.modelName ?? DEFAULT_MODEL;
   const resolution = options.resolution ?? DEFAULT_RESOLUTION;
@@ -296,7 +309,7 @@ export class XAIVideoProvider implements ApiProvider {
     modelName: string,
     options: { config?: XaiVideoOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    this.modelName = (modelName || DEFAULT_MODEL) as XaiVideoModel;
+    this.modelName = resolveVideoModel(modelName || DEFAULT_MODEL);
     this.config = options.config || {};
     this.providerId = options.id;
     this.env = options.env;

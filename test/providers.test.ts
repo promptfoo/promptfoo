@@ -524,8 +524,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
-    'should preserve bare %s Responses routing',
+  it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route bare %s to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:${model}`);
 
@@ -587,7 +587,6 @@ describe('loadApiProvider', () => {
     'gpt-4o-realtime-preview',
     'gpt-3.5-turbo-0301',
     'codex-mini-latest',
-    'gpt-4o-mini-tts-2025-03-20',
     'gpt-realtime-mini-2025-10-06',
     'computer-use-preview',
     'gpt-5-codex',
@@ -602,7 +601,6 @@ describe('loadApiProvider', () => {
   it.each([
     ['chatgpt-4o-latest', OpenAiChatCompletionProvider],
     ['gpt-4o-audio-preview', OpenAiChatCompletionProvider],
-    ['gpt-4o-mini-tts-2025-03-20', OpenAiTtsProvider],
     ['gpt-4o-realtime-preview', OpenAiRealtimeProvider],
     ['gpt-realtime-mini-2025-10-06', OpenAiRealtimeProvider],
     ['gpt-5-codex', OpenAiResponsesProvider],
@@ -691,9 +689,9 @@ describe('loadApiProvider', () => {
     ).rejects.toThrow('only available through openai:codex-sdk');
   });
 
-  it('should honor a passthrough override for a bare retired TTS route', async () => {
+  it('should honor a passthrough override for a TTS snapshot route', async () => {
     await expect(
-      loadApiProvider('openai:gpt-4o-mini-tts-2025-03-20', {
+      loadApiProvider('openai:tts:gpt-4o-mini-tts-2025-03-20', {
         options: { config: { passthrough: { model: 'gpt-4o-mini-tts' } } },
       }),
     ).resolves.toBeDefined();
@@ -835,6 +833,7 @@ describe('loadApiProvider', () => {
 
   it.each([
     'gpt-4o-mini-tts',
+    'gpt-4o-mini-tts-2025-03-20',
     'gpt-4o-mini-tts-2025-12-15',
     'tts-1',
     'tts-1-1106',
@@ -949,7 +948,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Chat %s IDs to Chat Completions',
     async (model) => {
       const provider = await loadApiProvider(`openai:chat:${model}`);
@@ -959,7 +958,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Responses %s IDs to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:responses:${model}`);
@@ -1230,26 +1229,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load GitHub provider with default model', async () => {
-    const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
-  });
-
-  it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
+  it.each(['github:', 'github:openai/gpt-4o-mini'])('rejects retired provider %s', async (id) => {
+    await expect(loadApiProvider(id)).rejects.toThrow('GitHub Models was retired');
   });
 
   it('should load HTTP provider', async () => {

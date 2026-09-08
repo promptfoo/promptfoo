@@ -90,23 +90,13 @@ promptfoo eval -c promptfooconfig-tools.yaml
 
 ## Model Capabilities
 
-Cerebras currently supports these models on its public endpoints:
+The public model catalog lists `gpt-oss-120b` and `qwen-3.8-27b`. Context limits depend on the account tier: GPT-OSS 120B allows about 65K tokens on free accounts and 131K on paid accounts; Qwen 3.8 27B allows 64K and 128K respectively.
 
-- `gpt-oss-120b` - Production model
-- `gemma-4-31b` - Preview model
-- `zai-glm-4.7` - Preview model scheduled for deprecation on August 17, 2026
-
-The preview lineup can change on short notice. Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for the current list.
+Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current availability. Dedicated deployments have a separate catalog, so a model's absence from this public list does not establish its dedicated availability.
 
 ## Pricing & Usage
 
-Cerebras Inference API usage is billed based on input and output tokens:
-
-- `gpt-oss-120b`: $0.35 input / $0.75 output per 1M tokens
-- `gemma-4-31b`: $0.99 input / $1.49 output per 1M tokens
-- `zai-glm-4.7`: $2.25 input / $2.75 output per 1M tokens
-
-Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current pricing.
+Check [Cerebras pricing](https://www.cerebras.ai/pricing) for the rates that apply to your model and account. The example compares both public models without assuming that they share prices or account limits.
 
 ## Learn More
 

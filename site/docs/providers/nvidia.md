@@ -81,10 +81,9 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 256
-  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
+  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
     config:
-      temperature: 1.0
-      top_p: 0.95
+      temperature: 0.2
       max_tokens: 256
 
 prompts:

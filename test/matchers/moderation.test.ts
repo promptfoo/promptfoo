@@ -3,7 +3,10 @@ import { matchesModeration } from '../../src/matchers/moderation';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { mockProcessEnv } from '../util/utils';
+
+import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 describe('matchesModeration', () => {
   const mockModerationResponse = {
@@ -74,6 +77,30 @@ describe('matchesModeration', () => {
     });
 
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
+  });
+
+  it('records moderation providers beneath the grading trace', async () => {
+    setTestEnv({ OPENAI_API_KEY: 'test-key' });
+    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue(
+      mockModerationResponse,
+    );
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async ({ callContext }, invoke) => invoke(callContext),
+    );
+
+    await withProviderCallTracingContext(
+      {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_options, invoke) => invoke(),
+        withProviderSpan: providerSpan,
+      },
+      () => matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
+    );
+
+    expect(providerSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'grader', promptLabel: 'moderation' }),
+      expect.any(Function),
+    );
   });
 
   it('should propagate token usage returned by moderation provider', async () => {

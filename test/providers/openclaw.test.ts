@@ -1062,7 +1062,7 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).not.toHaveProperty('cost');
+      expect(result.cost).toBeUndefined();
     });
 
     it('should infer hidden cached input from OpenClaw Responses totals', async () => {
@@ -1988,6 +1988,85 @@ describe('OpenClaw Provider', () => {
       const result = await promise;
       expect(result.output).toBe('Correct answer');
     });
+
+    it.each([0, 1737264000000, Number.MAX_SAFE_INTEGER])(
+      'signs the gateway challenge timestamp instead of the client clock (%s)',
+      async (challengeTimestamp) => {
+        const provider = new OpenClawAgentProvider('main', {
+          config: { gateway_url: 'http://test:18789' },
+        });
+        const promise = provider.callApi('Hello');
+        const onMessage = getMessageHandler();
+        onMessage(
+          Buffer.from(
+            JSON.stringify({
+              type: 'event',
+              event: 'connect.challenge',
+              payload: { nonce: 'server-challenge', ts: challengeTimestamp },
+            }),
+          ),
+        );
+        const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+        // End the mocked exchange without invoking an agent.
+        onMessage(
+          Buffer.from(
+            JSON.stringify({
+              type: 'res',
+              id: connectReq.id,
+              ok: false,
+              error: { code: 'TEST_COMPLETE', message: 'Fixture complete' },
+            }),
+          ),
+        );
+        await promise;
+
+        expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+          expect.objectContaining({ nonce: 'server-challenge', nowMs: challengeTimestamp }),
+        );
+      },
+    );
+
+    it.each([undefined, null, '1737264000000', -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects an invalid device-auth challenge timestamp (%s)',
+      async (ts) => {
+        const provider = new OpenClawAgentProvider('main', {
+          config: { gateway_url: 'http://test:18789' },
+        });
+        const promise = provider.callApi('Hello');
+        const onMessage = getMessageHandler();
+        onMessage(
+          Buffer.from(
+            JSON.stringify({
+              type: 'event',
+              event: 'connect.challenge',
+              payload: { nonce: 'challenge', ts },
+            }),
+          ),
+        );
+        // If a regression sends connect, settle it so the no-send assertion fails without timing out.
+        if (mockWs.send.mock.calls.length) {
+          const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+          onMessage(
+            Buffer.from(
+              JSON.stringify({
+                type: 'res',
+                id: connectReq.id,
+                ok: false,
+                error: { code: 'TEST_COMPLETE', message: 'Fixture complete' },
+              }),
+            ),
+          );
+        }
+        const result = await promise;
+
+        expect(result.error).toBe(
+          'OpenClaw WebSocket error: Invalid OpenClaw connect challenge timestamp',
+        );
+        expect(deviceAuthMocks.buildSignedOpenClawDevice).not.toHaveBeenCalled();
+        expect(mockWs.send).not.toHaveBeenCalled();
+        expect(mockWs.close).toHaveBeenCalled();
+      },
+    );
 
     it('should handle connect failure', async () => {
       const provider = new OpenClawAgentProvider('main', {

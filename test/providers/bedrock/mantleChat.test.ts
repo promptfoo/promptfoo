@@ -139,6 +139,144 @@ describe('bedrock mantle Chat Completions provider', () => {
       ).toThrow(/Use the bare "bedrock:openai\.gpt-5\.5" id/);
     });
 
+    it.each(['sol', 'terra', 'luna'])(
+      'uses the documented GPT-5.6 %s Chat endpoint and request contract',
+      async (tier) => {
+        const model = `openai.gpt-5.6-${tier}`;
+        const provider = createBedrockMantleChatProvider(model, {
+          config: {
+            apiKey: 'bedrock-key',
+            region: 'us-east-1',
+            reasoning_effort: 'high',
+            max_completion_tokens: 100,
+          },
+        });
+        const { body } = await provider.getOpenAiBody('hello');
+
+        expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
+        expect(body.model).toBe(model);
+        expect(body.reasoning_effort).toBe('high');
+        expect(body.max_completion_tokens).toBe(100);
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('rejects a Runtime profile on the Mantle Chat endpoint', () => {
+      expect(() =>
+        createBedrockMantleChatProvider('us.openai.gpt-5.6-sol', {
+          config: { apiKey: 'bedrock-key' },
+        }),
+      ).toThrow('bedrock:converse:us.openai.gpt-5.6-sol');
+    });
+
+    it('preserves a custom endpoint for GPT-5.6 Chat', () => {
+      const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+        config: { apiKey: 'local-key', apiBaseUrl: 'http://localhost:1234/v1' },
+      });
+      expect(provider.getApiUrl()).toBe('http://localhost:1234/v1');
+    });
+
+    it('keeps OpenAI account defaults out of Bedrock headers and preserves explicit headers', () => {
+      restoreEnv = mockProcessEnv({ OPENAI_ORGANIZATION: 'unrelated-openai-organization' });
+      const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      expect(provider.getOpenAiRequestHeaders()).toEqual({});
+      expect(provider.getOpenAiRequestHeaders({ 'X-Proxy-Route': 'test' })).toEqual({
+        'X-Proxy-Route': 'test',
+      });
+    });
+
+    it('returns GPT-5.6 Chat output and token usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Sol output' }, finish_reason: 'stop' }],
+          usage: {
+            total_tokens: 10,
+            prompt_tokens: 4,
+            completion_tokens: 6,
+            prompt_tokens_details: { cache_write_tokens: 0 },
+            completion_tokens_details: { reasoning_tokens: 2 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+        config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+      });
+      const result = await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-1.api.aws/openai/v1/chat/completions',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+      expect(result.output).toBe('Sol output');
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 4, completion: 6 });
+      expect(result.cost).toBeCloseTo((4 * 4.4 + 6 * 22) / 1_000_000, 10);
+      expect(result.error).toBeUndefined();
+    });
+
+    it.each(['provider', 'prompt'] as const)(
+      'keeps AWS billing identity for a %s passthrough override through a proxy',
+      async (scope) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'Terra output' }, finish_reason: 'stop' }],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              total_tokens: 1500,
+              prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const passthrough = { model: 'openai.gpt-5.6-terra' };
+        const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+          config: {
+            apiKey: 'bedrock-key',
+            apiBaseUrl: 'http://localhost:1234/v1',
+            ...(scope === 'provider' ? { passthrough } : {}),
+          },
+        });
+        const context =
+          scope === 'prompt'
+            ? { vars: {}, prompt: { raw: 'hello', label: 'test', config: { passthrough } } }
+            : undefined;
+        const result = await provider.callApi('hello', context);
+        const [, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
+        expect(JSON.parse(request?.body as string).model).toBe('openai.gpt-5.6-terra');
+        expect(result.cost).toBeCloseTo(
+          (700 * 2.2 + 200 * 0.22 + 100 * 2.75 + 500 * 13.2) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it('surfaces a GPT-5.6 Chat API error', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message: 'model access denied' } },
+        cached: false,
+        status: 403,
+        statusText: 'Forbidden',
+      });
+      const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      expect((await provider.callApi('hello')).error).toContain('403 Forbidden');
+    });
+
     it('pins the mantle endpoint even when OPENAI_API_HOST is set', () => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
@@ -150,6 +288,14 @@ describe('bedrock mantle Chat Completions provider', () => {
       // Base getApiUrl() would prefer OPENAI_API_HOST; the subclass must override that so the
       // Bedrock bearer token is never sent to the wrong host.
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/v1');
+    });
+
+    it('identifies the actual Bedrock provider in telemetry', () => {
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect((provider as any).getGenAISystem()).toBe('bedrock');
     });
 
     it('sends the real model id and posts to <base>/chat/completions', async () => {

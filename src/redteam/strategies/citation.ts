@@ -11,11 +11,13 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -59,7 +61,10 @@ async function generateCitations(
         };
       }
 
-      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(payload);
+      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(
+        payload,
+        runtimeContext,
+      );
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -137,12 +142,13 @@ export async function addCitationTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Citation strategy'));
   }
 
-  const citationTestCases = await generateCitations(testCases, injectVar, config);
+  const citationTestCases = await generateCitations(testCases, injectVar, config, runtimeContext);
   if (citationTestCases.length === 0) {
     logger.warn('No citation test cases were generated');
   }

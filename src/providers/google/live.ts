@@ -1,14 +1,16 @@
 import { type ChildProcess, spawn } from 'child_process';
-import path from 'path';
 
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -1245,18 +1247,24 @@ export class GoogleLiveProvider implements ApiProvider {
                 ? { enable_affective_dialog: enableAffectiveDialog }
                 : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
+              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && inputAudioTranscription
+                ? { inputAudioTranscription }
+                : {}),
+              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && outputAudioTranscription
+                ? { outputAudioTranscription }
+                : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
             ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
-            ...(outputAudioTranscription
+            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && outputAudioTranscription
               ? {
                   [usesRealtimeTextInput
                     ? 'outputAudioTranscription'
                     : 'output_audio_transcription']: outputAudioTranscription,
                 }
               : {}),
-            ...(inputAudioTranscription
+            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && inputAudioTranscription
               ? {
                   [usesRealtimeTextInput ? 'inputAudioTranscription' : 'input_audio_transcription']:
                     inputAudioTranscription,
@@ -1501,6 +1509,7 @@ export class GoogleLiveProvider implements ApiProvider {
                             : functionCall.args,
                         ),
                         config.functionToolCallbacks,
+                        functionCall.id,
                       );
                     } else if (config.functionToolStatefulApi) {
                       logger.warn(
@@ -1655,39 +1664,13 @@ export class GoogleLiveProvider implements ApiProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -1698,6 +1681,7 @@ export class GoogleLiveProvider implements ApiProvider {
     functionName: string,
     args: string,
     callbacks = this.config.functionToolCallbacks,
+    callId?: string,
   ): Promise<any> {
     try {
       const shouldUseSharedCache = callbacks === this.config.functionToolCallbacks;
@@ -1733,7 +1717,9 @@ export class GoogleLiveProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       return result;
     } catch (error: any) {

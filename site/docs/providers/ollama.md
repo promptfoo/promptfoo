@@ -7,6 +7,14 @@ description: "Run open-source LLMs locally using Ollama's streamlined interface 
 
 The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
+For a small local starting point, [Llama 3.2 3B](https://ollama.com/library/llama3.2:3b) has a roughly 2 GB model download. Install it before running an eval:
+
+```sh
+ollama pull llama3.2:3b
+```
+
+Use `ollama:chat:llama3.2:3b` in your provider configuration.
+
 You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
 - `ollama:completion:llama3.2`
@@ -54,19 +62,18 @@ To pass configuration options to Ollama, use the `config` key like so:
 
 ```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       num_predict: 1024
       temperature: 0.7
       top_p: 0.9
-      think: true # Enable thinking/reasoning mode (top-level API parameter)
 ```
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
 
 ```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       passthrough:
         keep_alive: '5m'
@@ -84,7 +91,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       tools:
         - type: function
@@ -132,7 +139,7 @@ defaultTest:
           # embedding-specific config if needed
 
 providers:
-  - ollama:chat:llama3.3
+  - ollama:chat:llama3.2:3b
   - ollama:chat:qwen2.5:14b
 
 tests:

@@ -7,6 +7,7 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
+import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 
@@ -62,6 +63,23 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) {
+    return;
+  }
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    throw reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  throw error;
+}
 
 function normalizeReplicateCacheValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -146,7 +164,12 @@ export class ReplicateProvider implements ApiProvider {
     return true;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    throwIfAborted(options?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'replicate',
@@ -156,7 +179,7 @@ export class ReplicateProvider implements ApiProvider {
       temperature: this.config.temperature,
       topP: this.config.top_p,
       maxTokens: this.config.max_tokens ?? this.config.max_length ?? this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -175,10 +198,13 @@ export class ReplicateProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
   }
 
-  protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  protected async callApiInternal(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
@@ -234,12 +260,22 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug('Returning cached Replicate response', { modelName: this.modelName });
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedResponse = JSON.parse(cachedResponse as string);
+        return {
+          ...parsedResponse,
+          tokenUsage: {
+            ...parsedResponse.tokenUsage,
+            cached: parsedResponse.tokenUsage?.total ?? 0,
+            numRequests: 0,
+          },
+          cached: true,
+        };
       }
     }
 
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
+    let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
@@ -248,6 +284,7 @@ export class ReplicateProvider implements ApiProvider {
           : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
@@ -259,11 +296,13 @@ export class ReplicateProvider implements ApiProvider {
         'json',
       );
 
+      cached = createResponse.cached;
       response = createResponse.data as ReplicatePrediction;
 
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
-        response = await this.pollForCompletion(response.id);
+        cached = false;
+        response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
       if (response.status === 'failed') {
@@ -272,8 +311,13 @@ export class ReplicateProvider implements ApiProvider {
 
       response = response.output;
     } catch (err) {
+      throwIfAborted(options?.abortSignal);
+      if (isAbortError(err)) {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
+        ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
     logger.debug('Replicate API response received', {
@@ -281,11 +325,16 @@ export class ReplicateProvider implements ApiProvider {
       ...getReplicateValueSummary('response', response),
     });
 
+    const responseMetadata = {
+      ...(cached && { cached: true }),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
+    };
+
     if (typeof response === 'string') {
       // It's text
       const ret = {
         output: response,
-        tokenUsage: createEmptyTokenUsage(),
+        ...responseMetadata,
       };
       if (cache && cacheKey) {
         try {
@@ -301,7 +350,7 @@ export class ReplicateProvider implements ApiProvider {
         const output = response.join('');
         const ret = {
           output,
-          tokenUsage: createEmptyTokenUsage(),
+          ...responseMetadata,
         };
         if (cache && cacheKey) {
           try {
@@ -317,25 +366,31 @@ export class ReplicateProvider implements ApiProvider {
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
     return {
       error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
+      ...responseMetadata,
     };
   }
 
-  protected async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {
+  protected async pollForCompletion(
+    predictionId: string,
+    signal?: AbortSignal,
+  ): Promise<ReplicatePrediction> {
     const maxPolls = 30; // Max 30 seconds of polling
     const pollInterval = 1000; // 1 second
 
     for (let i = 0; i < maxPolls; i++) {
+      throwIfAborted(signal);
       const pollResponse = await fetchWithCache(
         `https://api.replicate.com/v1/predictions/${predictionId}`,
         {
           method: 'GET',
+          signal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
           },
         },
         getRequestTimeoutMs(),
         'json',
-        false, // Don't cache polling requests
+        true, // Don't cache polling requests
       );
 
       const prediction = pollResponse.data as ReplicatePrediction;
@@ -348,7 +403,17 @@ export class ReplicateProvider implements ApiProvider {
         return prediction;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (signal) {
+        try {
+          await sleepWithAbort(pollInterval, signal);
+        } catch (err) {
+          // The shared delay throws a plain Error; preserve the evaluator's abort contract.
+          throwIfAborted(signal);
+          throw err;
+        }
+      } else {
+        await sleep(pollInterval);
+      }
     }
 
     throw new Error('Prediction timed out');
@@ -378,9 +443,27 @@ export class ReplicateModerationProvider
   extends ReplicateProvider
   implements ApiModerationProvider
 {
-  async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
+  async callModerationApi(
+    prompt: string,
+    assistant: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderModerationResponse> {
+    let response: ProviderResponse;
     try {
-      const response = await this.callApi(`Human: ${prompt}\n\nAssistant: ${assistant}`);
+      response = await this.callApi(
+        `Human: ${prompt}\n\nAssistant: ${assistant}`,
+        context,
+        options,
+      );
+    } catch (err) {
+      throwIfAborted(options?.abortSignal);
+      if (isAbortError(err)) {
+        throw err;
+      }
+      return { error: `API call error: ${String(err)}` };
+    }
+    try {
       // LlamaGuard moderation runs as a chat completion. Preserve any token usage
       // reported by that provider response for downstream assertion metrics.
       const tokenUsageResult = response.tokenUsage ? { tokenUsage: response.tokenUsage } : {};
@@ -447,7 +530,21 @@ export class ReplicateImageProvider extends ReplicateProvider {
   async callApi(
     prompt: string,
     _context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    throwIfAborted(options?.abortSignal);
+    try {
+      return await this.callImageApiInternal(prompt, options);
+    } catch (err) {
+      // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
+      throwIfAborted(options?.abortSignal);
+      throw err;
+    }
+  }
+
+  private async callImageApiInternal(
+    prompt: string,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -502,6 +599,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
           : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
@@ -519,7 +617,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
       // If still processing, poll for completion
       if (prediction.status === 'starting' || prediction.status === 'processing') {
-        prediction = await this.pollForCompletion(prediction.id);
+        prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
       logger.debug('Final Replicate prediction status', {

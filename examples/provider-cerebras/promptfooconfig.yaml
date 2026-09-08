@@ -7,7 +7,7 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:gemma-4-31b
+  - id: cerebras:qwen-3.8-27b
     config:
       temperature: 0.5
       max_completion_tokens: 1024

@@ -6,9 +6,9 @@
   "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
-    "npm": ">= 11"
+    "npm": ">=11.18.0 <12"
   },
-  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true",
+  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true\nmin-release-age=10",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -26,6 +26,21 @@
     {
       "description": "Disable major Node.js version updates",
       "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/main.yml"],
+      "matchPackageNames": ["node"],
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "enabled": false
+    },
+    {
+      "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
+      "matchFileNames": ["renovate.json"],
+      "matchPackageNames": ["npm"],
       "matchUpdateTypes": ["major"],
       "enabled": false
     },
@@ -183,6 +198,11 @@
       "groupName": "TanStack packages"
     },
     {
+      "description": "Keep TanStack Table on v8 until the shared data tables migrate to v9's feature registration, hooks, row models, state APIs, and generic types; the v9 upgrade currently breaks the production build and every shared-table interaction.",
+      "matchPackageNames": ["@tanstack/react-table", "@tanstack/table-core"],
+      "allowedVersions": "<9"
+    },
+    {
       "description": "Group Testing Library packages together",
       "matchPackagePatterns": ["^@testing-library/"],
       "groupName": "Testing Library packages"
@@ -219,17 +239,26 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep jsdom in sync across all workspaces",
+      "description": "Keep jsdom in sync across all workspaces, and hold it below 30. jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, but this package publishes engines.node >=22.22.0 and .npmrc sets engine-strict=true, so `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that exist precisely to test that floor (see the closed #10311). jsdom is a dev-only Vitest environment, so raising the published runtime floor for it would make promptfoo refuse to start on Node 22.22.0/22.22.1 for no user-facing gain. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
       "matchPackageNames": ["jsdom"],
+      "allowedVersions": "<30",
       "groupName": "jsdom"
     },
     {
-      "description": "Chevrotain's sub-packages are pinned to the parser version, not to whatever is newest. chevrotain@11.2.0 declares each of @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast and @chevrotain/utils at exactly 11.2.0, and test/package-manifests.test.ts asserts the overrides keep them equal to the pinned parser so a single shared instance is used. Renovate bumping them individually yields an incoherent tree (see the closed #10293 and #10294). Only @chevrotain/cst-dts-gen floats ahead, so it is deliberately not listed here. Re-enable if the pinned chevrotain parser itself moves.",
+      "description": "Keep jsdom's CSS color parser below 7 while promptfoo supports Node 22.22.0. @asamuzakjp/css-color 7 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, so engine-strict clean installs fail on the minimum supported Node version even though jsdom itself remains below 30. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
+      "matchPackageNames": ["@asamuzakjp/css-color"],
+      "allowedVersions": "<7"
+    },
+    {
+      "description": "Chevrotain ships as one lockstep release train: chevrotain@X declares @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast, @chevrotain/utils and @chevrotain/cst-dts-gen at exactly X, and all six reach npm within about a minute of each other. Renovate bumps one of them at a time and rewrites package.json overrides without regenerating package-lock.json, so the resulting PRs fail at `npm ci` with EUSAGE (see the closed #10293, #10294 and #10297) or leave a mixed tree (#10345 pulled @chevrotain/cst-dts-gen to 13.1.0 under chevrotain 11.2.0, which asks for 11.2.0 exactly). The family stays frozen until langium, chevrotain-allstar and every @chevrotain/* pin move together in one PR that also regenerates the lockfile; langium@4.3.1 declares chevrotain ~12.0.0, so 12.x is the next coherent target, not 13.x. test/package-manifests.test.ts asserts this rule keeps the whole family disabled and that the grammar pins equal the pinned parser version.",
       "matchPackageNames": [
+        "chevrotain",
+        "chevrotain-allstar",
         "@chevrotain/gast",
         "@chevrotain/types",
         "@chevrotain/regexp-to-ast",
-        "@chevrotain/utils"
+        "@chevrotain/utils",
+        "@chevrotain/cst-dts-gen"
       ],
       "enabled": false
     },
@@ -313,14 +342,19 @@
       "minimumReleaseAge": "10 days"
     },
     {
+      "description": "Hold Knip below 6.28 until existing public barrel re-exports have been audited; 6.28 changed ignoreExportsUsedInFile and flags 130 established exports",
+      "matchPackageNames": ["knip"],
+      "allowedVersions": "<6.28.0"
+    },
+    {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "framer-motion: monthly updates (animation library, low urgency)",
-      "matchPackageNames": ["framer-motion"],
+      "description": "motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["motion"],
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "10 days"
     },

@@ -145,7 +145,20 @@ questions are available at `metadata.perplexity.images` and
 
 ### Cost Tracking
 
-promptfoo uses Perplexity's returned `usage.cost.total_cost` when available, which includes request and specialized usage charges. It falls back to an estimate based on published input and output token prices for responses that do not include cost metadata.
+promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
+
+```yaml
+providers:
+  - id: perplexity:sonar-pro
+    config:
+      usage_tier: 'medium' # Options: 'high', 'medium', 'low'
+```
+
+The cost calculation includes:
+
+- Different rates for input and output tokens
+- Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
+- Usage tier considerations (high, medium, low)
 
 ## Advanced Use Cases
 

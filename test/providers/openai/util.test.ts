@@ -116,7 +116,6 @@ const retiredResponsesModelIds = [
 ] as const;
 
 const otherRetiredModelIds = [
-  'gpt-4o-mini-tts-2025-03-20',
   'gpt-4o-realtime-preview',
   'gpt-4o-realtime-preview-2024-10-01',
   'gpt-4o-realtime-preview-2024-12-17',
@@ -507,8 +506,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30],
-    ['gpt-5.6-sol', 5, 30],
+    ['gpt-5.6', 4, 20],
+    ['gpt-5.6-sol', 4, 20],
     ['gpt-5.6-terra', 2, 12],
     ['gpt-5.6-luna', 0.2, 1.2],
   ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
@@ -517,8 +516,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30, 10, 45],
-    ['gpt-5.6-sol', 5, 30, 10, 45],
+    ['gpt-5.6', 4, 20, 8, 30],
+    ['gpt-5.6-sol', 4, 20, 8, 30],
     ['gpt-5.6-terra', 2, 12, 4, 18],
     ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
   ])(
@@ -713,7 +712,7 @@ describe('calculateOpenAICost', () => {
       expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
     }
 
-    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(false);
+    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(true);
     expect(calculateOpenAICost('gpt-4o-mini-tts-2025-03-20', {}, 1_000, 0, 0, 500)).toBeTypeOf(
       'number',
     );
@@ -753,7 +752,7 @@ describe('calculateOpenAICost', () => {
       expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
       expect(OPENAI_DEEP_RESEARCH_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     }
-    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(false);
+    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some(({ id }) => id === 'gpt-realtime-mini-2025-10-06')).toBe(
       false,
     );

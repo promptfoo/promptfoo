@@ -1,10 +1,11 @@
 ---
 title: xAI (Grok) Provider
-description: Use xAI Grok models for text, image, video, voice, and Responses API tool workflows, including Grok 4.5, Grok 4.3, regional endpoints, and pricing.
+description: Use xAI Grok models for text, image, video, voice, and Responses API tool workflows, including Grok 4.6, Grok 4.5, Grok 4.3, regional endpoints, and pricing.
 keywords:
   [
     xai,
     grok,
+    grok-4.6,
     grok-4.5,
     grok-4.3,
     grok-imagine-image,
@@ -29,11 +30,11 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3`; select `grok-4.5` explicitly for xAI's current flagship model. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` so they work for both US and EU accounts; select `grok-4.6` or `grok-4.5` explicitly where they are available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
-The xAI provider includes support for the following model formats. [xAI's public model catalog](https://docs.x.ai/developers/models) currently recommends `grok-4.5` for chat, coding, and agentic workloads; consult the catalog when choosing a new default for a long-lived integration.
+The xAI provider includes support for the following model formats. [xAI's public model catalog](https://docs.x.ai/developers/models) currently recommends `grok-4.6` for chat, coding, and agentic workloads; consult the catalog when choosing a new default for a long-lived integration.
 
 :::caution Legacy xAI model aliases
 
@@ -41,11 +42,17 @@ The xAI provider includes support for the following model formats. [xAI's public
 
 :::
 
-:::caution Grok 4.5 availability
+:::caution Grok 4.5 and 4.6 availability
 
 [xAI made Grok 4.5 available to EU API Console users on July 17, 2026](https://docs.x.ai/developers/release-notes).
 
 :::
+
+### Grok 4.6 Models
+
+- `xai:grok-4.6` - Latest flagship reasoning model for coding, agentic tasks, and knowledge work (500K context, text and image input)
+
+xAI does not publish any aliases for this model, so target the exact `grok-4.6` id. There is no `grok-4.6-latest`.
 
 ### Grok 4.5 Models
 
@@ -389,7 +396,8 @@ tests:
 
 The Responses API works with current canonical Grok models, including:
 
-- `grok-4.5` (recommended)
+- `grok-4.6` (recommended)
+- `grok-4.5`
 - `grok-4.3`
 - `grok-4.20-0309-reasoning`
 - `grok-4.20-0309-non-reasoning`
@@ -538,10 +546,20 @@ providers:
 Current Grok Imagine image model IDs include:
 
 - `xai:image:grok-imagine-image`
+- `xai:image:grok-imagine-image-2.0`
 - `xai:image:grok-imagine-image-quality`
 - `xai:image:grok-imagine-image-pro`
 
-`grok-imagine-image-quality` is xAI's newer quality-oriented image model and the better default for new higher-quality image workflows. Older image-model aliases may continue to resolve through xAI-managed redirects.
+`grok-imagine-image-2.0` is xAI's latest image model. It prices per quality/resolution tier rather than at a flat per-image rate, and accepts only `low`, `medium`, and `auto` for `quality` (not `high`):
+
+| `quality`      | `resolution` | Price per image |
+| -------------- | ------------ | --------------- |
+| `low` / `auto` | `1k`         | $0.04           |
+| `low` / `auto` | `2k`         | $0.06           |
+| `medium`       | `1k`         | $0.06           |
+| `medium`       | `2k`         | $0.08           |
+
+`grok-imagine-image-quality` remains available as a quality-oriented alternative. Older image-model aliases may continue to resolve through xAI-managed redirects.
 
 Example configuration for image generation:
 

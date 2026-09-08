@@ -34,21 +34,14 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras public Inference API currently supports these models:
+The [public model catalog](https://inference-docs.cerebras.ai/models/overview) lists these free-trial and pay-as-you-go models:
 
-| Model          | ID             | Availability | Input / 1M tokens | Output / 1M tokens |
-| -------------- | -------------- | ------------ | ----------------- | ------------------ |
-| OpenAI GPT OSS | `gpt-oss-120b` | Production   | $0.35             | $0.75              |
-| Gemma 4 31B    | `gemma-4-31b`  | Production   | $0.99             | $1.49              |
-| Z.ai GLM 4.7   | `zai-glm-4.7`  | Preview      | $2.25             | $2.75              |
+| Model          | ID             | Context (free / paid) |
+| -------------- | -------------- | --------------------- |
+| OpenAI GPT OSS | `gpt-oss-120b` | 65k / 131k            |
+| Qwen 3.8 27B   | `qwen-3.8-27b` | 64k / 128k            |
 
-`zai-glm-4.7` is scheduled for deprecation on August 17, 2026.
-
-The preview lineup can change on short notice. To get the current public model catalog:
-
-```bash
-curl -sS https://api.cerebras.ai/public/v1/models | jq
-```
+Availability, rate limits, and pricing depend on the account tier. Additional model families may be available through dedicated endpoints; absence from the public catalog does not establish retirement of a dedicated deployment. Check the linked catalog and [pricing](https://www.cerebras.ai/pricing) before selecting a model.
 
 ## Parameters
 
@@ -128,7 +121,7 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:gemma-4-31b
+  - id: cerebras:qwen-3.8-27b
     config:
       temperature: 0.7
       max_completion_tokens: 1024

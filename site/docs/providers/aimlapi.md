@@ -69,16 +69,17 @@ providers:
 
 All standard OpenAI parameters are supported:
 
-| Parameter           | Description                                  |
-| ------------------- | -------------------------------------------- |
-| `apiKey`            | Your AI/ML API key                           |
-| `temperature`       | Controls randomness (0.0 to 2.0)             |
-| `max_tokens`        | Maximum number of tokens to generate         |
-| `top_p`             | Nucleus sampling parameter                   |
-| `frequency_penalty` | Penalizes frequent tokens                    |
-| `presence_penalty`  | Penalizes new tokens based on presence       |
-| `stop`              | Sequences where the API will stop generating |
-| `stream`            | Enable streaming responses                   |
+| Parameter               | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `apiKey`                | Your AI/ML API key                            |
+| `temperature`           | Controls randomness (0.0 to 2.0)              |
+| `max_tokens`            | Output cap for non-reasoning models           |
+| `max_completion_tokens` | Output cap for reasoning models such as GPT-5 |
+| `top_p`                 | Nucleus sampling parameter                    |
+| `frequency_penalty`     | Penalizes frequent tokens                     |
+| `presence_penalty`      | Penalizes new tokens based on presence        |
+| `stop`                  | Sequences where the API will stop generating  |
+| `stream`                | Enable streaming responses                    |
 
 ## Popular Models
 
@@ -143,8 +144,7 @@ providers:
   - id: aimlapi:chat:openai/gpt-5-2025-08-07
     label: 'GPT-5'
     config:
-      temperature: 0.7
-      max_tokens: 2000
+      max_completion_tokens: 2000
 
   # Additional general-purpose model
   - id: aimlapi:chat:google/gemini-2.5-flash

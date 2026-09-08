@@ -65,15 +65,15 @@ useful starting points:
 | Model ID                                  | Context (tokens) |
 | ----------------------------------------- | ---------------: |
 | `moonshotai/Kimi-K3`                      |        1,000,000 |
-| `deepseek-ai/DeepSeek-V4-Pro`             |          512,000 |
+| `deepseek-ai/DeepSeek-V4-Pro-0813`        |        1,048,576 |
 | `deepseek-ai/DeepSeek-V4-Flash-0731`      |        1,000,000 |
 | `Qwen/Qwen3.6-Plus`                       |        1,000,000 |
 | `thinkingmachines/Inkling`                |          524,288 |
 | `moonshotai/Kimi-K2.7-Code`               |          262,144 |
-| `zai-org/GLM-5.2`                         |          262,144 |
+| `zai-org/GLM-5.2`                         |        1,048,575 |
 | `MiniMaxAI/MiniMax-M3`                    |          524,288 |
 | `Qwen/Qwen3.5-9B`                         |          262,144 |
-| `openai/gpt-oss-120b`                     |          128,000 |
+| `openai/gpt-oss-120b`                     |          131,072 |
 | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |          131,072 |
 
 Check Together AI's [recommended models](https://docs.together.ai/docs/inference/recommended-models),

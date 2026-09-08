@@ -12,7 +12,11 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_SHORTHAND_MODEL_IDS } from './anthropic/util';
+import {
+  ANTHROPIC_MODELS,
+  ANTHROPIC_SHORTHAND_MODEL_IDS,
+  looksLikeClaudeModelId,
+} from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -131,9 +135,10 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
-// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
-// provider configs while allowing every tier through an explicit openai:chat: prefix.
-const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+// Preserve GPT-5.6 preview routing and default Astra to Responses, which supports its tools.
+// Each model also supports explicit openai:chat: requests.
+const OPENAI_BARE_RESPONSES_MODELS = new Set([
+  'gpt-6-astra',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
@@ -179,7 +184,7 @@ function getEffectiveOpenAiApiModel(
 
   const bareModelUsesPassthrough =
     !modelName &&
-    (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType) ||
+    (OPENAI_BARE_RESPONSES_MODELS.has(modelType) ||
       OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
       OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
       OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
@@ -222,7 +227,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createAbliterationProvider(providerPath, {
-        config: providerOptions,
+        providerOptions,
         env: context.env,
       });
     },
@@ -346,9 +351,17 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelType, providerOptions);
       }
 
-      // Check if the second part is a valid Anthropic model name
-      // If it is, assume it's a messages model
-      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType)) {
+      // The second part is a model name: route it to the Messages API. Catalogued ids
+      // always resolve; so does anything else shaped like a Claude id, so a model
+      // released after this build works without waiting for a catalog entry. The
+      // provider still logs `Using unknown Anthropic model`, and Anthropic returns
+      // not_found_error if the id is not real.
+      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
+      if (
+        ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) ||
+        modelIds.includes(modelType) ||
+        looksLikeClaudeModelId(modelType)
+      ) {
         return new AnthropicMessagesProvider(modelType, providerOptions);
       }
 
@@ -356,7 +369,7 @@ export const providerMap: ProviderFactory[] = [
         dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats:
         - anthropic:messages:<model name> - For Messages API
         - anthropic:completion:<model name> - For Completion API
-        - anthropic:<model name> - Shorthand for Messages API with a known model name`,
+        - anthropic:<model name> - Shorthand for Messages API, for a model id starting with "claude-"`,
       );
     },
   },
@@ -863,7 +876,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
       if (modelType === 'chat') {
         return new LocalAiChatProvider(modelName, providerOptions);
       }
@@ -873,7 +886,7 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new LocalAiEmbeddingProvider(modelName, providerOptions);
       }
-      return new LocalAiChatProvider(modelType, providerOptions);
+      return new LocalAiChatProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {
@@ -985,6 +998,34 @@ export const providerMap: ProviderFactory[] = [
       // Default to completion provider
       const modelName = splits.slice(1).join(':');
       return new OllamaCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'openai:codex-security' || providerPath.startsWith('openai:codex-security:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenAICodexSecurityProvider } = await import('./openai/codex-security');
+      const modelName = providerPath.split(':').slice(2).join(':');
+      const codexModel = modelName || getConfiguredOpenAiModel(providerOptions);
+
+      return new OpenAICodexSecurityProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: codexModel
+          ? {
+              ...providerOptions.config,
+              model: codexModel,
+            }
+          : providerOptions.config,
+        env: {
+          ...context.env,
+          ...providerOptions.env,
+        },
+      });
     },
   },
   {
@@ -1118,7 +1159,7 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+      if (OPENAI_BARE_RESPONSES_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {

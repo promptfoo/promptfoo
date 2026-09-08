@@ -1,4 +1,4 @@
-import { getAnthropicEnvHeaderSuppressions } from '../anthropic/generic';
+import { buildIsolatedAnthropicClientOptions } from '../anthropic/generic';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
 import {
   getBedrockMantleOrigin,
@@ -17,10 +17,18 @@ const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set([
   'x-api-key',
   'anthropic-version',
 ]);
+const RUNTIME_MESSAGES_MODELS = new Set([
+  'us.anthropic.claude-fable-5-1',
+  'global.anthropic.claude-fable-5-1',
+  'us.anthropic.claude-mythos-5-1',
+  'global.anthropic.claude-mythos-5-1',
+]);
 
 const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
   'anthropic.claude-fable-5',
   'anthropic.claude-mythos-5',
+  'anthropic.claude-fable-5-1',
+  ...RUNTIME_MESSAGES_MODELS,
   'anthropic.claude-mythos-preview',
   'anthropic.claude-opus-4-7',
   'anthropic.claude-opus-4-8',
@@ -39,29 +47,32 @@ export function requiresBedrockAnthropicMessagesModel(modelName: string): boolea
   return BEDROCK_ANTHROPIC_MESSAGES_ONLY_MODELS.has(modelName);
 }
 
-export function getBedrockAnthropicBaseUrl(region: string): string {
-  return `${getBedrockMantleOrigin(region)}/anthropic`;
+export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
+  // Validate the region before interpolating either host, which receives an API key.
+  const mantleOrigin = getBedrockMantleOrigin(region);
+  return useRuntime
+    ? `https://bedrock-runtime.${region}.amazonaws.com/anthropic`
+    : `${mantleOrigin}/anthropic`;
 }
 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
   // x-api-key (the factory guarantees one). Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
-  // Bedrock mantle host.
+  // Bedrock host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    return {
-      ...options,
-      defaultHeaders: {
-        ...options.defaultHeaders,
-        ...getAnthropicEnvHeaderSuppressions(),
-        'anthropic-version': '2023-06-01',
-        ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
-      },
-    };
+    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
   }
 
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
   protected override sanitizeRequestHeaders(
     headers: Record<string, string>,
   ): Record<string, string> {
@@ -70,13 +81,6 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
         ([name]) => !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
       ),
     );
-  }
-
-  protected override supportsResponseCache(): boolean {
-    // Bedrock bearer tokens do not expose a stable non-secret tenant/account
-    // identifier. Disable this inherited response cache rather than persisting
-    // either the token or a token-derived fingerprint in the disk cache key.
-    return false;
   }
 }
 
@@ -102,8 +106,23 @@ export function createBedrockAnthropicMessagesProvider(
 
   if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
     throw new Error(
-      `Amazon Bedrock model "${modelName}" is only available in us-east-1. ` +
-        `Set config.region or AWS_BEDROCK_REGION to us-east-1.`,
+      `Amazon Bedrock model "${modelName}" is only available in us-east-1 through the default ` +
+        `Anthropic Messages endpoint. Set config.region or AWS_BEDROCK_REGION to us-east-1, ` +
+        `or set config.apiBaseUrl for another provisioned endpoint.`,
+    );
+  }
+
+  // AWS's Fable 5.1 model card lists Mantle only in GovCloud West. Commercial
+  // regions use the Runtime Messages endpoint with a US or global inference profile.
+  if (
+    !config.apiBaseUrl &&
+    modelName === 'anthropic.claude-fable-5-1' &&
+    region !== 'us-gov-west-1'
+  ) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" uses Mantle only in us-gov-west-1. ` +
+        `For other regions, use "bedrock:messages:us.${modelName}" or ` +
+        `"bedrock:messages:global.${modelName}" with the Runtime Messages endpoint.`,
     );
   }
 
@@ -130,7 +149,8 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  const apiBaseUrl = config.apiBaseUrl || getBedrockAnthropicBaseUrl(region);
+  const apiBaseUrl =
+    config.apiBaseUrl || getBedrockAnthropicBaseUrl(region, RUNTIME_MESSAGES_MODELS.has(modelName));
 
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,

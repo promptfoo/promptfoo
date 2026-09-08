@@ -88,7 +88,14 @@ export function calculateDeepSeekCost(
   completionTokens?: number,
   cachedTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  if (
+    typeof promptTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens < 0 ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(completionTokens) ||
+    completionTokens < 0
+  ) {
     return undefined;
   }
 

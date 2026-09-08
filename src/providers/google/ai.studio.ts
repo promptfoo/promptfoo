@@ -19,8 +19,8 @@ import {
   mergeParts,
   normalizeGeminiAudio,
   normalizeSafetySettings,
-  omitUnsupportedGeminiSamplingControls,
   parseConfigResponseSchema,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -388,7 +388,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
-    body.generationConfig = omitUnsupportedGeminiSamplingControls(
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
       this.modelName,
       body.generationConfig,
     );

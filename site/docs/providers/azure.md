@@ -155,18 +155,18 @@ Azure retired the `gpt-5.1-chat`, `gpt-5.2-chat`, and `gpt-5.3-chat` versions by
 ### GPT-chat-latest on Azure
 
 Azure's exact product and model ID is `gpt-chat-latest`, not `gpt-5-chat-latest` or OpenAI's
-`chat-latest` API alias. Azure currently publishes Preview versions `2026-06-24`, `2026-05-28`,
-and `2026-05-05`. Azure exposes those dates as model versions, not separate model IDs. For cost
-matching, Promptfoo recognizes the base ID and deployment names that follow its usual
-`<model>-<version>` convention, such as `gpt-chat-latest-2026-06-24`.
+`chat-latest` API alias. Azure publishes dates as model versions, separately from the deployment name you choose. Promptfoo accepts arbitrary deployment names; recognizable `<model>-<version>` names can also match built-in cost metadata.
 
-:::warning Scheduled snapshot retirements
+[Microsoft's retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule) lists:
 
-Azure schedules the `2026-05-05` Preview version for retirement on August 5, 2026, and the
-`2026-05-28` and `2026-06-24` Preview versions for retirement on August 28, 2026. Promptfoo retains
-these IDs for deployments that still use them and for historical cost reporting.
+| Preview version | Retirement date    |
+| --------------- | ------------------ |
+| `2026-05-05`    | August 5, 2026     |
+| `2026-05-28`    | August 28, 2026    |
+| `2026-06-24`    | September 24, 2026 |
+| `2026-08-06`    | December 2, 2026   |
 
-:::
+Use a version available to your Azure resource. Historical cost metadata does not establish that a retired version remains served.
 
 ### GPT-5.6 on Azure
 
@@ -603,6 +603,8 @@ defaultTest:
           apiHost: 'your-resource.openai.azure.com'
 ```
 
+For `text-embedding-3` deployments, set `config.dimensions` to request shorter vectors. Omit it to use the model's default vector size. Use the same embedding model and dimensions for indexed documents and queries; changing either requires rebuilding existing vectors. Azure deployment names are user-defined and remain unchanged by this option.
+
 Note that any moderation tasks will still use the OpenAI API.
 
 ## Configuration
@@ -845,6 +847,7 @@ These properties can be set under the provider `config` key:
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                            |
 | isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                          |
 | isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                              |
+| modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                   |
 | max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                                                              |
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                        |
 | reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`. |
@@ -1041,7 +1044,9 @@ providers:
       max_tokens: 4096
 ```
 
-Fable 5 and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit `temperature` and `top_p` from the request body on this path too. If your Azure deployment uses a custom alias, set `isClaudeOpus47OrLater: true`:
+Fable and Mythos 5.1, Fable 5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 also omit forced `tool_choice` values; use `auto` or `none` instead.
+
+If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
 ```yaml
 providers:
@@ -1049,36 +1054,32 @@ providers:
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
-      isClaudeOpus47OrLater: true
+      modelName: claude-fable-5-1
       max_tokens: 4096
 ```
 
 :::note
-The `azure:chat:` provider and `isClaudeOpus47OrLater` only apply to Azure Claude deployments that expose the OpenAI-compatible chat-completions API. Some Azure AI Foundry models-as-a-service Claude deployments only support the Anthropic Messages API and return `api_not_supported` for chat completions; those deployments are not reachable via `azure:chat:`. Use Option 1 (the Anthropic Messages API endpoint) for them.
+The `azure:chat:` provider only applies to Azure Claude deployments that expose the OpenAI-compatible chat-completions API. Some Azure AI Foundry models-as-a-service Claude deployments only support the Anthropic Messages API and return `api_not_supported` for chat completions; those deployments are not reachable via `azure:chat:`. Use Option 1 (the Anthropic Messages API endpoint) for them. The existing `isClaudeOpus47OrLater: true` option remains available for sampling compatibility only.
 :::
 
 Available Claude deployments on Azure AI Foundry:
 
-| Model                   | Description                                                           |
-| ----------------------- | --------------------------------------------------------------------- |
-| `claude-mythos-5`       | Claude Mythos 5 (gated Preview; Entra only)                           |
-| `claude-mythos-preview` | Claude Mythos Preview (gated research Preview; retires April 2, 2027) |
-| `claude-fable-5`        | Claude Fable 5 (Preview)                                              |
-| `claude-opus-5`         | Claude Opus 5                                                         |
-| `claude-opus-4-8`       | Claude Opus 4.8                                                       |
-| `claude-opus-4-7`       | Claude Opus 4.7                                                       |
-| `claude-opus-4-6`       | Claude Opus 4.6                                                       |
-| `claude-opus-4-5`       | Claude Opus 4.5                                                       |
-| `claude-opus-4-1`       | Claude Opus 4.1 (scheduled to retire August 5, 2026; use Opus 4.8)    |
-| `claude-sonnet-5`       | Claude Sonnet 5                                                       |
-| `claude-sonnet-4-6`     | Claude Sonnet 4.6                                                     |
-| `claude-sonnet-4-5`     | Claude Sonnet 4.5                                                     |
-| `claude-haiku-4-5`      | Claude Haiku 4.5                                                      |
-
-Microsoft lists `claude-mythos-preview` as a gated research Preview until April 2, 2027. Anthropic
-has deprecated the same ID in favor of `claude-mythos-5`; use Microsoft's retirement schedule for
-the Azure marketplace deployment lifecycle. Microsoft also schedules `claude-opus-4-1` to retire
-on August 5, 2026, with `claude-opus-4-8` as its replacement.
+| Model                        | Description                                    |
+| ---------------------------- | ---------------------------------------------- |
+| `claude-fable-5-1`           | Claude Fable 5.1                               |
+| `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
+| `claude-fable-5`             | Claude Fable 5                                 |
+| `claude-opus-5`              | Claude Opus 5                                  |
+| `claude-opus-4-8`            | Claude Opus 4.8                                |
+| `claude-opus-4-7`            | Claude Opus 4.7                                |
+| `claude-opus-4-6-20260205`   | Claude Opus 4.6                                |
+| `claude-sonnet-5`            | Claude Sonnet 5                                |
+| `claude-sonnet-4-6`          | Claude Sonnet 4.6                              |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5                                |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5                              |
+| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5                               |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                              |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku                               |
 
 :::note
 Anthropic deployments on Azure require `modelProviderData` (`industry`,
@@ -1284,6 +1285,16 @@ Replace the assistant ID and deployment name with your actual values.
 ### Function Tools with Assistants
 
 Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
+
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal guard:
+the resolved path must stay inside the config's `basePath`. Move the callback
+file into your project or set `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to
+opt out. See [OpenAI provider docs](./openai.md#automatically-handling-function-tool-calls)
+for details.
+
+:::
 
 ```yaml
 providers:
@@ -1612,7 +1623,7 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+The `azure:video:<deployment name>` provider sends text prompts to Azure's video generation jobs API. Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
 
 ### Prerequisites
 
@@ -1623,7 +1634,7 @@ Azure AI Foundry provides access to OpenAI's Sora video generation model for tex
 
 ```yaml
 providers:
-  - id: azure:video:sora
+  - id: azure:video:my-video-deployment
     config:
       apiBaseUrl: https://your-resource.cognitiveservices.azure.com
       # Authentication (choose one):
@@ -1663,7 +1674,7 @@ providers:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - azure:video:sora
+  - azure:video:my-video-deployment
 
 prompts:
   - 'A serene Japanese garden with koi fish swimming in a pond'

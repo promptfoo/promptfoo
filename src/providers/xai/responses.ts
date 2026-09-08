@@ -10,6 +10,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs } from '../shared';
 import {
@@ -289,12 +290,14 @@ export class XAIResponsesProvider implements ApiProvider {
     };
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
-    // Parse input - can be string or array of messages
+    // Parse input - can be string or array of messages. Chat-format content parts are
+    // translated to their Responses equivalents so multimodal prompts authored for the chat
+    // API work here too (the Responses API rejects `type: "text"` / `"image_url"` outright).
     let input;
     try {
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
-        input = parsedJson;
+        input = normalizeResponsesInput(parsedJson);
       } else {
         input = prompt;
       }

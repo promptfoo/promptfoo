@@ -1,14 +1,25 @@
 ---
 title: GitHub Models Provider
-description: 'Use models from the GitHub Models catalog through an OpenAI-compatible API'
-keywords: [github models, llm providers, openai, llama, deepseek, ai models]
+description: 'GitHub Models retired on July 30, 2026. Learn how to migrate existing promptfoo configurations to another provider with its own endpoint and credentials.'
+keywords:
+  [github models, llm providers, openai, anthropic, claude, gemini, grok, deepseek, ai models]
 sidebar_label: GitHub Models
 ---
 
 # GitHub Models
 
-[GitHub Models](https://github.com/marketplace/models/) provides access to a catalog of models
-through a unified API interface.
+:::warning Retired service
+
+[GitHub retired GitHub Models on July 30, 2026](https://docs.github.com/en/github-models), including the inference API. The `github:` provider now reports a retirement error, and `GITHUB_TOKEN` no longer selects a default grader. GitHub Copilot is a separate service.
+
+Choose another [provider](./index.md) and configure its endpoint, model or deployment, and credentials. Provider IDs and credentials are not interchangeable. GitHub recommends Azure AI Foundry; see the [Azure provider](./azure.md) for configuration.
+
+:::
+
+<details>
+<summary>Historical configuration (the service is no longer available)</summary>
+
+[GitHub Models](https://github.com/marketplace/models/) provides access to industry-leading AI models from OpenAI, Anthropic, Google, and xAI through a unified API interface.
 
 The GitHub Models provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/) as it uses the OpenAI-compatible API format.
 
@@ -210,3 +221,5 @@ For more information on specific models and their capabilities, refer to the [Gi
 - [Configuration Reference](/docs/configuration/guide) - General configuration options
 - [Provider Options](/docs/providers/) - Overview of all available providers
 - [GitHub Models Documentation](https://docs.github.com/en/github-models) - Official GitHub Models documentation
+
+</details>

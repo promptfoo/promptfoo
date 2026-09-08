@@ -19,7 +19,12 @@ import {
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS, type GoogleModel, type GoogleModelCost } from './shared';
+import {
+  GEMINI_FLASH_MODELS,
+  GOOGLE_MODELS,
+  type GoogleModel,
+  type GoogleModelCost,
+} from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -197,6 +202,73 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
       ? []
       : [tool as Tool];
   });
+}
+
+/**
+ * Current Gemini Flash models no longer support manual sampling controls,
+ * candidate counts, or frequency/presence penalties.
+ */
+export function removeDeprecatedGeminiGenerationParams<T extends Record<string, unknown>>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (
+    !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
+    modelName !== 'gemini-flash-latest' &&
+    modelName !== 'gemini-flash-lite-latest'
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig };
+  for (const field of [
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'candidateCount',
+    'candidate_count',
+    'presencePenalty',
+    'presence_penalty',
+    'frequencyPenalty',
+    'frequency_penalty',
+  ]) {
+    delete sanitized[field];
+  }
+
+  if (
+    modelName.startsWith('gemini-3.8-flash') ||
+    modelName.startsWith('gemini-3.7-flash') ||
+    modelName === 'gemini-flash-latest'
+  ) {
+    for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
+      const thinkingConfig = config as
+        | {
+            thinkingBudget?: unknown;
+            thinking_budget?: unknown;
+            thinkingLevel?: unknown;
+            thinking_level?: unknown;
+          }
+        | undefined;
+      if (
+        thinkingConfig?.thinkingBudget !== undefined ||
+        thinkingConfig?.thinking_budget !== undefined
+      ) {
+        throw new Error(
+          `${modelName} does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).`,
+        );
+      }
+      const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
+      if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
+        throw new Error(
+          `${modelName} does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.`,
+        );
+      }
+    }
+  }
+
+  return sanitized as T;
 }
 
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
@@ -433,13 +505,20 @@ export function calculateGoogleCost(
     model?.vertexRegionalPremium !== undefined
       ? model.vertexRegionalPremium
       : 1;
+  const introductoryMultiplier =
+    model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
+      ? model.introductoryPricing.multiplier
+      : 1;
+  const catalogMultiplier = introductoryMultiplier;
+  const applyCatalogMultiplier = (rate?: number) =>
+    rate === undefined ? undefined : rate * catalogMultiplier;
   const modelCost =
     vertexRegionalMultiplier === 1
       ? baseModelCost
       : applyGoogleRegionalPremium(baseModelCost, vertexRegionalMultiplier);
 
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
     imagePromptTokens,
@@ -477,37 +556,42 @@ export function calculateGoogleCost(
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.audioInput ??
+    applyCatalogMultiplier(modelCost.audioInput) ??
     inputCost;
   const audioOutputCost =
     config.audioOutputCost ??
     config.audioCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.audioOutput ??
+    applyCatalogMultiplier(modelCost.audioOutput) ??
     outputCost;
   const videoOutputCost =
     config.videoOutputCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.videoOutput ??
+    applyCatalogMultiplier(modelCost.videoOutput) ??
     outputCost;
   const imageInputCost =
-    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
-  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.imageInput) ??
+    inputCost;
+  const catalogCacheRead = applyCatalogMultiplier(modelCost.cacheRead);
+  const cachedInputCost = config.inputCost ?? config.cost ?? catalogCacheRead ?? inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheReadAudio ??
-    modelCost.cacheRead ??
+    applyCatalogMultiplier(modelCost.cacheReadAudio) ??
+    catalogCacheRead ??
     audioInputCost;
   const cachedImageInputCost =
     config.imageInputCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheRead ??
+    applyCatalogMultiplier(modelCost.cacheRead) ??
     imageInputCost;
   const serviceTier =
     (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
@@ -522,7 +606,7 @@ export function calculateGoogleCost(
     serviceTierAudioInputCost,
   } = resolveGoogleServiceTierCosts(
     config,
-    modelCost,
+    applyGoogleRegionalPremium(modelCost, catalogMultiplier),
     serviceTier,
     cachedInputCost,
     cachedAudioInputCost,
@@ -560,7 +644,7 @@ const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): nu
 
 export function calculateGoogleCostFromUsage(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens: number | undefined,
   completionTokens: number | undefined,
   isVertexMode: boolean,

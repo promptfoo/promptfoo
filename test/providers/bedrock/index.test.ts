@@ -676,6 +676,54 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('omits temperature for Claude Opus 5 on the reported Bedrock path', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', temperature: 0.5 },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-5',
+      );
+
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for unlisted Claude 5+ models on Bedrock invokeModel', async () => {
+      for (const modelName of [
+        'us.anthropic.claude-haiku-5',
+        'global.anthropic.claude-research-preview-6',
+      ]) {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBeUndefined();
+      }
+    });
+
+    it.each([
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+    ])(
+      'preserves sampling and manual thinking for Claude inference profile %s',
+      async (modelName) => {
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5, thinking },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBe(0.5);
+        expect(params.thinking).toEqual(thinking);
+      },
+    );
+
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
       // `thinking` field, so the bare 1024 default would truncate ordinary answers.
@@ -716,6 +764,21 @@ describe('AwsBedrockGenericProvider', () => {
         'global.anthropic.claude-opus-5',
       );
       expect(params.max_tokens).toBe(77);
+    });
+
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          max_tokens: 8000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
+        },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+
+      expect(params.max_tokens).toBe(9024);
     });
 
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
@@ -3226,6 +3289,61 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('counts cached prompt tokens and reports the cache breakdown', async () => {
+      // The hand-rolled reader counted only input_tokens, so a cached prompt reported 100
+      // instead of 1200 — while calculateBedrockInvokeModelCost billed from the very same
+      // cache fields, leaving cost and usage disagreeing about one response.
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 100,
+            cache_read_input_tokens: 900,
+            cache_creation_input_tokens: 200,
+            output_tokens: 50,
+          },
+        },
+        'Test prompt',
+      );
+      expect(result).toEqual({
+        prompt: 1200,
+        completion: 50,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 900, cacheCreationInputTokens: 200 },
+      });
+    });
+
+    it('reports Claude thinking tokens as reasoning', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 50,
+            output_tokens_details: { thinking_tokens: 30 },
+          },
+        },
+        'Test prompt',
+      );
+      expect(result.completionDetails).toEqual({ reasoning: 30 });
+    });
+
+    it('still accepts the alternate prompt_tokens/completion_tokens names', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { prompt_tokens: 15, completion_tokens: 25 } },
+        'Test prompt',
+      );
+      expect(result).toEqual({ prompt: 15, completion: 25, total: 40, numRequests: 1 });
+    });
+
+    it('treats a zero input_tokens count as zero rather than missing', async () => {
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(
+        { usage: { input_tokens: 0, output_tokens: 7 } },
+        'Test prompt',
+      );
+      expect(result.prompt).toBe(0);
+      expect(result.total).toBe(7);
+    });
+
     it('should handle string token counts in Claude Messages', async () => {
       const mockResponse = {
         usage: {
@@ -3360,6 +3478,15 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
+    for (const prefix of ['', 'us.', 'global.']) {
+      const model = `${prefix}anthropic.claude-${family}-5-1`;
+      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${family}-5-1`]).toBeUndefined();
+  });
+
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3368,6 +3495,13 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5']).toBeUndefined();
+    // Grok 4.6 is served natively only through its inference profiles; the bare id has no
+    // on-demand throughput and is handled by the mantle Responses path instead.
+    expect(getHandlerForModel('us.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(getHandlerForModel('global.xai.grok-4.6')).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(() => getHandlerForModel('xai.grok-4.6')).toThrow(/inference profile/);
+    expect(() => getHandlerForModel('us.xai.grok-4.3')).toThrow(/inference profile/);
+
     expect(getHandlerForModel('anthropic.claude-fable-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(() => getHandlerForModel('anthropic.claude-mythos-5')).toThrow(/Anthropic Messages API/);
     expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
@@ -3591,9 +3725,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
+    // Withdrawn from Bedrock in every commercial region; deregistered so it raises
+    // "Unknown Amazon Bedrock model" instead of silently hitting the Claude catch-all.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3770,6 +3904,30 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each([
+    ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.6', 2, 6, 0.5],
+  ])('prices %s InvokeModel cached input once', async (modelId, input, output, cacheRead) => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 500,
+        total_tokens: 1500,
+        prompt_tokens_details: { cached_tokens: 200 },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider(modelId, { config: { region: 'us-east-1' } });
+    const response = await provider.callApi('hello');
+    expect(response.output).toBe('ok');
+    expect(response.tokenUsage?.prompt).toBe(1000);
+    expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
+  });
+
   it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
@@ -3818,6 +3976,37 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.output).toBe('ok');
     expect(result.cost).toBeCloseTo(0.00555, 8);
   });
+  it.each([
+    ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
+    ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
+    ['global.anthropic.claude-fable-5', 0, 0.02645],
+  ] as const)(
+    'prices Claude Runtime cache tokens once for %s',
+    async (modelName, inputTokens, expectedCost) => {
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: 500,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 100,
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelName, {
+        config: { region: 'us-west-2' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.tokenUsage?.prompt).toBe(inputTokens + 300);
+      expect(result.cost).toBeCloseTo(expectedCost, 8);
+    },
+  );
 
   it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
     const responseJson = JSON.stringify({

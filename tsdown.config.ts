@@ -39,41 +39,39 @@ const versionDefines = {
   __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
 };
 
-// All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
-// This prevents race conditions when multiple configs share the same outDir.
+// Use `npm run build:clean` to avoid racing concurrent builds in the shared output directory.
+const sharedBuildOptions = {
+  target: 'node22',
+  outDir: 'dist/src',
+  sourcemap: true,
+  clean: false,
+  deps: {
+    neverBundle: /^[a-z@][^:]*/,
+    onlyBundle: false,
+  },
+} as const;
+
 export default defineConfig([
   // Server (ESM only) - stable path for workflows
   {
+    ...sharedBuildOptions,
     entry: { 'server/index': 'src/server/index.ts' },
     format: ['esm'],
-    target: 'node22',
-    outDir: 'dist/src',
     shims: true,
-    sourcemap: true,
-    clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
   },
   // CLI binary (ESM only)
   {
+    ...sharedBuildOptions,
     entry: ['src/entrypoint.ts', 'src/main.ts'],
     format: ['esm'],
-    target: 'node22',
-    outDir: 'dist/src',
-    clean: false,
     shims: true, // Provides __dirname, __filename shims automatically
-    sourcemap: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -82,64 +80,37 @@ export default defineConfig([
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-      // Ensure critical native deps remain external
-      '@huggingface/transformers',
-      'playwright',
-      'sharp',
-      '@swc/core',
-      'esbuild',
-      'fsevents',
-    ],
   },
   // Library ESM build
   {
+    ...sharedBuildOptions,
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
     format: ['esm'],
-    target: 'node22',
-    outDir: 'dist/src',
     treeshake: true,
-    sourcemap: true,
     shims: true, // Ensure library ESM build has shims
-    clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
   },
   // Library CJS build for compatibility
   {
+    ...sharedBuildOptions,
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
     format: ['cjs'],
-    target: 'node22',
-    outDir: 'dist/src',
-    sourcemap: true,
-    clean: false,
     fixedExtension: true, // Use .cjs extension for CJS output
-    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
       'process.env.BUILD_FORMAT': '"cjs"',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
   },
 ]);

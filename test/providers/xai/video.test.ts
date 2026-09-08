@@ -3,6 +3,7 @@ import * as videoUtils from '../../../src/providers/video/utils';
 import {
   calculateVideoCost,
   createXAIVideoProvider,
+  resolveVideoModel,
   validateAspectRatio,
   validateDuration,
   validateResolution,
@@ -163,6 +164,40 @@ describe('XAI Video Provider', () => {
       it('returns 0 for cached videos', () => {
         expect(calculateVideoCost(10, true)).toBe(0);
       });
+
+      it('bills grok-imagine-video-1.5 at its higher per-second rate', () => {
+        // The default 720p output costs $0.14/sec for 1.5 and $0.07/sec for the base model.
+        expect(calculateVideoCost(10, false, 'grok-imagine-video-1.5')).toBeCloseTo(1.4, 10);
+        expect(calculateVideoCost(10, false, 'grok-imagine-video')).toBeCloseTo(0.7, 10);
+      });
+
+      it('bills grok-imagine-video-1.5 aliases at the 1.5 rate', () => {
+        for (const alias of [
+          'grok-imagine-video-1.5-preview',
+          'grok-imagine-video-1.5-2026-05-30',
+        ]) {
+          expect(calculateVideoCost(5, false, alias)).toBeCloseTo(0.7, 10);
+        }
+      });
+
+      it('falls back to the base rate for unknown slugs and returns 0 when cached', () => {
+        expect(calculateVideoCost(4, false, 'grok-imagine-video-9.9-preview')).toBeCloseTo(
+          0.28,
+          10,
+        );
+        expect(calculateVideoCost(10, true, 'grok-imagine-video-1.5')).toBe(0);
+      });
+    });
+
+    describe('resolveVideoModel', () => {
+      it('canonicalizes 1.5 aliases and preserves unknown slugs', () => {
+        expect(resolveVideoModel('grok-imagine-video-1.5-preview')).toBe('grok-imagine-video-1.5');
+        expect(resolveVideoModel('grok-imagine-video-1.5-2026-05-30')).toBe(
+          'grok-imagine-video-1.5',
+        );
+        expect(resolveVideoModel('grok-imagine-video')).toBe('grok-imagine-video');
+        expect(resolveVideoModel('grok-imagine-video-future')).toBe('grok-imagine-video-future');
+      });
     });
   });
 
@@ -273,7 +308,7 @@ describe('XAI Video Provider', () => {
         expect.objectContaining({ method: 'POST' }),
       ]);
       expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
-        model,
+        model: 'grok-imagine-video-1.5',
         prompt: mockPrompt,
         duration: 4,
         aspect_ratio: '16:9',
@@ -309,7 +344,7 @@ describe('XAI Video Provider', () => {
         video: {
           id: mockRequestId,
           storageRef: { key: mockStorageKey },
-          model,
+          model: 'grok-imagine-video-1.5',
           duration: 4,
           resolution: '1080p',
         },

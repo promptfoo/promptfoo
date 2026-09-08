@@ -115,6 +115,8 @@ providers:
 
 \*Token is required either in config or as environment variable
 
+Token precedence is `config.token`, provider-scoped `env.SLACK_BOT_TOKEN`, then the process `SLACK_BOT_TOKEN`. Eval-level `env` values are also supported; provider-scoped values take precedence.
+
 ## Response Strategies
 
 ### First Response (Default)
@@ -240,8 +242,7 @@ tests:
 
 ### Thread-based Conversations
 
-`threadTs` posts into an existing thread, but the provider does not poll that thread for replies.
-Treat this as a configuration reference rather than a complete response-collection example.
+`threadTs` controls where the prompt is posted. Response collection currently reads conversation history, so replies that remain only in the thread are not collected.
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -301,8 +302,8 @@ module.exports = {
    - Use Slack's markdown for better readability
 
 5. **Rate Limits**: Be aware of Slack's rate limits
-   - Web API: ~1 request per second per method
-   - Consider adding delays for bulk evaluations
+   - Limits vary by method and app distribution; see [Slack conversation history limits](https://docs.slack.dev/reference/methods/conversations.history/).
+   - The provider polls every second and does not expose a polling-interval option.
 
 ## Testing Other Slack Bots
 
@@ -602,7 +603,7 @@ tests:
 
 - **Bot not in channel**: Always invite the bot first with `/invite @YourBotName`
 - **No response captured**: Check the bot has all required scopes
-- **Rate limits**: The provider polls every 1 second. For non-Marketplace apps with strict rate limits, consider increasing timeouts and using longer polling intervals
+- **Rate limits**: The provider polls every second. Increasing the timeout does not reduce the polling rate; check whether your app is subject to stricter conversation history limits.
 
 ## See Also
 
