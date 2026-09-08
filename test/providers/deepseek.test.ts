@@ -5,6 +5,22 @@ import {
   DEEPSEEK_CHAT_MODELS,
 } from '../../src/providers/deepseek';
 
+describe('DeepSeek usage boundaries', () => {
+  it('bills input-only and output-only responses and preserves valid zero usage', () => {
+    expect(calculateDeepSeekCost('deepseek-chat', { inputCost: 0.01 }, 10, 0)).toBeCloseTo(0.1);
+    expect(calculateDeepSeekCost('deepseek-chat', { outputCost: 0.02 }, 0, 10)).toBeCloseTo(0.2);
+    expect(calculateDeepSeekCost('deepseek-chat', {}, 0, 0)).toBe(0);
+  });
+
+  it.each([undefined, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid usage %s',
+    (count) => {
+      expect(calculateDeepSeekCost('deepseek-chat', {}, count, 1)).toBeUndefined();
+      expect(calculateDeepSeekCost('deepseek-chat', {}, 1, count)).toBeUndefined();
+    },
+  );
+});
+
 describe('calculateDeepSeekCost', () => {
   it('should calculate cost without cache', () => {
     const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000);
