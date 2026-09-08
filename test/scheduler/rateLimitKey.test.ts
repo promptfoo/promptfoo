@@ -273,4 +273,77 @@ describe('getRateLimitKey', () => {
       expect(key).toMatch(/^custom:model\/v1\.2-beta\[.{12}\]$/);
     });
   });
+
+  describe('Multi-tenant and cloud provider differentiation', () => {
+    it('should generate different keys for different baseUrl, apiHost, or host aliases', () => {
+      const provider1 = createMockProvider('ollama:llama3', {
+        baseUrl: 'http://localhost:11434',
+      });
+      const provider2 = createMockProvider('ollama:llama3', {
+        baseUrl: 'http://remote-gpu:11434',
+      });
+      const providerHost = createMockProvider('ollama:llama3', {
+        host: 'http://remote-gpu:11434',
+      });
+
+      const key1 = getRateLimitKey(provider1);
+      const key2 = getRateLimitKey(provider2);
+      const keyHost = getRateLimitKey(providerHost);
+
+      expect(key1).not.toBe(key2);
+      expect(key2).toBe(keyHost);
+    });
+
+    it('should differentiate Azure OpenAI deployments and resources', () => {
+      const prodDeployment = createMockProvider('azure:gpt-4o', {
+        resourceName: 'my-resource',
+        deploymentName: 'gpt-4o-prod',
+      });
+      const devDeployment = createMockProvider('azure:gpt-4o', {
+        resourceName: 'my-resource',
+        deploymentName: 'gpt-4o-dev',
+      });
+      const otherResource = createMockProvider('azure:gpt-4o', {
+        resourceName: 'other-resource',
+        deploymentName: 'gpt-4o-prod',
+      });
+
+      const prodKey = getRateLimitKey(prodDeployment);
+      const devKey = getRateLimitKey(devDeployment);
+      const otherKey = getRateLimitKey(otherResource);
+
+      expect(prodKey).not.toBe(devKey);
+      expect(prodKey).not.toBe(otherKey);
+    });
+
+    it('should differentiate Google Cloud Vertex AI projects', () => {
+      const proj1 = createMockProvider('vertex:gemini-1.5-pro', {
+        projectId: 'project-corp-prod',
+        location: 'us-central1',
+      });
+      const proj2 = createMockProvider('vertex:gemini-1.5-pro', {
+        project: 'project-corp-dev',
+        location: 'us-central1',
+      });
+
+      const key1 = getRateLimitKey(proj1);
+      const key2 = getRateLimitKey(proj2);
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should differentiate Cloudflare Workers AI accounts and organizations', () => {
+      const account1 = createMockProvider('cloudflare:llama3', {
+        account: 'account-123',
+      });
+      const account2 = createMockProvider('cloudflare:llama3', {
+        accountId: 'account-456',
+      });
+
+      const key1 = getRateLimitKey(account1);
+      const key2 = getRateLimitKey(account2);
+
+      expect(key1).not.toBe(key2);
+    });
+  });
 });
