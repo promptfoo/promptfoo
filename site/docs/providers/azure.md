@@ -1552,7 +1552,7 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-The `azure:video:<deployment name>` provider sends text prompts to Azure's video generation jobs API. Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. This provider supports text-to-video requests and does not send image inputs or remix requests.
+The `azure:video:<deployment name>` provider sends text prompts to Azure's video generation jobs API. Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
 
 ### Prerequisites
 
