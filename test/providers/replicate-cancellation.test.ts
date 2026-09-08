@@ -61,7 +61,13 @@ it.each([
     await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
     expect(sharedSignal?.aborted).toBe(false);
     finish(reply('succeeded', output));
-    await expect(result2).resolves.toMatchObject({ output: expect.stringContaining(output) });
+    const surviving = await result2;
+    expect(surviving).toMatchObject({ output: expect.stringContaining(output) });
+    if (Provider === ReplicateProvider) {
+      expect(surviving.tokenUsage?.numRequests).toBe(1);
+    } else {
+      expect(surviving.cached).toBe(false);
+    }
   },
 );
 
@@ -85,6 +91,25 @@ it('counts only the creator when concurrent rows share a prediction', async () =
   finish(reply('succeeded', 'shared output'));
   expect((await first).tokenUsage?.numRequests).toBe(1);
   expect((await second).tokenUsage?.numRequests).toBe(0);
+});
+
+it('caches an image completed by polling after replaying an incomplete creation', async () => {
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  const cache = { get: vi.fn(), set: vi.fn() };
+  vi.mocked(getCache).mockReturnValue(cache as any);
+  vi.mocked(fetchWithCache)
+    .mockResolvedValueOnce({ ...reply('processing'), cached: true })
+    .mockResolvedValueOnce(reply('succeeded', ['https://example.invalid/complete.png']));
+  const provider = new ReplicateImageProvider('owner/model', { config: { apiKey: 'fixture' } });
+  const result = await provider.callApi('Hello');
+  expect(result).toMatchObject({ cached: false, output: expect.stringContaining('complete.png') });
+  expect(cache.set).toHaveBeenCalledWith(
+    expect.any(String),
+    JSON.stringify(['https://example.invalid/complete.png']),
+  );
+  cache.get.mockResolvedValueOnce(cache.set.mock.calls[0][1]);
+  expect(await provider.callApi('Hello')).toMatchObject({ cached: true });
+  expect(fetchWithCache).toHaveBeenCalledTimes(2);
 });
 
 it('starts a new prediction after the cache is cleared', async () => {

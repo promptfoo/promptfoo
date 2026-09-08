@@ -71,7 +71,12 @@ interface ReplicatePrediction {
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
 const pendingPredictions = new Map<
   string,
-  { promise: ReturnType<typeof fetchWithCache>; controller: AbortController; subscribers: number }
+  {
+    promise: ReturnType<typeof fetchWithCache>;
+    controller: AbortController;
+    subscribers: number;
+    claimed: boolean;
+  }
 >();
 
 function isAbortError(error: unknown): boolean {
@@ -174,7 +179,7 @@ async function createPrediction(
       getRequestTimeoutMs(),
       'json',
     );
-    pending = { promise, controller, subscribers: 0 };
+    pending = { promise, controller, subscribers: 0, claimed: false };
     if (key) {
       pendingPredictions.set(key, pending);
       void promise
@@ -186,13 +191,28 @@ async function createPrediction(
         .catch(() => {});
     }
   }
-  pending.subscribers++;
+  const pendingRequest = pending;
+  pendingRequest.subscribers++;
   try {
-    return { creation: await awaitPrediction(pending.promise, signal), shared };
+    return {
+      creation: await awaitPrediction(pendingRequest.promise, signal),
+      shared,
+      claim: () => {
+        if (pendingRequest.claimed) {
+          return false;
+        }
+        pendingRequest.claimed = true;
+        return true;
+      },
+    };
   } finally {
-    if (--pending.subscribers === 0 && key && pendingPredictions.get(key) === pending) {
+    if (
+      --pendingRequest.subscribers === 0 &&
+      key &&
+      pendingPredictions.get(key) === pendingRequest
+    ) {
       pendingPredictions.delete(key);
-      pending.controller.abort();
+      pendingRequest.controller.abort();
     }
   }
 }
@@ -358,7 +378,7 @@ export class ReplicateProvider implements ApiProvider {
     let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
-      const { creation, shared } = await createPrediction(
+      const { creation, shared, claim } = await createPrediction(
         this.modelName,
         this.apiKey,
         data,
@@ -369,7 +389,8 @@ export class ReplicateProvider implements ApiProvider {
       response = creation.data as ReplicatePrediction;
 
       // If still processing, poll for completion
-      if (response.status === 'starting' || response.status === 'processing') {
+      const polled = response.status === 'starting' || response.status === 'processing';
+      if (polled) {
         cached = shared;
         response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
@@ -379,6 +400,12 @@ export class ReplicateProvider implements ApiProvider {
       }
 
       response = response.output;
+      if (
+        typeof response === 'string' ||
+        (Array.isArray(response) && response.every((item) => typeof item === 'string'))
+      ) {
+        cached = (!polled && creation.cached) || !claim();
+      }
     } catch (err) {
       throwIfAborted(options?.abortSignal);
       if (isAbortError(err)) {
@@ -662,7 +689,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       // Create prediction with sync mode
-      const { creation, shared } = await createPrediction(
+      const { creation, shared, claim } = await createPrediction(
         this.modelName,
         this.apiKey,
         data,
@@ -675,7 +702,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
       logger.debug(`Initial prediction status: ${prediction.status}, ID: ${prediction.id}`);
 
       // If still processing, poll for completion
-      if (prediction.status === 'starting' || prediction.status === 'processing') {
+      const polled = prediction.status === 'starting' || prediction.status === 'processing';
+      if (polled) {
         prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
@@ -692,6 +720,12 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       response = prediction.output;
+      if (
+        typeof response === 'string' ||
+        (Array.isArray(response) && typeof response[0] === 'string')
+      ) {
+        cached = (!polled && creation.cached) || !claim();
+      }
     }
 
     // Handle various response formats
