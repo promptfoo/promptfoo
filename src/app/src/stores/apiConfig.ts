@@ -13,6 +13,12 @@ export interface ApiConfig {
 // The old single-port launcher auto-persisted exactly this URL as the API base. It is now
 // the dev UI's own origin (see vite.config.ts), so it must not survive as the API target.
 const LEGACY_LOCAL_API_BASE_URLS = new Set(['http://localhost:15500', 'http://localhost:15500/']);
+const LEGACY_DEV_API_ALIASES = new Set([
+  'http://127.0.0.1:15500',
+  'http://127.0.0.1:15500/',
+  'http://[::1]:15500',
+  'http://[::1]:15500/',
+]);
 
 function getPersistedApiBaseUrl(persistedState: unknown): string | undefined {
   if (
@@ -37,9 +43,14 @@ export function mergeApiConfigPersistedState(
 
   // Drop a missing/blank value or the exact legacy default and fall back to the environment
   // default without re-persisting, so the dev-only port never leaks into a later
-  // `promptfoo view` session. Only the exact `http://localhost:15500` literal is migrated:
-  // explicit loopback aliases (127.0.0.1, [::1]) were deliberate user choices and are kept.
-  if (persistedApiBaseUrl === undefined || LEGACY_LOCAL_API_BASE_URLS.has(persistedApiBaseUrl)) {
+  // `promptfoo view` session. Preserve explicitly saved loopback aliases outside local dev.
+  if (
+    persistedApiBaseUrl === undefined ||
+    LEGACY_LOCAL_API_BASE_URLS.has(persistedApiBaseUrl) ||
+    (import.meta.env.DEV &&
+      currentState.apiBaseUrl?.startsWith('http://localhost:') &&
+      LEGACY_DEV_API_ALIASES.has(persistedApiBaseUrl))
+  ) {
     return currentState;
   }
 

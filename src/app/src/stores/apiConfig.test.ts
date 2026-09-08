@@ -37,11 +37,18 @@ describe('mergeApiConfigPersistedState', () => {
     expect(merged.persistApiBaseUrl).toBe(false);
   });
 
-  it('preserves explicit loopback aliases on the legacy port as user choices', () => {
+  it('migrates loopback aliases only when the local dev API has moved', () => {
     for (const alias of ['http://127.0.0.1:15500', 'http://[::1]:15500']) {
-      const merged = mergeApiConfigPersistedState(
+      const dev = mergeApiConfigPersistedState(
         { apiBaseUrl: alias },
         createApiConfig('http://localhost:18601'),
+      );
+      expect(dev.apiBaseUrl).toBe('http://localhost:18601');
+      expect(dev.persistApiBaseUrl).toBe(false);
+
+      const merged = mergeApiConfigPersistedState(
+        { apiBaseUrl: alias },
+        createApiConfig('https://api.example.com'),
       );
 
       expect(merged.apiBaseUrl).toBe(alias);
