@@ -424,6 +424,99 @@ describe('named matcher assertions', () => {
   });
 });
 
+describe('trajectory:step-status', () => {
+  it.each(['toool', 123, null, [], ['tool', 123], ['tool', 'toool']].map((type) => ({ type })))(
+    'rejects invalid step type $type for positive and inverse assertions',
+    ({ type }) => {
+      for (const assertionType of [
+        'trajectory:step-status',
+        'not-trajectory:step-status',
+      ] as const) {
+        expect(
+          getRunnableAssertionValueError(
+            make({ type: assertionType, value: { name: 'search', status: 'error', type } }),
+          ),
+        ).toMatch(/step type/);
+      }
+    },
+  );
+
+  it('accepts supported step types and nonempty type lists', () => {
+    for (const type of [
+      'command',
+      'message',
+      'reasoning',
+      'search',
+      'span',
+      'tool',
+      ['tool', 'span'],
+    ]) {
+      expect(
+        getRunnableAssertionValueError(
+          make({
+            type: 'trajectory:step-status',
+            value: { name: 'search', status: 'success', type },
+          }),
+        ),
+      ).toBeUndefined();
+    }
+  });
+
+  it('defers templated status and type validation until test variables are resolved', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:step-status',
+          value: { name: '{{ tool }}', type: ['{{ step_type }}'], status: '{{ expected_status }}' },
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each(['trajectory:step-status', 'not-trajectory:step-status'] as const)(
+    'accepts valid %s matchers',
+    (type) => {
+      for (const status of ['success', 'error', 0, 429]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: { name: 'search', status } })),
+        ).toBeUndefined();
+      }
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, value: { pattern: 'search_*', status: 'error', message: '' } }),
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it.each(['name', 'pattern', 'message'])('rejects a non-string %s', (field) => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:step-status',
+          value: { name: 'search', pattern: '*', status: 'error', [field]: 123 },
+        }),
+      ),
+    ).toMatch(/strings/);
+  });
+
+  it.each([undefined, 'failed', NaN, Infinity])('rejects invalid status %s', (status) => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-status', value: { name: 'search', status } }),
+      ),
+    ).toMatch(/status/);
+  });
+
+  it('requires a name or pattern', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-status', value: { status: 'success' } }),
+      ),
+    ).toMatch(/name or pattern/);
+  });
+});
+
 describe('perplexity-score threshold', () => {
   it('rejects thresholds outside [0,1]', () => {
     expect(
