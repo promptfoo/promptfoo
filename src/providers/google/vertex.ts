@@ -432,8 +432,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -529,9 +528,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
@@ -705,8 +709,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let response;
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -954,8 +957,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         if (isCacheEnabled()) {
-          await cache.set(cacheKey, JSON.stringify(response));
+          options?.abortSignal?.throwIfAborted();
+          await awaitProviderOperation(
+            cache.set(cacheKey, JSON.stringify(response)),
+            options?.abortSignal,
+          );
         }
+        options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
@@ -1037,8 +1045,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1101,9 +1108,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
@@ -1191,8 +1203,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      options?.abortSignal?.throwIfAborted();
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1299,9 +1310,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
