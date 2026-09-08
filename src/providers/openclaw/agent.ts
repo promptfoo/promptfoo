@@ -574,7 +574,7 @@ export class OpenClawAgentProvider implements ApiProvider {
 
     if (
       typeof challengeTimestamp !== 'number' ||
-      !Number.isInteger(challengeTimestamp) ||
+      !Number.isSafeInteger(challengeTimestamp) ||
       challengeTimestamp < 0
     ) {
       throw new Error('Invalid OpenClaw connect challenge timestamp');
