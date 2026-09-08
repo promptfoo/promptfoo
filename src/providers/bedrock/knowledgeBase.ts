@@ -4,6 +4,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
@@ -133,23 +134,58 @@ export class AwsBedrockKnowledgeBaseProvider
     return this.knowledgeBaseClient;
   }
 
+  private buildGenerationConfiguration(modelArn: string) {
+    const { max_tokens } = this.kbConfig;
+    const { temperature, top_p, top_k } = isSamplingParamsDeprecatedClaudeModel(modelArn)
+      ? {}
+      : this.kbConfig;
+    // Sonnet 4.5/4.6 and Haiku 4.5 accept either temperature or top_p. Prefer top_p, as
+    // the Anthropic Messages provider does, without changing older models.
+    const omitTemperature =
+      top_p !== undefined &&
+      /(^|[^a-z0-9])claude-(?:sonnet-4-[56]|haiku-4-5)(?![0-9])/i.test(modelArn);
+    const textInferenceConfig = {
+      ...(temperature !== undefined && !omitTemperature && { temperature }),
+      ...(max_tokens !== undefined && { maxTokens: max_tokens }),
+      ...(top_p !== undefined && { topP: top_p }),
+    };
+    if (Object.keys(textInferenceConfig).length > 0 || top_k !== undefined) {
+      return {
+        ...(Object.keys(textInferenceConfig).length > 0 && {
+          inferenceConfig: { textInferenceConfig },
+        }),
+        ...(top_k !== undefined && {
+          additionalModelRequestFields: /(^|[/.])amazon\.nova-/.test(modelArn)
+            ? { inferenceConfig: { topK: top_k } }
+            : /(^|[/.])cohere\.command-r(?:-plus)?-v\d+(?::\d+)?$/.test(modelArn)
+              ? { k: top_k }
+              : { top_k },
+        }),
+      };
+    }
+
+    return undefined;
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.kbConfig.modelArn && (!this.modelName || this.modelName === 'default')) {
+      return {
+        error:
+          'A generation model is required for Bedrock Knowledge Bases. Set bedrock:kb:<model-id> or provide config.modelArn.',
+      };
+    }
+
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
     let modelArn = this.kbConfig.modelArn;
 
     if (!modelArn) {
-      if (this.modelName.includes('arn:aws:bedrock')) {
+      if (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName)) {
         modelArn = this.modelName; // Already has full ARN format
-      } else if (
-        this.modelName.startsWith('us.') ||
-        this.modelName.startsWith('eu.') ||
-        this.modelName.startsWith('apac.')
-      ) {
-        // This is a cross-region inference profile - use inference-profile ARN format
-        // Note: We'll use the modelName directly as the inference profile ID since Knowledge Bases
-        // expect the inference profile ID, not a full ARN for these
+      } else if (/^(?:us|eu|apac|global|jp|au)\./.test(this.modelName)) {
+        // Preserve system-defined inference profile IDs instead of wrapping them
+        // in a foundation-model ARN.
         modelArn = this.modelName;
       } else {
         // Regular foundation model
@@ -157,14 +193,12 @@ export class AwsBedrockKnowledgeBaseProvider
       }
     }
 
+    const generationConfiguration = this.buildGenerationConfiguration(modelArn);
     const knowledgeBaseConfiguration: any = {
       knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+      modelArn,
+      ...(generationConfiguration && { generationConfiguration }),
     };
-
-    // Only include modelArn if explicitly configured or if it's a valid model
-    if (this.kbConfig.modelArn || this.modelName !== 'default') {
-      knowledgeBaseConfiguration.modelArn = modelArn;
-    }
 
     // Only add retrieval configuration when numberOfResults is explicitly configured
     // This preserves backwards compatibility with AWS default behavior
@@ -203,7 +237,8 @@ export class AwsBedrockKnowledgeBaseProvider
     };
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    const cacheKey = `bedrock-kb:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    // Earlier cached results did not apply configured generation parameters.
+    const cacheKey = `bedrock-kb:v2:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,

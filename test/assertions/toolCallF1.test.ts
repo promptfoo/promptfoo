@@ -136,6 +136,44 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(1);
     });
 
+    it('should handle JSON stringified OpenAI Responses function_call output', () => {
+      const output = JSON.stringify({
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call_1',
+        name: 'get_weather',
+        arguments: '{"city":"NYC"}',
+      });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle newline-separated OpenAI Responses function_call output', () => {
+      const output = `Thinking about the request.
+{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather","arguments":"{\\"city\\":\\"NYC\\"}"}
+{"type":"function_call","id":"fc_2","call_id":"call_2","name":"book_flight","arguments":"{\\"destination\\":\\"LA\\"}"}`;
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should not treat unrelated named objects as tool calls', () => {
+      const output = JSON.stringify({ type: 'response_metadata', name: 'get_weather' });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
     it('should handle direct array of tool calls', () => {
       const output = [
         { function: { name: 'get_weather', arguments: '{}' } },
@@ -477,6 +515,34 @@ describe('handleToolCallF1', () => {
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
+    });
+  });
+
+  describe('OpenAI Responses API function_call items', () => {
+    const singleCall = {
+      type: 'function_call',
+      id: 'fc_1',
+      call_id: 'call_1',
+      name: 'get_weather',
+      arguments: '{"city":"NYC"}',
+    };
+
+    it('recognizes a single function_call object', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('recognizes a JSON-stringified single function_call (Responses providers serialize calls)', () => {
+      const result = handleToolCallF1(createParams(JSON.stringify(singleCall), ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('still scores zero when the function_call name does not match', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['book_flight']));
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
     });
   });
 });

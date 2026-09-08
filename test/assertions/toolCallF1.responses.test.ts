@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
+import { runAssertion } from '../../src/assertions/index';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 import { ResponsesProcessor } from '../../src/providers/responses/processor';
 
-import type { AssertionParams } from '../../src/types/index';
+import type { ProviderResponse } from '../../src/types/index';
 
 const call = (name: string) => ({
   type: 'function_call',
@@ -13,67 +13,89 @@ const call = (name: string) => ({
   arguments: '{"city":"NYC"}',
   status: 'completed',
 });
-const grade = (output: unknown, expected = ['get_weather']) =>
-  handleToolCallF1({
+const grade = (providerResponse: ProviderResponse, expected = ['get_weather']) =>
+  runAssertion({
     assertion: { type: 'tool-call-f1', value: expected },
-    output,
-    renderedValue: expected,
-    inverse: false,
-  } as AssertionParams);
-
-describe('Responses function calls retain tool-call-f1 scores', () => {
-  it.each([
-    ['single object', call('get_weather')],
-    ['JSON string', JSON.stringify(call('get_weather'))],
-    ['text plus JSON', `Looking up weather.\n${JSON.stringify(call('get_weather'))}`],
-  ])('%s should score one for the expected tool', (_name, output) => {
-    expect(grade(output)).toMatchObject({ score: 1, pass: true });
+    providerResponse,
+    test: {},
   });
 
-  it('array control already recognizes the same call', () => {
-    expect(grade([call('get_weather')]).score).toBe(1);
-  });
-  it('Chat Completions control recognizes the expected tool', () => {
-    expect(
-      grade([{ type: 'function', function: { name: 'get_weather', arguments: '{}' } }]).score,
-    ).toBe(1);
-  });
+describe('Responses tool-call-f1 input validation', () => {
   it.each([
     { name: 'get_weather', type: 'message' },
     { name: 'get_weather' },
     { type: 'function_call' },
     { type: 'function_call', name: 42 },
-  ])('does not extract a tool name from %j', (output) => {
-    expect(grade(output).score).toBe(0);
+    '{"type":"function_call","name":',
+  ])('does not extract a tool name from %j', async (output) => {
+    expect(await grade({ output })).toMatchObject({ score: 0, pass: false });
   });
-  it('wrong tool must score zero', () => {
-    expect(grade([call('book_flight')]).score).toBe(0);
-  });
+});
 
-  it.each(['openai', 'azure', 'xai'] as const)(
-    '%s real ResponsesProcessor output should retain both calls',
-    async (providerType) => {
+describe.each(['openai', 'azure', 'xai'] as const)(
+  '%s Responses tool-call-f1 without function callbacks',
+  (providerType) => {
+    const processOutput = (output: object[]) => {
       const processor = new ResponsesProcessor({
         modelName: 'fixture-model',
         providerType,
         functionCallbackHandler: new FunctionCallbackHandler(),
         costCalculator: () => 0,
       });
-      const response = await processor.processResponseOutput(
+      return processor.processResponseOutput({ id: 'resp_fixture', output }, {}, false);
+    };
+
+    it.each([
+      ['one call', [call('get_weather')], ['get_weather']],
+      [
+        'multiple calls',
+        [call('get_weather'), call('book_flight')],
+        ['get_weather', 'book_flight'],
+      ],
+      ['repeated calls', [call('get_weather'), call('get_weather')], ['get_weather']],
+    ])(
+      'grades %s emitted by the real processor and callback handler',
+      async (_name, calls, expected) => {
+        const response = await processOutput(calls);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe(calls.map((item) => JSON.stringify(item)).join('\n'));
+        expect(await grade(response, expected)).toMatchObject({ score: 1, pass: true });
+      },
+    );
+
+    it('grades calls mixed with assistant text', async () => {
+      const calls = [call('get_weather'), call('book_flight')];
+      const response = await processOutput([
+        calls[0],
         {
-          id: 'resp_fixture',
-          output: [call('get_weather'), call('book_flight')],
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Checking flights next.' }],
         },
-        {},
-        false,
-      );
+        calls[1],
+      ]);
+
       expect(response.error).toBeUndefined();
       expect(response.output).toBe(
-        [call('get_weather'), call('book_flight')].map((item) => JSON.stringify(item)).join('\n'),
+        `${JSON.stringify(calls[0])}\nChecking flights next.\n${JSON.stringify(calls[1])}`,
       );
-      const result = grade(response.output, ['get_weather', 'book_flight']);
-      expect(result.score).toBe(1);
-      expect(result.pass).toBe(true);
-    },
-  );
-});
+      expect(await grade(response, ['get_weather', 'book_flight'])).toMatchObject({
+        score: 1,
+        pass: true,
+      });
+    });
+
+    it.each([
+      ['wrong tools', ['search_web'], 0],
+      ['unexpected tools', ['get_weather'], 2 / 3],
+      ['missing tools', ['get_weather', 'book_flight', 'search_web'], 4 / 5],
+    ])('fails for %s after processing', async (_name, expected, score) => {
+      const response = await processOutput([call('get_weather'), call('book_flight')]);
+      expect(response.error).toBeUndefined();
+
+      const result = await grade(response, expected);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(score);
+    });
+  },
+);
