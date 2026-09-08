@@ -17,9 +17,15 @@ export type HyperbolicAudioOptions = {
   apiBaseUrl?: string;
   model?: string;
   voice?: string;
+  speaker?: string;
   speed?: number;
   language?: string;
+  sdp_ratio?: number;
+  noise_scale?: number;
+  noise_scale_w?: number;
 };
+
+const HYPERBOLIC_API_BASE_URL = 'https://api.hyperbolic.xyz/v1';
 
 const HYPERBOLIC_AUDIO_MODELS = [
   {
@@ -51,7 +57,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    return this.config?.apiBaseUrl || 'https://api.hyperbolic.xyz/v1';
+    return this.config?.apiBaseUrl || HYPERBOLIC_API_BASE_URL;
   }
 
   id(): string {
@@ -62,14 +68,23 @@ export class HyperbolicAudioProvider implements ApiProvider {
     return `[Hyperbolic Audio Provider ${this.modelName}]`;
   }
 
-  private getApiModelName(): string {
-    const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
-    );
-    return model?.id || this.modelName;
+  private isHyperbolicApi(): boolean {
+    try {
+      const url = new URL(this.getApiUrl());
+      return (
+        url.origin === 'https://api.hyperbolic.xyz' && url.pathname.replace(/\/+$/, '') === '/v1'
+      );
+    } catch {
+      return false;
+    }
   }
 
   private calculateAudioCost(textLength: number): number {
+    // Hyperbolic documents $5 per million characters. Preserve the legacy estimate
+    // for custom endpoints, whose pricing is independent of Hyperbolic's service.
+    if (this.isHyperbolicApi()) {
+      return (textLength / 1000) * 0.005;
+    }
     const model = HYPERBOLIC_AUDIO_MODELS.find(
       (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
     );
@@ -100,7 +115,8 @@ export class HyperbolicAudioProvider implements ApiProvider {
       text: prompt,
     };
 
-    // Add optional parameters
+    // The native endpoint uses Melo TTS without a model selector. Keep explicit
+    // model/voice passthrough for compatibility with existing custom endpoints.
     if (config.model) {
       body.model = config.model;
     }
@@ -112,6 +128,14 @@ export class HyperbolicAudioProvider implements ApiProvider {
     }
     if (config.language) {
       body.language = config.language;
+    }
+    if (config.speaker) {
+      body.speaker = config.speaker;
+    }
+    for (const parameter of ['sdp_ratio', 'noise_scale', 'noise_scale_w'] as const) {
+      if (config[parameter] !== undefined) {
+        body[parameter] = config[parameter];
+      }
     }
 
     const headers = {
@@ -169,7 +193,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
               isBase64: true,
               audio: {
                 data: data.audio,
-                format: 'wav',
+                format: this.isHyperbolicApi() ? 'mp3' : 'wav',
               },
             }
           : {}),
