@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('cloud provider loader configuration', () => {
-  it('uses Cloudera domain env overrides while preserving the deployed endpoint and model', async () => {
+  it('forwards Cloudera domain config while preserving the deployed endpoint and model', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { choices: [{ message: { content: 'hello' } }] },
       cached: false,
@@ -30,8 +30,11 @@ describe('cloud provider loader configuration', () => {
     });
     const provider = await loadApiProvider('cloudera:customer:model', {
       options: {
-        env: { CDP_DOMAIN: 'deployment.example.test', CDP_TOKEN: 'fixture-token' },
-        config: { endpoint: 'endpoint-name' },
+        config: {
+          domain: 'deployment.example.test',
+          apiKey: 'fixture-token',
+          endpoint: 'endpoint-name',
+        },
       },
     });
     expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
@@ -144,30 +147,30 @@ describe('cloud provider loader configuration', () => {
     });
   });
 
-  it('uses provider Snowflake account env ahead of suite and process env', async () => {
+  it('uses explicit Snowflake account config ahead of process env', async () => {
     const provider = await loadApiProvider('snowflake:mistral-large2', {
       env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: 'suite-account' },
       options: {
-        env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: 'provider-account' },
-        config: { apiKey: 'fixture-key' },
+        config: { accountIdentifier: 'configured-account', apiKey: 'fixture-key' },
       },
     });
     expect((provider as unknown as { getApiUrl(): string }).getApiUrl()).toBe(
-      'https://provider-account.snowflakecomputing.com',
+      'https://configured-account.snowflakecomputing.com',
     );
   });
 
   it.each([
-    ['cloudera:customer:model', 'CDP_DOMAIN', 'CDP_TOKEN', 'deployment.example.test'],
+    ['cloudera:customer:model', 'CDP_DOMAIN', 'CDP_TOKEN', 'deployment.example.test', 'domain'],
     [
       'snowflake:private:model',
       'SNOWFLAKE_ACCOUNT_IDENTIFIER',
       'SNOWFLAKE_API_KEY',
       'provider-account',
+      'accountIdentifier',
     ],
   ])(
-    'retains parsed credentials and deployment env for %s',
-    async (id, locationKey, tokenKey, location) => {
+    'retains parsed credentials with explicit deployment config for %s',
+    async (id, locationKey, tokenKey, location, configKey) => {
       vi.stubEnv(tokenKey, '');
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { choices: [{ message: { content: 'hello' } }] },
@@ -176,7 +179,11 @@ describe('cloud provider loader configuration', () => {
         statusText: 'OK',
       });
       const env = { [locationKey]: location, [tokenKey]: 'fixture-provider' };
-      const options = ProviderOptionsSchema.parse({ id: 'custom-label', env });
+      const options = ProviderOptionsSchema.parse({
+        id: 'custom-label',
+        env,
+        config: { [configKey]: location },
+      });
       expect(options.env).toEqual(env);
       const provider = await loadApiProvider(id, { options });
       expect(provider.id()).toBe('custom-label');
