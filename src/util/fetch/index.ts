@@ -188,11 +188,13 @@ export async function fetchWithProxy(
   }
 
   // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const requestSignal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {

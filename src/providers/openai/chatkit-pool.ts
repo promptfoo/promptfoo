@@ -563,10 +563,12 @@ export class ChatKitBrowserPool {
     const previous = ChatKitBrowserPool.pendingShutdown;
     const completed = Promise.allSettled(previous ? [previous, work] : [work]).then(() => {});
     ChatKitBrowserPool.pendingShutdown = completed;
-    this.shutdownPromise = work.finally(() => {
+    void completed.then(() => {
       if (ChatKitBrowserPool.pendingShutdown === completed) {
         ChatKitBrowserPool.pendingShutdown = null;
       }
+    });
+    this.shutdownPromise = work.finally(() => {
       this.shutdownPromise = null;
     });
     return this.shutdownPromise;

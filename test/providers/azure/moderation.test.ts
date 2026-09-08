@@ -329,6 +329,27 @@ describe('Azure Moderation', () => {
       expect(mockCache.get).toHaveBeenCalled();
     });
 
+    it('does not return a cached moderation result after cancellation during lookup', async () => {
+      const controller = new AbortController();
+      let finishLookup!: (value: { flags: never[] }) => void;
+      const lookup = new Promise<{ flags: never[] }>((resolve) => {
+        finishLookup = resolve;
+      });
+      const cache = { get: vi.fn().mockReturnValue(lookup) } as any;
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(cache);
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: { apiKey: 'test-key', endpoint: 'https://test.cognitiveservices.azure.com/' },
+      });
+      const result = provider.callModerationApi('user', 'assistant', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(cache.get).toHaveBeenCalledOnce());
+      controller.abort();
+      finishLookup({ flags: [] });
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
     it('should use resolved endpoint and apiVersion in cache key', async () => {
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
