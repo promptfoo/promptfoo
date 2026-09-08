@@ -1,12 +1,13 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
   createVercelProvider,
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
+import { mockProcessEnv } from '../util/utils';
 
 // Mock the cache module
 vi.mock('../../src/cache', async () => ({
@@ -35,6 +36,16 @@ vi.mock('ai', () => {
     jsonSchema: vi.fn((schema: unknown) => schema),
   };
 });
+
+let restoreEnv: () => void;
+beforeEach(() => {
+  restoreEnv = mockProcessEnv({
+    AI_GATEWAY_API_KEY: 'fixture-default-key',
+    VERCEL_AI_GATEWAY_API_KEY: undefined,
+    VERCEL_OIDC_TOKEN: undefined,
+  });
+});
+afterEach(() => restoreEnv());
 
 const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
 const testTracerProvider = new NodeTracerProvider();
@@ -1419,6 +1430,91 @@ describe('VercelAiEmbeddingProvider', () => {
       expect(cacheKey).toMatch(/^vercel:embedding:openai\/text-embedding-3-small:[a-f0-9]{64}$/);
       expect(cacheKey).not.toContain(input);
     });
+  });
+});
+
+describe.each(['generation', 'embedding'])('ambient gateway auth (%s)', (task) => {
+  let mockCache: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
+  const createProvider = (config = {}, env = {}) =>
+    task === 'embedding'
+      ? new VercelAiEmbeddingProvider('fixture/model', { config, env })
+      : new VercelAiProvider('fixture/model', { config, env });
+  const call = (provider: VercelAiProvider | VercelAiEmbeddingProvider) =>
+    provider instanceof VercelAiEmbeddingProvider
+      ? provider.callEmbeddingApi('Hello')
+      : provider.callApi('Hello');
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const entries = new Map<string, string>();
+    mockCache = {
+      get: vi.fn(async (key: string) => entries.get(key)),
+      set: vi.fn(async (key: string, value: string) => {
+        entries.set(key, value);
+      }),
+    };
+    vi.mocked(getCache).mockResolvedValue(mockCache as any);
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    const { generateText, embed } = await import('ai');
+    vi.mocked(generateText)
+      .mockReset()
+      .mockResolvedValue({ text: 'Fresh' } as any);
+    vi.mocked(embed)
+      .mockReset()
+      .mockResolvedValue({ embedding: [1, 2] } as any);
+  });
+
+  it('separates ambient API-key accounts and reuses the same account cache', async () => {
+    const { createGateway } = await import('ai');
+    mockProcessEnv({ AI_GATEWAY_API_KEY: 'fixture-account-a' });
+    await call(createProvider());
+    mockProcessEnv({ AI_GATEWAY_API_KEY: 'fixture-account-b' });
+    expect((await call(createProvider())).cached).toBeUndefined();
+    expect((await call(createProvider())).cached).toBe(true);
+    expect(vi.mocked(createGateway).mock.calls.map(([config]) => config?.apiKey)).toEqual([
+      'fixture-account-a',
+      'fixture-account-b',
+    ]);
+    expect(mockCache.set).toHaveBeenCalledTimes(2);
+  });
+
+  it('bypasses cache when the SDK resolves OIDC authentication', async () => {
+    const { createGateway } = await import('ai');
+    mockProcessEnv({ AI_GATEWAY_API_KEY: undefined });
+    await call(createProvider());
+    await call(createProvider());
+    expect(createGateway).toHaveBeenCalledWith(expect.objectContaining({ apiKey: undefined }));
+    expect(mockCache.get).not.toHaveBeenCalled();
+    expect(mockCache.set).not.toHaveBeenCalled();
+  });
+
+  it('uses the same API-key snapshot for the cache and SDK request', async () => {
+    const { createGateway } = await import('ai');
+    mockCache.get.mockImplementationOnce(async () => {
+      mockProcessEnv({ AI_GATEWAY_API_KEY: 'changed-during-cache-read' });
+      return undefined;
+    });
+    await call(createProvider());
+    expect(createGateway).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'fixture-default-key' }),
+    );
+  });
+
+  it.each([
+    [{ apiKey: 'explicit', apiKeyEnvar: 'CUSTOM_GATEWAY_KEY' }, {}, 'explicit'],
+    [{ apiKeyEnvar: 'CUSTOM_GATEWAY_KEY' }, {}, 'custom'],
+    [
+      { apiKeyEnvar: 'MISSING_GATEWAY_KEY' },
+      { VERCEL_AI_GATEWAY_API_KEY: 'override' },
+      'fixture-default-key',
+    ],
+    [{}, { VERCEL_AI_GATEWAY_API_KEY: 'override' }, 'override'],
+    [{}, { VERCEL_AI_GATEWAY_API_KEY: '' }, ''],
+  ])('preserves configured credential precedence for %j', async (config, env, expectedKey) => {
+    const { createGateway } = await import('ai');
+    mockProcessEnv({ CUSTOM_GATEWAY_KEY: 'custom', MISSING_GATEWAY_KEY: undefined });
+    await call(createProvider(config, env));
+    expect(createGateway).toHaveBeenCalledWith(expect.objectContaining({ apiKey: expectedKey }));
   });
 });
 

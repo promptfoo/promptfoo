@@ -73,16 +73,12 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
   if (config.apiKey) {
     return config.apiKey;
   }
-  if (config.apiKeyEnvar) {
-    return (
-      (env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
-      getEnvString(config.apiKeyEnvar)
-    );
-  }
-  return (
-    (env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
-    getEnvString('VERCEL_AI_GATEWAY_API_KEY')
-  );
+  const apiKey = config.apiKeyEnvar
+    ? ((env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
+      getEnvString(config.apiKeyEnvar))
+    : ((env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
+      getEnvString('VERCEL_AI_GATEWAY_API_KEY'));
+  return apiKey ?? getEnvString('AI_GATEWAY_API_KEY');
 }
 
 /**
@@ -107,7 +103,7 @@ async function createGatewayInstance(
     const { createGateway } = await import('ai');
 
     return createGateway({
-      apiKey: resolveApiKey(config, env),
+      apiKey: config.apiKey,
       baseURL: resolveBaseUrl(config, env),
       headers: config.headers,
     });
@@ -207,7 +203,7 @@ function getGatewayCacheConfig(config: VercelAiConfig, env?: EnvOverrides) {
           .sort(([left], [right]) => left.localeCompare(right)),
       )
     : undefined;
-  const apiKey = resolveApiKey(config, env);
+  const apiKey = config.apiKey;
   const baseUrl = resolveBaseUrl(config, env);
 
   return {
@@ -291,22 +287,22 @@ export class VercelAiProvider implements ApiProvider {
     return `[Vercel AI Gateway Provider ${this.modelName}]`;
   }
 
-  private getCacheKey(prompt: string): string {
+  private getCacheKey(prompt: string, config: VercelAiConfig): string {
     // Version generation responses because AI SDK 6 caps and usage changed.
     return `vercel:v2:${this.modelName}:${sha256(
       JSON.stringify({
         prompt,
-        gateway: getGatewayCacheConfig(this.config, this.env),
+        gateway: getGatewayCacheConfig(config, this.env),
         config: {
-          temperature: this.config.temperature,
-          maxTokens: this.config.maxTokens,
-          topP: this.config.topP,
-          topK: this.config.topK,
-          frequencyPenalty: this.config.frequencyPenalty,
-          presencePenalty: this.config.presencePenalty,
-          stopSequences: this.config.stopSequences,
-          streaming: this.config.streaming,
-          responseSchema: this.config.responseSchema,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          topP: config.topP,
+          topK: config.topK,
+          frequencyPenalty: config.frequencyPenalty,
+          presencePenalty: config.presencePenalty,
+          stopSequences: config.stopSequences,
+          streaming: config.streaming,
+          responseSchema: config.responseSchema,
         },
       }),
     )}`;
@@ -317,26 +313,27 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiStreaming(
     messages: ChatMessage[],
+    config: VercelAiConfig,
     context?: CallApiContextParams,
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? getRequestTimeoutMs();
+    const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
-      const gateway = await createGatewayInstance(this.config, this.env);
+      const gateway = await createGatewayInstance(config, this.env);
       const { streamText } = await import('ai');
 
       logger.debug('Calling Vercel AI Gateway (streaming)', {
         model: this.modelName,
-        temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
       });
 
       const result = streamText({
         model: gateway(this.modelName),
         messages,
-        ...pickGenerateOptions(this.config),
+        ...pickGenerateOptions(config),
         ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
@@ -371,33 +368,34 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiStructured(
     messages: ChatMessage[],
+    config: VercelAiConfig,
     context?: CallApiContextParams,
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? getRequestTimeoutMs();
+    const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
-      const gateway = await createGatewayInstance(this.config, this.env);
+      const gateway = await createGatewayInstance(config, this.env);
       const { generateObject, jsonSchema } = await import('ai');
 
       // OpenAI requires additionalProperties: false for strict mode
       const schema = jsonSchema<Record<string, unknown>>({
-        ...this.config.responseSchema,
-        additionalProperties: this.config.responseSchema?.additionalProperties ?? false,
+        ...config.responseSchema,
+        additionalProperties: config.responseSchema?.additionalProperties ?? false,
       } as Parameters<typeof jsonSchema>[0]);
 
       logger.debug('Calling Vercel AI Gateway (structured output)', {
         model: this.modelName,
-        temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
       });
 
       const result = await generateObject({
         model: gateway(this.modelName),
         messages,
         schema,
-        ...pickGenerateOptions(this.config),
+        ...pickGenerateOptions(config),
         ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
@@ -430,11 +428,14 @@ export class VercelAiProvider implements ApiProvider {
     if (options?.abortSignal?.aborted) {
       return { error: 'Request aborted' };
     }
+    const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
+    // The SDK can resolve a request-scoped OIDC token when no API key is configured.
+    const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
     const cache = await getCache();
-    const cacheKey = this.getCacheKey(prompt);
+    const cacheKey = this.getCacheKey(prompt, config);
 
     // Check cache first
-    if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
+    if (cacheEnabled && !(context?.bustCache ?? context?.debug)) {
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for Vercel AI Gateway: ${this.modelName}`);
@@ -456,17 +457,17 @@ export class VercelAiProvider implements ApiProvider {
 
     // Dispatch to appropriate method based on config
     const response = await withSdkTraceContext(context, async () => {
-      if (this.config.responseSchema) {
-        return this.callApiStructured(messages, context, options?.abortSignal);
+      if (config.responseSchema) {
+        return this.callApiStructured(messages, config, context, options?.abortSignal);
       }
-      if (this.config.streaming) {
-        return this.callApiStreaming(messages, context, options?.abortSignal);
+      if (config.streaming) {
+        return this.callApiStreaming(messages, config, context, options?.abortSignal);
       }
-      return this.callApiNonStreaming(messages, context, options?.abortSignal);
+      return this.callApiNonStreaming(messages, config, context, options?.abortSignal);
     });
 
     // Cache the response if successful
-    if (isCacheEnabled() && !response.error) {
+    if (cacheEnabled && !response.error) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -482,26 +483,27 @@ export class VercelAiProvider implements ApiProvider {
    */
   private async callApiNonStreaming(
     messages: ChatMessage[],
+    config: VercelAiConfig,
     context?: CallApiContextParams,
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? getRequestTimeoutMs();
+    const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
 
     try {
-      const gateway = await createGatewayInstance(this.config, this.env);
+      const gateway = await createGatewayInstance(config, this.env);
       const { generateText } = await import('ai');
 
       logger.debug('Calling Vercel AI Gateway', {
         model: this.modelName,
-        temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
       });
 
       const result = await generateText({
         model: gateway(this.modelName),
         messages,
-        ...pickGenerateOptions(this.config),
+        ...pickGenerateOptions(config),
         ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
@@ -564,16 +566,18 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     input: string,
     context?: CallApiContextParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
+    const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
     const cache = await getCache();
     const cacheKey = `vercel:embedding:${this.modelName}:${sha256(
       JSON.stringify({
         input,
-        gateway: getGatewayCacheConfig(this.config, this.env),
+        gateway: getGatewayCacheConfig(config, this.env),
       }),
     )}`;
 
     // Check cache first
-    if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
+    if (cacheEnabled && !(context?.bustCache ?? context?.debug)) {
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached embedding for Vercel AI Gateway: ${this.modelName}`);
@@ -586,11 +590,11 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       }
     }
 
-    const timeout = this.config.timeout ?? getRequestTimeoutMs();
+    const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {
-      const gateway = await createGatewayInstance(this.config, this.env);
+      const gateway = await createGatewayInstance(config, this.env);
       const { embed } = await import('ai');
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
@@ -616,7 +620,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
         tokenUsage: { total: result.usage?.tokens },
       };
 
-      if (isCacheEnabled()) {
+      if (cacheEnabled) {
         try {
           await cache.set(cacheKey, JSON.stringify(response));
         } catch (err) {
