@@ -57,15 +57,24 @@ export class LlmRubricProviderError extends Error {
   }
 }
 
+/**
+ * True when a `rubricPrompt` override is absent or an empty object/array (e.g. `{}` or
+ * `[]`), which `loadRubricPrompt` treats identically to "no override". Callers that
+ * decide *whether* to use a custom rubric prompt (rather than just rendering it) must
+ * use this same definition, or they can disagree with `loadRubricPrompt` about whether
+ * an override is in effect.
+ */
+export function isEmptyRubricPrompt(rubricPrompt: string | object | undefined): boolean {
+  return (
+    !rubricPrompt || (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt).length === 0)
+  );
+}
+
 export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
-  if (!rubricPrompt) {
-    return defaultPrompt;
-  }
-
-  if (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt).length === 0) {
+  if (isEmptyRubricPrompt(rubricPrompt)) {
     return defaultPrompt;
   }
 

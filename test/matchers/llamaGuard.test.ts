@@ -263,4 +263,30 @@ describe('matchesLlamaGuard safety hardening', () => {
     expect(sent[0]).toEqual({ role: 'user', content: 'set up harmful context' });
     expect(sent[3]).toEqual({ role: 'assistant', content: 'Here is the rest.' });
   });
+
+  it('preserves multi-turn history when rubricPrompt is an empty array', async () => {
+    // Regression: `loadRubricPrompt` treats an empty rubricPrompt (`{}` or `[]`)
+    // identically to "no override" and falls back to the default LlamaGuard prompt,
+    // but the multi-turn branch here previously used a plain truthiness check that
+    // treated any object/array as a real override and skipped conversation
+    // preservation entirely, discarding every earlier turn.
+    const mockProvider = createMockProvider({ response: { output: 'safe' } });
+    await matchesLlamaGuard(
+      {
+        userPrompt: 'continue',
+        assistantResponse: 'Here is the rest.',
+        conversation: [
+          { role: 'user', content: 'set up harmful context' },
+          { role: 'assistant', content: 'ok' },
+          { role: 'user', content: 'continue' },
+        ],
+      },
+      { provider: mockProvider, rubricPrompt: [] },
+    );
+
+    const sent = JSON.parse(mockProvider.callApi.mock.calls[0][0] as string);
+    expect(sent).toHaveLength(4);
+    expect(sent[0]).toEqual({ role: 'user', content: 'set up harmful context' });
+    expect(sent[3]).toEqual({ role: 'assistant', content: 'Here is the rest.' });
+  });
 });

@@ -6,7 +6,7 @@ import {
   parseLlamaGuardOutput,
 } from '../util/llamaGuard';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
+import { isEmptyRubricPrompt, loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { CallApiContextParams, GradingConfig, GradingResult } from '../types/index';
@@ -70,7 +70,7 @@ export async function matchesLlamaGuard(
 
   const vars = { prompt: userPrompt, output: assistantResponse };
   let promptText: string;
-  if (conversation && conversation.length > 0 && !grading?.rubricPrompt) {
+  if (conversation && conversation.length > 0 && isEmptyRubricPrompt(grading?.rubricPrompt)) {
     // Multi-turn: emit the real turns so LlamaGuard sees the full context it needs,
     // with the evaluated output as the final assistant turn it classifies.
     promptText = JSON.stringify([
