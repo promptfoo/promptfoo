@@ -49,7 +49,7 @@ assert:
 
 ## Handling objects
 
-If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
+For string expressions and `file://` scripts, `output` keeps its type after any provider, test, or assertion [transforms](/docs/configuration/guide#transforming-outputs). If it is an object or array (such as tool/function calls), access it directly:
 
 ```yaml
 assert:
@@ -57,7 +57,7 @@ assert:
     value: output[0].function.name === 'get_current_weather'
 ```
 
-This applies when `value` is a string, whether it's an inline expression or a `file://` script. Function values (see [Inline assertions](#inline-assertions)) always receive a string, with objects JSON-stringified. Either way, `output` is the value that reaches the assertion, so any [transform](/docs/configuration/guide#transforming-outputs) on the provider, the test, or the assertion itself has already been applied.
+JSON text remains a string; use `JSON.parse(output)` to parse it. [Inline function assertions](#inline-assertions) always receive a string, with objects serialized as JSON.
 
 ## Return type
 
@@ -249,30 +249,17 @@ Here's a more complex example that uses an async function to hit an external val
 ```js
 const VALIDATION_ENDPOINT = 'https://example.com/api/validate';
 
-async function evaluate(modelResponse) {
-  try {
-    const response = await fetch(VALIDATION_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: modelResponse,
-    });
+module.exports = async (output, context) => {
+  const response = await fetch(VALIDATION_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain',
+    },
+    body: output,
+  });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function main(output, context) {
-  const success = await evaluate(output);
-  console.log(`success: ${success}`);
-  return success;
-}
-
-module.exports = main;
+  return response.json();
+};
 ```
 
 You can also return complete [`GradingResult`](/docs/configuration/reference/#gradingresult) objects. For example:
