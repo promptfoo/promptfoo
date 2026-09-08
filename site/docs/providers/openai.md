@@ -118,11 +118,13 @@ Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a 
 <details>
 <summary>Aliases, snapshots, and default models</summary>
 
-`openai:<model>` routes recognized models automatically; unknown names fall back to Chat Completions. For example, bare `openai:gpt-5.6-luna` uses Responses, while `openai:gpt-5.6` uses Chat Completions. Prefer `openai:responses:gpt-5.6-luna` or `openai:chat:gpt-5.6-luna` to choose the endpoint yourself.
+Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models, including named variants and dated snapshots. For example, `openai:gpt-5.6`, `openai:gpt-5.6-luna`, and `openai:gpt-6-astra` all use Responses. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
+
+Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
 Bare `openai:chat` and `openai:responses` currently select `gpt-4.1-2025-04-14`. They do not select OpenAI's latest model. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
-`openai:embeddings:` is an alias for `openai:embedding:`. `openai:speech:` is an alias for `openai:tts:`.
+`openai:embedding` and `openai:embeddings` default to `text-embedding-3-large`; both prefixes accept an explicit model. `openai:speech:` is an alias for `openai:tts:`.
 
 </details>
 
@@ -442,7 +444,7 @@ The schema itself can be a nested `file://` reference. File paths support Nunjuc
 <details>
 <summary>Prompt-level and per-test formats</summary>
 
-A prompt's `config.response_format` overrides the provider setting. For a different schema per test, set `tests[].options.response_format`. See the [per-test schema example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output/per-test-schema.yaml).
+A prompt's `config.response_format` overrides the provider setting. For a different schema per test, set `tests[].options.response_format`. See the [per-test schema example](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-structured-output/per-test-schema.yaml).
 
 For complete configurations, see the [structured output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) and [Responses external format example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses).
 
@@ -537,7 +539,9 @@ config:
   tools: file://./tools.yaml
 ```
 
-For dynamic definitions, export a function that returns the array and include its name: `file://./tools.ts:getTools`, `file://./tools.js:getTools`, or `file://./tools.py:get_tools`. Both synchronous and asynchronous functions are supported. Tool descriptions and schemas can use test variables.
+For dynamic definitions, export a function that returns the array and include its name: `file://./tools.ts:getTools`, `file://./tools.js:getTools`, or `file://./tools.py:get_tools`. Both synchronous and asynchronous functions are supported.
+
+Inline tool definitions and file-reference paths can use test variables. Promptfoo does not render placeholders inside the loaded file or returned tool definitions; supply those values in the file or function itself.
 
 ### Run tool callbacks {#automatically-handling-function-tool-calls}
 
@@ -585,15 +589,30 @@ providers:
     config:
       tools:
         - type: web_search
+          search_context_size: low
+          filters:
+            allowed_domains: [developers.openai.com]
       include:
         - web_search_call.results
 ```
+
+This example limits searches to OpenAI's developer documentation. Tool options are forwarded to OpenAI, including `search_context_size`, `filters`, `user_location`, `external_web_access`, and `return_token_budget`. See the [web search guide](https://developers.openai.com/api/docs/guides/tools-web-search) for supported values and model restrictions.
 
 Inspect citations in the provider response's `metadata.annotations` and search items in `raw.output`. Use `--no-cache` for fresh searches. Web search can incur tool charges in addition to token usage; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 The [`search-rubric` assertion](/docs/configuration/expected-outputs/model-graded/search-rubric) uses a search-enabled grading model to verify an output against current information. Configuring the target's search tools and configuring a search-based grader are separate choices.
 
 ### MCP tools {#mcp-model-context-protocol-support}
+
+Choose the integration based on what you want to test:
+
+| Task                                                                   | Configuration                                                              |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Let OpenAI call a remote MCP server                                    | Responses with `config.tools` containing `type: mcp`, as below             |
+| Connect Promptfoo to a local or remote MCP server for model tool calls | Explicit `openai:chat:<model>` with [`config.mcp`](/docs/integrations/mcp) |
+| Evaluate an MCP server's tools directly                                | The [MCP provider](/docs/providers/mcp), without an OpenAI model           |
+
+The Chat provider implements Promptfoo's `config.mcp` integration. For Responses, use OpenAI's hosted MCP tool configuration below.
 
 <Link id="basic-mcp-configuration" />
 <Link id="mcp-tool-configuration-options" />
@@ -829,6 +848,8 @@ providers:
 ```
 
 For audio output, set `modalities: [text, audio]` and a top-level `voice`, such as `marin`. Promptfoo sends the current Realtime API schema; if the requested modalities include audio, it selects audio output with a transcript.
+
+The result includes audio for playback and a transcript for text assertions. The built-in `llm-rubric` assertion grades the transcript; it does not automatically send the generated audio to the grader. Grading voice quality or other acoustic properties requires a custom grading integration.
 
 ### Session settings {#realtime-specific-configuration-options}
 
