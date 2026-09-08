@@ -106,6 +106,25 @@ it('honors a subclass prototype capability getter over an inherited instance mar
   );
 });
 
+it('honors an own child capability exclusion over an ancestor prototype getter', async () => {
+  class Ancestor extends OpenAiEmbeddingProvider {
+    override async callApi(): Promise<never> {
+      throw new Error('text excluded');
+    }
+  }
+  Object.defineProperty(Ancestor.prototype, 'promptfooCapabilities', {
+    get: () => ['callApi', 'callEmbeddingApi'],
+  });
+  class Child extends Ancestor {
+    override readonly promptfooCapabilities = ['callEmbeddingApi'] as const;
+  }
+  const provider = new Child('fixture');
+  expect(hasProviderCapability(provider, 'callApi')).toBe(false);
+  await expect(getAndCheckProvider('text', provider, null, 'rubric')).rejects.toThrow(
+    'not a valid text provider',
+  );
+});
+
 it('recognizes an override on the same prototype as its capability declaration', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     static override readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
