@@ -595,7 +595,8 @@ function getAbortSignalId(signal: AbortSignal) {
 }
 
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
@@ -844,6 +845,25 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
+  signal?.throwIfAborted();
+  const awaitCache = <V>(work: Promise<V>): Promise<V> => {
+    if (!signal) {
+      return work;
+    }
+    const operation = Promise.resolve(work);
+    return new Promise<V>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      try {
+        signal.throwIfAborted();
+      } catch (error) {
+        reject(error);
+      }
+      operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    });
+  };
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -894,7 +914,7 @@ export async function fetchWithCache<T = unknown>(
 
   const cache = getCacheInstance();
 
-  const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+  const cachedResponse = await awaitCache(cache.get<SerializedFetchResponse>(cacheKey));
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -916,7 +936,8 @@ export async function fetchWithCache<T = unknown>(
         format,
       );
       if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
+        signal?.throwIfAborted();
+        await awaitCache(cache.set(cacheKey, preparedResponse.response));
       }
       return preparedResponse.response;
     })().finally(() => {
@@ -925,7 +946,7 @@ export async function fetchWithCache<T = unknown>(
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
+  const response = await awaitCache(inflightResponse);
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

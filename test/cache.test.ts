@@ -360,6 +360,40 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('aborts while waiting for a cache read', async () => {
+      const controller = new AbortController();
+      const cache = getCache();
+      let finishRead!: (value: undefined) => void;
+      const read = new Promise<undefined>((resolve) => {
+        finishRead = resolve;
+      });
+      const get = vi.mocked(cache.get).mockReturnValueOnce(read);
+      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
+      await vi.waitFor(() => expect(get).toHaveBeenCalledOnce());
+      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      controller.abort();
+      await rejected;
+      finishRead(undefined);
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+
+    it('aborts while waiting for a cache write', async () => {
+      const controller = new AbortController();
+      const cache = getCache();
+      let finishWrite!: () => void;
+      const write = new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      });
+      const set = vi.mocked(cache.set).mockReturnValueOnce(write);
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
+      await vi.waitFor(() => expect(set).toHaveBeenCalledOnce());
+      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      controller.abort();
+      await rejected;
+      finishWrite();
+    });
+
     it('should scope cache disabling to the current async context', async () => {
       expect(isCacheEnabled()).toBe(true);
 
@@ -800,7 +834,7 @@ describe('fetchWithCache', () => {
 
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason.name).toBe('AbortError');
       }
       expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
       if (unsignaledResult.status === 'fulfilled') {
@@ -852,7 +886,7 @@ describe('fetchWithCache', () => {
       }
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason.name).toBe('AbortError');
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });

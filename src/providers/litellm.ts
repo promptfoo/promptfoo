@@ -1,17 +1,18 @@
 import { getEnvString } from '../envars';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 interface LiteLLMProviderOptions {
@@ -37,8 +38,8 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
   } as const;
   readonly promptfooCapabilities: readonly ('callApi' | 'callEmbeddingApi')[];
   readonly getApiKey: () => string | undefined;
-  readonly cleanup?: ApiProvider['cleanup'];
-  readonly validateFunctionToolCall?: OpenAiChatCompletionProvider['validateFunctionToolCall'];
+  declare readonly cleanup?: ApiProvider['cleanup'];
+  declare readonly validateFunctionToolCall?: OpenAiChatCompletionProvider['validateFunctionToolCall'];
 
   constructor(
     protected readonly provider: TProvider,
@@ -46,14 +47,18 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
     private readonly customId?: string,
   ) {
     this.getApiKey = provider.getApiKey.bind(provider);
-    this.promptfooCapabilities =
+    this.promptfooCapabilities = inheritProviderCapabilities(
       LiteLLMProviderWrapper.declaredProviderCapabilities[
         providerType === 'embedding' ? 'embedding' : 'text'
-      ];
-    if ('cleanup' in provider) {
+      ],
+    );
+    if ('cleanup' in provider && typeof Object.getPrototypeOf(this).cleanup !== 'function') {
       this.cleanup = provider.cleanup.bind(provider);
     }
-    if ('validateFunctionToolCall' in provider) {
+    if (
+      'validateFunctionToolCall' in provider &&
+      typeof Object.getPrototypeOf(this).validateFunctionToolCall !== 'function'
+    ) {
       this.validateFunctionToolCall = provider.validateFunctionToolCall.bind(provider);
     }
   }

@@ -23,6 +23,7 @@ import {
   getRequestSignal,
   getRequestTimeoutMs,
   shouldBustProviderCache,
+  withResponseCacheMetadata,
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getGeminiTokenUsage, parseGeminiContent, prepareGeminiRequest } from './gemini';
@@ -449,7 +450,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         return parsed.response;
       }
       const { output, data: dataWithResponse, lastData } = parsed;
-      const tokenUsage = getGeminiTokenUsage(lastData.usageMetadata, cached, 'unified');
+      const tokenUsage = getGeminiTokenUsage(lastData.usageMetadata, false, 'unified');
 
       let guardrails: GuardrailResponse | undefined;
       const lastDataWithCandidate =
@@ -470,16 +471,14 @@ export class GoogleProvider extends GoogleGenericProvider {
         tokenUsage.completion == null
           ? undefined
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCostFromUsage(
-            this.modelName,
-            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
-            lastData.usageMetadata?.promptTokenCount,
-            completionForCost,
-            this.isVertexMode,
-            lastData.usageMetadata,
-          );
+      const cost = calculateGoogleCostFromUsage(
+        this.modelName,
+        this.isVertexMode ? { ...config, region: this.getRegion() } : config,
+        lastData.usageMetadata?.promptTokenCount,
+        completionForCost,
+        this.isVertexMode,
+        lastData.usageMetadata,
+      );
       const audio = normalizeGeminiAudio(output);
 
       const response: ProviderResponse = {
@@ -520,7 +519,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         }
       }
 
-      return response;
+      return withResponseCacheMetadata(response, cached);
     } catch (err) {
       return {
         error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
