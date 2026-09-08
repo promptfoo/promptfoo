@@ -8,7 +8,13 @@ function tokenizeForGleu(text: string): string[] {
     .toLowerCase()
     .trim()
     .split(/\s+/)
-    .map((word) => word.replace(/\.+$/, ''));
+    .map((word) => {
+      let end = word.length;
+      while (end > 0 && word[end - 1] === '.') {
+        end--;
+      }
+      return word.slice(0, end);
+    });
 
   return words.some(Boolean) ? words : [];
 }

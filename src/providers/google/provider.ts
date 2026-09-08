@@ -349,7 +349,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      { useAssistantRole: config.useAssistantRole, sourceVars: context?.test?.vars },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);

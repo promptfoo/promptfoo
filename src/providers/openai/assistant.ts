@@ -1,18 +1,19 @@
-import path from 'path';
-
 import OpenAI from 'openai';
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { sleep } from '../../util/time';
+import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import {
   buildChatSpanContext,
   extractProviderResponseAttributes,
   withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { parseFileUrl } from '../../util/functions/loadFunction';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { sleep } from '../../util/time';
-import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
+  withGenAIToolSpan,
+} from '../tracing';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
@@ -107,39 +108,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -150,6 +125,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     context?: CallbackContext,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -194,7 +170,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await callback(parsedArgs, context);
+      const result = await withGenAIToolSpan(
+        { name: functionName, arguments: parsedArgs, callId },
+        () => callback(parsedArgs, context),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -232,7 +211,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, operationName: 'invoke_agent', agentId: this.assistantId },
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );
@@ -352,6 +331,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               toolCall.function.name,
               toolCall.function.arguments,
               callbackContext,
+              toolCall.id,
             );
             return {
               tool_call_id: toolCall.id,

@@ -741,6 +741,7 @@ describe('GoogleVideoProvider', () => {
       const firstCallOptions = mockRequest.mock.calls[0][0];
       const body = JSON.parse(firstCallOptions.body);
       expect(body.instances[0].video).toEqual({ operationName: 'previous-operation-id' });
+      expect(body.instances[0]).not.toHaveProperty('durationSeconds');
     });
 
     it('should preserve Vertex operation names passed through sourceVideo', async () => {
@@ -773,10 +774,7 @@ describe('GoogleVideoProvider', () => {
       expect(body.instances[0].video).toEqual({ operationName: sourceOperationName });
     });
 
-    // Vertex's extend-a-video body documents only storageUri and sampleCount and fixes the added
-    // length at 7s, so durationSeconds is not an extension parameter. Existing configs still
-    // carry 4 or 6 (this repo's own example shipped 6), so those must not be rejected.
-    it.each([4, 6] as const)(
+    it.each([undefined, 4, 6, 8] as const)(
       'should ignore a %s-second duration on a Vertex source-video extension instead of failing',
       async (durationSeconds) => {
         const operationName = 'test-op';
@@ -804,10 +802,23 @@ describe('GoogleVideoProvider', () => {
         expect(result.error).toBeUndefined();
         expect(mockRequest).toHaveBeenCalled();
         const body = JSON.parse(mockRequest.mock.calls[0][0].body);
-        // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
-        expect(body.parameters?.durationSeconds).not.toBe(durationSeconds);
+        expect(body.instances[0]).not.toHaveProperty('durationSeconds');
+        expect(body.parameters?.durationSeconds).toBeUndefined();
       },
     );
+
+    it.each([
+      'gs://video-bucket/source.webm',
+      'file://source.mov',
+      'data:video/webm;base64,dmlkZW8=',
+    ])('rejects a non-MP4 Vertex source video %s before a request', async (sourceVideo) => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+        config: { vertexai: true, sourceVideo },
+      });
+      const result = await provider.callApi('Extend');
+      expect(result.error).toContain('MP4 source video');
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
 
     it('should send a Vertex GCS source video using gcsUri', async () => {
       const operationName = 'test-op';
@@ -836,7 +847,7 @@ describe('GoogleVideoProvider', () => {
       const firstCallOptions = mockRequest.mock.calls[0][0];
       const body = JSON.parse(firstCallOptions.body);
       expect(result.error).toBeUndefined();
-      expect(body.instances[0].durationSeconds).toBe('8');
+      expect(body.instances[0]).not.toHaveProperty('durationSeconds');
       expect(body.instances[0].video).toEqual({
         gcsUri: 'gs://video-bucket/source.mp4',
         mimeType: 'video/mp4',

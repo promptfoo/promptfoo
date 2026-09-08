@@ -16,6 +16,7 @@ import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
+  clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
   isSamplingParamsDeprecatedClaudeModel,
@@ -268,7 +269,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       topP: this.config.topP,
       maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -336,7 +337,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const apiHost = this.getApiHost();
+    const apiHostUrl = `https://${apiHost}`;
+    const normalizedApiHostname = URL.canParse(apiHostUrl) ? new URL(apiHostUrl).hostname : '';
+    const allowGenerationFallback =
+      /^(?:[a-z0-9-]+-)?aiplatform(?:\.mtls)?\.googleapis\.com$/i.test(normalizedApiHostname);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowGenerationFallback,
+    });
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
     const effort = this.config.effort;
@@ -344,6 +352,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.modelName,
       requestedThinkingConfig,
       effort,
+      { allowGenerationFallback },
     );
     // Thinking shares the max_tokens budget with the answer, and Opus 5 thinks even with no
     // `thinking` field — so the 512 default would truncate ordinary replies.
@@ -353,14 +362,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     if (!maxTokens) {
       maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
-    // Claude requires max_tokens >= budget_tokens when thinking is enabled
-    if (
-      thinkingConfig?.type === 'enabled' &&
-      thinkingConfig.budget_tokens &&
-      maxTokens < thinkingConfig.budget_tokens
-    ) {
-      maxTokens = thinkingConfig.budget_tokens + 1024;
-    }
+    maxTokens = clampMaxTokensForThinkingBudget(maxTokens, thinkingConfig);
 
     // Newer Claude models deprecate manual sampling controls at the model
     // level — the underlying Anthropic API returns 400 for any request that
@@ -399,7 +401,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
 
     const cache = await getCache();
-    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,
@@ -555,7 +556,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      { useAssistantRole: config.useAssistantRole, sourceVars: context?.test?.vars },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -1337,8 +1338,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-// Gemini 3.6 Flash is available through Vertex AI's global endpoint.
-const DEFAULT_VERTEX_MODEL = 'gemini-3.6-flash';
+// Gemini 3.1 Pro preview is available through Vertex AI's global endpoint.
+const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
 const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 

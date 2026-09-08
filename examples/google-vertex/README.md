@@ -23,7 +23,7 @@ cd google-vertex
 
 ## Environment Variables
 
-- `GOOGLE_CLOUD_PROJECT` - Your Google Cloud project ID (`VERTEX_PROJECT_ID` is also supported)
+- `VERTEX_PROJECT_ID` - Your Google Cloud project ID
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account credentials (optional)
 
 ## Setup
@@ -46,19 +46,23 @@ cd google-vertex
 
 3. Set your project ID:
    ```sh
-   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_PROJECT_ID=your-project-id
    ```
 
 ## Configurations
 
 This example includes:
 
-- `promptfooconfig.gemini.yaml`: Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, and Gemini 2.5 models with function calling
+- `promptfooconfig.gemini.yaml`: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
 - `promptfooconfig.claude.yaml`: Claude models for technical writing and code analysis
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
-- `promptfooconfig.search.yaml`: Search grounding with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
-- `promptfooconfig.image.yaml`: Multimodal image inputs with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
+- `promptfooconfig.search.yaml`: Search grounding for real-time information
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
+
+The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
+3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
+premium. The examples use `thinkingLevel` because these models no longer support
+manual sampling parameters such as `temperature`, `topP`, and `topK`.
 
 ## Running Examples
 

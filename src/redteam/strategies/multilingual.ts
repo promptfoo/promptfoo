@@ -122,6 +122,7 @@ async function processRemoteChunk(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   const payload = {
     task: 'multilingual',
@@ -135,7 +136,7 @@ async function processRemoteChunk(
     ...remoteGenerationContextPayload(config.targetId),
   };
 
-  const resp = await postRemoteGenerationTask(payload);
+  const resp = await postRemoteGenerationTask(payload, runtimeContext);
   const { data, status, statusText } = resp as any;
   const result = (data as any)?.result;
   if (!Array.isArray(result)) {
@@ -158,6 +159,7 @@ async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   try {
     const chunkSize = getRemoteChunkSize(config);
@@ -195,7 +197,7 @@ async function generateMultilingual(
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
       try {
-        const chunkResults = await processRemoteChunk(chunk, injectVar, config);
+        const chunkResults = await processRemoteChunk(chunk, injectVar, config, runtimeContext);
 
         const languages: string[] =
           Array.isArray(config.languages) && config.languages.length > 0
@@ -229,7 +231,12 @@ async function generateMultilingual(
           // Try individual test cases from failed chunk silently
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (error) {
               logger.debug(`Individual test case failed in chunk ${chunkNum}: ${error}`);
@@ -248,7 +255,12 @@ async function generateMultilingual(
 
           for (const testCase of missingTestCases) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (error) {
               logger.debug(`Individual retry failed for test case in chunk ${chunkNum}: ${error}`);
@@ -273,7 +285,12 @@ async function generateMultilingual(
         if (chunk.length > 1) {
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
+              const individualResults = await processRemoteChunk(
+                [testCase],
+                injectVar,
+                config,
+                runtimeContext,
+              );
               allResults.push(...individualResults);
             } catch (individualError) {
               logger.debug(`Individual test case failed: ${individualError}`);
@@ -548,7 +565,12 @@ export async function addMultilingual(
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
   if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
-    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
+    const multilingualTestCases = await generateMultilingual(
+      testCases,
+      injectVar,
+      config,
+      runtimeContext,
+    );
     if (multilingualTestCases.length > 0) {
       return multilingualTestCases;
     }

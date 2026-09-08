@@ -14,19 +14,25 @@
  * - callApi(): The main API call implementation
  */
 
-import path from 'path';
-
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
+import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
+import {
+  normalizeTools,
+  resolveGoogleToolConfig,
+  stripExecutableToolFileReferences,
+  validateFunctionCall,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -97,21 +103,30 @@ function setPartialFunctionArg(
   }
 
   let current: Record<string | number, unknown> = args;
-  for (let index = 0; index < segments.length - 1; index++) {
+  for (let index = 0; index < segments.length; index++) {
     const segment = segments[index];
-    const nextSegment = segments[index + 1];
+    if (
+      Array.isArray(current) &&
+      (!/^\d+$/.test(String(segment)) ||
+        !Number.isSafeInteger(Number(segment)) ||
+        Number(segment) > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)
+    ) {
+      return false;
+    }
     const existing = current[segment];
+    if (index === segments.length - 1) {
+      current[segment] =
+        typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
+      return true;
+    }
+    const nextSegment = segments[index + 1];
     if (!existing || typeof existing !== 'object') {
       current[segment] = typeof nextSegment === 'number' ? [] : {};
     }
     current = current[segment] as Record<string | number, unknown>;
   }
 
-  const lastSegment = segments[segments.length - 1];
-  const existing = current[lastSegment];
-  current[lastSegment] =
-    typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
-  return true;
+  return false;
 }
 
 function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown): void {
@@ -489,58 +504,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @returns The loaded function
    */
   protected async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const basePath = cliState.basePath || process.cwd();
-      const resolvedPath = path.resolve(basePath, filePath);
-
-      // Path traversal protection: ensure resolved path is within the base directory
-      // Use path.relative() to get relative path from base to target
-      // If path starts with '..' or is absolute, it's outside the base directory
-      const normalizedBase = path.resolve(basePath);
-      const normalizedResolved = path.resolve(resolvedPath);
-      const relativePath = path.relative(normalizedBase, normalizedResolved);
-
-      // Check if path escapes the base directory:
-      // - Starts with '..' means it goes up out of base
-      // - path.isAbsolute() handles edge cases on Windows where relative might return absolute path
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        throw new Error(
-          `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
-            `Resolved path '${normalizedResolved}' is not within '${normalizedBase}'.`,
-        );
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -556,6 +526,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     functionName: string,
     args: string,
     config: CompletionOptions,
+    callId?: string,
   ): Promise<any> {
     try {
       const callbacks = config.functionToolCallbacks;
@@ -617,7 +588,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       return result;
     } catch (error: any) {
@@ -627,50 +600,22 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   }
 
   /**
-   * Execute explicitly configured callbacks from native parts or trusted JSON
-   * function-call envelopes. Local eval configuration and model-output feedback
-   * loops share the trusted execution model documented in SECURITY.md.
+   * Execute explicitly configured callbacks from native function-call parts.
    */
   protected async executeFunctionToolCallbacks(
     output: ProviderResponse['output'],
     config: CompletionOptions,
     toolsDisabled: boolean,
   ): Promise<ProviderResponse['output']> {
-    if (toolsDisabled) {
+    if (toolsDisabled || !Array.isArray(output)) {
       return output;
     }
 
-    let parsedOutput: any = output;
-    if (typeof output === 'string') {
-      try {
-        parsedOutput = JSON.parse(output);
-      } catch {
-        return output;
-      }
-    }
-
-    const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
-    const passthroughToolConfig = config.passthrough?.toolConfig ?? config.passthrough?.tool_config;
-    const effectiveToolConfig = (passthroughToolConfig ??
-      config.toolConfig ??
-      config.tool_config) as
-      | {
-          functionCallingConfig?: {
-            streamFunctionCallArguments?: boolean;
-            stream_function_call_arguments?: boolean;
-          };
-          function_calling_config?: {
-            streamFunctionCallArguments?: boolean;
-            stream_function_call_arguments?: boolean;
-          };
-        }
-      | undefined;
-    const functionCallingConfig =
-      effectiveToolConfig?.functionCallingConfig ?? effectiveToolConfig?.function_calling_config;
+    const parts = output;
+    const { toolConfig } = resolveGoogleToolConfig(config);
     const streamsFunctionCallArguments =
       config.streaming === true &&
-      (functionCallingConfig?.streamFunctionCallArguments === true ||
-        functionCallingConfig?.stream_function_call_arguments === true);
+      toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true;
     const functionCalls = streamsFunctionCallArguments
       ? assembleStreamedFunctionCalls(parts)
       : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
@@ -684,10 +629,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         : output;
     }
 
-    const preparedCalls: Array<{ functionName: string; args: string }> = [];
+    const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
-      if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
+      if (
+        typeof functionName !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)
+      ) {
         return output;
       }
       try {
@@ -695,7 +643,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           typeof functionCall.args === 'string'
             ? JSON.parse(functionCall.args)
             : (functionCall.args ?? {});
-        preparedCalls.push({ functionName, args: JSON.stringify(args) });
+        preparedCalls.push({ functionName, args: JSON.stringify(args), callId: functionCall.id });
       } catch {
         return output;
       }
@@ -706,9 +654,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     const results = [];
-    for (const { functionName, args } of preparedCalls) {
+    for (const { functionName, args, callId } of preparedCalls) {
       try {
-        results.push(await this.executeFunctionCallback(functionName, args, config));
+        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch {
         // executeFunctionCallback already logs the error. Preserve the original
         // model output when a callback cannot be executed.
@@ -716,7 +664,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       }
     }
     if (results.length === 1) {
-      return results[0];
+      return results[0] ?? output;
     }
     return results
       .map((result) => {

@@ -111,12 +111,8 @@ export function validateDuration(
   return { valid: true };
 }
 
-/**
- * Vertex's extend-a-video request body documents only `storageUri` and `sampleCount`, and fixes
- * the added length at 7 seconds -- `durationSeconds` is not an extension parameter. Existing
- * configs nonetheless carry 4 or 6 (this repo's own example shipped 6), so warn and fall back to
- * the extension default rather than failing a request the API would have accepted.
- */
+// AI Studio uses an 8-second request duration for extensions. Vertex omits it;
+// both APIs add a fixed 7 seconds to the source video.
 function resolveExtensionDuration(duration: number): GoogleVideoDuration {
   if (duration !== VEO_EXTENSION_DURATION) {
     logger.warn(
@@ -301,6 +297,14 @@ export class GoogleVideoProvider implements ApiProvider {
       return undefined;
     }
 
+    const sourceMimeType = /^data:([^;,]+)[;,]/i.exec(config.sourceVideo)?.[1].toLowerCase();
+    const incompatibleVideoPath =
+      /^(gs|file):\/\//.test(config.sourceVideo) &&
+      /\.(avi|mov|mkv|webm|mpeg|mpg|wmv|flv|3gp|3gpp)(?:[?#]|$)/i.test(config.sourceVideo);
+    if ((sourceMimeType && sourceMimeType !== 'video/mp4') || incompatibleVideoPath) {
+      return 'Vertex Veo video extension requires an MP4 source video.';
+    }
+
     if (config.sourceVideo.startsWith('gs://')) {
       instance.video = {
         gcsUri: config.sourceVideo,
@@ -332,7 +336,7 @@ export class GoogleVideoProvider implements ApiProvider {
     if (config.resolution) {
       instance.resolution = config.resolution;
     }
-    if (config.durationSeconds) {
+    if (config.durationSeconds && !config.sourceVideo && !config.extendVideoId) {
       instance.durationSeconds = String(config.durationSeconds);
     }
     if (config.negativePrompt) {

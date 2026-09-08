@@ -190,6 +190,20 @@ describe('writeOutput', () => {
           },
         },
       ],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          auth: { token: 'output-tempo-secret' },
+          headers: {
+            'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
+            'X-Trace-Access': 'Bearer short-secret',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
     });
 
     await writeOutput(outputPath, eval_, null);
@@ -204,6 +218,11 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(outputJson).not.toContain('output-tempo-secret');
+    expect(outputJson).not.toContain('output-honeycomb-secret');
+    expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
+    expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
   it.each([

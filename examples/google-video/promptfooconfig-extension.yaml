@@ -8,7 +8,7 @@ providers:
   - id: google:video:veo-3.1-generate-preview
     config:
       sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
-      # durationSeconds is not an extension parameter; Veo adds a fixed 7 seconds.
+      # Promptfoo requests 8 seconds for AI Studio; Veo adds a fixed 7 seconds.
 
 tests:
   - vars:

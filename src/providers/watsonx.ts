@@ -501,7 +501,7 @@ export class WatsonXProvider implements ApiProvider {
       model: this.modelName,
       providerId: this.id(),
       maxTokens: this.options.config.maxNewTokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,

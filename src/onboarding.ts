@@ -390,7 +390,7 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | ProviderOptions)[] = [];
+  const providers: (string | object)[] = [];
   let action: string;
   let language: string;
 
@@ -509,15 +509,24 @@ export async function createDummyFiles(
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
-          'anthropic:messages:claude-opus-4-1-20250805',
+          'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
         ],
       },
       {
-        name: '[Google] Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, ...',
+        name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-          { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+          ...[
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+          ].map((id) => ({
+            id: `vertex:${id}`,
+            config: { region: 'global' },
+          })),
+          'vertex:gemini-3.1-pro-preview',
+          'vertex:gemini-2.5-pro',
         ],
       },
       {
@@ -610,21 +619,15 @@ export async function createDummyFiles(
         providers.push(...providerChoices);
       }
 
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
+      const providerIds = providerChoices.filter((choice) => typeof choice === 'string');
+      if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
         await writeFile({
           file: 'provider.js',
           contents: JAVASCRIPT_PROVIDER,
           required: true,
         });
       }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
+      if (providerIds.some((id) => id.startsWith('exec:'))) {
         // Generate platform-appropriate executable provider script
         const isWindows = process.platform === 'win32';
         await writeFile({
@@ -634,11 +637,8 @@ export async function createDummyFiles(
         });
       }
       if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        providerIds.some(
+          (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
         )
       ) {
         await writeFile({
@@ -713,10 +713,7 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((provider) => {
-      const providerId = typeof provider === 'string' ? provider : provider.id;
-      return providerId?.split(':')[0] ?? 'unknown';
-    }),
+    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
     action,
     language,
     outDirectory,

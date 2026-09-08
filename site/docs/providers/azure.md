@@ -92,10 +92,10 @@ providers:
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4.1)
 - `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
-- `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
+- `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
-- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.5) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
+- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.6) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
 Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
@@ -130,7 +130,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                                         |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                                              |
 | **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                                         |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                       |
 | **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                         |
 | **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                                        |
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
@@ -542,6 +542,8 @@ Then Azure OpenAI will be used as the default provider for all operations includ
 
 Because embedding models are distinct from text generation models, to set a default embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
 
+When Azure is selected for chat and this variable is absent, promptfoo uses configured Gemini API, Mistral, or Voyage embedding credentials, then Google Application Default Credentials. It keeps Azure for chat and never sends embedding requests to the chat deployment. Without another embedding credential, the existing OpenAI embedding fallback requires its own API key. An explicit embedding provider override takes precedence; keep that override when comparing against an existing vector index.
+
 Set this environment variable to the deployment name of your embedding model:
 
 ```bash
@@ -559,6 +561,8 @@ defaultTest:
         config:
           apiHost: 'your-resource.openai.azure.com'
 ```
+
+For `text-embedding-3` deployments, set `config.dimensions` to request shorter vectors. Omit it to use the model's default vector size. Use the same embedding model and dimensions for indexed documents and queries; changing either requires rebuilding existing vectors. Azure deployment names are user-defined and remain unchanged by this option.
 
 Note that any moderation tasks will still use the OpenAI API.
 
@@ -802,6 +806,7 @@ These properties can be set under the provider `config` key:
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                            |
 | isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                          |
 | isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                              |
+| modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                   |
 | max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                                                              |
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                        |
 | reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`. |
@@ -991,7 +996,9 @@ providers:
       max_tokens: 4096
 ```
 
-Fable 5 and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit `temperature` and `top_p` from the request body on this path too. If your Azure deployment uses a custom alias, set `isClaudeOpus47OrLater: true`:
+Fable and Mythos 5.1, Fable 5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 also omit forced `tool_choice` values; use `auto` or `none` instead.
+
+If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
 ```yaml
 providers:
@@ -999,30 +1006,32 @@ providers:
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
-      isClaudeOpus47OrLater: true
+      modelName: claude-fable-5-1
       max_tokens: 4096
 ```
 
 :::note
-The `azure:chat:` provider and `isClaudeOpus47OrLater` only apply to Azure Claude deployments that expose the OpenAI-compatible chat-completions API. Some Azure AI Foundry models-as-a-service Claude deployments only support the Anthropic Messages API and return `api_not_supported` for chat completions; those deployments are not reachable via `azure:chat:`. Use Option 1 (the Anthropic Messages API endpoint) for them.
+The `azure:chat:` provider only applies to Azure Claude deployments that expose the OpenAI-compatible chat-completions API. Some Azure AI Foundry models-as-a-service Claude deployments only support the Anthropic Messages API and return `api_not_supported` for chat completions; those deployments are not reachable via `azure:chat:`. Use Option 1 (the Anthropic Messages API endpoint) for them. The existing `isClaudeOpus47OrLater: true` option remains available for sampling compatibility only.
 :::
 
 Available Claude deployments on Azure AI Foundry:
 
-| Model                        | Description       |
-| ---------------------------- | ----------------- |
-| `claude-fable-5`             | Claude Fable 5    |
-| `claude-opus-5`              | Claude Opus 5     |
-| `claude-opus-4-8`            | Claude Opus 4.8   |
-| `claude-opus-4-7`            | Claude Opus 4.7   |
-| `claude-opus-4-6-20260205`   | Claude Opus 4.6   |
-| `claude-sonnet-5`            | Claude Sonnet 5   |
-| `claude-sonnet-4-6`          | Claude Sonnet 4.6 |
-| `claude-opus-4-5-20251101`   | Claude Opus 4.5   |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
-| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5  |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
-| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku  |
+| Model                        | Description                                    |
+| ---------------------------- | ---------------------------------------------- |
+| `claude-fable-5-1`           | Claude Fable 5.1                               |
+| `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
+| `claude-fable-5`             | Claude Fable 5                                 |
+| `claude-opus-5`              | Claude Opus 5                                  |
+| `claude-opus-4-8`            | Claude Opus 4.8                                |
+| `claude-opus-4-7`            | Claude Opus 4.7                                |
+| `claude-opus-4-6-20260205`   | Claude Opus 4.6                                |
+| `claude-sonnet-5`            | Claude Sonnet 5                                |
+| `claude-sonnet-4-6`          | Claude Sonnet 4.6                              |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5                                |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5                              |
+| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5                               |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                              |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku                               |
 
 :::note
 Anthropic deployments on Azure require `modelProviderData` (`industry`,
@@ -1119,17 +1128,17 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Image generation** models (`MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation with explicit width and height. For MAI-Image-2.6 and MAI-Image-2.6-Flash, use `config.passthrough` to send the documented [`auto_aspect_ratio` and `web_grounding` boolean options](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#request-parameters). Image editing uses a separate multipart `/mai/v1/images/edits` request and requires additional provider support.
 - **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
 
-Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
+Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint. This example uses the [documented MAI-Image-2.6 version `2026-07-31`](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#mai-image-models-at-a-glance); confirm regional availability before deploying:
 
 ```bash
 az cognitiveservices account deployment create \
   --name <RESOURCE> --resource-group <RG> \
-  --deployment-name mai-image-2-5 \
-  --model-name MAI-Image-2.5 --model-format Microsoft \
-  --model-version 2026-06-02 --sku-name GlobalStandard --sku-capacity 1
+  --deployment-name mai-image-2-6 \
+  --model-name MAI-Image-2.6 --model-format Microsoft \
+  --model-version 2026-07-31 --sku-name GlobalStandard --sku-capacity 1
 
 export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
 export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
@@ -1137,18 +1146,22 @@ export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
 
 ### Image generation (`azure:image`)
 
+[Azure retired `MAI-Image-2` and `MAI-Image-2e` on August 15, 2026](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule). The 2.5 variants retire on October 1, 2026. For new deployments, review the preview [MAI-Image-2.6 and MAI-Image-2.6-Flash models](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image) and confirm regional availability. Historical cost metadata remains available.
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:image:mai-image-2-5
+  - id: azure:image:mai-image-2-6
     config:
-      # `model` is used only for cost reporting — Azure deployment names can't
-      # contain the dot in "MAI-Image-2.5", so name the model id explicitly.
-      model: MAI-Image-2.5
+      # Optional model ID for cost lookup; no built-in 2.6 price is available yet.
+      model: MAI-Image-2.6
       width: 1024 # min 768; width * height must be <= 1,048,576
       height: 1024
+      passthrough:
+        auto_aspect_ratio: false # Set true to let the model choose the aspect ratio
+        web_grounding: false # Set true to use Bing Search context
 
 tests:
   - vars:
@@ -1159,9 +1172,9 @@ tests:
         value: output.startsWith('promptfoo://blob/') || output.startsWith('data:image/')
 ```
 
-The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's token counts. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage from the API's token counts. Cost estimates require a matching built-in model price; uncached `MAI-Image-2.6` and `MAI-Image-2.6-Flash` responses omit cost because these models have no price entries. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
 
-To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. See the [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) for a complete vision-grading config.
+To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. The [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) illustrates this grading pattern with a legacy 2.5 deployment; update its deployment and model settings for the 2.6 configuration above.
 
 ### Reasoning chat (`azure:chat`)
 
@@ -1185,17 +1198,23 @@ The MAI image models are in **Preview**, and the MAI text models roll out region
 
 ## Assistants
 
-To evaluate an OpenAI assistant on Azure:
+:::warning Retired API
 
-1. Create a deployment for the assistant in the Azure portal
-2. Create an assistant in the Azure web UI
-3. Install the `@azure/openai-assistants` package:
+[Azure OpenAI Assistants retired on August 26, 2026](https://learn.microsoft.com/en-us/azure/foundry/how-to/navigate-from-classic). Use the Foundry agent provider for new agent evaluations. The configuration below documents the legacy integration; assistant IDs and Foundry agent names are different resources and cannot be substituted directly.
+
+:::
+
+The following setup and examples are archival references for pre-retirement configurations, not instructions for creating new Azure OpenAI assistants. Before retirement, this integration required:
+
+1. An Azure OpenAI deployment
+2. An assistant created in the Azure web UI
+3. The `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants
 ```
 
-4. Configure your provider with the assistant ID:
+4. A provider configuration referencing the assistant ID:
 
 ```yaml
 providers:
@@ -1204,11 +1223,21 @@ providers:
       apiHost: yourdeploymentname.openai.azure.com
 ```
 
-Replace the assistant ID and deployment name with your actual values.
+The assistant ID and deployment name above represent the former Azure OpenAI resources; they are not Foundry agent identifiers.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
+The retired Azure OpenAI Assistants integration supported tool calling through `tools` schemas and `functionToolCallbacks` implementations. This archived configuration shows that former contract:
+
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal guard:
+the resolved path must stay inside the config's `basePath`. Move the callback
+file into your project or set `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to
+opt out. See [OpenAI provider docs](./openai.md#automatically-handling-function-tool-calls)
+for details.
+
+:::
 
 ```yaml
 providers:
@@ -1243,10 +1272,10 @@ providers:
 
 ### Using Vector Stores with Assistants
 
-Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store:
+The retired Azure OpenAI Assistants integration supported file search with vector stores. Its setup required:
 
-1. Create a vector store in the Azure Portal or via the API
-2. Configure your assistant to use it:
+1. A vector store created in the Azure Portal or via the API
+2. An assistant configuration referencing that store:
 
 ```yaml
 providers:
@@ -1267,15 +1296,11 @@ providers:
       apiVersion: '2025-04-01-preview'
 ```
 
-Key requirements:
-
-- Set up a tool with `type: file_search`
-- Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
-- Set the appropriate `apiVersion` (recommended: `2025-04-01-preview` or later)
+This archived configuration used a `file_search` tool, the `tool_resources.file_search.vector_store_ids` array, and the `2025-04-01-preview` API version.
 
 ### Simple Example
 
-Here's an example of a simple full assistant eval:
+This archived eval shows the former Azure OpenAI assistant configuration:
 
 ```yaml
 prompts:
@@ -1291,9 +1316,9 @@ tests:
       topic: bananas
 ```
 
-For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
+Historical Azure OpenAI Assistants configurations are preserved in the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
 
-See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants/) documents compatible endpoints that still implement that API. For Azure, use the [Foundry agent provider](#azure-ai-foundry-agents) for new agent evaluations.
 
 ## Azure AI Foundry Agents
 
@@ -1523,11 +1548,7 @@ Use Azure Foundry Agents when:
 - You're using managed identities or service principals for authentication
 - You want to leverage Azure AI Projects features
 
-Use standard Azure Assistants when:
-
-- You're using Azure OpenAI Service directly (not through AI Foundry)
-- You have an existing Azure OpenAI resource and endpoint
-- You prefer API key-based authentication
+Azure OpenAI Assistants is retired. Existing Azure OpenAI resources and API keys do not restore that API; migrate to a Foundry agent and configure its project URL and agent name.
 
 ### Example Repository
 
@@ -1535,7 +1556,15 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+The `azure:video:<deployment name>` provider sends text prompts to Azure's legacy Sora jobs API (`/openai/v1/video/generations/jobs`). Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
+
+:::warning Check the deployed model version
+
+Azure's [retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule) lists October 15, 2026 for `sora-2` version `2025-12-08`, with no replacement. This differs from the native OpenAI Videos API's September 24 shutdown.
+
+Sora 2 uses a [different Videos API and request schema](https://learn.microsoft.com/en-us/azure/foundry-classic/openai/concepts/video-generation#model-comparison). Changing the deployment name on `azure:video:` does not implement that protocol, and the Sora 2 date does not establish availability of the legacy jobs API. Keep these legacy configurations only for existing deployments whose availability you have verified in Azure.
+
+:::
 
 ### Prerequisites
 
@@ -1546,7 +1575,7 @@ Azure AI Foundry provides access to OpenAI's Sora video generation model for tex
 
 ```yaml
 providers:
-  - id: azure:video:sora
+  - id: azure:video:my-video-deployment
     config:
       apiBaseUrl: https://your-resource.cognitiveservices.azure.com
       # Authentication (choose one):
@@ -1585,7 +1614,7 @@ providers:
 
 ```yaml
 providers:
-  - azure:video:sora
+  - azure:video:my-video-deployment
 
 prompts:
   - 'A serene Japanese garden with koi fish swimming in a pond'
@@ -1609,7 +1638,7 @@ tests:
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
-- [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
+- [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Legacy workflow for Assistants-compatible endpoints
 - [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
   - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples
   - [Claude](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/claude) - Anthropic Claude on Azure AI Foundry
@@ -1617,5 +1646,5 @@ tests:
   - [DeepSeek](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/deepseek) - DeepSeek reasoning models
   - [Mistral](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/mistral) - Mistral models
   - [Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/comparison) - Multi-provider comparison
-  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Assistant with tools examples
+  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Archived Azure Assistants configurations
   - [Foundry Agent](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) - Azure AI Foundry Agents

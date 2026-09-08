@@ -1848,23 +1848,24 @@ describe('evaluatorHelpers', () => {
       },
     );
 
-    // Extensions are whatever the user typed. isAudioFile() lowercases before matching, so an
-    // uppercase name still classifies as audio and must take the same branch -- otherwise it
-    // falls through to ISO-BMFF sniffing, which labels a generic `mp42`/`isom` brand as
-    // video/mp4 and Gemini rejects the request with HTTP 400.
     it.each(['m4a', 'M4A', 'M4a'])(
-      'should preserve M4A audio MIME type in a data URL for .%s',
+      'should preserve raw audio data in native templates for .%s',
       async (extension) => {
         vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
           return Buffer.from('test-audio-content');
         });
 
-        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const prompt = toPrompt(
+          '[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/mp4","data":"{{audio}}"}}]}]',
+        );
         const renderedPrompt = await renderPrompt(prompt, {
           audio: `file://test-audio.${extension}`,
         });
 
-        expect(renderedPrompt).toContain('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+        expect(JSON.parse(renderedPrompt)[0].parts[0].inlineData).toEqual({
+          mimeType: 'audio/mp4',
+          data: 'dGVzdC1hdWRpby1jb250ZW50',
+        });
       },
     );
 

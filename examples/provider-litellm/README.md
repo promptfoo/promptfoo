@@ -32,7 +32,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
    # Or manually:
    pip install litellm[proxy]
-   litellm --model gpt-4.1 --model claude-sonnet-4-6 --model gemini-2.5-pro --model text-embedding-3-large
+   litellm --config litellm_config.yaml --port 4000
    ```
 
 3. **Run the evaluation**:
@@ -63,6 +63,8 @@ The LiteLLM provider in promptfoo connects to a LiteLLM proxy server (default po
 - `promptfooconfig.yaml` - Main evaluation configuration
 - `litellm_config.yaml` - LiteLLM proxy server configuration
 - `start-proxy.sh` - Helper script to start the proxy
+
+The proxy keeps client-facing `model_name` aliases separate from backend routes. For Google AI Studio, the [LiteLLM Gemini backend](https://docs.litellm.ai/docs/providers/gemini) uses `gemini/gemini-2.5-pro`; promptfoo continues to select `litellm:gemini-2.5-pro`. API keys in the proxy YAML use LiteLLM's `os.environ/VARIABLE_NAME` syntax.
 
 ## Example Configuration
 
