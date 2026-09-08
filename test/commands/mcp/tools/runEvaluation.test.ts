@@ -94,7 +94,9 @@ describe('runEvaluation tool', () => {
       const tool = vi.fn();
       registerRunEvaluationTool({ tool } as unknown as McpServer);
       const [, schema, handler] = tool.mock.calls[0];
-      const advertisedFilter = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/)[1];
+      const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
+      expect(advertisedMatch).not.toBeNull();
+      const advertisedFilter = advertisedMatch![1];
       const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mcp-provider-filter-'));
       const originalState = {
         basePath: cliState.basePath,
