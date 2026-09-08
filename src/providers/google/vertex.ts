@@ -318,7 +318,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     } else if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context, options);
     }
-    return this.callPalm2Api(prompt, options);
+    return this.callPalm2Api(prompt, options, context);
   }
 
   async callClaudeApi(
@@ -427,10 +427,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body,
       apiHost,
     );
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
 
     let cachedResponse;
-    if (isCacheEnabled()) {
+    if (useCache) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -525,7 +527,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         ),
       };
 
-      if (isCacheEnabled()) {
+      if (useCache) {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
@@ -1000,7 +1002,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return response;
   }
 
-  async callPalm2Api(prompt: string, options?: CallApiOptionsParams): Promise<ProviderResponse> {
+  async callPalm2Api(
+    prompt: string,
+    options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const instances = parseChatPrompt(prompt, [
       {
@@ -1030,10 +1036,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const cache = await getCache();
     const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost);
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
 
     let cachedResponse;
-    if (isCacheEnabled()) {
+    if (useCache) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1095,7 +1103,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
       };
 
-      if (isCacheEnabled()) {
+      if (useCache) {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
@@ -1109,7 +1117,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callLlamaApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
@@ -1185,8 +1193,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     });
 
     let cachedResponse;
-    if (isCacheEnabled()) {
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    if (useCache) {
       cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1292,7 +1302,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         tokenUsage,
       };
 
-      if (isCacheEnabled()) {
+      if (useCache) {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 

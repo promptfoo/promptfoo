@@ -252,6 +252,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
+      options?.abortSignal?.throwIfAborted();
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');

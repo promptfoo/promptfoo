@@ -66,11 +66,14 @@ describe('ephemeral agent lifecycle', () => {
       const result = await providerRegistry.withScope([current], () => current.callApi('hello'));
       expect(result.error).toBeUndefined();
     }
-    expect(client.delete.mock.calls).toEqual([
-      ['/convai/agents/owned-1'],
-      ['/convai/agents/owned-2'],
-      ['/convai/agents/owned-3'],
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-2',
+      '/convai/agents/owned-3',
     ]);
+    for (const [, options] of client.delete.mock.calls) {
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    }
   });
 
   it('coalesces creation within an instance but keeps different instances independent', async () => {
@@ -118,9 +121,35 @@ describe('ephemeral agent lifecycle', () => {
     expect((await provider.callApi('again')).metadata?.agentId).toBe('owned-1');
     await provider.cleanup();
     expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(1);
-    expect(client.delete.mock.calls).toEqual([
-      ['/convai/agents/owned-1'],
-      ['/convai/agents/owned-1'],
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-1',
+    ]);
+  });
+
+  it('bounds deletion and retains an agent whose deletion timed out', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(controller.signal);
+    client.delete.mockImplementationOnce(
+      (_path: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const provider = createProvider();
+    await provider.callApi('hello');
+    const cleanup = provider.cleanup();
+    await vi.waitFor(() => expect(client.delete).toHaveBeenCalledOnce());
+    controller.abort();
+    await cleanup;
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(5000);
+    await provider.cleanup();
+    expect(client.delete).toHaveBeenCalledTimes(2);
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-1',
     ]);
   });
 });
