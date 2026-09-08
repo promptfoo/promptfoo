@@ -90,7 +90,7 @@
     }
   },
   "ignoreBinaries": [
-    // System tools invoked via child_process.
+    // System tools invoked by package scripts and subprocesses.
     "act",
     "ffmpeg",
     "go",
