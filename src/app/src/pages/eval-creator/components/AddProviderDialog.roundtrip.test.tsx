@@ -5,6 +5,7 @@ import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog from './AddProviderDialog';
+import { normalizeProviders } from './setupReadiness';
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -161,4 +162,73 @@ describe('eval provider configuration round trips', () => {
       expect(onSave.mock.calls[0][0]).toMatchObject({ id, label: saved.label, config: edited });
     },
   );
+
+  it('edits an imported Bedrock agent shorthand with no config object', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const [imported] = normalizeProviders(['bedrock:agents:AGENT123']);
+    renderWithProviders(
+      <AddProviderDialog open onClose={vi.fn()} onSave={onSave} initialProvider={imported} />,
+    );
+    expect(screen.getByRole('textbox', { name: 'Provider configuration JSON' })).toHaveValue('{}');
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+      JSON.stringify({ agentAliasId: 'ALIAS456', region: 'eu-west-1' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: imported.id,
+        config: { agentAliasId: 'ALIAS456', region: 'eu-west-1' },
+      }),
+    );
+  });
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'keeps a reopened %s target when an empty ID is rejected',
+    async (type) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const initialProvider = {
+        id: 'openai:chat:tenant/private-served-model:Q4_K_M',
+        config: { type, apiBaseUrl: 'http://localhost:8000/v1', stop: ['<end>'] },
+      };
+      renderWithProviders(
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={initialProvider}
+        />,
+      );
+      await user.clear(screen.getByRole('textbox', { name: /Target ID/ }));
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(onSave).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: /Target ID/ }),
+        initialProvider.id,
+      );
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(normalizeProviders([onSave.mock.calls[0][0]])).toMatchObject([initialProvider]);
+    },
+  );
+
+  it('saves the Groq advanced token limit from the real model editor', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(<AddProviderDialog open onClose={vi.fn()} onSave={onSave} />);
+    await user.click(screen.getByText('Groq', { selector: 'p' }).closest('[role="button"]')!);
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await replaceText(user, screen.getByLabelText('Max Tokens'), '100');
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'groq:openai/gpt-oss-120b',
+        config: expect.objectContaining({ max_tokens: 100 }),
+      }),
+    );
+  });
 });

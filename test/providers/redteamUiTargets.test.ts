@@ -23,7 +23,9 @@ vi.mock('@fal-ai/client', () => ({
   createFalClient: vi.fn(() => ({ subscribe })),
 }));
 
-let initialConfigs: Record<string, { id: string; config: Record<string, unknown> }>;
+type Target = { id: string; config: Record<string, unknown> };
+let initialConfigs: Record<string, Target>;
+let persistedTargets: Record<string, Target>;
 
 beforeAll(() => {
   // The app owns this browser-only module in a separate TypeScript project. Read its
@@ -49,18 +51,46 @@ beforeAll(() => {
     'groq',
     'cerebras',
   ];
+  const storeUrl = new URL('../../src/app/src/stores/evalConfig.ts', import.meta.url);
   const script = `
     const { getProviderInitialConfig } = await import(${JSON.stringify(helperUrl.href)});
-    console.log(JSON.stringify(Object.fromEntries(
+    const initialConfigs = Object.fromEntries(
       ${JSON.stringify(providerTypes)}.map(type => [type, getProviderInitialConfig(type)])
-    )));
+    );
+    const storage = new Map();
+    globalThis.localStorage = {
+      getItem: key => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: key => storage.delete(key),
+    };
+    globalThis.window = { localStorage: globalThis.localStorage };
+    const { useStore } = await import(${JSON.stringify(storeUrl.href)});
+    const persistedTargets = {};
+    for (const type of ['llamafile', 'vllm', 'text-generation-webui']) {
+      for (const [auth, config] of Object.entries({
+        none: {},
+        inline: { apiKey: 'private-session-key' },
+        selected: { apiKeyEnvar: 'LOCAL_MODEL_KEY' },
+      })) {
+        const target = structuredClone(initialConfigs[type]);
+        target.id = 'openai:chat:tenant/private-served-model:Q4_K_M';
+        target.config = { ...target.config, ...config, stop: ['<end>'] };
+        useStore.getState().setConfig({ providers: [target] });
+        const saved = localStorage.getItem('promptfoo');
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', saved);
+        await useStore.persist.rehydrate();
+        persistedTargets[type + ':' + auth] = useStore.getState().config.providers[0];
+      }
+    }
+    console.log(JSON.stringify({ initialConfigs, persistedTargets }));
   `;
-  initialConfigs = JSON.parse(
+  ({ initialConfigs, persistedTargets } = JSON.parse(
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
       cwd: fileURLToPath(new URL('../../', import.meta.url)),
       encoding: 'utf8',
     }),
-  );
+  ));
 });
 
 function initialConfig(providerType: string) {
@@ -90,6 +120,7 @@ beforeEach(() => {
   subscribe.mockReset();
   restoreEnv = mockProcessEnv({
     OPENAI_API_KEY: 'unrelated-openai-key',
+    LOCAL_MODEL_KEY: 'selected-local-key',
     LLAMA_BASE_URL: 'http://127.0.0.1:8099',
     HF_TOKEN: 'test-hf-token',
     TOGETHER_API_KEY: 'test-together-key',
@@ -179,7 +210,7 @@ describe('redteam UI initial target runtime contracts', () => {
       expect(result.output).toBe('Hello from the fixture');
       const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe(`${target.config.apiBaseUrl}/chat/completions`);
-      expect(request!.headers).toMatchObject({ Authorization: 'Bearer not-needed' });
+      expect(request!.headers).not.toHaveProperty('Authorization');
       expect(JSON.parse(request!.body as string).model).toBe(
         target.id.slice('openai:chat:'.length),
       );
@@ -213,6 +244,54 @@ describe('redteam UI initial target runtime contracts', () => {
       expect(body).not.toHaveProperty('type');
     },
   );
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      ['none', 'inline', 'selected'].map((auth) => ({ type, auth })),
+    ),
+  )(
+    'keeps $type credentials isolated after real store rehydration ($auth)',
+    async ({ type, auth }) => {
+      const target = persistedTargets[`${type}:${auth}`];
+      expect(target.config).not.toHaveProperty('apiKey');
+      if (auth === 'inline') {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { message: 'Local credentials required' } },
+          cached: false,
+          status: 401,
+          statusText: 'Unauthorized',
+        });
+      }
+      const provider = await loadApiProvider(target.id, { options: target });
+      const result = await provider.callApi('Say hello');
+      if (auth === 'inline') {
+        expect(result.error).toContain('Local credentials required');
+      } else {
+        expect(result.output).toBe('Hello from the fixture');
+      }
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`${target.config.apiBaseUrl}/chat/completions`);
+      if (auth === 'selected') {
+        expect(request!.headers).toMatchObject({ Authorization: 'Bearer selected-local-key' });
+      } else {
+        expect(request!.headers).not.toHaveProperty('Authorization');
+      }
+      expect(JSON.parse(request!.body as string)).toMatchObject({
+        model: 'tenant/private-served-model:Q4_K_M',
+        stop: ['<end>'],
+      });
+    },
+  );
+
+  it('passes the Groq editor token cap through the actual chat request', async () => {
+    const target = initialConfig('groq');
+    target.config.max_tokens = 100;
+    const provider = await loadApiProvider(target.id, { options: target });
+    await provider.callApi('Say hello');
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+    expect(body).toMatchObject({ model: 'openai/gpt-oss-120b', max_completion_tokens: 100 });
+    expect(body).not.toHaveProperty('max_tokens');
+  });
 
   it.each([
     'together',

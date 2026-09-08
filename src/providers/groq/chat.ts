@@ -51,6 +51,14 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (
+      this.isReasoningModel() &&
+      config.max_completion_tokens === undefined &&
+      config.max_tokens !== undefined &&
+      config.passthrough?.max_completion_tokens === undefined
+    ) {
+      body.max_completion_tokens = config.max_tokens;
+    }
     const groqConfig = this.config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters

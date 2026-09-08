@@ -73,7 +73,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
   const initialGuidance: Record<string, { title: string; helpText: string }> = {
     together: {
       title: 'Together AI',
-      helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY or apiKey.',
+      helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY.',
     },
     huggingface: {
       title: 'Hugging Face',
@@ -102,17 +102,17 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     llamafile: {
       title: 'Llamafile',
       helpText:
-        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
     },
     vllm: {
       title: 'vLLM',
       helpText:
-        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
     },
     'text-generation-webui': {
       title: 'Text Generation WebUI',
       helpText:
-        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
     },
     ollama: {
       title: 'Ollama',
@@ -131,7 +131,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     },
     cerebras: {
       title: 'Cerebras',
-      helpText: 'Use a Cerebras-hosted model ID. Configure CEREBRAS_API_KEY or apiKey.',
+      helpText: 'Use a Cerebras-hosted model ID. Configure CEREBRAS_API_KEY.',
     },
     groq: {
       title: 'Groq',

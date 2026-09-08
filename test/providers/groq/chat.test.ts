@@ -107,6 +107,53 @@ describe('GroqProvider', () => {
     });
   });
 
+  it.each([
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'qwen/qwen3.6-27b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 40,
+      expected: { max_completion_tokens: 40 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 0,
+      expected: { max_completion_tokens: 0 },
+    },
+    {
+      model: 'tenant/custom-served-model',
+      maxCompletionTokens: undefined,
+      expected: { max_tokens: 100 },
+    },
+  ])(
+    'preserves the token limit for $model ($maxCompletionTokens)',
+    async ({ model, maxCompletionTokens, expected }) => {
+      const provider = new GroqProvider(model, {
+        config: { max_tokens: 100, max_completion_tokens: maxCompletionTokens },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body).toMatchObject({ model, ...expected });
+      if ('max_completion_tokens' in expected) {
+        expect(body).not.toHaveProperty('max_tokens');
+      }
+    },
+  );
+
+  it('preserves an explicit passthrough token limit', async () => {
+    const provider = new GroqProvider('openai/gpt-oss-120b', {
+      config: { max_tokens: 100, passthrough: { max_completion_tokens: 20 } },
+    });
+    expect((await provider.getOpenAiBody('Hello')).body.max_completion_tokens).toBe(20);
+  });
+
   describe('serialization', () => {
     it('should serialize to JSON correctly without API key', () => {
       const provider = new GroqProvider('mixtral-8x7b-32768', {

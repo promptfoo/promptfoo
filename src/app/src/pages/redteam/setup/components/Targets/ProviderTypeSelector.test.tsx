@@ -41,13 +41,23 @@ describe('ProviderTypeSelector', () => {
       'Llamafile',
       'llamafile',
       'openai:chat:local-model',
-      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1', apiKey: 'not-needed' },
+      {
+        type: 'llamafile',
+        apiBaseUrl: 'http://localhost:8080/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
     ],
     [
       'vLLM',
       'vllm',
       'openai:chat:your-served-model-name',
-      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1', apiKey: 'not-needed' },
+      {
+        type: 'vllm',
+        apiBaseUrl: 'http://localhost:8000/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
     ],
     [
       'Text Generation WebUI',
@@ -56,7 +66,8 @@ describe('ProviderTypeSelector', () => {
       {
         type: 'text-generation-webui',
         apiBaseUrl: 'http://localhost:5000/v1',
-        apiKey: 'not-needed',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
       },
     ],
     ['Ollama', 'ollama', 'ollama:llama3.2:3b', {}],

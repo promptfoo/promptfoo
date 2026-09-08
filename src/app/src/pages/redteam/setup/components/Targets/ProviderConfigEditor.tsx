@@ -16,6 +16,7 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import { isLocalOpenAiProviderType } from './helpers';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -110,7 +111,7 @@ function ProviderConfigEditor({
   const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
     isRedTeam && targetConfigDraft !== null
       ? targetConfigDraft
-      : JSON.stringify(provider.config, null, 2),
+      : (JSON.stringify(provider.config, null, 2) ?? '{}'),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
@@ -169,7 +170,7 @@ function ProviderConfigEditor({
   useEffect(() => {
     if (previousProviderType.current !== providerType) {
       previousProviderType.current = providerType;
-      setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      setRawConfigJson(JSON.stringify(provider.config, null, 2) ?? '{}');
       if (isRedTeam) {
         let cleared = false;
         try {
@@ -478,6 +479,7 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
+      isLocalOpenAiProviderType(providerType) ||
       ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
         providerType || '',
       )

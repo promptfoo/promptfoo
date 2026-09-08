@@ -22,12 +22,22 @@ export function getProviderInitialConfig(
     case 'llamafile':
       return {
         id: 'openai:chat:local-model',
-        config: { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1', apiKey: 'not-needed' },
+        config: {
+          type: 'llamafile',
+          apiBaseUrl: 'http://localhost:8080/v1',
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
+        },
       };
     case 'vllm':
       return {
         id: 'openai:chat:your-served-model-name',
-        config: { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1', apiKey: 'not-needed' },
+        config: {
+          type: 'vllm',
+          apiBaseUrl: 'http://localhost:8000/v1',
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
+        },
       };
     case 'text-generation-webui':
       return {
@@ -35,7 +45,8 @@ export function getProviderInitialConfig(
         config: {
           type: 'text-generation-webui',
           apiBaseUrl: 'http://localhost:5000/v1',
-          apiKey: 'not-needed',
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
         },
       };
     case 'ollama':

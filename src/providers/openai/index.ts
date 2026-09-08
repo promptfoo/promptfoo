@@ -133,8 +133,9 @@ export class OpenAiGenericProvider implements ApiProvider {
         ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
+      (this.config.useDefaultApiKey === false
+        ? undefined
+        : this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY'))
     );
   }
 
