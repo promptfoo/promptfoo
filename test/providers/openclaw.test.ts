@@ -794,25 +794,28 @@ describe('OpenClaw Provider', () => {
       expect(provider.config.headers?.['x-openclaw-session-key']).toBe('agent:main:my-session');
     });
 
-    it('should keep default and pre-scoped session keys unchanged', () => {
-      const defaultProvider = new OpenClawChatProvider(undefined, {
-        config: { session_key: 'my-session' },
-      });
-      const explicitProvider = new OpenClawChatProvider('main', {
-        config: { session_key: 'agent:main:my-session' },
-      });
-      const defaultScopedProvider = new OpenClawChatProvider(undefined, {
-        config: { session_key: 'agent:main:my-session' },
-      });
+    it.each(['my-session', 'my-session::tail'])(
+      'should preserve valid session suffix %s',
+      (sessionKey) => {
+        const defaultProvider = new OpenClawChatProvider(undefined, {
+          config: { session_key: sessionKey },
+        });
+        const explicitProvider = new OpenClawChatProvider('main', {
+          config: { session_key: `agent:main:${sessionKey}` },
+        });
+        const defaultScopedProvider = new OpenClawChatProvider(undefined, {
+          config: { session_key: `agent:main:${sessionKey}` },
+        });
 
-      expect(defaultProvider.config.headers?.['x-openclaw-session-key']).toBe('my-session');
-      expect(explicitProvider.config.headers?.['x-openclaw-session-key']).toBe(
-        'agent:main:my-session',
-      );
-      expect(defaultScopedProvider.config.headers?.['x-openclaw-session-key']).toBe(
-        'agent:main:my-session',
-      );
-    });
+        expect(defaultProvider.config.headers?.['x-openclaw-session-key']).toBe(sessionKey);
+        expect(explicitProvider.config.headers?.['x-openclaw-session-key']).toBe(
+          `agent:main:${sessionKey}`,
+        );
+        expect(defaultScopedProvider.config.headers?.['x-openclaw-session-key']).toBe(
+          `agent:main:${sessionKey}`,
+        );
+      },
+    );
 
     it.each(['global', 'GLOBAL', 'unknown', 'Unknown'])(
       'should not agent-scope the unscoped session sentinel %s',
@@ -838,28 +841,39 @@ describe('OpenClaw Provider', () => {
       'agent:main:',
       'agent:main::',
       'agent:main:::',
+      'agent:main::foo',
+      'agent:main:::foo',
+      'agent:main: :foo',
       'agent::shared-session',
-    ])('should reject malformed scoped session key %s', (sessionKey) => {
-      for (const agentId of [undefined, 'main']) {
-        expect(
-          () =>
-            new OpenClawChatProvider(agentId, {
-              config: { session_key: sessionKey },
-            }),
-        ).toThrow('must use the form "agent:<agent-id>:<session-id>"');
+    ])('should reject malformed scoped session key %s before HTTP requests', (sessionKey) => {
+      for (const Provider of [
+        OpenClawChatProvider,
+        OpenClawResponsesProvider,
+        OpenClawEmbeddingProvider,
+      ]) {
+        for (const agentId of [undefined, 'main']) {
+          expect(() => new Provider(agentId, { config: { session_key: sessionKey } })).toThrow(
+            'must use the form "agent:<agent-id>:<session-id>"',
+          );
+        }
       }
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 
-    it.each([':', '::', ' : '])('should reject empty unscoped session key %s', (sessionKey) => {
-      for (const agentId of [undefined, 'main']) {
-        expect(
-          () =>
-            new OpenClawChatProvider(agentId, {
-              config: { session_key: sessionKey },
-            }),
-        ).toThrow('must include a non-empty session ID');
-      }
-    });
+    it.each([':', '::', ' : ', ':foo', '::foo'])(
+      'should reject empty unscoped session key %s',
+      (sessionKey) => {
+        for (const agentId of [undefined, 'main']) {
+          expect(
+            () =>
+              new OpenClawChatProvider(agentId, {
+                config: { session_key: sessionKey },
+              }),
+          ).toThrow('must include a non-empty session ID');
+        }
+      },
+    );
 
     it('should not set session key header when not provided', () => {
       const provider = new OpenClawChatProvider('main', {});
@@ -2595,47 +2609,94 @@ describe('OpenClaw Provider', () => {
       },
     );
 
-    it('should scope unscoped configured session keys for explicit agents', async () => {
-      const provider = new OpenClawAgentProvider('dev', {
-        config: { gateway_url: 'http://test:18789', session_key: 'my-session' },
-      });
+    it.each(['my-session', 'my-session::tail'])(
+      'should scope valid session suffix %s for explicit WS agents',
+      async (sessionKey) => {
+        const provider = new OpenClawAgentProvider('dev', {
+          config: { gateway_url: 'http://test:18789', session_key: sessionKey },
+        });
 
-      const promise = provider.callApi('Hello');
-      const onMessage = getMessageHandler();
-      const { agentReq, waitReq } = simulateHandshake(onMessage);
+        const promise = provider.callApi('Hello');
+        const onMessage = getMessageHandler();
+        const { agentReq, waitReq } = simulateHandshake(onMessage);
 
-      expect(agentReq.params.agentId).toBe('dev');
-      expect(agentReq.params.sessionKey).toBe('agent:dev:my-session');
+        expect(agentReq.params.agentId).toBe('dev');
+        expect(agentReq.params.sessionKey).toBe(`agent:dev:${sessionKey}`);
 
-      onMessage(
-        Buffer.from(
-          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
-        ),
-      );
+        onMessage(
+          Buffer.from(
+            JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+          ),
+        );
 
-      await promise;
-    });
+        await promise;
+      },
+    );
 
-    it('should forward unscoped session sentinels unchanged for explicit WS agents', async () => {
-      const provider = new OpenClawAgentProvider('dev', {
-        config: { gateway_url: 'http://test:18789', session_key: 'global' },
-      });
+    it.each(['global', 'GLOBAL'])(
+      'should forward the global session sentinel %s for explicit WS agents',
+      async (sessionKey) => {
+        const provider = new OpenClawAgentProvider('dev', {
+          config: { gateway_url: 'http://test:18789', session_key: sessionKey },
+        });
 
-      const promise = provider.callApi('Hello');
-      const onMessage = getMessageHandler();
-      const { agentReq, waitReq } = simulateHandshake(onMessage);
+        const promise = provider.callApi('Hello');
+        const onMessage = getMessageHandler();
+        const { agentReq, waitReq } = simulateHandshake(onMessage);
 
-      expect(agentReq.params.agentId).toBe('dev');
-      expect(agentReq.params.sessionKey).toBe('global');
+        expect(agentReq.params.agentId).toBe('dev');
+        expect(agentReq.params.sessionKey).toBe(sessionKey);
 
-      onMessage(
-        Buffer.from(
-          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
-        ),
-      );
+        onMessage(
+          Buffer.from(
+            JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+          ),
+        );
 
-      await promise;
-    });
+        await promise;
+      },
+    );
+
+    it.each(['unknown', 'Unknown'])(
+      'should scope WS session %s to the explicit non-main agent',
+      async (sessionKey) => {
+        const provider = new OpenClawAgentProvider('dev', {
+          config: { gateway_url: 'http://test:18789', session_key: sessionKey },
+        });
+        const promise = provider.callApi('Hello');
+        const onMessage = getMessageHandler();
+        const { agentReq, waitReq } = simulateHandshake(onMessage);
+        onMessage(
+          Buffer.from(
+            JSON.stringify({
+              type: 'res',
+              id: waitReq.id,
+              ok: true,
+              payload: { status: 'ok' },
+            }),
+          ),
+        );
+        await promise;
+        expect(agentReq.params.agentId).toBe('dev');
+        expect(agentReq.params.sessionKey).toBe(`agent:dev:${sessionKey}`);
+      },
+    );
+
+    it.each(['unknown', ' Unknown '])(
+      'should reject WS session %s before connecting when the default agent is unknown',
+      async (sessionKey) => {
+        websocketMocks.WebSocketMock.mockImplementation(function () {
+          throw new Error('Unexpected WebSocket connection');
+        });
+        const provider = new OpenClawAgentProvider(undefined, {
+          config: { gateway_url: 'http://test:18789', session_key: sessionKey },
+        });
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          'requires an explicit agent for session_key "unknown"',
+        );
+        expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
+      },
+    );
 
     it('should reject configured sessions scoped to another WS agent', async () => {
       const provider = new OpenClawAgentProvider('dev', {
@@ -2651,33 +2712,43 @@ describe('OpenClaw Provider', () => {
       expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
     });
 
-    it('should reject malformed scoped sessions for the default WS agent', async () => {
-      const provider = new OpenClawAgentProvider(undefined, {
-        config: {
-          gateway_url: 'http://test:18789',
-          session_key: 'agent:main::',
-        },
-      });
+    it.each(['agent:dev::', 'agent:dev::foo', 'agent:dev:::foo', 'agent:dev: :foo'])(
+      'should reject malformed scoped session %s before WebSocket connections',
+      async (sessionKey) => {
+        websocketMocks.WebSocketMock.mockImplementation(function () {
+          throw new Error('Unexpected WebSocket connection');
+        });
+        for (const agentId of [undefined, 'dev']) {
+          const provider = new OpenClawAgentProvider(agentId, {
+            config: { gateway_url: 'http://test:18789', session_key: sessionKey },
+          });
+          await expect(provider.callApi('Hello')).rejects.toThrow(
+            'must use the form "agent:<agent-id>:<session-id>"',
+          );
+        }
+        expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
+      },
+    );
 
-      await expect(provider.callApi('Hello')).rejects.toThrow(
-        'must use the form "agent:<agent-id>:<session-id>"',
-      );
-      expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
-    });
+    it.each(['::', ':foo', '::foo'])(
+      'should reject empty first session segment %s for explicit WS agents',
+      async (sessionKey) => {
+        websocketMocks.WebSocketMock.mockImplementation(function () {
+          throw new Error('Unexpected WebSocket connection');
+        });
+        const provider = new OpenClawAgentProvider('main', {
+          config: {
+            gateway_url: 'http://test:18789',
+            session_key: sessionKey,
+          },
+        });
 
-    it('should reject empty unscoped sessions for explicit WS agents', async () => {
-      const provider = new OpenClawAgentProvider('main', {
-        config: {
-          gateway_url: 'http://test:18789',
-          session_key: '::',
-        },
-      });
-
-      await expect(provider.callApi('Hello')).rejects.toThrow(
-        'must include a non-empty session ID',
-      );
-      expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
-    });
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          'must include a non-empty session ID',
+        );
+        expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
+      },
+    );
 
     it('should include channel and account context when configured', async () => {
       const provider = new OpenClawAgentProvider('main', {

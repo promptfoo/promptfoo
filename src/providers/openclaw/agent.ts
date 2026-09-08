@@ -176,10 +176,18 @@ export class OpenClawAgentProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
-    const sessionKey = buildOpenClawSessionKey(
-      this.agentId,
-      this.openclawConfig.session_key?.trim() || `promptfoo-${crypto.randomUUID()}`,
-    );
+    let sessionKey = this.openclawConfig.session_key?.trim() || `promptfoo-${crypto.randomUUID()}`;
+    // Older gateways lose the selected agent when a WS request uses raw `unknown`.
+    if (sessionKey.toLowerCase() === 'unknown') {
+      if (!this.agentId) {
+        throw new Error(
+          'OpenClaw WS requires an explicit agent for session_key "unknown". ' +
+            'Select openclaw:agent:<agent-id>, use another session key, or omit session_key.',
+        );
+      }
+      sessionKey = `agent:${this.agentId}:${sessionKey}`;
+    }
+    sessionKey = buildOpenClawSessionKey(this.agentId, sessionKey);
 
     const firstResult = await this.callApiOnce(prompt, sessionKey);
     if (firstResult.retryWithDeviceToken) {

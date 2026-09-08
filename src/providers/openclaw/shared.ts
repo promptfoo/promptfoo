@@ -369,14 +369,6 @@ function normalizeHeaderValue(value: string | undefined): string | undefined {
 }
 
 /**
- * OpenClaw treats these unscoped session keys as canonical sentinels (global queue/history and
- * unknown-session classification) and resolves them before generic agent scoping, even when an
- * explicit agent is targeted. Prefixing them would silently turn a sentinel into an ordinary
- * per-agent session.
- */
-const UNSCOPED_SESSION_SENTINELS = new Set(['global', 'unknown']);
-
-/**
  * Scope an unqualified session key to an explicit agent. OpenClaw canonicalizes unscoped keys
  * under the configured default agent, so explicit agents must carry their scope in the key.
  */
@@ -387,7 +379,7 @@ export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey:
     return trimmedSessionKey;
   }
 
-  if (!trimmedSessionKey.split(':').some((part) => part.trim().length > 0)) {
+  if (trimmedSessionKey.startsWith(':')) {
     throw new Error(
       `OpenClaw session key "${trimmedSessionKey}" must include a non-empty session ID`,
     );
@@ -396,21 +388,21 @@ export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey:
   if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
     const sessionKeyParts = trimmedSessionKey.split(':');
     const scopedAgentId = sessionKeyParts[1]?.trim();
-    const hasScopedSessionId = sessionKeyParts.slice(2).some((part) => part.trim().length > 0);
-    if (!scopedAgentId || !hasScopedSessionId) {
+    if (!scopedAgentId || !sessionKeyParts[2]?.trim()) {
       throw new Error(
         `OpenClaw session key "${trimmedSessionKey}" must use the form "agent:<agent-id>:<session-id>"`,
       );
     }
     if (trimmedAgentId && scopedAgentId.toLowerCase() !== trimmedAgentId.toLowerCase()) {
       throw new Error(
-        `OpenClaw session key targets agent "${scopedAgentId || '(missing)'}" but the provider targets "${trimmedAgentId}"`,
+        `OpenClaw session key targets agent "${scopedAgentId}" but the provider targets "${trimmedAgentId}"`,
       );
     }
     return trimmedSessionKey;
   }
 
-  if (UNSCOPED_SESSION_SENTINELS.has(trimmedSessionKey.toLowerCase())) {
+  const lowerSessionKey = trimmedSessionKey.toLowerCase();
+  if (lowerSessionKey === 'global' || lowerSessionKey === 'unknown') {
     return trimmedSessionKey;
   }
 
