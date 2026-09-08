@@ -99,7 +99,7 @@ import {
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
@@ -1205,10 +1205,14 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  abortSignal?: AbortSignal,
+) {
   if (!response.cached && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+    await (abortSignal ? sleepWithAbort(provider.delay, abortSignal) : sleep(provider.delay));
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1727,7 +1731,7 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
