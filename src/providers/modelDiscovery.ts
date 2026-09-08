@@ -1,5 +1,3 @@
-import { isCacheEnabled } from '../cache';
-
 const SUCCESS_TTL_MS = 5 * 60 * 1000;
 const ERROR_RETRY_MS = 5 * 1000;
 const MAX_ENTRIES = 100;
@@ -11,7 +9,7 @@ interface DiscoveryEntry<T> {
 }
 
 /** Short-lived discovery state only; inference responses use the normal provider cache. */
-export function createModelDiscoveryCache<T>() {
+export function createModelDiscoveryCache<T>(isCacheEnabled: () => boolean) {
   const entries = new Map<string, DiscoveryEntry<T>>();
 
   return {

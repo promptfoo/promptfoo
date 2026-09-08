@@ -1,4 +1,4 @@
-import { fetchWithCache, getHeadersForCacheKey, getScopedCacheKey } from '../cache';
+import { fetchWithCache, getHeadersForCacheKey, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { createModelDiscoveryCache } from './modelDiscovery';
@@ -16,7 +16,7 @@ export interface AimlApiModel {
   aliases?: string[];
 }
 
-const modelCache = createModelDiscoveryCache<AimlApiModel>();
+const modelCache = createModelDiscoveryCache<AimlApiModel>(isCacheEnabled);
 
 export function clearAimlApiModelsCache() {
   modelCache.clear();

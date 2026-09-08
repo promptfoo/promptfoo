@@ -1,4 +1,4 @@
-import { fetchWithCache, getHeadersForCacheKey, getScopedCacheKey } from '../cache';
+import { fetchWithCache, getHeadersForCacheKey, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { createModelDiscoveryCache } from './modelDiscovery';
@@ -18,7 +18,7 @@ export interface CometApiModel {
 
 // Note: We no longer filter models - users specify intent via provider syntax like :chat:, :image:, :embedding:
 
-const modelCache = createModelDiscoveryCache<CometApiModel>();
+const modelCache = createModelDiscoveryCache<CometApiModel>(isCacheEnabled);
 
 export function clearCometApiModelsCache() {
   modelCache.clear();
