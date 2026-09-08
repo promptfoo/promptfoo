@@ -20,6 +20,24 @@ describe('oauth utils', () => {
   });
 
   describe('fetchOAuthToken', () => {
+    it('cancels an in-flight token request', async () => {
+      const controller = new AbortController();
+      mockFetchWithProxy.mockImplementation(
+        (_url, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const token = fetchOAuthToken(
+        { tokenUrl: 'https://auth.example.com/token', grantType: 'client_credentials' },
+        controller.signal,
+      );
+      controller.abort(new Error('fixture cleanup'));
+      await expect(token).rejects.toThrow('fixture cleanup');
+    });
+
     it('should fetch token with client_credentials grant', async () => {
       const mockResponse = {
         ok: true,
