@@ -229,10 +229,10 @@ export async function updateResult(
       existingEval.config = restoreAzureBlobSasTokens(config, existingEval.config);
     }
     if (configPatch) {
-      existingEval.config = {
-        ...existingEval.config,
-        ...configPatch,
-      };
+      existingEval.config = restoreAzureBlobSasTokens(
+        { ...existingEval.config, ...configPatch },
+        existingEval.config,
+      );
     }
     if (table) {
       existingEval.setTable(table);

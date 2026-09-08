@@ -371,7 +371,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       const originalTests = structuredClone(eval_.config.tests);
 
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table?lean=true`);
 
       expect(res.status).toBe(200);
       expect(res.body.config.tests).toBeUndefined();
@@ -419,6 +419,12 @@ describe('eval routes', () => {
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toBe(sasUri);
       expect(updatedEval.config.description).toBe('renamed eval');
+
+      const partial = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ configPatch: { tests: res.body.config.tests } });
+      expect(partial.status).toBe(200);
+      expect((await Eval.findById(eval_.id))?.config.tests).toBe(sasUri);
     });
   });
 

@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { callApi } from '@app/utils/api';
+import { callApi, clearEvalApiResponseCache } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -672,6 +672,7 @@ export const useTableStore = create<TableState>()(
 
       try {
         logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
+        clearEvalApiResponseCache(id);
 
         const url = new URL(
           `/eval/${id}/table`,
@@ -681,6 +682,7 @@ export const useTableStore = create<TableState>()(
 
         url.searchParams.set('offset', (pageIndex * pageSize).toString());
         url.searchParams.set('limit', pageSize.toString());
+        url.searchParams.set('lean', 'true');
         url.searchParams.set('filterMode', filterMode);
 
         comparisonEvalIds.forEach((evalId) => {

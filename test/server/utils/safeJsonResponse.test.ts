@@ -18,4 +18,13 @@ describe('stripOversizedStrings', () => {
 
     expect(stripOversizedStrings(value)).toBe('[Circular Reference]');
   });
+
+  it('returns a serializable placeholder for deeply nested eval data', () => {
+    let value: object = { leaf: 'safe' };
+    for (let depth = 0; depth < 4000; depth++) {
+      value = { child: value };
+    }
+
+    expect(JSON.stringify(stripOversizedStrings(value))).toContain('excessive nesting');
+  });
 });

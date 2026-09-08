@@ -292,35 +292,13 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const getFirstOutput = (row: EvaluateTableRow): EvaluateTableOutput | null =>
     row.outputs.find((output): output is EvaluateTableOutput => Boolean(output)) ?? null;
 
-  const getFullConfigTest = (
-    fullConfig: Partial<UnifiedConfig>,
-    row: EvaluateTableRow,
-  ): EvaluateTableRow['test'] | undefined => {
-    if (!Array.isArray(fullConfig.tests) || !Number.isInteger(row.testIdx)) {
-      return undefined;
-    }
-
-    const test = fullConfig.tests[row.testIdx];
-    if (test && typeof test === 'object' && !Array.isArray(test)) {
-      return test as EvaluateTableRow['test'];
-    }
-
-    return undefined;
-  };
-
   const getRowVars = (
     row: EvaluateTableRow,
     detail?: EvalResultDetailResponse | null,
-    fullConfig?: Partial<UnifiedConfig>,
   ): Record<string, unknown> => {
     const detailVars = detail?.testCase?.vars;
     if (detailVars && typeof detailVars === 'object' && !Array.isArray(detailVars)) {
       return detailVars as Record<string, unknown>;
-    }
-
-    const fullConfigVars = fullConfig ? getFullConfigTest(fullConfig, row)?.vars : undefined;
-    if (fullConfigVars && typeof fullConfigVars === 'object' && !Array.isArray(fullConfigVars)) {
-      return fullConfigVars as Record<string, unknown>;
     }
 
     if (row.test?.vars) {
@@ -345,9 +323,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       const detailHydrationFailures = detailHydrationFailuresRef.current;
       if (detailHydrationFailures > 0) {
         showToast(
-          `Export used table data for ${detailHydrationFailures} result${
+          `Full details unavailable for ${detailHydrationFailures} result${
             detailHydrationFailures === 1 ? '' : 's'
-          } because full result details could not be loaded.`,
+          }; incomplete entries may be omitted.`,
           'warning',
         );
       }
@@ -416,14 +394,19 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                 Boolean(output && !output.pass),
               ) ?? getFirstOutput(row);
             const detail = await getOutputDetail(failedOutput);
-            return detail?.testCase ?? getFullConfigTest(fullConfig, row) ?? row.test;
+            return detail?.testCase ?? (failedOutput?.detail?.available ? null : row.test);
           } finally {
             incrementExportProgress();
           }
         },
       );
 
-      const configCopy = { ...fullConfig, tests: failedTests };
+      const completeTests = failedTests.filter((test) => test !== null);
+      if (completeTests.length === 0) {
+        showToast('No complete failed tests available to export', 'warning');
+        return;
+      }
+      const configCopy = { ...fullConfig, tests: completeTests };
       const fileName = getFilename('failed-tests.yaml');
 
       downloadYamlConfig(
@@ -462,29 +445,41 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           : leanValue;
       });
 
-      const formattedData = await mapWithConcurrency(
-        table.body,
+      const outputJobs = table.body.flatMap((row, rowIndex) =>
+        row.outputs.map((output, outputIndex) => ({ rowIndex, outputIndex, output })),
+      );
+      const details = await mapWithConcurrency(
+        outputJobs,
         DETAIL_EXPORT_CONCURRENCY,
-        async (row) => {
-          // Row vars in the table are display strings. Hydrate one result per
-          // row to preserve typed values, then hydrate additional cells only
-          // where their exported output text was trimmed.
+        async ({ rowIndex, outputIndex, output }) => {
+          try {
+            const firstOutputIndex = table.body[rowIndex].outputs.findIndex(Boolean);
+            return outputIndex === firstOutputIndex || hasPlaceholder(output?.text)
+              ? await getOutputDetail(output)
+              : null;
+          } finally {
+            incrementExportProgress();
+          }
+        },
+      );
+
+      let nextDetailIndex = 0;
+      const formattedData = table.body
+        .map((row) => {
+          const rowDetails = details.slice(nextDetailIndex, nextDetailIndex + row.outputs.length);
+          nextDetailIndex += row.outputs.length;
           const rowDetailIndex = row.outputs.findIndex(Boolean);
-          const details = await Promise.all(
-            row.outputs.map(async (output, idx) => {
-              try {
-                if (idx !== rowDetailIndex && !hasPlaceholder(output?.text)) {
-                  return null;
-                }
-                return await getOutputDetail(output);
-              } finally {
-                incrementExportProgress();
-              }
-            }),
-          );
           const getOutputText = (output: EvaluateTableOutput, idx: number) =>
-            hasPlaceholder(output.text) ? (details[idx]?.text ?? output.text ?? '') : output.text;
-          const rowDetail = rowDetailIndex >= 0 ? details[rowDetailIndex] : null;
+            hasPlaceholder(output.text)
+              ? (rowDetails[idx]?.text ?? output.text ?? '')
+              : output.text;
+          const rowDetail = rowDetailIndex >= 0 ? rowDetails[rowDetailIndex] : null;
+          if (
+            (hasPlaceholder(row.vars) && !rowDetail) ||
+            row.outputs.some((output, idx) => hasPlaceholder(output?.text) && !rowDetails[idx])
+          ) {
+            return null;
+          }
 
           return {
             chosen: row.outputs
@@ -493,12 +488,12 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             rejected: row.outputs
               .map((output, idx) => (output && !output.pass ? getOutputText(output, idx) : null))
               .filter((text): text is string => text != null),
-            vars: getRowVars(row, rowDetail, fullConfig),
+            vars: getRowVars(row, rowDetail),
             providers: table.head.prompts.map((prompt) => prompt.provider),
             prompts,
           };
-        },
-      );
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
       const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
       openDownloadDialog(blob, getFilename('dpo.json'));
       handleClose();
@@ -553,15 +548,16 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             const detail = await getOutputDetail(output);
             const outputText = detail?.text ?? output?.text ?? '';
             const metadata = detail?.metadata ?? output?.metadata;
+            const comment =
+              (detail?.gradingResult as EvaluateTableOutput['gradingResult'])?.comment ??
+              output?.gradingResult?.comment;
 
             return {
               vars: {
                 ...getRowVars(row, detail),
                 output: outputText.includes('---') ? outputText.split('---\n')[1] : outputText,
                 redteamFinalPrompt: metadata?.redteamFinalPrompt,
-                ...(output?.gradingResult?.comment
-                  ? { comment: output.gradingResult.comment }
-                  : {}),
+                ...(comment ? { comment } : {}),
               },
               assert: [
                 {
@@ -613,6 +609,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             const detail = hasPlaceholder(row.vars)
               ? await getOutputDetail(getFirstOutput(row))
               : null;
+            if (hasPlaceholder(row.vars) && !detail) {
+              return '';
+            }
             const vars = getRowVars(row, detail);
             return String(vars?.[varName] || '');
           } finally {

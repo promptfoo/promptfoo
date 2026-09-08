@@ -1253,12 +1253,15 @@ export function getPersistableEvalConfig(config: Partial<UnifiedConfig>): Partia
     return compactConfig;
   }
 
-  return {
+  const fallback = {
     ...DEFAULT_CONFIG,
     description: sanitizedConfig.description ?? '',
     providers: sanitizedConfig.providers ?? [],
     prompts: [],
   };
+  return getJsonSize(fallback) <= MAX_PERSISTED_EVAL_CONFIG_BYTES
+    ? fallback
+    : { ...DEFAULT_CONFIG };
 }
 
 export const useStore = create<EvalConfigState>()(

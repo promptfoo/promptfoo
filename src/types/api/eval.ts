@@ -90,6 +90,7 @@ export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
 export const EvalTableQuerySchema = z
   .object({
     format: z.enum(['csv', 'json']).optional(),
+    lean: z.literal('true').optional(),
     limit: z.coerce.number().int().positive().prefault(50),
     offset: z.coerce.number().int().nonnegative().prefault(0),
     filterMode: EvalResultsFilterMode.prefault('all'),
@@ -170,10 +171,6 @@ export const EvalResultDetailResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   gradingResult: z.unknown().optional(),
   text: z.string(),
-  output: z.unknown().optional(),
-  audio: z.unknown().optional(),
-  video: z.unknown().optional(),
-  images: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;

@@ -141,7 +141,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
   }
 
   it('returns a lean table payload without waiting for JSON serialization to overflow', async () => {
-    const response = await request(app).get('/api/eval/large-eval/table');
+    const response = await request(app).get('/api/eval/large-eval/table?lean=true');
 
     expect(response.status).toBe(200);
     expect(response.headers['x-promptfoo-response-truncated']).toBeUndefined();
@@ -180,6 +180,15 @@ describe('GET /api/eval/:id/table large payload handling', () => {
       available: true,
       omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult'],
     });
+  });
+
+  it('keeps the full table and config for existing API clients', async () => {
+    const response = await request(app).get('/api/eval/large-eval/table');
+
+    expect(response.status).toBe(200);
+    expect(response.body.config.tests[0].vars.image).toBe(oversized);
+    expect(response.body.table.body[0].outputs[0].response.output).toBe(oversized);
+    expect(response.body.table.body[0].outputs[0].detail).toBeUndefined();
   });
 
   it('keeps legacy eval table payloads full so manual rating updates do not persist trimmed detail', async () => {
@@ -225,7 +234,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
       (value) => value !== null && typeof value === 'object' && 'table' in value,
     );
 
-    const response = await request(app).get('/api/eval/large-eval/table');
+    const response = await request(app).get('/api/eval/large-eval/table?lean=true');
 
     expect(response.status).toBe(200);
     expect(response.headers['x-promptfoo-response-truncated']).toBe('true');
@@ -291,6 +300,23 @@ describe('GET /api/eval/:id/table large payload handling', () => {
       reason: oversized,
       comment: 'full comment',
     });
+  });
+
+  it('handles object outputs that overflow text serialization before sending detail', async () => {
+    const output = { message: 'local object' };
+    vi.spyOn(EvalResult, 'findById').mockResolvedValue({
+      id: 'output-1',
+      evalId: 'large-eval',
+      prompt: { raw: 'prompt' },
+      response: { output },
+      testCase: {},
+      success: true,
+    } as unknown as EvalResult);
+    mockNextPayloadStringifyRangeError((value) => value === output);
+
+    const response = await request(app).get('/api/eval/large-eval/results/output-1/detail');
+    expect(response.status).toBe(200);
+    expect(response.body.response.output).toEqual(output);
   });
 
   it('returns full config from the config detail endpoint', async () => {

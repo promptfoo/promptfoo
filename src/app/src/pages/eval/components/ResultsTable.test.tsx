@@ -47,6 +47,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 });
 
 vi.mock('@app/utils/api', () => ({
+  clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 

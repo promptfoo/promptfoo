@@ -15,6 +15,7 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -45,7 +46,7 @@ function getResultDetailText(result: EvalResult): string {
   const rawOutput = result.response?.output;
   const outputText =
     rawOutput !== null && typeof rawOutput === 'object'
-      ? JSON.stringify(rawOutput)
+      ? safeJsonStringify(rawOutput) || ''
       : rawOutput == null || rawOutput === ''
         ? result.error || ''
         : String(rawOutput);
@@ -288,6 +289,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   const {
     format,
+    lean,
     limit: baseLimit,
     offset: baseOffset,
     filterMode,
@@ -433,15 +435,17 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   // Version 3 evals persist the client table for legacy manual-rating updates.
   // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
   const isLegacyTable = eval_.version() < 4;
-  const tableForResponse = isLegacyTable ? returnTable : trimEvalTableForApi(returnTable);
-  const leanConfig = trimEvalConfigForTableApi(redactAzureBlobSasTokens(eval_.config));
+  const useLeanTable = lean === 'true' && !isLegacyTable;
+  const tableForResponse = useLeanTable ? trimEvalTableForApi(returnTable) : returnTable;
+  const config = redactAzureBlobSasTokens(eval_.config);
+  const configForResponse = useLeanTable ? trimEvalConfigForTableApi(config) : { config };
   const responsePayload = EvalSchemas.Table.Response.parse({
     table: tableForResponse,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: leanConfig.config,
-    configDetail: leanConfig.detail,
+    config: configForResponse.config,
+    configDetail: 'detail' in configForResponse ? configForResponse.detail : undefined,
     author: eval_.author || null,
     version: eval_.version(),
     id,
@@ -454,7 +458,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     // Legacy v3 clients PATCH the whole table back via saveManualRating; returning
     // placeholder strings on overflow would silently overwrite stored content, so
     // we return 413 instead and let the client surface the error.
-    stripOversizedStringsOnRangeError: !isLegacyTable,
+    stripOversizedStringsOnRangeError: useLeanTable,
     tooLargeMessage: 'Eval table response is too large to serialize',
   });
 });
@@ -487,10 +491,6 @@ evalRouter.get(
         metadata: result.metadata,
         gradingResult: result.gradingResult,
         text: getResultDetailText(result),
-        output: result.response?.output,
-        audio: result.response?.audio,
-        video: result.response?.video,
-        images: result.response?.images,
       });
 
       sendJsonResponse(res, responsePayload, {

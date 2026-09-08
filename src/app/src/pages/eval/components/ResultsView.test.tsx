@@ -492,6 +492,31 @@ describe('ResultsView Share Button', () => {
     });
   });
 
+  it('ignores a late edit-and-rerun config response after leaving the eval', async () => {
+    let resolveConfig!: (value: { config: { description: string } }) => void;
+    mockFetchEvalConfig.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveConfig = resolve;
+        }),
+    );
+    const view = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+    await waitFor(() => expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id'));
+
+    view.unmount();
+    await act(async () => resolveConfig({ config: { description: 'old eval' } }));
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalledWith('/setup', expect.anything());
+  });
+
   it('hides eval actions while config is loading', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',

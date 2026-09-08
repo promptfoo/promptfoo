@@ -1399,7 +1399,7 @@ function EvalOutputCell({
     setCellDetail(null);
     setDetailLoading(false);
     setDetailError(null);
-  }, [detailEvalId, output.id]);
+  }, [detailEvalId, output.id, output.gradingResult]);
 
   React.useEffect(() => {
     return () => {
@@ -1598,11 +1598,20 @@ function EvalOutputCell({
     setCommentDraftText(newCommentText);
   };
 
-  const text = stringifyOutputText(output.text);
+  const detailResponse = cellDetail?.response as ProviderResponse | undefined;
+  const renderedOutput = detailResponse
+    ? {
+        ...output,
+        audio: detailResponse.audio ?? output.audio,
+        video: detailResponse.video ?? output.video,
+        images: detailResponse.images ?? output.images,
+      }
+    : output;
+  const text = stringifyOutputText(cellDetail?.text ?? output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
-  const outputAudioSource = resolveAudioSource(output.audio);
+  const outputAudioSource = resolveAudioSource(renderedOutput.audio);
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
@@ -1619,7 +1628,7 @@ function EvalOutputCell({
   const responseAudioSource = resolveAudioSource(responseAudio);
 
   const node = renderOutputNode({
-    output,
+    output: renderedOutput,
     firstOutput,
     showDiffs,
     searchText,

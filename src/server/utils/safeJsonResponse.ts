@@ -35,7 +35,10 @@ export function stripOversizedStrings<T>(
 ): T {
   const seen = new WeakSet<object>();
 
-  function stripValue(current: unknown): unknown {
+  function stripValue(current: unknown, depth = 0): unknown {
+    if (depth > 512) {
+      return '[content omitted: excessive nesting]';
+    }
     if (typeof current === 'string') {
       if (current.length <= maxStringLength) {
         return current;
@@ -54,21 +57,21 @@ export function stripOversizedStrings<T>(
       seen.add(current);
 
       if (Array.isArray(current)) {
-        const stripped = current.map(stripValue);
+        const stripped = current.map((child) => stripValue(child, depth + 1));
         seen.delete(current);
         return stripped;
       }
 
       const toJSON = (current as { toJSON?: () => unknown }).toJSON;
       if (typeof toJSON === 'function') {
-        const stripped = stripValue(toJSON.call(current));
+        const stripped = stripValue(toJSON.call(current), depth + 1);
         seen.delete(current);
         return stripped;
       }
 
       const stripped: Record<string, unknown> = {};
       for (const [key, child] of Object.entries(current)) {
-        stripped[key] = stripValue(child);
+        stripped[key] = stripValue(child, depth + 1);
       }
 
       seen.delete(current);

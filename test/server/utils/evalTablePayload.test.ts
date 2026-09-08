@@ -168,6 +168,7 @@ describe('trimEvalTableForApi', () => {
       'testCase',
       'metadata',
       'gradingResult',
+      'media',
     ]);
     expect(cell.audio?.data).toBe('short-audio');
     expect(cell.metadata?.redteamHistory).toEqual([
@@ -177,7 +178,7 @@ describe('trimEvalTableForApi', () => {
     ]);
     expect(cell.video?.url).toBe('https://example.test/video.mp4');
     expect(cell.video?.thumbnail).toBe('short-thumb');
-    expect(cell.images?.map((image) => image.data)).toEqual(['short-image', 'blobref:image-1']);
+    expect(cell.images?.map((image) => image.data)).toEqual(['short-image', undefined]);
   });
 
   it('moves generated tests and default tests out of the table config payload', () => {

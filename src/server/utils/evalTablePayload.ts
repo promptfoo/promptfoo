@@ -4,16 +4,14 @@ import {
   stripOversizedStrings,
 } from './safeJsonResponse';
 
-const RESULT_FAILURE_NONE = 0;
 const EVAL_CONFIG_DETAIL_FIELDS = ['tests', 'defaultTest', 'scenarios'] as const;
-const EVAL_TABLE_CELL_DETAIL_FIELDS = [
+const BASE_CELL_DETAIL_OMITTED_FIELDS = [
   'prompt',
   'response',
   'testCase',
   'metadata',
   'gradingResult',
-  'media',
-] as const;
+];
 
 type EvalConfigDetailField = (typeof EVAL_CONFIG_DETAIL_FIELDS)[number];
 
@@ -103,11 +101,6 @@ const DETAIL_ONLY_METADATA_KEYS = new Set([
   'citations',
 ]);
 
-// 'media' is appended at runtime only when media content was actually trimmed.
-const BASE_CELL_DETAIL_OMITTED_FIELDS = EVAL_TABLE_CELL_DETAIL_FIELDS.filter(
-  (field) => field !== 'media',
-);
-
 type TrimOptions = {
   maxStringLength?: number;
 };
@@ -122,16 +115,16 @@ function trimTextForTable(value: string | undefined, maxStringLength: number): s
 
 function isExternalMediaRef(value: string): boolean {
   return (
-    /^https?:\/\//i.test(value) ||
-    value.startsWith('blob:') ||
-    value.startsWith('blobref:') ||
-    value.startsWith('storageRef:')
+    /^https?:\/\//i.test(value) || value.startsWith('blob:') || value.startsWith('storageRef:')
   );
 }
 
 function trimMediaData(value: string | undefined, maxStringLength: number) {
   if (!value) {
     return { value, omitted: false };
+  }
+  if (value.startsWith('blobref:')) {
+    return { value: undefined, omitted: true };
   }
   if (value.length <= maxStringLength || isExternalMediaRef(value)) {
     return { value, omitted: false };
@@ -268,13 +261,6 @@ function trimTestCaseForTable(testCase: TestCaseLike, maxStringLength: number): 
   return trimForTable(rest, maxStringLength) as TestCaseLike;
 }
 
-function trimPromptForTable<T extends PromptLike>(prompt: T, maxStringLength: number): T {
-  return {
-    ...trimForTable(prompt, maxStringLength),
-    raw: trimTextForTable(prompt.raw, maxStringLength),
-  } as T;
-}
-
 export function trimTableCellForApi<T extends TableCellLike>(
   cell: T | null | undefined,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
@@ -298,7 +284,7 @@ export function trimTableCellForApi<T extends TableCellLike>(
     score: cell.score,
     cost: cell.cost ?? 0,
     latencyMs: cell.latencyMs ?? 0,
-    failureReason: cell.failureReason ?? RESULT_FAILURE_NONE,
+    failureReason: cell.failureReason ?? 0,
     namedScores: cell.namedScores ?? {},
     gradingResult: trimForTable(cell.gradingResult, maxStringLength),
     tokenUsage: cell.tokenUsage,
@@ -336,7 +322,7 @@ export function trimEvalTableForApi<T extends TableLike>(
     ...table,
     head: {
       ...table.head,
-      prompts: table.head.prompts.map((prompt) => trimPromptForTable(prompt, maxStringLength)),
+      prompts: table.head.prompts.map((prompt) => trimForTable(prompt, maxStringLength)),
     },
     body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
   } as T;

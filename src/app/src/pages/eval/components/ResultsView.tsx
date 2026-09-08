@@ -282,6 +282,13 @@ export default function ResultsView({
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
+  const rerunEvalIdRef = React.useRef<string | null | undefined>(evalId);
+  React.useEffect(() => {
+    rerunEvalIdRef.current = evalId;
+    return () => {
+      rerunEvalIdRef.current = undefined;
+    };
+  }, [evalId]);
 
   const { showToast } = useToast();
   const initialSearchText = searchParams.get('search') || '';
@@ -598,16 +605,24 @@ export default function ResultsView({
       setIsLoadingRerunConfig(true);
 
       const configToEdit = evalId ? (await fetchEvalConfig(evalId)).config : config;
+      if (rerunEvalIdRef.current !== evalId) {
+        return;
+      }
       updateConfig(configToEdit);
       navigate(ROUTES.SETUP, { state: { sourceEvalId: evalId } });
     } catch (error) {
+      if (rerunEvalIdRef.current !== evalId) {
+        return;
+      }
       console.error('Failed to load eval config for editing:', error);
       showToast(
         `Failed to load eval config: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'error',
       );
     } finally {
-      setIsLoadingRerunConfig(false);
+      if (rerunEvalIdRef.current === evalId) {
+        setIsLoadingRerunConfig(false);
+      }
     }
   }, [config, evalId, navigate, showToast, updateConfig]);
 

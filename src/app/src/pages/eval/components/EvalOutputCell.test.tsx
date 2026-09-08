@@ -738,6 +738,55 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
+  it('shows an updated rating comment after an earlier detail was loaded', async () => {
+    const user = userEvent.setup();
+    const output: MockEvalOutputCellProps['output'] = {
+      ...defaultProps.output,
+      detail: { available: true, omittedFields: ['gradingResult'] },
+      gradingResult: {
+        ...defaultProps.output.gradingResult,
+        pass: true,
+        score: 1,
+        reason: 'rated',
+        comment: 'old comment',
+      },
+    };
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'prompt',
+      text: 'output',
+      gradingResult: { comment: 'old comment' },
+    });
+    const view = renderWithProviders(
+      <EvalOutputCell {...defaultProps} evaluationId="eval-1" output={output} />,
+    );
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await screen.findByTestId('dialog-component');
+    await user.keyboard('{Escape}');
+
+    view.rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...output,
+            gradingResult: {
+              ...output.gradingResult,
+              pass: true,
+              score: 1,
+              reason: 'rated',
+              comment: 'new comment',
+            },
+          }}
+        />
+      </ShiftKeyProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    expect(screen.getByRole('textbox')).toHaveValue('new comment');
+  });
+
   it('restores oversized redteam response audio from hydrated detail', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchEvalResultDetail).mockResolvedValue({
@@ -745,6 +794,7 @@ describe('EvalOutputCell', () => {
       resultId: 'test-id',
       prompt: 'Hydrated prompt',
       text: 'Hydrated output',
+      response: { audio: { data: 'fulltopaudio', format: 'wav' } },
       metadata: {
         redteamHistory: [
           {
@@ -778,6 +828,10 @@ describe('EvalOutputCell', () => {
     await user.click(screen.getByRole('button', { name: 'Load prompt' }));
 
     const player = await screen.findByTestId('response-audio-player');
+    expect(screen.getByTestId('audio-player').querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/wav;base64,fulltopaudio',
+    );
     expect(player.querySelector('source')).toHaveAttribute(
       'src',
       'data:audio/wav;base64,full-audio',

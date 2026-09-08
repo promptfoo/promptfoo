@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApi, clearEvalApiResponseCache } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -1689,6 +1689,9 @@ function ResultsTable({
       });
 
       setTable(newTable);
+      if (evalId) {
+        clearEvalApiResponseCache(evalId);
+      }
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {

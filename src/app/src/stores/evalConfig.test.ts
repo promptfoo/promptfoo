@@ -1675,6 +1675,16 @@ describe('evalConfig store', () => {
       });
     });
 
+    it('drops providers when their config alone exceeds the persistence limit', () => {
+      const config = {
+        providers: [
+          { id: 'echo', config: { schema: 'plain text '.repeat(MAX_PERSISTED_EVAL_CONFIG_BYTES) } },
+        ],
+      } as Partial<UnifiedConfig>;
+
+      expect(getPersistableEvalConfig(config)).toEqual(DEFAULT_CONFIG);
+    });
+
     it('fails closed when config serialization fails', () => {
       const config = {
         description: 'Circular config',
