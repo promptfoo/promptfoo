@@ -1841,7 +1841,7 @@ tests:
 
 ### Classifier
 
-The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+The `classifier` assertion runs the LLM output through a compatible HuggingFace text-classification or token-classification endpoint. A model on the Hub must also be hosted for the required task, or deployed to your own endpoint. This is useful for:
 
 - Sentiment analysis
 - Toxicity detection
@@ -1859,12 +1859,15 @@ assert:
     threshold: 0.5
 ```
 
-Example for PII detection (using negation):
+Example for PII detection (using negation). The gated `bigcode/starpii` model currently has no Inference Provider deployment; set `HF_STARPII_ENDPOINT` to a compatible token-classification endpoint you have deployed. See [classifier setup](./classifier.md#pii-detection-example).
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     threshold: 0.75
 ```
 
