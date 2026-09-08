@@ -7,6 +7,131 @@ interface QueuedRequest {
   queuedAt: number;
 }
 
+export interface DequeNode<T> {
+  value: T;
+  prev: DequeNode<T> | null;
+  next: DequeNode<T> | null;
+}
+
+/**
+ * An O(1) Doubly Linked Deque with a Hash Map index by ID.
+ *
+ * Provides:
+ * - O(1) push (enqueue to tail)
+ * - O(1) shift (dequeue from head)
+ * - O(1) remove (remove arbitrary node by ID, e.g. for timeouts/cancellations)
+ * - O(1) length getter
+ * - O(N) drain (empty all nodes into an array)
+ */
+export class IndexedDeque<T extends { id: string }> {
+  private head: DequeNode<T> | null = null;
+  private tail: DequeNode<T> | null = null;
+  private nodeMap = new Map<string, Set<DequeNode<T>>>();
+  private _size = 0;
+
+  get length(): number {
+    return this._size;
+  }
+
+  /**
+   * Push an item to the back of the queue (O(1)).
+   */
+  push(value: T): void {
+    const node: DequeNode<T> = { value, prev: this.tail, next: null };
+    if (this.tail) {
+      this.tail.next = node;
+      this.tail = node;
+    } else {
+      this.head = this.tail = node;
+    }
+
+    let nodeSet = this.nodeMap.get(value.id);
+    if (!nodeSet) {
+      nodeSet = new Set();
+      this.nodeMap.set(value.id, nodeSet);
+    }
+    nodeSet.add(node);
+    this._size++;
+  }
+
+  /**
+   * Pop an item from the front of the queue (O(1)).
+   */
+  shift(): T | undefined {
+    if (!this.head) {
+      return undefined;
+    }
+    const node = this.head;
+    this.head = node.next;
+    if (this.head) {
+      this.head.prev = null;
+    } else {
+      this.tail = null;
+    }
+
+    const nodeSet = this.nodeMap.get(node.value.id);
+    if (nodeSet) {
+      nodeSet.delete(node);
+      if (nodeSet.size === 0) {
+        this.nodeMap.delete(node.value.id);
+      }
+    }
+
+    this._size--;
+    return node.value;
+  }
+
+  /**
+   * Remove an item by ID from anywhere in the queue (O(1)).
+   * If multiple queued items share the same ID, removes the earliest queued item (FIFO).
+   */
+  remove(id: string): T | undefined {
+    const nodeSet = this.nodeMap.get(id);
+    if (!nodeSet || nodeSet.size === 0) {
+      return undefined;
+    }
+
+    // Get the earliest queued node with this ID
+    const node = nodeSet.values().next().value!;
+    nodeSet.delete(node);
+    if (nodeSet.size === 0) {
+      this.nodeMap.delete(id);
+    }
+
+    if (node.prev) {
+      node.prev.next = node.next;
+    } else {
+      this.head = node.next;
+    }
+
+    if (node.next) {
+      node.next.prev = node.prev;
+    } else {
+      this.tail = node.prev;
+    }
+
+    this._size--;
+    return node.value;
+  }
+
+  /**
+   * Drain and clear all items from the queue (O(N)).
+   */
+  drain(): T[] {
+    const items: T[] = [];
+    let curr = this.head;
+    while (curr) {
+      items.push(curr.value);
+      curr = curr.next;
+    }
+    this.head = null;
+    this.tail = null;
+    this.nodeMap.clear();
+    this._size = 0;
+    return items;
+  }
+}
+
 export interface SlotQueueOptions {
   maxConcurrency: number;
   minConcurrency: number;
@@ -29,7 +154,7 @@ export class SlotQueue {
   private activeCount = 0;
   private maxConcurrency: number;
   private minConcurrency: number;
-  private waiting: QueuedRequest[] = [];
+  private waiting = new IndexedDeque<QueuedRequest>();
   private resetTimer: NodeJS.Timeout | null = null;
   private queueTimeoutMs: number;
 
@@ -63,10 +188,9 @@ export class SlotQueue {
       let timeoutId: NodeJS.Timeout | null = null;
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(() => {
-          // Remove from queue
-          const idx = this.waiting.findIndex((r) => r.id === requestId);
-          if (idx !== -1) {
-            this.waiting.splice(idx, 1);
+          // Remove from queue in O(1)
+          const removed = this.waiting.remove(requestId);
+          if (removed) {
             reject(
               new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
             );
@@ -90,7 +214,7 @@ export class SlotQueue {
         reject(error);
       };
 
-      // Always queue the request
+      // Always queue the request (O(1))
       this.waiting.push({
         id: requestId,
         resolve: wrappedResolve,
@@ -295,8 +419,7 @@ export class SlotQueue {
       this.resetTimer = null;
     }
     // Reject any waiting requests
-    const waiting = this.waiting;
-    this.waiting = [];
+    const waiting = this.waiting.drain();
     for (const request of waiting) {
       request.reject(new Error('Queue disposed'));
     }
