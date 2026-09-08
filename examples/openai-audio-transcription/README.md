@@ -2,6 +2,14 @@
 
 Compare GPT Transcribe with Whisper and GPT-4o transcription models using the included Moon landing recording.
 
+To copy the example into another project:
+
+```bash
+npx promptfoo@latest init --example openai-audio-transcription
+```
+
+If you run from the generated example directory, set `audio_file` to `sample-audio.mp3` before running `npx promptfoo eval`. The commands below assume the Promptfoo repository layout.
+
 ## Run the example
 
 From the repository root:
