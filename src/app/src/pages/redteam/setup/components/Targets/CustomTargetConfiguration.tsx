@@ -24,6 +24,8 @@ import {
   Server,
   Terminal,
 } from 'lucide-react';
+import { getProviderDocumentationUrl } from './providerDocumentationMap';
+import { getProviderInitialConfig } from './providerInitialConfig';
 
 import type { ProviderOptions } from '../../types';
 
@@ -66,6 +68,93 @@ const highlightJSON = (code: string): string => {
 };
 
 const getProviderConfig = (providerType?: string): ProviderConfig => {
+  const initialConfig = providerType ? getProviderInitialConfig(providerType) : undefined;
+  const initialGuidance: Record<string, { title: string; helpText: string }> = {
+    together: {
+      title: 'Together AI',
+      helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY or apiKey.',
+    },
+    huggingface: {
+      title: 'Hugging Face',
+      helpText:
+        'Use a chat model hosted by an Inference Provider with HF_TOKEN. Hub artifacts alone do not guarantee hosted inference. You can append :provider to select a host or set apiBaseUrl for your own compatible endpoint.',
+    },
+    'bedrock-agent': {
+      title: 'AWS Bedrock Agents',
+      helpText:
+        'Replace the agent ID and agentAliasId with your deployed agent and alias. Configure AWS credentials and the agent region.',
+    },
+    fal: {
+      title: 'fal.ai Images',
+      helpText: 'Use an image model ID with the fal:image: prefix. Configure FAL_KEY or apiKey.',
+    },
+    'cloudflare-ai': {
+      title: 'Cloudflare Workers AI',
+      helpText:
+        'Use a Workers AI chat model. Configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_KEY, or accountId and apiKey.',
+    },
+    'llama.cpp': {
+      title: 'llama.cpp',
+      helpText:
+        'Start the native llama.cpp server. The target ID is a label for the loaded model. Set LLAMA_BASE_URL on the Promptfoo server to change http://localhost:8080; apiBaseUrl in this JSON is not used by the native adapter.',
+    },
+    llamafile: {
+      title: 'Llamafile',
+      helpText:
+        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+    },
+    vllm: {
+      title: 'vLLM',
+      helpText:
+        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+    },
+    'text-generation-webui': {
+      title: 'Text Generation WebUI',
+      helpText:
+        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. The placeholder apiKey is for a local server without authentication; replace it if your server requires a key.',
+    },
+    ollama: {
+      title: 'Ollama',
+      helpText:
+        'Start Ollama and pull llama3.2:3b, or replace the model name with an installed model. This target uses the completion API; use ollama:chat: for chat. Set OLLAMA_BASE_URL on the Promptfoo server to change the server URL.',
+    },
+    databricks: {
+      title: 'Databricks',
+      helpText:
+        'Use a chat serving endpoint available in your Databricks workspace. You can replace the managed endpoint name with your own deployment name. Configure DATABRICKS_WORKSPACE_URL and DATABRICKS_TOKEN, or workspaceUrl and apiKey.',
+    },
+    deepseek: {
+      title: 'DeepSeek',
+      helpText:
+        'Use a DeepSeek model ID with DEEPSEEK_API_KEY or apiKey. This example disables thinking for a non-reasoning chat target.',
+    },
+    cerebras: {
+      title: 'Cerebras',
+      helpText: 'Use a Cerebras-hosted model ID. Configure CEREBRAS_API_KEY or apiKey.',
+    },
+    groq: {
+      title: 'Groq',
+      helpText: 'Use a Groq-hosted model ID. Configure GROQ_API_KEY or apiKey.',
+    },
+  };
+  const guidance = providerType ? initialGuidance[providerType] : undefined;
+  if (initialConfig && guidance && providerType) {
+    return {
+      title: guidance.title,
+      icon: <Server className="size-5 text-primary" />,
+      targetIdLabel: 'Target ID',
+      targetIdPlaceholder: initialConfig.id,
+      helpText: guidance.helpText,
+      docUrl: getProviderDocumentationUrl(providerType),
+      examples: {
+        title: `${guidance.title} Target Example`,
+        items: [{ code: initialConfig.id, description: 'Initial target configuration' }],
+      },
+      configExample: initialConfig.config,
+      configDescription: 'Provider connection settings and model parameters',
+    };
+  }
+
   switch (providerType) {
     case 'python':
       return {
@@ -262,54 +351,6 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
       };
 
     // Local model providers
-    case 'ollama':
-      return {
-        title: 'Ollama',
-        icon: <Server className="size-5 text-primary" />,
-        targetIdLabel: 'Model Name',
-        targetIdPlaceholder: 'ollama:llama3.2 or ollama:chat:mistral',
-        helpText: <>Ollama model name. Make sure Ollama is running locally.</>,
-        docUrl: 'https://www.promptfoo.dev/docs/providers/ollama/',
-        examples: {
-          title: 'Ollama Model Examples',
-          items: [
-            { code: 'ollama:llama3.2', description: 'Llama 3.2 (completion)' },
-            { code: 'ollama:chat:llama3.2', description: 'Llama 3.2 (chat)' },
-            { code: 'ollama:mistral', description: 'Mistral' },
-            { code: 'ollama:codellama', description: 'Code Llama' },
-          ],
-        },
-        configExample: {
-          baseUrl: 'http://localhost:11434',
-          temperature: 0.7,
-          num_predict: 1024,
-        },
-        configDescription: 'Ollama server URL and model parameters',
-      };
-
-    case 'vllm':
-      return {
-        title: 'vLLM',
-        icon: <Server className="size-5 text-primary" />,
-        targetIdLabel: 'Model Path',
-        targetIdPlaceholder: 'vllm:meta-llama/Llama-2-7b-hf',
-        helpText: <>vLLM model path. Can be a HuggingFace model ID or local path.</>,
-        docUrl: 'https://www.promptfoo.dev/docs/providers/vllm/',
-        examples: {
-          title: 'vLLM Model Examples',
-          items: [
-            { code: 'vllm:meta-llama/Llama-2-7b-hf', description: 'HuggingFace model' },
-            { code: 'vllm:/path/to/model', description: 'Local model path' },
-          ],
-        },
-        configExample: {
-          baseUrl: 'http://localhost:8000',
-          temperature: 0.7,
-          max_tokens: 1024,
-        },
-        configDescription: 'vLLM server URL and generation parameters',
-      };
-
     case 'localai':
       return {
         title: 'LocalAI',
@@ -330,34 +371,6 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
           temperature: 0.7,
         },
         configDescription: 'LocalAI server URL and parameters',
-      };
-
-    case 'llamafile':
-    case 'llama.cpp':
-      return {
-        title: providerType === 'llamafile' ? 'Llamafile' : 'llama.cpp',
-        icon: <Server className="size-5 text-primary" />,
-        targetIdLabel: 'Server URL',
-        targetIdPlaceholder: `${providerType}:http://localhost:8080`,
-        helpText: (
-          <>
-            {providerType === 'llamafile' ? 'Llamafile' : 'llama.cpp'} server URL. Start the server
-            first.
-          </>
-        ),
-        docUrl: 'https://www.promptfoo.dev/docs/providers/llama.cpp/',
-        examples: {
-          title: `${providerType === 'llamafile' ? 'Llamafile' : 'llama.cpp'} Examples`,
-          items: [
-            { code: `${providerType}:http://localhost:8080`, description: 'Default local server' },
-            { code: `${providerType}:http://192.168.1.100:8080`, description: 'Remote server' },
-          ],
-        },
-        configExample: {
-          temperature: 0.7,
-          n_predict: 1024,
-        },
-        configDescription: 'Generation parameters',
       };
 
     // Open Interpreter coding-agent target

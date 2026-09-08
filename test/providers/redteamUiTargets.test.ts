@@ -1,0 +1,329 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
+import { mockProcessEnv } from '../util/utils';
+
+const { send, subscribe } = vi.hoisted(() => ({ send: vi.fn(), subscribe: vi.fn() }));
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+  isCacheEnabled: () => false,
+}));
+vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => ({
+  ...(await importOriginal()),
+  BedrockAgentRuntimeClient: vi.fn(function () {
+    return { send };
+  }),
+}));
+vi.mock('@fal-ai/client', () => ({
+  createFalClient: vi.fn(() => ({ subscribe })),
+}));
+
+let initialConfigs: Record<string, { id: string; config: Record<string, unknown> }>;
+
+beforeAll(() => {
+  // The app owns this browser-only module in a separate TypeScript project. Read its
+  // actual exports through that runtime boundary instead of importing app source
+  // into the backend compiler project.
+  const helperUrl = new URL(
+    '../../src/app/src/pages/redteam/setup/components/Targets/providerInitialConfig.ts',
+    import.meta.url,
+  );
+  const providerTypes = [
+    'together',
+    'huggingface',
+    'bedrock-agent',
+    'fal',
+    'cloudflare-ai',
+    'llama.cpp',
+    'llamafile',
+    'vllm',
+    'text-generation-webui',
+    'ollama',
+    'databricks',
+    'deepseek',
+    'groq',
+    'cerebras',
+  ];
+  const script = `
+    const { getProviderInitialConfig } = await import(${JSON.stringify(helperUrl.href)});
+    console.log(JSON.stringify(Object.fromEntries(
+      ${JSON.stringify(providerTypes)}.map(type => [type, getProviderInitialConfig(type)])
+    )));
+  `;
+  initialConfigs = JSON.parse(
+    execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      cwd: fileURLToPath(new URL('../../', import.meta.url)),
+      encoding: 'utf8',
+    }),
+  );
+});
+
+function initialConfig(providerType: string) {
+  const config = initialConfigs[providerType];
+  if (!config) {
+    throw new Error(`No initial configuration for ${providerType}`);
+  }
+  return structuredClone(config);
+}
+
+const chatResponse = {
+  data: {
+    choices: [
+      { message: { role: 'assistant', content: 'Hello from the fixture' }, finish_reason: 'stop' },
+    ],
+    usage: { prompt_tokens: 3, completion_tokens: 5, total_tokens: 8 },
+  },
+  cached: false,
+  status: 200,
+  statusText: 'OK',
+};
+
+let restoreEnv: () => void;
+beforeEach(() => {
+  vi.mocked(fetchWithCache).mockReset().mockResolvedValue(chatResponse);
+  send.mockReset();
+  subscribe.mockReset();
+  restoreEnv = mockProcessEnv({
+    OPENAI_API_KEY: 'unrelated-openai-key',
+    LLAMA_BASE_URL: 'http://127.0.0.1:8099',
+    HF_TOKEN: 'test-hf-token',
+    TOGETHER_API_KEY: 'test-together-key',
+    DEEPSEEK_API_KEY: 'test-deepseek-key',
+    GROQ_API_KEY: 'test-groq-key',
+    CEREBRAS_API_KEY: 'test-cerebras-key',
+    CLOUDFLARE_ACCOUNT_ID: 'test-account',
+    CLOUDFLARE_API_KEY: 'test-cloudflare-key',
+    DATABRICKS_WORKSPACE_URL: 'https://workspace.example.invalid',
+    DATABRICKS_TOKEN: 'test-databricks-token',
+    FAL_KEY: 'test-fal-key',
+  });
+});
+afterEach(() => {
+  restoreEnv();
+  vi.restoreAllMocks();
+});
+
+describe('redteam UI initial target runtime contracts', () => {
+  it.each([
+    [
+      'together',
+      'OpenAiChatCompletionProvider',
+      'https://api.together.xyz/v1/chat/completions',
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    ],
+    [
+      'huggingface',
+      'HuggingfaceChatCompletionProvider',
+      'https://router.huggingface.co/v1/chat/completions',
+      'meta-llama/Meta-Llama-3-70B-Instruct',
+    ],
+    [
+      'cloudflare-ai',
+      'CloudflareAiChatCompletionProvider',
+      'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    ],
+    [
+      'databricks',
+      'DatabricksMosaicAiChatCompletionProvider',
+      'https://workspace.example.invalid/serving-endpoints/chat/completions',
+      'databricks-meta-llama-3-3-70b-instruct',
+    ],
+    [
+      'deepseek',
+      'DeepSeekProvider',
+      'https://api.deepseek.com/v1/chat/completions',
+      'deepseek-v4-flash',
+    ],
+    [
+      'groq',
+      'GroqProvider',
+      'https://api.groq.com/openai/v1/chat/completions',
+      'openai/gpt-oss-120b',
+    ],
+    ['cerebras', 'CerebrasProvider', 'https://api.cerebras.ai/v1/chat/completions', 'gpt-oss-120b'],
+  ])(
+    'routes %s through its chat adapter and emits its model',
+    async (type, className, url, model) => {
+      const target = initialConfig(type);
+      const provider = await loadApiProvider(target.id, { options: target });
+      expect(provider.constructor.name).toBe(className);
+      const result = await provider.callApi('Say hello');
+      expect(result.output).toBe('Hello from the fixture');
+      expect(result.tokenUsage).toMatchObject({ prompt: 3, completion: 5, total: 8 });
+      const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(requestUrl).toBe(url);
+      expect(JSON.parse(request!.body as string)).toMatchObject({
+        model,
+        messages: [{ role: 'user', content: 'Say hello' }],
+      });
+      expect(request!.headers).not.toMatchObject({ Authorization: 'Bearer unrelated-openai-key' });
+      if (type === 'deepseek') {
+        expect(JSON.parse(request!.body as string).thinking).toEqual({ type: 'disabled' });
+      }
+    },
+  );
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'uses %s local chat settings without inheriting hosted credentials',
+    async (type) => {
+      const target = initialConfig(type);
+      const provider = await loadApiProvider(target.id, { options: target });
+      expect(provider.constructor.name).toBe('OpenAiChatCompletionProvider');
+      const result = await provider.callApi('Say hello');
+      expect(result.output).toBe('Hello from the fixture');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`${target.config.apiBaseUrl}/chat/completions`);
+      expect(request!.headers).toMatchObject({ Authorization: 'Bearer not-needed' });
+      expect(JSON.parse(request!.body as string).model).toBe(
+        target.id.slice('openai:chat:'.length),
+      );
+    },
+  );
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'preserves %s served names, custom URLs and server keys',
+    async (type) => {
+      const target = initialConfig(type);
+      target.id = 'openai:chat:tenant/models/local:quantized';
+      target.config.apiBaseUrl = 'http://127.0.0.1:8999/custom/v1';
+      target.config.apiKey = 'local-server-key';
+      const provider = await loadApiProvider(target.id, { options: target });
+      await provider.callApi('Say hello');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('http://127.0.0.1:8999/custom/v1/chat/completions');
+      expect(request!.headers).toMatchObject({ Authorization: 'Bearer local-server-key' });
+      expect(JSON.parse(request!.body as string).model).toBe('tenant/models/local:quantized');
+    },
+  );
+
+  it.each([
+    'together',
+    'huggingface',
+    'cloudflare-ai',
+    'databricks',
+    'deepseek',
+    'groq',
+    'cerebras',
+    'llamafile',
+    'vllm',
+    'text-generation-webui',
+  ])('surfaces a rejected %s request', async (type) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'Unknown served model' } },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    const target = initialConfig(type);
+    const provider = await loadApiProvider(target.id, { options: target });
+    const result = await provider.callApi('Say hello');
+    expect(result.error).toContain('Unknown served model');
+    expect(result.output).toBeUndefined();
+  });
+
+  it('uses the native llama.cpp completion API and LLAMA_BASE_URL', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { content: 'Native fixture' },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const target = initialConfig('llama.cpp');
+    const provider = await loadApiProvider(target.id, { options: target });
+    expect(provider.constructor.name).toBe('LlamaProvider');
+    expect(await provider.callApi('Say hello')).toMatchObject({ output: 'Native fixture' });
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:8099/completion');
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      prompt: 'Say hello',
+      n_predict: 1024,
+    });
+    expect(request!.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('uses the modest Ollama tag on the completion API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: JSON.stringify({
+        response: 'Local fixture',
+        done: true,
+        eval_count: 5,
+        prompt_eval_count: 3,
+      }),
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const target = initialConfig('ollama');
+    const provider = await loadApiProvider(target.id, { options: target });
+    expect(provider.constructor.name).toBe('OllamaCompletionProvider');
+    expect(await provider.callApi('Say hello')).toMatchObject({ output: 'Local fixture' });
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('http://localhost:11434/api/generate');
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      model: 'llama3.2:3b',
+      prompt: 'Say hello',
+    });
+  });
+
+  it('invokes the selected Bedrock agent and alias instead of a foundation model', async () => {
+    send.mockResolvedValue({
+      completion: (async function* () {
+        yield { chunk: { bytes: new TextEncoder().encode('Agent fixture') } };
+      })(),
+    });
+    const target = initialConfig('bedrock-agent');
+    target.id = 'bedrock:agents:AGENT12345';
+    target.config.agentAliasId = 'ALIAS12345';
+    const provider = await loadApiProvider(target.id, { options: target });
+    expect(provider.constructor.name).toBe('AwsBedrockAgentsProvider');
+    expect(await provider.callApi('Say hello')).toMatchObject({ output: 'Agent fixture' });
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][0].constructor.name).toBe('InvokeAgentCommand');
+    expect(send.mock.calls[0][0].input).toMatchObject({
+      agentId: 'AGENT12345',
+      agentAliasId: 'ALIAS12345',
+      inputText: 'Say hello',
+    });
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing Bedrock agent alias before an SDK request', async () => {
+    const target = initialConfig('bedrock-agent');
+    delete target.config.agentAliasId;
+    const provider = await loadApiProvider(target.id, { options: target });
+    expect(await provider.callApi('Say hello')).toMatchObject({
+      error: expect.stringContaining('Agent Alias ID is required'),
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('routes Fal to image generation and returns the image response', async () => {
+    subscribe.mockResolvedValue({
+      data: { images: [{ url: 'https://fixture.invalid/image.png' }] },
+    });
+    const target = initialConfig('fal');
+    const provider = await loadApiProvider(target.id, { options: target });
+    expect(provider.constructor.name).toBe('FalImageGenerationProvider');
+    expect(await provider.callApi('A blue circle')).toMatchObject({
+      output: '![A blue circle](https://fixture.invalid/image.png)',
+    });
+    expect(subscribe).toHaveBeenCalledWith('fal-ai/flux/dev', {
+      input: expect.objectContaining({ prompt: 'A blue circle' }),
+    });
+  });
+
+  it('preserves an arbitrary Databricks deployment name in the chat request', async () => {
+    const target = initialConfig('databricks');
+    target.id = 'databricks:our-private-endpoint';
+    const provider = await loadApiProvider(target.id, { options: target });
+    await provider.callApi('Say hello');
+    expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string).model).toBe(
+      'our-private-endpoint',
+    );
+  });
+});

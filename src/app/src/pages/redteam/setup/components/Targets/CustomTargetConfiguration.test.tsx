@@ -5,6 +5,7 @@ import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { getProviderInitialConfig } from './providerInitialConfig';
 
 import type { ProviderOptions } from '../../types';
 
@@ -33,6 +34,51 @@ const replaceText = async (
 };
 
 describe('CustomTargetConfiguration', () => {
+  it.each([
+    'together',
+    'huggingface',
+    'bedrock-agent',
+    'fal',
+    'cloudflare-ai',
+    'llama.cpp',
+    'llamafile',
+    'vllm',
+    'text-generation-webui',
+    'ollama',
+    'databricks',
+    'deepseek',
+    'groq',
+    'cerebras',
+  ])(
+    'shows the generated %s configuration without replacing a user target',
+    async (providerType) => {
+      const user = userEvent.setup();
+      const initialConfig = getProviderInitialConfig(providerType)!;
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'my-existing-target', config: { apiKey: 'my-server-key' } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson='{"apiKey":"my-server-key"}'
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={providerType}
+        />,
+      );
+      const target = screen.getByLabelText(/Target ID/i);
+      expect(target).toHaveAttribute('placeholder', initialConfig.id);
+      expect(target).toHaveValue('my-existing-target');
+      await user.click(screen.getByRole('button', { name: /Examples/i }));
+      const example = screen.getByText((_, element) => element?.tagName === 'PRE');
+      expect(JSON.parse(example.textContent!)).toEqual(initialConfig.config);
+      expect(updateCustomTarget).not.toHaveBeenCalled();
+      if (providerType === 'llama.cpp') {
+        expect(screen.getByText(/Set LLAMA_BASE_URL/)).toBeInTheDocument();
+        expect(example.textContent).not.toContain('apiBaseUrl');
+      }
+    },
+  );
+
   it('shows valid Open Interpreter target and configuration examples', async () => {
     const user = userEvent.setup();
 

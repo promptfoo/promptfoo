@@ -13,6 +13,7 @@ import {
 } from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
+import { getProviderInitialConfig } from './providerInitialConfig';
 
 import type { ProviderOptions } from '../../types';
 
@@ -494,7 +495,10 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    if (value === 'javascript') {
+    const initialConfig = getProviderInitialConfig(value);
+    if (initialConfig) {
+      setProvider({ ...initialConfig, label: currentLabel }, value);
+    } else if (value === 'javascript') {
       setProvider(
         {
           id: 'file:///path/to/custom_provider.js',
@@ -635,24 +639,6 @@ export default function ProviderTypeSelector({
         },
         'cohere',
       );
-    } else if (value === 'groq') {
-      setProvider(
-        {
-          id: 'groq:llama-3.1-70b-versatile',
-          config: {},
-          label: currentLabel,
-        },
-        'groq',
-      );
-    } else if (value === 'deepseek') {
-      setProvider(
-        {
-          id: 'deepseek:deepseek-chat',
-          config: {},
-          label: currentLabel,
-        },
-        'deepseek',
-      );
     } else if (value === 'openrouter') {
       setProvider(
         {
@@ -671,15 +657,6 @@ export default function ProviderTypeSelector({
         },
         'bedrock',
       );
-    } else if (value === 'bedrock-agent') {
-      setProvider(
-        {
-          id: 'bedrock:agent:your-agent-id',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock-agent',
-      );
     } else if (value === 'sagemaker') {
       setProvider(
         {
@@ -689,42 +666,6 @@ export default function ProviderTypeSelector({
         },
         'sagemaker',
       );
-    } else if (value === 'huggingface') {
-      setProvider(
-        {
-          id: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'huggingface',
-      );
-    } else if (value === 'ollama') {
-      setProvider(
-        {
-          id: 'ollama:llama3',
-          config: {},
-          label: currentLabel,
-        },
-        'ollama',
-      );
-    } else if (value === 'llama.cpp') {
-      setProvider(
-        {
-          id: 'llama.cpp:http://localhost:8080/completion',
-          config: {},
-          label: currentLabel,
-        },
-        'llama.cpp',
-      );
-    } else if (value === 'llamafile') {
-      setProvider(
-        {
-          id: 'llamafile:http://localhost:8080/v1/chat/completions',
-          config: {},
-          label: currentLabel,
-        },
-        'llamafile',
-      );
     } else if (value === 'localai') {
       setProvider(
         {
@@ -733,24 +674,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'localai',
-      );
-    } else if (value === 'vllm') {
-      setProvider(
-        {
-          id: 'vllm:http://localhost:8000/v1',
-          config: {},
-          label: currentLabel,
-        },
-        'vllm',
-      );
-    } else if (value === 'text-generation-webui') {
-      setProvider(
-        {
-          id: 'text-generation-webui:http://localhost:5000',
-          config: {},
-          label: currentLabel,
-        },
-        'text-generation-webui',
       );
     } else if (value === 'perplexity') {
       setProvider(
@@ -787,33 +710,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'voyage',
-      );
-    } else if (value === 'cloudflare-ai') {
-      setProvider(
-        {
-          id: 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'cloudflare-ai',
-      );
-    } else if (value === 'databricks') {
-      setProvider(
-        {
-          id: 'databricks:databricks-meta-llama-3-1-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'databricks',
-      );
-    } else if (value === 'fal') {
-      setProvider(
-        {
-          id: 'fal:fal-ai/flux/dev',
-          config: {},
-          label: currentLabel,
-        },
-        'fal',
       );
     } else if (value === 'hyperbolic') {
       setProvider(
@@ -994,24 +890,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'fireworks',
-      );
-    } else if (value === 'together') {
-      setProvider(
-        {
-          id: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-          config: {},
-          label: currentLabel,
-        },
-        'together',
-      );
-    } else if (value === 'cerebras') {
-      setProvider(
-        {
-          id: 'cerebras:llama3.1-70b',
-          config: {},
-          label: currentLabel,
-        },
-        'cerebras',
       );
     } else if (value === 'replicate') {
       setProvider(
