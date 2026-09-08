@@ -1455,6 +1455,28 @@ describe('Command Options Validation', () => {
     });
   });
 
+  it('should reject obsolete options before the action handler', async () => {
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const actionReached = vi.fn();
+    command.hook('preAction', actionReached);
+    command.exitOverride();
+    command.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
+
+    await expect(
+      command.parseAsync(['node', 'scan-model', 'model.pkl', '--max-file-size', '500MB']),
+    ).rejects.toMatchObject({
+      code: 'commander.unknownOption',
+      message: "error: unknown option '--max-file-size'",
+    });
+    expect(actionReached).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('should only pass valid arguments to modelaudit', async () => {
     // Mock for checkModelAuditInstalled (returns { installed, version })
     const versionCheckProcess = {
