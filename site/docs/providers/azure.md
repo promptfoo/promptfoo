@@ -130,7 +130,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                                         |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                                              |
 | **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                                         |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                       |
 | **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                         |
 | **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                                        |
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
@@ -1124,7 +1124,7 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Image generation** models (`MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation with explicit width and height. MAI-Image-2.6 features such as automatic aspect ratio, web grounding, and image editing require additional request support.
 - **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
 
 Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
@@ -1141,6 +1141,8 @@ export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
 ```
 
 ### Image generation (`azure:image`)
+
+[Azure retired `MAI-Image-2` and `MAI-Image-2e` on August 15, 2026](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule). The 2.5 variants retire on October 1, 2026. For new deployments, review the preview [MAI-Image-2.6 and MAI-Image-2.6-Flash models](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image) and confirm regional availability. Historical cost metadata remains available.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -1190,7 +1192,13 @@ The MAI image models are in **Preview**, and the MAI text models roll out region
 
 ## Assistants
 
-To evaluate an OpenAI assistant on Azure:
+:::warning Retired API
+
+[Azure OpenAI Assistants retired on August 26, 2026](https://learn.microsoft.com/en-us/azure/foundry/how-to/navigate-from-classic). Use the Foundry agent provider for new agent evaluations. The configuration below documents the legacy integration; assistant IDs and Foundry agent names are different resources and cannot be substituted directly.
+
+:::
+
+Legacy Azure OpenAI assistant configuration:
 
 1. Create a deployment for the assistant in the Azure portal
 2. Create an assistant in the Azure web UI

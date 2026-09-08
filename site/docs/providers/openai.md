@@ -1667,12 +1667,12 @@ These OpenAI-related environment variables are supported:
 ## Evaluating assistants
 
 :::warning
-The Assistants API is deprecated and scheduled to shut down on August 26, 2026. For new
+The Assistants API shut down on August 26, 2026. For new
 integrations, use the Responses API and see OpenAI's
 [Assistants migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses#assistants-api).
 :::
 
-To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/playground).
+The configuration below documents the legacy Assistants integration for compatible endpoints. Native OpenAI assistant IDs cannot be used directly with the Responses API.
 
 Set functions, code interpreter, and files for file search as necessary.
 
