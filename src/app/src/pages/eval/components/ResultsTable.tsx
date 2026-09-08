@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi, clearEvalApiResponseCache } from '@app/utils/api';
+import { callApi, clearEvalApiResponseCache, prefetchEvalResultDetail } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -405,6 +405,46 @@ function renderMediaVariableCell({
   );
 }
 
+function HydratedMediaVariableCell({
+  evalId,
+  output,
+  varName,
+  value,
+  ...props
+}: {
+  evalId: string;
+  output: EvaluateTableOutput;
+  varName: string;
+  value: string;
+  mediaMetadata: { path: string; type: string; format?: string };
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  maxTextLength: number;
+  toggleLightbox: (url?: string) => void;
+}) {
+  const resultKey = `${output.evalId || evalId}/${output.id}`;
+  const [media, setMedia] = React.useState<{ key: string; value: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    void prefetchEvalResultDetail(output.evalId || evalId, output.id).then((detail) => {
+      const fullValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[varName];
+      if (active && typeof fullValue === 'string') {
+        setMedia({ key: resultKey, value: fullValue });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [evalId, output.evalId, output.id, resultKey, varName]);
+
+  const fullValue = media?.key === resultKey ? media.value : value;
+  return (
+    renderMediaVariableCell({ output, value: fullValue, ...props }) ?? (
+      <TruncatedText text={value} maxLength={props.maxTextLength} />
+    )
+  );
+}
+
 function renderDecodedVariableCell({
   value,
   varName,
@@ -481,6 +521,7 @@ function renderDecodedVariableCell({
 
 function renderVariableCell({
   info,
+  evalId,
   varName,
   injectVarName,
   maxTextLength,
@@ -490,6 +531,7 @@ function renderVariableCell({
   toggleLightbox,
 }: {
   info: CellContext<EvaluateTableRow, string>;
+  evalId: string;
   varName: string;
   injectVarName: string;
   maxTextLength: number;
@@ -510,6 +552,26 @@ function renderVariableCell({
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
+  if (
+    typeof value === 'string' &&
+    value.startsWith('[content omitted:') &&
+    fileMetadata?.[varName] &&
+    output?.id
+  ) {
+    return (
+      <HydratedMediaVariableCell
+        evalId={evalId}
+        output={output}
+        varName={varName}
+        value={value}
+        mediaMetadata={fileMetadata[varName]}
+        lightboxOpen={lightboxOpen}
+        lightboxImage={lightboxImage}
+        maxTextLength={maxTextLength}
+        toggleLightbox={toggleLightbox}
+      />
+    );
+  }
   const mediaCell = renderMediaVariableCell({
     output,
     mediaMetadata: fileMetadata?.[varName],
@@ -2008,6 +2070,7 @@ function ResultsTable({
               cell: (info: CellContext<EvaluateTableRow, string>) =>
                 renderVariableCell({
                   info,
+                  evalId: evalId || '',
                   varName,
                   injectVarName,
                   maxTextLength,
@@ -2025,6 +2088,7 @@ function ResultsTable({
     return [];
   }, [
     columnHelper,
+    evalId,
     head,
     head.vars,
     maxTextLength,

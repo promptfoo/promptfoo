@@ -38,6 +38,9 @@ function hasPlaceholder(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some(hasPlaceholder);
   }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(hasPlaceholder);
+  }
   return false;
 }
 
@@ -440,8 +443,17 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             : [];
       const prompts = table.head.prompts.map((prompt, idx) => {
         const leanValue = prompt.label || prompt.display || prompt.raw;
+        const matchingPrompt = fullConfigPrompts.find(
+          (candidate) =>
+            candidate &&
+            typeof candidate === 'object' &&
+            ((prompt.label && candidate.label === prompt.label) ||
+              (prompt.id && candidate.id === prompt.id)),
+        );
         return hasPlaceholder(leanValue)
-          ? (getConfigPromptDisplayValue(fullConfigPrompts[idx]) ?? leanValue)
+          ? (getConfigPromptDisplayValue(
+              matchingPrompt ?? fullConfigPrompts[idx % fullConfigPrompts.length],
+            ) ?? leanValue)
           : leanValue;
       });
 
@@ -547,6 +559,10 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           try {
             const detail = await getOutputDetail(output);
             const outputText = detail?.text ?? output?.text ?? '';
+            const vars = getRowVars(row, detail);
+            if (hasPlaceholder(outputText) || hasPlaceholder(vars)) {
+              return null;
+            }
             const metadata = detail?.metadata ?? output?.metadata;
             const comment =
               (detail?.gradingResult as EvaluateTableOutput['gradingResult'])?.comment ??
@@ -554,7 +570,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
             return {
               vars: {
-                ...getRowVars(row, detail),
+                ...vars,
                 output: outputText.includes('---') ? outputText.split('---\n')[1] : outputText,
                 redteamFinalPrompt: metadata?.redteamFinalPrompt,
                 ...(comment ? { comment } : {}),
@@ -573,7 +589,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         },
       );
 
-      const yamlContent = yaml.dump(humanEvalCases);
+      const yamlContent = yaml.dump(humanEvalCases.filter((item) => item !== null));
       const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
       openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
       handleClose();

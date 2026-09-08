@@ -1,6 +1,7 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
@@ -49,6 +50,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', () => ({
   clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  prefetchEvalResultDetail: vi.fn(),
 }));
 
 const mockNavigate = vi.fn();
@@ -811,6 +813,50 @@ describe('ResultsTable Metrics Display', () => {
         'src',
         'data:image/png;base64,encodedImage',
       );
+    });
+
+    it('hydrates a trimmed image variable from its result detail', async () => {
+      const store = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...store,
+        table: {
+          ...mockTableWithMedia,
+          body: [
+            {
+              ...mockTableWithMedia.body[0],
+              vars: ['[content omitted: 120000 characters]'],
+              outputs: [
+                {
+                  ...mockTableWithMedia.body[0].outputs[0],
+                  id: 'image-1',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      imageVar: { path: '/path/to/image.jpg', type: 'image', format: 'jpeg' },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(prefetchEvalResultDetail).mockResolvedValueOnce({
+        evalId: '123',
+        resultId: 'image-1',
+        prompt: '',
+        text: '',
+        testCase: { vars: { imageVar: 'data:image/jpeg;base64,fullImage' } },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await waitFor(() => expect(prefetchEvalResultDetail).toHaveBeenCalledWith('123', 'image-1'));
+      await waitFor(() =>
+        expect(screen.getByRole('img', { name: 'Input image' })).toHaveAttribute(
+          'src',
+          'data:image/jpeg;base64,fullImage',
+        ),
+      );
+      expect(prefetchEvalResultDetail).toHaveBeenCalledWith('123', 'image-1');
     });
 
     it('renders variable video from file metadata', () => {

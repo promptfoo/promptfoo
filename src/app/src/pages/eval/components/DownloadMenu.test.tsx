@@ -297,6 +297,32 @@ describe('DownloadMenu', () => {
     ]);
   });
 
+  it('hydrates the same oversized prompt across multiple providers', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: ['a', 'b'].map((provider) => ({
+            provider,
+            raw: '[content omitted: 120000 characters]',
+          })),
+        },
+        body: [{ test: {}, vars: [], outputs: [{ pass: true, text: 'ok' }] }],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({
+      config: { ...mockConfig, prompts: ['full prompt'] },
+    });
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalled());
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    expect(JSON.parse(await blob.text())[0].prompts).toEqual(['full prompt', 'full prompt']);
+  });
+
   it('limits in-flight detail requests across all columns of a wide row', async () => {
     const outputs = Array.from({ length: 24 }, (_, index) => ({
       id: `output-${index}`,
@@ -455,6 +481,30 @@ describe('DownloadMenu', () => {
         }),
       ]),
     );
+  });
+
+  it('omits human-eval rows whose full details fail to hydrate', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { vars: ['prompt'], prompts: [{ provider: 'provider1', label: 'label1' }] },
+        body: [
+          {
+            test: { vars: { prompt: '[content omitted: 120000 characters]' } },
+            vars: ['[content omitted: 120000 characters]'],
+            outputs: [
+              { id: 'output-1', pass: false, text: '[content omitted: 120000 characters]' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockRejectedValueOnce(new Error('Detail unavailable'));
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Human Eval YAML'));
+    await waitFor(() => expect(yamlDumpMock).toHaveBeenCalledWith([]));
+    expect(showToastMock).toHaveBeenCalledWith(expect.stringContaining('unavailable'), 'warning');
   });
 
   it('hydrates failed-test configs from full config and result detail', async () => {
