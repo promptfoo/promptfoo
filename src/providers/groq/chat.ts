@@ -39,8 +39,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'GROQ_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl ?? GROQ_API_BASE_URL,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
       },
     });
   }

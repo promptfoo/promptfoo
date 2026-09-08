@@ -103,17 +103,18 @@ describe.each([
     expect(request().headers).toHaveProperty('Authorization', 'Bearer scoped-key');
   });
 
-  it.each([{}, { apiBaseUrl: undefined, apiKeyEnvar: undefined }])(
-    'keeps Groq defaults when settings are absent: %j',
-    async (config) => {
-      reply(responses);
-      await new Provider('private/model', { config }).callApi('Hello');
-      expect(request()).toMatchObject({
-        url: `https://api.groq.com/openai/v1${path}`,
-        headers: { Authorization: 'Bearer groq-process-key' },
-      });
-    },
-  );
+  it.each([
+    {},
+    { apiBaseUrl: undefined, apiKeyEnvar: undefined },
+    { apiBaseUrl: '', apiKeyEnvar: '' },
+  ])('keeps Groq defaults when settings are absent or empty: %j', async (config) => {
+    reply(responses);
+    await new Provider('private/model', { config }).callApi('Hello');
+    expect(request()).toMatchObject({
+      url: `https://api.groq.com/openai/v1${path}`,
+      headers: { Authorization: 'Bearer groq-process-key' },
+    });
+  });
 
   it('keeps explicit apiHost precedence', async () => {
     reply(responses);
