@@ -53,9 +53,8 @@ export function createEnvoyProvider(
   }
 
   // Ensure the URL ends with the correct path if not already specified
-  const normalizedBaseUrl = apiBaseUrl.endsWith('/v1')
-    ? apiBaseUrl
-    : `${apiBaseUrl.replace(/\/$/, '')}/v1`;
+  const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+  const normalizedBaseUrl = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
 
   const envoyConfig = {
     ...options,
