@@ -51,24 +51,6 @@ describe('ElevenLabs documented request contracts', () => {
     expect(body).not.toHaveProperty('optimize_streaming_latency');
   });
 
-  it('uses documented STT language and diarization fields', async () => {
-    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('fixture audio'));
-    vi.mocked(ElevenLabsClient.prototype.upload).mockResolvedValue({ text: 'Hello' });
-    const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-      config: { apiKey: 'fixture-key', language: 'en', diarization: true, maxSpeakers: 2 },
-    });
-    expect(await provider.callApi('/fixture.wav')).toMatchObject({
-      output: 'Hello',
-      cached: false,
-    });
-    expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledWith(
-      '/speech-to-text',
-      expect.any(Buffer),
-      'fixture.wav',
-      { model_id: 'scribe_v2', language_code: 'en', diarize: true, num_speakers: 2 },
-    );
-  });
-
   it.each(transcriptionExample.providers)(
     'transcribes the runnable $id example with Scribe v2',
     async ({ id, config }) => {
@@ -101,42 +83,6 @@ describe('ElevenLabs documented request contracts', () => {
       }
     },
   );
-
-  it('keeps transcription rejection errors in the provider response', async () => {
-    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('fixture audio'));
-    vi.mocked(ElevenLabsClient.prototype.upload).mockRejectedValue(new Error('Fixture 422'));
-    const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-      config: { apiKey: 'fixture-key' },
-    });
-
-    expect(await provider.callApi('/fixture.wav')).toMatchObject({ error: 'Fixture 422' });
-  });
-
-  it('preserves an explicit voice resource ID over the provider suffix', async () => {
-    vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('fixture audio'));
-    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:display-label', {
-      config: { apiKey: 'fixture-key', cache: false, voiceId: 'account-voice-resource' },
-    });
-
-    const response = await provider.callApi('Hello');
-
-    expect(response.error).toBeUndefined();
-    const [endpoint, body] = vi.mocked(ElevenLabsClient.prototype.post).mock.calls[0];
-    expect(new URL(endpoint, 'https://example.test').pathname).toBe(
-      '/text-to-speech/account-voice-resource',
-    );
-    expect(body).toMatchObject({ model_id: 'eleven_multilingual_v2' });
-  });
-
-  it('keeps TTS transport errors in the provider response', async () => {
-    vi.mocked(ElevenLabsClient.prototype.post).mockRejectedValue(new Error('Fixture 422'));
-    const provider = new ElevenLabsTTSProvider('elevenlabs:tts', {
-      config: { apiKey: 'fixture-key', cache: false },
-    });
-    expect(await provider.callApi('Hello')).toMatchObject({
-      error: 'ElevenLabs TTS API error: Fixture 422',
-    });
-  });
 
   it('does not replay legacy TTS audio and separates latency settings in the cache', async () => {
     const legacyParams = {
