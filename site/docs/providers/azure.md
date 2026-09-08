@@ -1549,7 +1549,15 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+The `azure:video:` provider implements Azure's legacy Sora jobs API (`/openai/v1/video/generations/jobs`). The configuration below describes that API.
+
+:::warning Check the deployed model version
+
+Azure's [retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule) lists October 15, 2026 for `sora-2` version `2025-12-08`, with no replacement. This differs from the native OpenAI Videos API's September 24 shutdown.
+
+Sora 2 uses a [different Videos API and request schema](https://learn.microsoft.com/en-us/azure/foundry-classic/openai/concepts/video-generation#model-comparison). Changing the deployment name on `azure:video:` does not implement that protocol, and the Sora 2 date does not establish availability of the legacy jobs API. Keep these legacy configurations only for existing deployments whose availability you have verified in Azure.
+
+:::
 
 ### Prerequisites
 

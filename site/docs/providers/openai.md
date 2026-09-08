@@ -249,10 +249,13 @@ for currently supported training bases and lifecycle information.
 The empty segment before `ID` represents an omitted fine-tuning suffix. If a suffix was set during
 training, use `ft:<base-model>:<organization>:<suffix>:<id>` instead.
 
-The legacy `/v1/completions` endpoint supports `babbage-002`, `davinci-002`,
-`gpt-3.5-turbo-instruct`, and `gpt-3.5-turbo-instruct-0914`. These models are useful for
-maintaining existing evals, but OpenAI has scheduled the legacy snapshots for removal on
-September 28, 2026; prefer a current Chat Completions or Responses model for new work.
+:::warning Native Completions retirement
+
+OpenAI [schedules removal](https://developers.openai.com/api/docs/deprecations) of `babbage-002`, `davinci-002`, and `gpt-3.5-turbo-instruct` on September 28, 2026. This includes the model selected by bare `openai:completion`. Fine-tuned models have separate lifecycle entries.
+
+Migrate native workloads to `openai:chat:<model>` or `openai:responses:<model>` with a supported model and compatible prompt and options. For SDK wrappers, switch the completion client class too; changing only its model leaves the legacy endpoint in use. Custom OpenAI-compatible endpoints follow their own model lifecycle.
+
+:::
 
 ### GPT-4.1
 
@@ -1004,8 +1007,13 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models an
 - `sora-2`, `sora-2-2025-10-06`, `sora-2-2025-12-08` - standard video generation
 - `sora-2-pro`, `sora-2-pro-2025-10-06` - higher-quality video generation
 
-The Sora Videos API is scheduled for removal on September 24, 2026. `sora-2-pro-high-res` is a
-pricing tier, not a separate model ID; select a supported Pro resolution instead.
+:::warning Native Videos API retirement
+
+OpenAI will [remove the Videos API and Sora 2 aliases and snapshots](https://developers.openai.com/api/docs/deprecations) on September 24, 2026. No replacement is listed. Use the configurations below only for existing workloads before shutdown; a different model ID cannot preserve this API afterward. Azure has a [separate model schedule and API contract](/docs/providers/azure#video-generation-sora).
+
+:::
+
+`sora-2-pro-high-res` is a pricing tier, not a separate model ID; select a supported Pro resolution instead.
 
 ### Basic Usage
 
