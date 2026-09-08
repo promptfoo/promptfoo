@@ -172,6 +172,15 @@ export function inheritProviderCapabilities<T extends readonly ProviderCapabilit
 
 /** A subclass may replace a built-in stub, but its explicit capability declaration takes precedence. */
 function hasSubclassCapabilityOverride(provider: object, capability: ProviderCapability): boolean {
+  if (
+    Object.prototype.hasOwnProperty.call(provider, 'promptfooCapabilities') &&
+    !Object.prototype.hasOwnProperty.call(
+      (provider as ProviderIdentity).promptfooCapabilities ?? [],
+      inheritedProviderCapabilities,
+    )
+  ) {
+    return false;
+  }
   let prototype = Object.getPrototypeOf(provider);
   let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
   while (prototype && prototype !== Object.prototype) {
