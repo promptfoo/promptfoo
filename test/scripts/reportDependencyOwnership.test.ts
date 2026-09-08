@@ -91,6 +91,7 @@ describe('dependency ownership report', () => {
     },
     { patterns: ['./packages/*/', '!/packages/skip/'], included: ['contracts'] },
     { patterns: ['!!packages/*', '!!!packages/skip'], included: ['contracts'] },
+    { patterns: ['packages/./contracts'], included: [] },
     {
       patterns: ['packages/*', '!packages/**', '!packages/skip', 'packages/skip'],
       included: ['contracts'],
@@ -140,6 +141,121 @@ describe('dependency ownership report', () => {
     ).toBe(2);
     expect(report.computedImports[0].line).toBe(3);
     expect(report.undeclaredUsages[0].references[0].line).toBe(4);
+  });
+
+  it.each(['build', 'dist', 'coverage', '.docusaurus', '__mocks__'])(
+    'discovers a declared workspace beneath %s without scanning its generated output',
+    (directory) => {
+      const workspace = `${directory}/pkg`;
+      json('package.json', { workspaces: [workspace] });
+      json(`${workspace}/package.json`, { name: 'nested', dependencies: { runtime: '1' } });
+      json('architecture/dependency-ownership.json', {
+        manifestOwners: { 'package.json': 'root', [`${workspace}/package.json`]: 'nested' },
+      });
+      write(`${workspace}/src/index.ts`, "import 'runtime';");
+      write(`${workspace}/build/generated.ts`, 'import {');
+      const report = reportDependencyOwnership(root, config);
+      expect(report.coverage.manifests).toEqual(
+        [`${workspace}/package.json`, 'package.json'].sort(),
+      );
+      expect(report.unassignedManifests).toEqual([]);
+      expect(
+        report.declarations.find((entry) => entry.dependency === 'runtime')?.references,
+      ).toEqual([expect.objectContaining({ file: `${workspace}/src/index.ts`, scope: 'source' })]);
+    },
+  );
+
+  it('honors configured ignored roots across workspace, configured, and emitted declaration scans', () => {
+    write('src/keep.ts', "import 'shared';");
+    for (const file of [
+      'src/ignored/index.ts',
+      'src/app/src/excluded/index.ts',
+      'tools/ignored/index.ts',
+      'dist/src/ignored/index.d.ts',
+    ]) {
+      write(file, 'import {');
+    }
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      ignoredRoots: ['src/ignored/', 'src/app/src/excluded', 'tools/ignored', 'dist/src/ignored'],
+      layers: [...config.layers, { name: 'tools', roots: ['tools'], allowedDependencies: [] }],
+    });
+    expect(report.coverage.sourceFiles).toBe(1);
+    expect(report.coverage.generatedDeclarations).toEqual([]);
+    expect(report.undeclaredUsages).toEqual([]);
+  });
+
+  it('records leading triple-slash package type references with workspace and scope attribution', () => {
+    json('package.json', {
+      workspaces: ['src/app'],
+      devDependencies: { '@types/node': '1', '@types/acme__client': '1' },
+    });
+    json('src/app/package.json', { name: 'app', devDependencies: { vite: '1' } });
+    write(
+      'src/app/src/env.d.ts',
+      [
+        `/* ${'漢字é😀'.repeat(40)} */`,
+        '/// <reference types="vite/client" />',
+        "/// <reference types='node' />",
+        '/// <reference types="@acme/client" />',
+      ].join('\n'),
+    );
+    write(
+      'src/app/src/browser.test.ts',
+      '/// <reference types="@vitest/browser/matchers" />\nexport {};',
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.declarations.find((entry) => entry.dependency === 'vite')?.references).toEqual([
+      expect.objectContaining({
+        kind: 'type',
+        specifier: 'vite/client',
+        scope: 'declaration',
+        line: 2,
+      }),
+    ]);
+    expect(
+      report.undeclaredUsages.map((entry) => [
+        entry.dependency,
+        entry.manifest,
+        entry.references[0].scope,
+        entry.references[0].kind,
+        entry.references[0].line,
+      ]),
+    ).toEqual([
+      ['@types/acme__client', 'src/app/package.json', 'declaration', 'type', 4],
+      ['@types/node', 'src/app/package.json', 'declaration', 'type', 3],
+      ['@vitest/browser', 'src/app/package.json', 'test', 'type', 1],
+    ]);
+    expect(report.runtimeDeclarationGaps).toEqual([]);
+  });
+
+  it('ignores triple-slash lookalikes and directives following a statement', () => {
+    write(
+      'src/index.ts',
+      [
+        '/* /// <reference types="block-comment" /> */',
+        '// <reference types="ordinary-comment" />',
+        '/// <reference path="types=\'attribute-value\'" />',
+        `const text = '/// <reference types="string-content" />';`,
+        '/// <reference types="late-directive" />',
+      ].join('\n'),
+    );
+    write('src/directive.ts', '"use strict";\n/// <reference types="after-prologue" />');
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('preserves exact computed expressions after long Unicode prefixes', () => {
+    write(
+      'src/index.ts',
+      `/* ${'漢字é😀'.repeat(40)} */\nconst value = 1;\nimport(candidate);\nimport('shared');`,
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.computedImports).toEqual([
+      expect.objectContaining({ expression: 'import(candidate)', line: 3 }),
+    ]);
+    expect(
+      report.declarations.find((entry) => entry.dependency === 'shared')?.references[0].line,
+    ).toBe(4);
   });
 
   it('discovers configured production roots outside conventional source directories', () => {
