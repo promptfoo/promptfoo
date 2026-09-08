@@ -29,6 +29,12 @@ describe('portable validation compatibility', () => {
     expect(filterByRange(items, '2:')).toEqual(['two', 'three']);
   });
 
+  it.each(['', 'file.'])('rejects empty media extensions in %j', (filePath) => {
+    expect(extensions.isImageFile(filePath)).toBe(false);
+    expect(extensions.isVideoFile(filePath)).toBe(false);
+    expect(extensions.isAudioFile(filePath)).toBe(false);
+  });
+
   it.each([':', '1:2:3', '-1:2', '1.5:2', 'a:2'])(
     'preserves invalid range errors for %s',
     (range) => {
