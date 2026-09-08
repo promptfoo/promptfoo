@@ -207,6 +207,46 @@ describe('SageMakerCompletionProvider', () => {
       });
     });
 
+    it.each(['cache lookup', 'endpoint request'])(
+      'keeps the request and cache identity together when defaults change during %s',
+      async (stage) => {
+        vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '128');
+        const getCached = mockCacheGet.getMockImplementation()!;
+        mockCacheGet.mockImplementation(async (key: string) => {
+          const cached = await getCached(key);
+          if (stage === 'cache lookup' && mockCacheGet.mock.calls.length === 1) {
+            vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '256');
+          }
+          return cached;
+        });
+        mockSend.mockImplementation(async ({ Body }) => {
+          const output = String(JSON.parse(Body).max_tokens);
+          if (stage === 'endpoint request') {
+            vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '256');
+          }
+          return {
+            Body: new TextEncoder().encode(JSON.stringify({ choices: [{ text: output }] })),
+          };
+        });
+        const provider = new SageMakerCompletionProvider('test-endpoint', {
+          config: { region: 'us-east-1', modelType: 'openai' },
+        });
+
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '128' });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '256' });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({
+          output: '256',
+          cached: true,
+        });
+        vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '128');
+        expect(await provider.callApi('A quiet garden')).toMatchObject({
+          output: '128',
+          cached: true,
+        });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+      },
+    );
+
     it('uses the model type resolved from the provider ID for response caching', async () => {
       mockSend.mockResolvedValue({
         Body: new TextEncoder().encode(
