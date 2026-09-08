@@ -1260,6 +1260,24 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.01, 10);
   });
 
+  it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    'uses reasoning web-search pricing for %s',
+    (model) => {
+      const response = {
+        output: [{ type: 'web_search_call', action: { type: 'search' } }],
+      };
+      expect(
+        calculateObservableOpenAIToolCost(response, model, {
+          tools: [{ type: 'web_search_preview' }],
+        }),
+      ).toBeCloseTo(0.01, 10);
+      expect(calculateObservableOpenAIToolCost(response, model, {})).toBeCloseTo(0.01, 10);
+      expect(
+        calculateObservableOpenAIToolCost(response, model, { tools: [{ type: 'web_search' }] }),
+      ).toBeCloseTo(0.01, 10);
+    },
+  );
+
   it('does not charge non-search web actions', () => {
     expect(
       calculateObservableOpenAIToolCost(

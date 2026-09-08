@@ -1196,6 +1196,7 @@ function isReasoningModel(modelName: string): boolean {
   const capabilityModelName = modelName.replace(/^bedrock:/, '').replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
+    /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(capabilityModelName) ||
     isGpt6AstraModel(capabilityModelName) ||
     capabilityModelName.startsWith('o1') ||
     capabilityModelName.startsWith('o3') ||
