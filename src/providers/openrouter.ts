@@ -3,12 +3,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import {
-  appendOpenAiApiPath,
-  calculateOpenAICost,
-  formatOpenAiError,
-  getTokenUsage,
-} from './openai/util';
+import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -19,6 +14,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -68,6 +65,56 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         ...(this.config.apiKey && { apiKey: undefined }),
       },
     };
+  }
+
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return 0;
+    }
+
+    if (
+      config.cost !== undefined ||
+      config.inputCost !== undefined ||
+      config.outputCost !== undefined
+    ) {
+      // Explicit user rates override provider billing. Require both rates and
+      // counts; a missing rate must not come from a native OpenAI price table.
+      const inputCost = config.inputCost ?? config.cost;
+      const outputCost = config.outputCost ?? config.cost;
+      const promptTokens = data.usage?.prompt_tokens;
+      const completionTokens = data.usage?.completion_tokens;
+      if (
+        typeof inputCost !== 'number' ||
+        !Number.isFinite(inputCost) ||
+        inputCost < 0 ||
+        typeof outputCost !== 'number' ||
+        !Number.isFinite(outputCost) ||
+        outputCost < 0 ||
+        typeof promptTokens !== 'number' ||
+        !Number.isFinite(promptTokens) ||
+        promptTokens < 0 ||
+        typeof completionTokens !== 'number' ||
+        !Number.isFinite(completionTokens) ||
+        completionTokens < 0
+      ) {
+        return undefined;
+      }
+      const cost = promptTokens * inputCost + completionTokens * outputCost;
+      return Number.isFinite(cost) ? cost : undefined;
+    }
+
+    // usage.cost is the total charged to the OpenRouter account. Its upstream
+    // inference cost is a separate value; native vendor rates cannot substitute.
+    // https://openrouter.ai/docs/cookbook/administration/usage-accounting
+    const usage = data.usage as
+      | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cost?: unknown })
+      | undefined;
+    const cost = usage?.cost;
+    return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
   }
 
   async callApi(
@@ -240,12 +287,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost: this.calculateResponseCost(data, config, cached),
       ...(finishReason && { finishReason }),
     };
   }
