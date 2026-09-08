@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { CometApiImageProvider } from '../../src/providers/cometapi';
 import { HeliconeGatewayProvider } from '../../src/providers/helicone';
+import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { mockProcessEnv } from '../util/utils';
 
@@ -88,19 +89,24 @@ describe('Cerebras organization isolation', () => {
 });
 
 describe('Nscale image resolved configuration', () => {
-  it.each([undefined, 'explicit-key'])(
-    'preserves scoped credentials and explicit key %s',
-    async (apiKey) => {
+  it.each([
+    [undefined, 'http://127.0.0.1:9000/v1/'],
+    ['explicit-key', 'http://127.0.0.1:9000/v1'],
+  ] as const)(
+    'preserves scoped credentials, key %s and base URL %s',
+    async (apiKey, apiBaseUrl) => {
       reply(imageReply);
-      const provider = new NscaleImageProvider('private/image:model', {
+      const provider = createNscaleProvider('nscale:image:private/image:model', {
         id: 'nscale-fixture',
         env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale' },
         config: {
-          apiKey,
-          apiBaseUrl: 'http://127.0.0.1:9000/v1',
-          size: '512x512',
-          response_format: 'url',
-          headers: { 'X-Fixture': 'yes' },
+          config: {
+            apiKey,
+            apiBaseUrl,
+            size: '512x512',
+            response_format: 'url',
+            headers: { 'X-Fixture': 'yes' },
+          },
         },
       });
       const result = await provider.callApi('A blue square');

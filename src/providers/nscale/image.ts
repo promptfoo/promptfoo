@@ -2,6 +2,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import { appendOpenAiApiPath } from '../openai/util';
 import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -38,7 +39,7 @@ type NscaleImageOptions = OpenAiSharedOptions & {
  * Defaults to base64 JSON response format for compatibility with Nscale API.
  */
 export class NscaleImageProvider extends OpenAiImageProvider {
-  declare config: NscaleImageOptions & any;
+  declare config: OpenAiImageProvider['config'] & NscaleImageOptions & { size?: any };
 
   /**
    * Create a new Nscale image provider instance.
@@ -57,7 +58,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
         ...nscaleConfig,
         apiBaseUrl: nscaleConfig.apiBaseUrl || 'https://inference.api.nscale.com/v1',
         apiKey: NscaleImageProvider.getApiKey(options),
-      } as any, // Use type assertion since Nscale supports OpenAI-compatible parameters
+      } as OpenAiImageProvider['config'],
     });
   }
 
@@ -187,7 +188,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
+        appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),
