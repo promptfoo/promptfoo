@@ -29,6 +29,7 @@ const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
   'apiKey',
   'apiKeyEnvar',
   'apiKeyRequired',
+  'useDefaultApiKey',
   'apiHost',
   'apiBaseUrl',
   'organization',
