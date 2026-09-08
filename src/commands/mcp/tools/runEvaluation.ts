@@ -84,7 +84,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Filter to specific providers by ID.
-            Examples: "openai:gpt-4", ["openai:gpt-4", "anthropic:messages:claude-sonnet-4-6"]
+            Examples: "openai:gpt-4", ["openai:gpt-4", "anthropic:claude-sonnet-4-6"]
           `,
         ),
       maxConcurrency: z
