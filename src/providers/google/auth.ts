@@ -232,7 +232,7 @@ export class GoogleAuthManager {
 
     // Check for Python SDK environment variables
     const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -324,6 +324,7 @@ export class GoogleAuthManager {
         getEnvString('VERTEX_PROJECT_ID') ||
         env?.GOOGLE_PROJECT_ID ||
         getEnvString('GOOGLE_PROJECT_ID') ||
+        env?.GOOGLE_CLOUD_PROJECT ||
         getEnvString('GOOGLE_CLOUD_PROJECT'),
     );
     const hasCredentials = Boolean(config.credentials);

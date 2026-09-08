@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveProjectId } from '../../../src/providers/google/auth';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
+import { GoogleVideoProvider } from '../../../src/providers/google/video';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -18,6 +20,8 @@ vi.mock('google-auth-library', () => ({
   },
 }));
 
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
+
 let restoreEnv: () => void;
 
 beforeEach(() => {
@@ -26,6 +30,7 @@ beforeEach(() => {
     VERTEX_PROJECT_ID: undefined,
     GOOGLE_PROJECT_ID: undefined,
     GOOGLE_CLOUD_PROJECT: undefined,
+    GOOGLE_GENAI_USE_VERTEXAI: undefined,
   });
   auth.getClient.mockResolvedValue({ request: auth.request });
   auth.getProjectId.mockResolvedValue('adc-project');
@@ -37,6 +42,39 @@ afterEach(() => {
 });
 
 describe('scoped Google cloud project resolution', () => {
+  it.each([undefined, false])(
+    'routes scoped-only video project with vertexai=%j',
+    async (vertexai) => {
+      auth.request.mockRejectedValue(new Error('Local video route fixture'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Local video route fixture'));
+      const options = ProviderOptionsSchema.parse({
+        config: { apiKey: 'local-fixture-key', vertexai },
+        env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      });
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', options);
+
+      const result = await provider.callApi('A quiet garden');
+
+      expect(result.error).toBe('Failed to create video job: Local video route fixture');
+      if (vertexai === false) {
+        expect(auth.request).not.toHaveBeenCalled();
+        expect(fetchWithTimeout).toHaveBeenCalledExactlyOnceWith(
+          'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning',
+          expect.objectContaining({ method: 'POST' }),
+          expect.any(Number),
+        );
+      } else {
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+        expect(auth.request).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            url: 'https://us-central1-aiplatform.googleapis.com/v1/projects/scoped-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning',
+            method: 'POST',
+          }),
+        );
+      }
+    },
+  );
+
   it.each([
     [{ projectId: 'configured' }, { GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'configured'],
     [{}, { VERTEX_PROJECT_ID: 'vertex', GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'vertex'],
