@@ -1672,7 +1672,7 @@ integrations, use the Responses API and see OpenAI's
 [Assistants migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses#assistants-api).
 :::
 
-The configuration below documents the legacy Assistants integration for compatible endpoints. Native OpenAI assistant IDs cannot be used directly with the Responses API.
+`openai:assistant` no longer works against OpenAI's native API. The legacy examples below require an Assistants-compatible endpoint configured through `config.apiBaseUrl` or `OPENAI_API_BASE_URL`. Native OpenAI assistant IDs cannot be used directly with the Responses API.
 
 Set functions, code interpreter, and files for file search as necessary.
 
