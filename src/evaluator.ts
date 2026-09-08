@@ -1542,11 +1542,10 @@ async function transformRunEvalResponse({
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
-  const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
-    evalId,
-    testIdx,
-    promptIdx,
-  });
+  const blobbedResponse = await awaitProviderOperation(
+    extractAndStoreBinaryData(processedResponse, { evalId, testIdx, promptIdx }),
+    abortSignal,
+  );
 
   return {
     processedResponse: blobbedResponse || processedResponse,
@@ -5044,17 +5043,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    await this.processComparisonAssertions({
-      ciProgressReporter,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithMaxScoreAssertion,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    if (!evalTimedOut) {
+      await this.processComparisonAssertions({
+        ciProgressReporter,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithMaxScoreAssertion,
+        rowsWithSelectBestAssertion,
+        runEvalOptions,
+      });
+    }
 
     await this.finalizeEvaluation({
       assertionTypes,
