@@ -1,6 +1,7 @@
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, getHeadersForCacheKey, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { createModelDiscoveryCache } from './modelDiscovery';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -17,17 +18,13 @@ export interface CometApiModel {
 
 // Note: We no longer filter models - users specify intent via provider syntax like :chat:, :image:, :embedding:
 
-let modelCache: CometApiModel[] | null = null;
+const modelCache = createModelDiscoveryCache<CometApiModel>(isCacheEnabled);
 
 export function clearCometApiModelsCache() {
-  modelCache = null;
+  modelCache.clear();
 }
 
 export async function fetchCometApiModels(env?: EnvOverrides): Promise<CometApiModel[]> {
-  if (modelCache) {
-    return modelCache;
-  }
-
   try {
     const apiKey = env?.COMETAPI_KEY || getEnvString('COMETAPI_KEY');
     const headers: Record<string, string> = { Accept: 'application/json' };
@@ -35,28 +32,40 @@ export async function fetchCometApiModels(env?: EnvOverrides): Promise<CometApiM
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const { data } = await fetchWithCache<any>(
-      'https://api.cometapi.com/v1/models',
-      { headers },
-      getRequestTimeoutMs(),
-    );
-
-    const raw = data?.data || data?.models || data;
-    let models: CometApiModel[] = [];
-    if (Array.isArray(raw)) {
-      models = raw.map((m: any) => ({
-        id: m.id || m.model || m.name || (typeof m === 'string' ? m : ''),
-      }));
-    }
-
-    // Return all models - let users specify their intent with :chat:, :image:, :embedding: prefixes
-    modelCache = models;
+    const url = 'https://api.cometapi.com/v1/models';
+    const key = getScopedCacheKey(JSON.stringify(getHeadersForCacheKey(url, { headers })));
+    return await modelCache.get(key, async () => {
+      // Keep credentialed discovery out of the persistent HTTP cache.
+      const { data, status } = await fetchWithCache<unknown>(
+        url,
+        { headers },
+        getRequestTimeoutMs(),
+        'json',
+        true,
+        2,
+      );
+      if (status < 200 || status >= 300) {
+        throw new Error(`HTTP ${status}`);
+      }
+      const body = data as { data?: unknown; models?: unknown } | null;
+      const raw = body?.data ?? body?.models ?? data;
+      if (!Array.isArray(raw)) {
+        throw new Error('Invalid CometAPI model catalogue');
+      }
+      // Task selection remains the caller's choice, independent of model names.
+      return raw.map((model: unknown) => {
+        const item = model as { id?: unknown; model?: unknown; name?: unknown } | null;
+        const id = typeof model === 'string' ? model : (item?.id ?? item?.model ?? item?.name);
+        if (typeof id !== 'string' || !id.trim()) {
+          throw new Error('Invalid CometAPI model ID');
+        }
+        return { id };
+      });
+    });
   } catch (err) {
-    logger.warn(`Failed to fetch cometapi models: ${String(err)}`);
-    modelCache = [];
+    logger.warn('Failed to fetch cometapi models', { error: err });
+    return [];
   }
-
-  return modelCache;
 }
 
 /**
