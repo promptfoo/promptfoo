@@ -1549,6 +1549,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached, {
       suppressReasoningOutput: Boolean(body.stream),
+      abortSignal,
     });
     const billedResult = this.applyBilling(result, data, config, cached);
 
