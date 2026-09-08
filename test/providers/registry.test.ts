@@ -1538,17 +1538,16 @@ describe('Provider Registry', () => {
         );
         const options = {
           id: 'custom-omni-id',
-          config: { apiKey: 'test-key', aspectRatio: '9:16' },
+          config: { apiKey: 'test-key', aspectRatio: '9:16', vertexai: true },
           env: { GOOGLE_API_KEY: 'env-test-key', PALM_API_HOST: 'scoped-palm.example' },
         };
         const provider = await factory!.create(providerPath, options, bareContext);
         expect(provider.id()).toBe('custom-omni-id');
         expect(provider).toMatchObject({
           modelName: 'gemini-omni-1.1-flash',
-          config: options.config,
+          config: { ...options.config, vertexai: false },
           env: options.env,
         });
-        expect((provider as any).config.vertexai).toBeUndefined();
       },
     );
 

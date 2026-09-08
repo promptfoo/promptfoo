@@ -736,6 +736,7 @@ describe('GoogleInteractionsProvider', () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
+        usage: { total_input_tokens: 100, total_output_tokens: 600 },
         steps: [
           {
             type: 'model_output',
@@ -745,8 +746,8 @@ describe('GoogleInteractionsProvider', () => {
       },
       cached: false,
     } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      id: 'vertex:gemini-omni-flash-preview',
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash-preview', {
+      id: 'vertex:gemini-omni-1.1-flash-preview',
       config: {
         vertexai: true,
         projectId: 'configured-project',
@@ -759,6 +760,7 @@ describe('GoogleInteractionsProvider', () => {
     const result = await provider.callApi('A city at dusk');
 
     expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo((100 * 1.5 + 600 * 9) / 1e6, 12);
     expect(mockFetchWithCache).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
       expect.objectContaining({
@@ -768,7 +770,7 @@ describe('GoogleInteractionsProvider', () => {
           'x-goog-user-project': 'quota-project',
         }),
         body: JSON.stringify({
-          model: 'gemini-omni-flash-preview',
+          model: 'gemini-omni-1.1-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],
           response_format: [{ type: 'video', aspect_ratio: '16:9' }],
           generation_config: { temperature: 0.2, top_p: 0.9 },
