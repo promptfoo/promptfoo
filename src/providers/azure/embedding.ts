@@ -31,6 +31,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     const body = {
       input: text,
       model: this.deploymentName,
+      ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
     };
     let data,
       cached = false;

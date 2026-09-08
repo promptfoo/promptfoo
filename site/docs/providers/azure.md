@@ -560,6 +560,8 @@ defaultTest:
           apiHost: 'your-resource.openai.azure.com'
 ```
 
+For `text-embedding-3` deployments, set `config.dimensions` to request shorter vectors. Omit it to use the model's default vector size. Use the same embedding model and dimensions for indexed documents and queries; changing either requires rebuilding existing vectors. Azure deployment names are user-defined and remain unchanged by this option.
+
 Note that any moderation tasks will still use the OpenAI API.
 
 ## Configuration
@@ -1550,7 +1552,7 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 
 ## Video Generation (Sora)
 
-Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+The `azure:video:<deployment name>` provider sends text prompts to Azure's video generation jobs API. Use the name assigned to your deployment; promptfoo sends it in the request's `model` field. It also forwards legacy `inpaint_items` for image-to-video requests. The OpenAI video options `input_reference` and `remix_video_id` are not supported by this Azure provider.
 
 ### Prerequisites
 
@@ -1561,7 +1563,7 @@ Azure AI Foundry provides access to OpenAI's Sora video generation model for tex
 
 ```yaml
 providers:
-  - id: azure:video:sora
+  - id: azure:video:my-video-deployment
     config:
       apiBaseUrl: https://your-resource.cognitiveservices.azure.com
       # Authentication (choose one):
@@ -1600,7 +1602,7 @@ providers:
 
 ```yaml
 providers:
-  - azure:video:sora
+  - azure:video:my-video-deployment
 
 prompts:
   - 'A serene Japanese garden with koi fish swimming in a pond'

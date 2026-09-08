@@ -37,6 +37,13 @@ site/coverage/
 
 # Examples-related
 examples/**/package-lock.json
+examples/config-js/output.*
+examples/config-multishot/output.*
+examples/config-node-package-typescript/output.*
+examples/config-node-package/output.*
+examples/provider-replicate/llama4-scout/output.*
+examples/simple-csv/output.*
+examples/simple-test/output.*
 examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images
 examples/redteam-medical-agent/redteam.yaml
