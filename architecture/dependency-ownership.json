@@ -1,0 +1,86 @@
+{
+  "manifestOwners": {
+    "package.json": "root/runtime",
+    "src/app/package.json": "app/browser",
+    "site/package.json": "site/docs-build"
+  },
+  "aliases": {
+    "site/package.json": [
+      "@site",
+      "@theme",
+      "@theme-original",
+      "@generated",
+      "@docusaurus/Head",
+      "@docusaurus/Link",
+      "@docusaurus/router",
+      "@docusaurus/useBaseUrl",
+      "@docusaurus/useDocusaurusContext",
+      "@docusaurus/useIsBrowser"
+    ]
+  },
+  "annotations": [
+    {
+      "manifest": "package.json",
+      "dependency": "@opencode-ai/sdk",
+      "disposition": "computed-loader",
+      "reason": "The OpenCode provider selects the v2 or root entrypoint from a candidate table and falls back to package export resolution. Literal import scanning cannot attribute those calls.",
+      "evidence": ["src/providers/opencode-sdk.ts"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "@playwright/browser-chromium",
+      "disposition": "native-install",
+      "reason": "Installs the Chromium browser used by the optional browser provider; an install asset need not have a source import.",
+      "evidence": ["src/providers/browser.ts", "package.json"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "gcp-metadata",
+      "disposition": "compatibility-pin",
+      "reason": "Retained as the documented Google authentication transitive compatibility pin, not a direct source import.",
+      "evidence": ["src/providers/google/auth.ts", "knip.jsonc"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "hono",
+      "disposition": "peer",
+      "reason": "Supplies the Hono peer relationship for @hono/node-server used by the MCP command; absence of a direct import is not removal evidence.",
+      "evidence": ["src/commands/mcp/server.ts", "package-lock.json"]
+    },
+    {
+      "manifest": "site/package.json",
+      "dependency": "@swc/core",
+      "disposition": "build",
+      "reason": "Retained as a documented docs/build compatibility dependency. The current Docusaurus faster=false configuration uses Babel; this annotation does not claim SWC is the active compiler.",
+      "evidence": ["site/docusaurus.config.ts", "knip.jsonc"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "langium",
+      "disposition": "compatibility-pin",
+      "reason": "The root manifest records the Langium transitive pin and overrides; Knip documents that it is not directly imported.",
+      "evidence": ["package.json", "knip.jsonc"]
+    },
+    {
+      "manifest": "site/package.json",
+      "dependency": "langium",
+      "disposition": "compatibility-pin",
+      "reason": "Retained as a documented transitive pin for the Docusaurus build.",
+      "evidence": ["site/package.json", "knip.jsonc"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "@asteasolutions/zod-to-openapi",
+      "disposition": "build",
+      "reason": "src/openapi/server.ts is loaded by the OpenAPI generation script, not the server entrypoint; its source location alone does not make the converter a production dependency.",
+      "evidence": ["scripts/generateOpenApi.ts", "src/openapi/server.ts"]
+    },
+    {
+      "manifest": "package.json",
+      "dependency": "source-map-support",
+      "disposition": "build",
+      "reason": "The debug logger optionally loads development source-map support and deliberately catches its absence in production builds. Keep this development-only behavior.",
+      "evidence": ["src/logger.ts"]
+    }
+  ]
+}
