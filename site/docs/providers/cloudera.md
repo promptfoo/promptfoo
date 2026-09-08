@@ -22,6 +22,8 @@ export CDP_DOMAIN=your-domain-here
 export CDP_TOKEN=your-token-here
 ```
 
+`CDP_DOMAIN` and `CDP_TOKEN` are also accepted in the eval or provider `env` block. To override a token already set in the process environment, use `config.apiKey`.
+
 ## Basic Usage
 
 Here's a basic example of how to use the Cloudera provider:

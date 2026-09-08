@@ -41,6 +41,8 @@ export SNOWFLAKE_ACCOUNT_IDENTIFIER="myorg-myaccount"
 export SNOWFLAKE_API_KEY="your-bearer-token"
 ```
 
+`SNOWFLAKE_ACCOUNT_IDENTIFIER` and `SNOWFLAKE_API_KEY` are also accepted in the eval or provider `env` block. To override a token already set in the process environment, use `config.apiKey`.
+
 Then use the provider without specifying credentials:
 
 ```yaml

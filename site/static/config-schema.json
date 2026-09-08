@@ -248,6 +248,12 @@
         "AZURE_TOKEN_SCOPE": {
           "type": "string"
         },
+        "CDP_DOMAIN": {
+          "type": "string"
+        },
+        "CDP_TOKEN": {
+          "type": "string"
+        },
         "CLAUDE_CODE_USE_BEDROCK": {
           "type": "string"
         },
@@ -510,6 +516,12 @@
           "type": "string"
         },
         "SHAREPOINT_TENANT_ID": {
+          "type": "string"
+        },
+        "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+          "type": "string"
+        },
+        "SNOWFLAKE_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1725,6 +1737,12 @@
                     "AZURE_TOKEN_SCOPE": {
                       "type": "string"
                     },
+                    "CDP_DOMAIN": {
+                      "type": "string"
+                    },
+                    "CDP_TOKEN": {
+                      "type": "string"
+                    },
                     "CLAUDE_CODE_USE_BEDROCK": {
                       "type": "string"
                     },
@@ -1987,6 +2005,12 @@
                       "type": "string"
                     },
                     "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+                      "type": "string"
+                    },
+                    "SNOWFLAKE_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {
