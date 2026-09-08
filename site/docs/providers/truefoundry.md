@@ -53,8 +53,9 @@ tests:
 
 ### Basic Configuration Options
 
-The TrueFoundry provider supports all standard OpenAI configuration options:
+The TrueFoundry provider supports the following configuration options:
 
+- `task`: Set `chat` or `embedding` explicitly. When omitted, model IDs containing `embedding` select embeddings; other IDs select chat. The full account/model ID is sent unchanged.
 - `temperature`: Controls randomness in output between 0 and 2
 - `max_tokens`: Maximum number of tokens to generate
 - `max_completion_tokens`: Maximum number of tokens that can be generated in the chat completion
@@ -141,55 +142,59 @@ providers:
 providers:
   - truefoundry:groq-main/llama-3.3-70b-versatile
   - truefoundry:mistral-main/mistral-large-latest
-  - truefoundry:cohere-main/embed-english-v3.0 # Embeddings
 ```
 
 ## Embeddings
 
-TrueFoundry supports embedding models through the same unified API:
+Use `task: embedding` to select the embeddings API for any account/model ID, including custom aliases. Configure it as the embedding provider for a [`similar` assertion](/docs/configuration/expected-outputs/similar):
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - '{{query}}'
 providers:
-  - id: truefoundry:openai-main/text-embedding-3-large
-    config:
-      metadata:
-        user_id: 'embedding-test'
-      loggingConfig:
-        enabled: true
+  - echo
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:openai-main/text-embedding-3-large
+        config:
+          task: embedding
+          metadata:
+            user_id: 'embedding-test'
+          loggingConfig:
+            enabled: true
 tests:
   - vars:
       query: 'What is machine learning?'
     assert:
-      - type: is-valid-openai-embedding
+      - type: similar
+        value: 'How does machine learning work?'
+        threshold: 0.8
 ```
 
 ### Cohere Embeddings
 
-When using Cohere models, you must specify the `input_type` parameter:
+When using Cohere models, select the embedding task and send the required [`input_type`](https://www.truefoundry.com/docs/ai-gateway/embed#input-type-cohere) through `passthrough`. For example, replace the embedding provider above with:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: truefoundry:cohere-main/embed-english-v3.0
-    config:
-      input_type: 'search_query' # Options: search_query, search_document, classification, clustering
-      metadata:
-        user_id: 'embedding-test'
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:cohere-main/embed-english-v3.0
+        config:
+          task: embedding
+          passthrough:
+            input_type: search_query # Or search_document, classification, clustering
+          metadata:
+            user_id: 'embedding-test'
 ```
 
 ### Multimodal Embeddings (Vertex AI)
 
-TrueFoundry supports multimodal embeddings for images and videos through Vertex AI:
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: truefoundry:vertex-ai-main/multimodalembedding@001
-    config:
-      metadata:
-        use_case: 'image-search'
-```
+TrueFoundry's gateway supports [Vertex AI image and video embeddings](https://www.truefoundry.com/docs/ai-gateway/embed#multimodal-embeddings-vertex-ai). Promptfoo's TrueFoundry embedding adapter accepts text strings and reads the text embedding vector. Image/video payloads and their additional output vectors require a [custom provider](/docs/providers/custom-api/).
 
 ## Tool Use and Function Calling
 
