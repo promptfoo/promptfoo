@@ -83,8 +83,8 @@ export interface Reasoning {
 }
 
 /**
- * Reasoning effort values accepted by GPT-5 family models. Support varies by model;
- * GPT-5.6 models add `max` reasoning.
+ * Shared reasoning effort options for GPT models. Accepted values vary by model;
+ * Astra's runtime validation rejects `none` and `minimal` from this shared union.
  */
 export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
 
@@ -171,7 +171,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
+  service_tier?: ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -206,7 +206,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   mcp?: MCPConfig;
 
   /**
-   * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
+   * Controls response verbosity for GPT-5 models and GPT-6 Astra.
    */
   verbosity?: GPT5Verbosity;
 

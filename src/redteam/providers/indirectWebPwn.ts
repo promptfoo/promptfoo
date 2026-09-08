@@ -4,7 +4,11 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getTargetResponse } from './shared';
@@ -264,6 +268,9 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
       const webPage = await this.createWebPage(testCaseId, prompt, evalId, goal, purpose);
+      if (webPage.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: webPage.tokenUsage });
+      }
       webPageUuid = webPage.uuid;
       webPageUrl = webPage.fullUrl;
 

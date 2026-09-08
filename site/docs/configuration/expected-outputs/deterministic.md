@@ -605,7 +605,21 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
+
+For example, this OpenAI Responses item matches `value: [get_weather]`:
+
+```json
+{
+  "type": "function_call",
+  "id": "fc_1",
+  "call_id": "call_1",
+  "name": "get_weather",
+  "arguments": "{\"city\":\"NYC\"}"
+}
+```
+
+Responses providers serialize calls this way when `functionToolCallbacks` is not configured, so no output transform is needed. The assertion compares tool names only; it does not validate arguments.
 
 The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
 
@@ -679,6 +693,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenAI Codex Security, by recording the selected native scan or finding-validation operation.
 - OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
@@ -1140,7 +1155,7 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1351,6 +1366,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
+
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
 
 **When to use GLEU:**
 
@@ -1663,7 +1680,7 @@ tests:
 The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
-- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
 
 :::note
 Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
@@ -1824,7 +1841,7 @@ tests:
 
 ### Classifier
 
-The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+The `classifier` assertion runs the LLM output through a compatible HuggingFace text-classification or token-classification endpoint. A model on the Hub must also be hosted for the required task, or deployed to your own endpoint. This is useful for:
 
 - Sentiment analysis
 - Toxicity detection
@@ -1842,12 +1859,15 @@ assert:
     threshold: 0.5
 ```
 
-Example for PII detection (using negation):
+Example for PII detection (using negation). The gated `bigcode/starpii` model currently has no Inference Provider deployment; set `HF_STARPII_ENDPOINT` to a compatible token-classification endpoint you have deployed. See [classifier setup](./classifier.md#pii-detection-example).
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     threshold: 0.75
 ```
 
@@ -1964,4 +1984,4 @@ assert:
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
 - [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
-- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs
+- [Guardrails](/docs/configuration/expected-outputs/guardrails) - Evaluating target-reported guardrail decisions

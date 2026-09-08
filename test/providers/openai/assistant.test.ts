@@ -230,7 +230,7 @@ describe('OpenAI Provider', () => {
       );
     });
 
-    it('emits a chat <model> span around the assistant run', async () => {
+    it('emits an agent invocation span around the assistant run', async () => {
       const spans = installTracerSpy();
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
       const mockSteps = {
@@ -255,19 +255,21 @@ describe('OpenAI Provider', () => {
       });
       await localProvider.callApi('Test prompt');
 
-      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.attributes).toMatchObject({
-        'gen_ai.system': 'openai',
-        'gen_ai.operation.name': 'chat',
-        'gen_ai.request.model': 'test-assistant-id',
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.id': 'test-assistant-id',
       });
-      expect(chatSpan?.ended).toBe(true);
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.agent.name');
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
+      expect(agentSpan?.ended).toBe(true);
       // SpanStatusCode.OK === 1
-      expect(chatSpan?.status?.code).toBe(1);
+      expect(agentSpan?.status?.code).toBe(1);
     });
 
-    it('marks the chat span ERROR when the assistant run fails', async () => {
+    it('marks the agent invocation span ERROR when the assistant run fails', async () => {
       const spans = installTracerSpy();
       mockClient.beta.threads.createAndRun.mockRejectedValue(new Error('assistant boom'));
 
@@ -277,11 +279,11 @@ describe('OpenAI Provider', () => {
       const result = await localProvider.callApi('Test prompt');
       expect(result.error).toBeDefined();
 
-      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
-      expect(chatSpan).toBeDefined();
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
       // SpanStatusCode.ERROR === 2
-      expect(chatSpan?.status?.code).toBe(2);
-      expect(chatSpan?.ended).toBe(true);
+      expect(agentSpan?.status?.code).toBe(2);
+      expect(agentSpan?.ended).toBe(true);
     });
 
     it('should preserve an explicit temperature of 0', async () => {

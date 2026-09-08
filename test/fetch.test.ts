@@ -59,6 +59,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -164,6 +165,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -305,6 +307,46 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer cloud-token',
+        }),
+      }),
+    );
+  });
+
+  it('should not inject saved cloud auth when skipCloudAuthInjection is set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+      skipCloudAuthInjection: true,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+        }),
+      }),
+    );
+    const [, calledOpts] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOpts?.headers).has('Authorization')).toBe(false);
+  });
+
+  it('should still inject saved cloud auth when skipCloudAuthInjection is not set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+          Authorization: 'Bearer old-saved-key',
         }),
       }),
     );

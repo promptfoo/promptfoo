@@ -501,8 +501,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
-    'should preserve bare %s Responses routing',
+  it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route bare %s to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:${model}`);
 
@@ -513,14 +513,9 @@ describe('loadApiProvider', () => {
   );
 
   it.each([
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -528,8 +523,6 @@ describe('loadApiProvider', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
   ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
     const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
       '../src/providers/openai/chat',
@@ -814,7 +807,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Chat %s IDs to Chat Completions',
     async (model) => {
       const provider = await loadApiProvider(`openai:chat:${model}`);
@@ -824,7 +817,7 @@ describe('loadApiProvider', () => {
     },
   );
 
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route explicit Responses %s IDs to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:responses:${model}`);
@@ -1095,26 +1088,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load GitHub provider with default model', async () => {
-    const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
-  });
-
-  it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
+  it.each(['github:', 'github:openai/gpt-4o-mini'])('rejects retired provider %s', async (id) => {
+    await expect(loadApiProvider(id)).rejects.toThrow('GitHub Models was retired');
   });
 
   it('should load HTTP provider', async () => {
