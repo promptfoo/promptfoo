@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
+import { fetchWithCache, getCache, getCacheClearGeneration, isCacheEnabled } from '../../src/cache';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -10,11 +10,13 @@ vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
   getCache: vi.fn(),
+  getCacheClearGeneration: vi.fn(),
   isCacheEnabled: vi.fn(),
 }));
 beforeEach(() => {
   vi.mocked(fetchWithCache).mockReset();
   vi.mocked(getCache).mockReset();
+  vi.mocked(getCacheClearGeneration).mockReset().mockReturnValue(0);
   vi.mocked(isCacheEnabled).mockReset().mockReturnValue(false);
   vi.useFakeTimers();
 });
@@ -31,9 +33,41 @@ function reply(status: string, output?: unknown) {
   };
 }
 
-it('shares a cached prediction across row signals while cancelling only its caller', async () => {
+it.each([
+  [ReplicateProvider, 'shared output'],
+  [ReplicateImageProvider, 'https://example.invalid/shared.png'],
+])(
+  'shares a cached %s prediction across row signals while cancelling only its caller',
+  async (Provider, output) => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+    let finish!: (value: ReturnType<typeof reply>) => void;
+    vi.mocked(fetchWithCache).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const provider = new Provider('owner/model', { config: { apiKey: 'fixture' } });
+    const first = new AbortController();
+    const second = new AbortController();
+    const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
+    const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
+    expect(sharedSignal).toBeInstanceOf(AbortSignal);
+    first.abort();
+    await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
+    expect(sharedSignal?.aborted).toBe(false);
+    finish(reply('succeeded', output));
+    await expect(result2).resolves.toMatchObject({ output: expect.stringContaining(output) });
+  },
+);
+
+it('counts only the creator when concurrent rows share a prediction', async () => {
   vi.mocked(isCacheEnabled).mockReturnValue(true);
-  vi.mocked(getCache).mockResolvedValue({ get: vi.fn(), set: vi.fn() } as any);
+  vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
   let finish!: (value: ReturnType<typeof reply>) => void;
   vi.mocked(fetchWithCache).mockImplementation(
     () =>
@@ -42,24 +76,39 @@ it('shares a cached prediction across row signals while cancelling only its call
       }),
   );
   const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
-  const first = new AbortController();
-  const second = new AbortController();
-  const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
-  const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
+  const first = provider.callApi('Hello', undefined, { abortSignal: new AbortController().signal });
+  const second = provider.callApi('Hello', undefined, {
+    abortSignal: new AbortController().signal,
+  });
   await vi.advanceTimersByTimeAsync(0);
   expect(fetchWithCache).toHaveBeenCalledTimes(1);
-  const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
-  expect(sharedSignal).toBeInstanceOf(AbortSignal);
-  first.abort();
-  await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
-  expect(sharedSignal?.aborted).toBe(false);
   finish(reply('succeeded', 'shared output'));
-  await expect(result2).resolves.toMatchObject({ output: 'shared output' });
+  expect((await first).tokenUsage?.numRequests).toBe(1);
+  expect((await second).tokenUsage?.numRequests).toBe(0);
+});
+
+it('starts a new prediction after the cache is cleared', async () => {
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+  vi.mocked(fetchWithCache).mockImplementation(() => new Promise(() => {}));
+  const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
+  const firstSignal = new AbortController();
+  const first = provider.callApi('Hello', undefined, { abortSignal: firstSignal.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  vi.mocked(getCacheClearGeneration).mockReturnValue(1);
+  const secondSignal = new AbortController();
+  const second = provider.callApi('Hello', undefined, { abortSignal: secondSignal.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetchWithCache).toHaveBeenCalledTimes(2);
+  firstSignal.abort();
+  secondSignal.abort();
+  await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+  await expect(second).rejects.toMatchObject({ name: 'AbortError' });
 });
 
 it('aborts an unneeded shared prediction and allows a fresh creation', async () => {
   vi.mocked(isCacheEnabled).mockReturnValue(true);
-  vi.mocked(getCache).mockResolvedValue({ get: vi.fn(), set: vi.fn() } as any);
+  vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
   vi.mocked(fetchWithCache).mockImplementation(
     (_url, request) =>
       new Promise((_resolve, reject) => {

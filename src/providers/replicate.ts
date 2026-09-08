@@ -1,6 +1,12 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
+import {
+  fetchWithCache,
+  getCache,
+  getCacheClearGeneration,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
@@ -136,6 +142,59 @@ function getReplicateAuthCacheNamespace(apiKey: string | undefined) {
   }
 
   return createHmac('sha256', apiKey).update(REPLICATE_CACHE_KEY_HMAC_KEY).digest('hex');
+}
+
+async function createPrediction(
+  modelName: string,
+  apiKey: string,
+  data: unknown,
+  cacheKey: string | undefined,
+  signal?: AbortSignal,
+) {
+  const url = modelName.includes(':')
+    ? 'https://api.replicate.com/v1/predictions'
+    : `https://api.replicate.com/v1/models/${modelName}/predictions`;
+  const request = {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'wait=60',
+    },
+    body: JSON.stringify(data),
+  };
+  const key = cacheKey && `${getCacheClearGeneration()}:${getScopedCacheKey(cacheKey)}`;
+  let pending = key ? pendingPredictions.get(key) : undefined;
+  const shared = pending !== undefined;
+  if (!pending) {
+    const controller = new AbortController();
+    const promise = fetchWithCache(
+      url,
+      { ...request, signal: key ? controller.signal : signal },
+      getRequestTimeoutMs(),
+      'json',
+    );
+    pending = { promise, controller, subscribers: 0 };
+    if (key) {
+      pendingPredictions.set(key, pending);
+      void promise
+        .finally(() => {
+          if (pendingPredictions.get(key) === pending) {
+            pendingPredictions.delete(key);
+          }
+        })
+        .catch(() => {});
+    }
+  }
+  pending.subscribers++;
+  try {
+    return { creation: await awaitPrediction(pending.promise, signal), shared };
+  } finally {
+    if (--pending.subscribers === 0 && key && pendingPredictions.get(key) === pending) {
+      pendingPredictions.delete(key);
+      pending.controller.abort();
+    }
+  }
 }
 
 function getReplicateValueSummary(prefix: string, value: unknown): Record<string, unknown> {
@@ -299,58 +358,19 @@ export class ReplicateProvider implements ApiProvider {
     let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
-      const url = this.modelName.includes(':')
-        ? 'https://api.replicate.com/v1/predictions'
-        : `https://api.replicate.com/v1/models/${this.modelName}/predictions`;
-      const request = {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          Prefer: 'wait=60',
-        },
-        body: JSON.stringify(data),
-      };
-      const signal = options?.abortSignal;
-      const key = cacheKey && getScopedCacheKey(cacheKey);
-      let pending = key ? pendingPredictions.get(key) : undefined;
-      if (!pending) {
-        const controller = new AbortController();
-        const promise = fetchWithCache(
-          url,
-          { ...request, signal: key ? controller.signal : signal },
-          getRequestTimeoutMs(),
-          'json',
-        );
-        pending = { promise, controller, subscribers: 0 };
-        if (key) {
-          pendingPredictions.set(key, pending);
-          void promise
-            .finally(() => {
-              if (pendingPredictions.get(key) === pending) {
-                pendingPredictions.delete(key);
-              }
-            })
-            .catch(() => {});
-        }
-      }
-      pending.subscribers++;
-      let createResponse;
-      try {
-        createResponse = await awaitPrediction(pending.promise, signal);
-      } finally {
-        if (--pending.subscribers === 0 && key && pendingPredictions.get(key) === pending) {
-          pendingPredictions.delete(key);
-          pending.controller.abort();
-        }
-      }
-
-      cached = createResponse.cached;
-      response = createResponse.data as ReplicatePrediction;
+      const { creation, shared } = await createPrediction(
+        this.modelName,
+        this.apiKey,
+        data,
+        cacheKey,
+        options?.abortSignal,
+      );
+      cached = creation.cached || shared;
+      response = creation.data as ReplicatePrediction;
 
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
-        cached = false;
+        cached = shared;
         response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
@@ -642,25 +662,15 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       // Create prediction with sync mode
-      const createResponse = await fetchWithCache(
-        this.modelName.includes(':')
-          ? 'https://api.replicate.com/v1/predictions'
-          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
-        {
-          method: 'POST',
-          signal: options?.abortSignal,
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'wait=60',
-          },
-          body: JSON.stringify(data),
-        },
-        getRequestTimeoutMs(),
-        'json',
+      const { creation, shared } = await createPrediction(
+        this.modelName,
+        this.apiKey,
+        data,
+        isCacheEnabled() ? cacheKey : undefined,
+        options?.abortSignal,
       );
-
-      let prediction = createResponse.data as ReplicatePrediction;
+      cached = creation.cached || shared;
+      let prediction = creation.data as ReplicatePrediction;
 
       logger.debug(`Initial prediction status: ${prediction.status}, ID: ${prediction.id}`);
 
