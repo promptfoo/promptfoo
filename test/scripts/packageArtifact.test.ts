@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
 
 const directories: string[] = [];
@@ -246,11 +247,10 @@ setInterval(() => {}, 1000);`;
         for (const pid of pids) {
           expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid).toBe(true);
         }
-        const deadline = Date.now() + 1_000;
-        while (pids.some(processIsRunning) && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-        expect(pids.filter(processIsRunning)).toEqual([]);
+        await vi.waitFor(() => expect(pids.filter(processIsRunning)).toEqual([]), {
+          timeout: 1_000,
+          interval: 20,
+        });
         expect(fs.readdirSync(temporary)).toEqual([]);
       } finally {
         fs.closeSync(descriptor);
@@ -273,4 +273,80 @@ setInterval(() => {}, 1000);`;
       }
     },
   );
+
+  it('retains owned state when best-effort kill emits a synchronous error after tree termination fails', async () => {
+    const { root, temporary, nativeDir, fixture } = prepareConsumer(
+      'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
+    );
+    const preload = path.join(root, 'kill-failure.mjs');
+    fs.writeFileSync(
+      preload,
+      `import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const failure = () => Object.assign(new Error('injected-tree-kill-failure'), { code: 'EPERM' });
+const originalProcessKill = process.kill;
+process.kill = function (pid, signal) {
+  if (pid < 0) throw failure();
+  return originalProcessKill.call(process, pid, signal);
+};
+childProcess.execFileSync = () => { throw failure(); };
+syncBuiltinESMExports();
+const originalChildKill = childProcess.ChildProcess.prototype.kill;
+childProcess.ChildProcess.prototype.kill = function (signal) {
+  const result = originalChildKill.call(this, signal);
+  console.error('injected-synchronous-child-kill-error');
+  this.emit('error', Object.assign(new Error('injected-child-kill-EPERM'), { code: 'EPERM' }));
+  return result;
+};`,
+    );
+    const output = path.join(root, 'supervisor.log');
+    const descriptor = fs.openSync(output, 'w');
+    const pidFile = path.join(nativeDir, 'native-pid');
+    try {
+      // --import applies only to this supervisor; its child receives no preload arguments.
+      const result = spawnSync(
+        process.execPath,
+        ['--import', pathToFileURL(preload).href, fixture, '--timeout-ms', '1500'],
+        {
+          stdio: ['ignore', descriptor, descriptor],
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).not.toBeNull();
+      expect(result.status).not.toBe(0);
+      const diagnostic = fs.readFileSync(output, 'utf8');
+      expect(diagnostic).toContain('injected-synchronous-child-kill-error');
+      expect(diagnostic).toContain('Could not confirm termination of migration process tree');
+      expect(diagnostic).toContain('Retained migration state after termination failure');
+      const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+      expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid && pid !== result.pid).toBe(
+        true,
+      );
+      await vi.waitFor(() => expect(processIsRunning(pid)).toBe(false), {
+        timeout: 1_000,
+        interval: 20,
+      });
+      const retained = fs.readdirSync(temporary);
+      expect(retained).toHaveLength(1);
+      expect(retained[0]).toMatch(/^promptfoo-artifact-migrations-/);
+      expect(fs.statSync(path.join(temporary, retained[0])).isDirectory()).toBe(true);
+    } finally {
+      fs.closeSync(descriptor);
+      if (fs.existsSync(pidFile)) {
+        const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+              throw error;
+            }
+          }
+        }
+      }
+    }
+  });
 });

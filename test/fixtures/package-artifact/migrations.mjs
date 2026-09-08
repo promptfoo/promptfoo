@@ -83,6 +83,13 @@ async function runNativeCheck(tempDir, timeoutMs) {
           } catch (secondError) {
             // If the OS refuses both attempts, do not unlink a database that may still
             // be open. Report the PID and retain state for diagnosis instead of hiding it.
+            // Settle first: the best-effort kill can synchronously emit an error event.
+            reject(
+              new NativeCheckTerminationError(
+                child.pid,
+                new AggregateError([firstError, secondError], 'Migration tree termination failed'),
+              ),
+            );
             try {
               child.kill('SIGKILL');
             } catch {
@@ -91,12 +98,6 @@ async function runNativeCheck(tempDir, timeoutMs) {
             child.stdout.destroy();
             child.stderr.destroy();
             child.unref();
-            reject(
-              new NativeCheckTerminationError(
-                child.pid,
-                new AggregateError([firstError, secondError], 'Migration tree termination failed'),
-              ),
-            );
           }
         }
       }, timeoutMs);
