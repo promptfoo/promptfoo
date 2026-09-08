@@ -84,49 +84,63 @@ describe('ElevenLabs documented request contracts', () => {
     },
   );
 
-  it('does not replay legacy TTS audio and separates latency settings in the cache', async () => {
-    const legacyParams = {
-      text: 'Hello',
-      voiceId: 'fixture-voice',
-      modelId: 'eleven_multilingual_v2',
-      voiceSettings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0,
-        use_speaker_boost: true,
-        speed: 1,
-      },
-      outputFormat: 'pcm_16000',
-      seed: 42,
-    };
-    const oldKey = `elevenlabs:tts:${crypto.createHash('sha256').update(JSON.stringify(legacyParams)).digest('hex')}`;
-    const entries = new Map<string, unknown>([[oldKey, { output: 'Old MP3 labeled as PCM' }]]);
-    const cache = {
-      get: vi.fn(async (key: string) => entries.get(key)),
-      set: vi.fn(async (key: string, value: unknown) => entries.set(key, value)),
-    };
-    vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
-    vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('correct PCM'));
-    const options = {
-      config: { apiKey: 'fixture-key', outputFormat: 'pcm_16000' as const, seed: 42 },
-    };
-    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', options);
-    expect(await provider.callApi('Hello')).toMatchObject({
-      cached: false,
-      audio: { format: 'pcm' },
-    });
-    expect(cache.get).not.toHaveBeenCalledWith(oldKey);
-    expect(await provider.callApi('Hello')).toMatchObject({
-      cached: true,
-      audio: { format: 'pcm' },
-    });
-    expect(ElevenLabsClient.prototype.post).toHaveBeenCalledTimes(1);
-    const optimized = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
-      config: { ...options.config, optimizeStreamingLatency: 3 },
-    });
-    expect(await optimized.callApi('Hello')).toMatchObject({ cached: false });
-    expect(ElevenLabsClient.prototype.post).toHaveBeenCalledTimes(2);
-  });
+  it.each([1, 2])(
+    'does not replay TTS request version %i and separates latency settings',
+    async (version) => {
+      const legacyParams = {
+        ...(version === 2 && { requestVersion: 2 }),
+        text: 'Hello',
+        voiceId: 'fixture-voice',
+        modelId: 'eleven_multilingual_v2',
+        voiceSettings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0,
+          use_speaker_boost: true,
+          speed: 1,
+        },
+        outputFormat: 'ulaw_8000',
+        ...(version === 2 && { optimizeStreamingLatency: 0 }),
+        seed: 42,
+      };
+      const oldKey = `elevenlabs:tts:${crypto.createHash('sha256').update(JSON.stringify(legacyParams)).digest('hex')}`;
+      const entries = new Map<string, unknown>([
+        [
+          oldKey,
+          {
+            audio: { data: Buffer.alloc(8000, 0xff).toString('base64'), format: 'wav' },
+            voiceId: 'fixture-voice',
+            modelId: 'eleven_multilingual_v2',
+          },
+        ],
+      ]);
+      const cache = {
+        get: vi.fn(async (key: string) => entries.get(key)),
+        set: vi.fn(async (key: string, value: unknown) => entries.set(key, value)),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.alloc(8000, 0xff));
+      const options = {
+        config: { apiKey: 'fixture-key', outputFormat: 'ulaw_8000' as const, seed: 42 },
+      };
+      const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', options);
+      expect(await provider.callApi('Hello')).toMatchObject({
+        cached: false,
+        audio: { format: 'basic' },
+      });
+      expect(cache.get).not.toHaveBeenCalledWith(oldKey);
+      expect(await provider.callApi('Hello')).toMatchObject({
+        cached: true,
+        audio: { format: 'basic' },
+      });
+      expect(ElevenLabsClient.prototype.post).toHaveBeenCalledTimes(1);
+      const optimized = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+        config: { ...options.config, optimizeStreamingLatency: 3 },
+      });
+      expect(await optimized.callApi('Hello')).toMatchObject({ cached: false });
+      expect(ElevenLabsClient.prototype.post).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('does not reuse STT responses cached before the request field correction', async () => {
     const audioPath = '/fixture.wav';

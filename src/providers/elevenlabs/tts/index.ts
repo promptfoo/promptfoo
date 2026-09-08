@@ -177,7 +177,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
 
     // Check cache first
     const cacheKey = this.cache.generateKey('tts', {
-      requestVersion: 2,
+      requestVersion: 3,
       text: prompt,
       voiceId: this.config.voiceId,
       modelId: this.config.modelId,
@@ -402,6 +402,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create streaming configuration
       const streamConfig: TTSStreamConfig = {
         modelId: this.config.modelId,
+        outputFormat: this.config.outputFormat,
         voiceSettings: this.config.voiceSettings,
         baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
         pronunciationDictionaryLocators: this.config.pronunciationDictionaryId

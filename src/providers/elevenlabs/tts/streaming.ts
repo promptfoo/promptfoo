@@ -26,7 +26,11 @@ export async function createStreamingConnection(
   });
 
   // Connect to TTS streaming endpoint
-  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?model_id=${config.modelId}`;
+  const query = new URLSearchParams({ model_id: config.modelId });
+  if (config.outputFormat) {
+    query.set('output_format', config.outputFormat);
+  }
+  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?${query}`;
 
   // Initial configuration
   const streamConfig: Record<string, any> = {
