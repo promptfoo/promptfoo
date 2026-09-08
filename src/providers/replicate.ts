@@ -169,6 +169,7 @@ async function createPrediction(
     body: JSON.stringify(data),
   };
   const key = cacheKey && `${getCacheClearGeneration()}:${getScopedCacheKey(cacheKey)}`;
+  throwIfAborted(signal);
   let pending = key ? pendingPredictions.get(key) : undefined;
   const shared = pending !== undefined;
   if (!pending) {
@@ -182,30 +183,11 @@ async function createPrediction(
     pending = { promise, controller, subscribers: 0, claimed: false };
     if (key) {
       pendingPredictions.set(key, pending);
-      void promise
-        .finally(() => {
-          if (pendingPredictions.get(key) === pending) {
-            pendingPredictions.delete(key);
-          }
-        })
-        .catch(() => {});
     }
   }
   const pendingRequest = pending;
   pendingRequest.subscribers++;
-  try {
-    return {
-      creation: await awaitPrediction(pendingRequest.promise, signal),
-      shared,
-      claim: () => {
-        if (pendingRequest.claimed) {
-          return false;
-        }
-        pendingRequest.claimed = true;
-        return true;
-      },
-    };
-  } finally {
+  const release = () => {
     if (
       --pendingRequest.subscribers === 0 &&
       key &&
@@ -214,6 +196,36 @@ async function createPrediction(
       pendingPredictions.delete(key);
       pendingRequest.controller.abort();
     }
+  };
+  try {
+    return {
+      creation: await awaitPrediction(pendingRequest.promise, signal),
+      shared,
+      release,
+      claim: () => {
+        if (pendingRequest.claimed) {
+          return false;
+        }
+        pendingRequest.claimed = true;
+        return true;
+      },
+    };
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
+async function withPredictionLease<T>(
+  run: (retain: (release: () => void) => void) => Promise<T>,
+): Promise<T> {
+  let release: (() => void) | undefined;
+  try {
+    return await run((value) => {
+      release = value;
+    });
+  } finally {
+    release?.();
   }
 }
 
@@ -298,12 +310,19 @@ export class ReplicateProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
+    return withPredictionLease((retain) =>
+      withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, options, retain),
+        resultExtractor,
+      ),
+    );
   }
 
   protected async callApiInternal(
     prompt: string,
     options?: CallApiOptionsParams,
+    retainPrediction?: (release: () => void) => void,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -378,13 +397,14 @@ export class ReplicateProvider implements ApiProvider {
     let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
-      const { creation, shared, claim } = await createPrediction(
+      const { creation, shared, claim, release } = await createPrediction(
         this.modelName,
         this.apiKey,
         data,
         cacheKey,
         options?.abortSignal,
       );
+      retainPrediction?.(release);
       cached = creation.cached || shared;
       response = creation.data as ReplicatePrediction;
 
@@ -629,18 +649,21 @@ export class ReplicateImageProvider extends ReplicateProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throwIfAborted(options?.abortSignal);
-    try {
-      return await this.callImageApiInternal(prompt, options);
-    } catch (err) {
-      // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
-      throwIfAborted(options?.abortSignal);
-      throw err;
-    }
+    return withPredictionLease(async (retain) => {
+      try {
+        return await this.callImageApiInternal(prompt, options, retain);
+      } catch (err) {
+        // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
+        throwIfAborted(options?.abortSignal);
+        throw err;
+      }
+    });
   }
 
   private async callImageApiInternal(
     prompt: string,
     options?: CallApiOptionsParams,
+    retainPrediction?: (release: () => void) => void,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -689,13 +712,14 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       // Create prediction with sync mode
-      const { creation, shared, claim } = await createPrediction(
+      const { creation, shared, claim, release } = await createPrediction(
         this.modelName,
         this.apiKey,
         data,
         isCacheEnabled() ? cacheKey : undefined,
         options?.abortSignal,
       );
+      retainPrediction?.(release);
       cached = creation.cached || shared;
       let prediction = creation.data as ReplicatePrediction;
 
