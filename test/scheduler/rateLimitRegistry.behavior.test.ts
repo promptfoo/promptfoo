@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { fetchWithProxy, fetchWithRetries } from '../../src/util/fetch';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -39,6 +41,7 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('should propagate provider maxRetries into the fetch retry context', async () => {
@@ -105,6 +108,339 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
 
   it('should retry provider maxRetries + 1 total attempts', async () => {
     expect(await runRateLimitedCall(2)).toBe(3);
+  });
+
+  it.each([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPIPE',
+  ])('should retry the flattened fetch failure %s', async (code) => {
+    const cause = Object.assign(new Error(`getaddrinfo ${code} example.com`), { code });
+    const failure = new TypeError('fetch failed', { cause });
+    const fetch = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        async () => {
+          try {
+            const response = await fetchWithRetries('https://example.com', {}, 1000, 2);
+            return { output: await response.text() };
+          } catch (error) {
+            return { error: (error as Error).message };
+          }
+        },
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.output).toBe('ok');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    { configured: 0, requested: 2, attempts: 3 },
+    { configured: 5, requested: 1, attempts: 2 },
+    { configured: 2, requested: 0, attempts: 1 },
+  ])('should honor request maxRetries=$requested over provider maxRetries=$configured', async ({
+    configured,
+    requested,
+    attempts,
+  }) => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callFn = vi.fn(async () => ({ status: 429 }));
+
+    try {
+      await expect(
+        registry.execute(createProvider(configured), callFn, {
+          maxRetries: requested,
+          isRateLimited: (result) => result?.status === 429,
+          getRetryAfter: () => 0,
+        }),
+      ).rejects.toThrow('Rate limit exceeded');
+      expect(callFn).toHaveBeenCalledTimes(attempts);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    { maxRetries: undefined, expectedAttempts: 4 },
+    { maxRetries: 0, expectedAttempts: 1 },
+    { maxRetries: 2, expectedAttempts: 3 },
+  ])('should make $expectedAttempts total requests with provider maxRetries=$maxRetries', async ({
+    maxRetries,
+    expectedAttempts,
+  }) => {
+    const fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'rate_limit_exceeded' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'retry-after': '0' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      await expect(
+        registry.execute(
+          createProvider(maxRetries),
+          () => fetchWithRetries('https://example.com', {}, 1_000, maxRetries),
+          {
+            isRateLimited: (_, error) => error instanceof HttpRateLimitError,
+            getRetryAfter: () => 0,
+          },
+        ),
+      ).rejects.toThrow('Rate limit exceeded');
+
+      expect(fetch).toHaveBeenCalledTimes(expectedAttempts);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should never retry a hard quota error', async () => {
+    const fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'insufficient_quota' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      await expect(
+        registry.execute(
+          createProvider(2),
+          () => fetchWithRetries('https://example.com', {}, 1_000, 2),
+          {
+            isRateLimited: (_, error) => error instanceof HttpRateLimitError,
+            getRetryAfter: () => 0,
+          },
+        ),
+      ).rejects.toThrow('insufficient_quota');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not retry a non-idempotent request that explicitly disables retries', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        try {
+          await fetchWithRetries('https://example.com/webhook', { method: 'POST' }, 1000, 0);
+          return { output: 'unexpected' };
+        } catch (error) {
+          return { error: `webhook error: ${(error as Error).message}` };
+        }
+      });
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should keep retrying after a successful zero-retry credential request', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi.fn().mockImplementation(async (url: RequestInfo | URL) => {
+      if (String(url).includes('/token')) {
+        return new Response('token');
+      }
+      throw new Error('Network error');
+    });
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        async () => {
+          await fetchWithRetries('https://example.com/token', { method: 'POST' }, 1000, 0);
+          try {
+            await fetchWithRetries('https://example.com/api', {}, 1000, 2);
+            return { output: 'unexpected' };
+          } catch (error) {
+            return { error: `API error: ${(error as Error).message}` };
+          }
+        },
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(4);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should recover an ordinary 503 without replaying a successful token request', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('token'))
+      .mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithRetries('https://example.com/token', { method: 'POST' }, 1000, 0);
+        const response = await fetchWithRetries('https://example.com/api', {}, 1000, 2);
+        return { output: await response.text() };
+      });
+
+      expect(result.output).toBe('ok');
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not replay a non-idempotent webhook that returns an application error', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'network timeout' })));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        const response = await fetchWithRetries(
+          'https://example.com/webhook',
+          { method: 'POST' },
+          1000,
+          0,
+        );
+        return response.json() as Promise<{ error: string }>;
+      });
+
+      expect(result.error).toBe('network timeout');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not recreate an accepted job when its download cannot be retried', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'job-123' })))
+      .mockResolvedValue(new Response(null, { status: 503, statusText: 'Service Unavailable' }));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        const response = await fetchWithProxy('https://example.com/jobs/123/content', {
+          disableTransientRetries: true,
+        });
+        return { error: `Failed to download video: ${response.status} ${response.statusText}` };
+      });
+
+      expect(result.error).toContain('503');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should never recreate an accepted job after a later request resets its retry budget', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi.fn().mockImplementation(async (url: RequestInfo | URL) => {
+      if (String(url).endsWith('/jobs')) {
+        return new Response(JSON.stringify({ id: 'job-123' }));
+      }
+      throw new Error('Network error');
+    });
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        try {
+          await fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+          return { output: 'unexpected' };
+        } catch (error) {
+          return { error: (error as Error).message };
+        }
+      });
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(4);
+      expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/jobs'))).toHaveLength(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should keep provider maxRetries zero after a mutation is accepted', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'job-123' })))
+      .mockResolvedValue(new Response(null, { status: 503, statusText: 'Service Unavailable' }));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(0), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        const response = await fetchWithRetries(
+          'https://example.com/jobs/123/content',
+          {},
+          1000,
+          2,
+        );
+        return { error: `HTTP ${response.status}: ${response.statusText}` };
+      });
+
+      expect(result.error).toContain('503');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should honor the all-5xx retry setting with the scheduler enabled', async () => {
+    vi.stubEnv('PROMPTFOO_RETRY_5XX', 'true');
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 500, statusText: 'Server Error' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        () => fetchWithRetries('https://example.com', {}, 1000, 2),
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
   });
 
   it('should parse numeric string maxRetries values', async () => {

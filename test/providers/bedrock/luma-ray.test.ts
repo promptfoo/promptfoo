@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
 
@@ -449,6 +450,25 @@ describe('LumaRayVideoProvider', () => {
       const result = await provider.callApi('A problematic prompt');
 
       expect(result.error).toContain('Content policy violation');
+    });
+
+    it('should not recreate an accepted SDK video job after a transient polling error', async () => {
+      mockBedrockSend
+        .mockReset()
+        .mockResolvedValueOnce({ invocationArn: 'arn:aws:bedrock:job/video-123' })
+        .mockRejectedValueOnce(new Error('HTTP 503: Service Unavailable'));
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.error).toContain('HTTP 503');
+        expect(mockBedrockSend).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+      }
     });
 
     it('should use custom poll interval', async () => {

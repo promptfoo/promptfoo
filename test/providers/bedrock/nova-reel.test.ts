@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { sleep } from '../../../src/util/time';
 
 import type { NovaReelVideoOptions } from '../../../src/providers/bedrock';
@@ -332,6 +333,27 @@ describe('NovaReelVideoProvider', () => {
 
       expect(result.error).toContain('Video generation failed');
       expect(result.error).toContain('Content moderation violation');
+    });
+
+    it('should not recreate an accepted SDK video job after a transient polling error', async () => {
+      mockBedrockSend
+        .mockResolvedValueOnce({ invocationArn: 'arn:aws:bedrock:job/video-123' })
+        .mockRejectedValueOnce(new Error('HTTP 503: Service Unavailable'));
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' } as NovaReelVideoOptions,
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.error).toContain('HTTP 503');
+        expect(mockBedrockSend).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+      }
     });
 
     it('should fallback to S3 URL when downloadFromS3 is false', async () => {

@@ -209,6 +209,33 @@ describe('runEval', () => {
     expect(context!.prompt.config).toEqual({ temperature: 0.9, max_tokens: 100 });
   });
 
+  it('should pass the effective per-test retry budget to the scheduler', async () => {
+    const execute = vi.fn();
+    const provider = { ...mockProvider, config: { maxRetries: 0 } };
+
+    await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label', config: { maxRetries: 4 } },
+      test: { options: { maxRetries: 2 } },
+      conversations: {},
+      registers: {},
+      rateLimitRegistry: {
+        execute: <T>(provider: ApiProvider, callFn: () => Promise<T>, options?: unknown) => {
+          execute(provider, callFn, options);
+          return callFn();
+        },
+        dispose: vi.fn(),
+      },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      provider,
+      expect.any(Function),
+      expect.objectContaining({ maxRetries: 2 }),
+    );
+  });
+
   it('should not leak dynamic prompt config across runEval calls for a shared prompt object', async () => {
     const promptWithFunction: Prompt = {
       raw: 'Dynamic prompt {{mode}}',

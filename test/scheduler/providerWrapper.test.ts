@@ -4,6 +4,7 @@ import {
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -46,6 +47,38 @@ describe('providerWrapper', () => {
           isRateLimited: expect.any(Function),
           getRetryAfter: expect.any(Function),
         }),
+      );
+    });
+
+    it('should pass request cancellation to the scheduler', async () => {
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+      const abortSignal = new AbortController().signal;
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test', undefined, {
+        abortSignal,
+      });
+
+      expect(mockExecute).toHaveBeenCalledWith(
+        mockProvider,
+        expect.any(Function),
+        expect.objectContaining({ abortSignal }),
+      );
+    });
+
+    it.each([
+      0, 2,
+    ])('should pass a per-request retry budget of %s to the scheduler', async (maxRetries) => {
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test', {
+        prompt: { raw: 'test', label: 'test', config: { maxRetries } },
+        vars: {},
+      });
+
+      expect(mockExecute).toHaveBeenCalledWith(
+        mockProvider,
+        expect.any(Function),
+        expect.objectContaining({ maxRetries }),
       );
     });
 
@@ -200,6 +233,40 @@ describe('providerWrapper', () => {
       // Headers are normalized to lowercase in getRetryAfter
       const retryAfter = capturedOptions.getRetryAfter(result, undefined);
       expect(retryAfter).toBe(30000); // 30 seconds in ms
+    });
+
+    it('should preserve retry-after metadata from transport rate-limit errors', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test');
+
+      expect(
+        capturedOptions.getRetryAfter(
+          undefined,
+          new HttpRateLimitError({ status: 429, retryAfterMs: 2500 }),
+        ),
+      ).toBe(2500);
+    });
+
+    it('should honor reset-only rate-limit metadata', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test');
+      const delay = capturedOptions.getRetryAfter(
+        undefined,
+        new HttpRateLimitError({ status: 429, resetAt: Date.now() + 5000 }),
+      );
+
+      expect(delay).toBeGreaterThanOrEqual(4900);
+      expect(delay).toBeLessThanOrEqual(5000);
     });
 
     it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {

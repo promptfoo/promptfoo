@@ -8,6 +8,7 @@ import {
   validateDuration,
   validateResolution,
 } from '../../../src/providers/google/video';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
@@ -330,6 +331,25 @@ describe('GoogleVideoProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Invalid duration');
+    });
+
+    it('should not recreate an accepted SDK video job after a transient polling error', async () => {
+      mockRequest
+        .mockResolvedValueOnce({ data: { name: 'operations/video-123', done: false } })
+        .mockRejectedValueOnce(new Error('HTTP 503: Service Unavailable'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.error).toContain('HTTP 503');
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+      }
     });
 
     it('should create video job, poll for completion, and store to blob storage', async () => {

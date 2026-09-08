@@ -20,7 +20,14 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
-import { getFetchRetryContextMaxRetries } from './retryContext';
+import {
+  canSchedulerRetry,
+  disableSchedulerRetries,
+  doesSchedulerOwnFetchRetries,
+  getFetchRetryContextMaxRetries,
+  hasAcceptedNonIdempotentRequest,
+  markNonIdempotentRequestAccepted,
+} from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
@@ -119,12 +126,13 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
 }
 
 /**
- * Resolve whether to disable transient-error retries. An explicit caller flag
- * always wins (a caller may opt back in even when the provider set
- * `maxRetries: 0`); otherwise we disable only when the retry context carries
- * `maxRetries === 0`.
+ * The scheduler owns retries until an accepted mutation makes replay unsafe.
+ * Then direct transport calls can retry unless explicitly disabled.
  */
 function resolveTransientRetryDisabled(explicit?: boolean): boolean {
+  if (doesSchedulerOwnFetchRetries()) {
+    return explicit === true || canSchedulerRetry() || getFetchRetryContextMaxRetries() === 0;
+  }
   if (explicit !== undefined) {
     return explicit;
   }
@@ -269,6 +277,14 @@ export async function fetchWithProxy(
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    const method = (
+      finalOptions.method ?? (url instanceof Request ? url.method : 'GET')
+    ).toUpperCase();
+
+    if (response.ok && (method === 'POST' || method === 'PATCH')) {
+      // Replaying the provider could create another billable job.
+      markNonIdempotentRequestAccepted();
+    }
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -665,7 +681,15 @@ export async function fetchWithRetries(
   maxRetries?: number,
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
-  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  if (doesSchedulerOwnFetchRetries()) {
+    disableSchedulerRetries(maxRetries === 0);
+    maxRetries =
+      hasAcceptedNonIdempotentRequest() && contextMaxRetries !== 0
+        ? Math.max(0, maxRetries ?? contextMaxRetries ?? 4)
+        : 0;
+  } else {
+    maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  }
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
@@ -681,11 +705,18 @@ export async function fetchWithRetries(
         timeout,
       );
 
+      if (hasAcceptedNonIdempotentRequest() && isTransientError(response) && i < maxRetries) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
+        if (response.ok && doesSchedulerOwnFetchRetries()) {
+          return response;
+        }
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }
