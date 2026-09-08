@@ -88,6 +88,12 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
+  // OpenAI Responses API single item: { type: 'function_call', name: '...' }
+  if (obj.type === 'function_call' && typeof obj.name === 'string') {
+    names.add(obj.name);
+    return names;
+  }
+
   // Handle Google/Vertex single functionCall: { functionCall: { name: '...' } }
   if ('functionCall' in obj && obj.functionCall && typeof obj.functionCall === 'object') {
     const fc = obj.functionCall as Record<string, unknown>;
