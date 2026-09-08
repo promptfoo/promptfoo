@@ -2864,6 +2864,44 @@ describe('util', () => {
       },
     );
 
+    it.each([
+      { vertex: false, region: 'global', expected: 0.08 },
+      { vertex: true, region: 'global', expected: 0.075 },
+      { vertex: true, region: 'us-central1', expected: 0.0825 },
+    ])(
+      'uses the hosting-specific Gemini 3.5 Flash Flex cache rate: %j',
+      ({ vertex, region, expected }) => {
+        expect(
+          calculateGoogleCost(
+            'gemini-3.5-flash',
+            { region, service_tier: 'flex' },
+            1_000_000,
+            0,
+            vertex,
+            0,
+            0,
+            undefined,
+            0,
+            1_000_000,
+          ),
+        ).toBeCloseTo(expected, 12);
+        expect(
+          calculateGoogleCost(
+            'gemini-3.5-flash',
+            { region, service_tier: 'flex', cost: 0 },
+            1_000_000,
+            0,
+            vertex,
+            0,
+            0,
+            undefined,
+            0,
+            1_000_000,
+          ),
+        ).toBe(0);
+      },
+    );
+
     it('should calculate cost for gemini-3.5-flash', () => {
       // gemini-3.5-flash: input=1.5/1M, output=9.0/1M
       const cost = calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500);

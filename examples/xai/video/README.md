@@ -101,7 +101,8 @@ providers:
       resolution: '720p'
 ```
 
-Preset voices are currently available only to trusted partners in the United States.
+Preset voices are generally available. Uploaded audio references are restricted to trusted partners
+in the United States.
 
 ## See Also
 

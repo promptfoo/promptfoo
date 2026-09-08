@@ -15,6 +15,72 @@ import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 
 describe('Bedrock Anthropic Messages provider', () => {
+  it.each([
+    { region: 'us-gov-west-1', apiBaseUrl: undefined, expected: 0.0717 },
+    { region: 'us-east-1', apiBaseUrl: undefined, expected: 0.065725 },
+    {
+      region: 'us-east-1',
+      apiBaseUrl: 'https://bedrock-mantle.us-gov-west-1.api.aws/anthropic',
+      expected: 0.0717,
+    },
+    {
+      region: 'us-gov-west-1',
+      apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+      expected: 0.065725,
+    },
+    { region: 'us-gov-west-1', apiBaseUrl: 'https://proxy.example/anthropic', expected: 0.0717 },
+  ])(
+    'uses the Opus 4.8 Messages hosting rate and cache TTLs in $region',
+    async ({ region, apiBaseUrl, expected }) => {
+      enableCache();
+      const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-4-8', {
+        env: { AWS_REGION: region },
+        config: { apiKey: 'bedrock-key', ...(apiBaseUrl && { apiBaseUrl }) },
+      });
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-opus48-hosting',
+        type: 'message',
+        role: 'assistant',
+        model: 'anthropic.claude-opus-4-8',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 1000,
+          cache_read_input_tokens: 2000,
+          cache_creation_input_tokens: 4000,
+          cache_creation: { ephemeral_5m_input_tokens: 3000, ephemeral_1h_input_tokens: 1000 },
+        },
+      } as Anthropic.Messages.Message);
+      const first = await provider.callApi('hosting cost');
+      const cached = await provider.callApi('hosting cost');
+      expect(first.error).toBeUndefined();
+      expect(first.cost).toBeCloseTo(expected, 12);
+      expect(cached.cost).toBeCloseTo(expected, 12);
+      expect(cached.cached).toBe(true);
+      expect(create).toHaveBeenCalledTimes(1);
+      const zero = await provider.callApi('explicit pricing', {
+        vars: {},
+        prompt: {
+          raw: 'explicit pricing',
+          label: 'zero',
+          config: { cost: 0 },
+        },
+      });
+      expect(zero.cost).toBe(0);
+      const perTokenZero = await provider.callApi('explicit per-token pricing', {
+        vars: {},
+        prompt: {
+          raw: 'explicit per-token pricing',
+          label: 'zero rates',
+          config: { inputCost: 0, outputCost: 0 },
+        },
+      });
+      expect(perTokenZero.cost).toBe(0);
+    },
+  );
+
   let restoreEnv: (() => void) | undefined;
 
   afterEach(async () => {

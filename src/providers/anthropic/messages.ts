@@ -287,6 +287,14 @@ function getAnthropicCostFromMessage(
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
+
+  protected calculateMessageCost(
+    config: AnthropicMessageOptions,
+    message: Anthropic.Messages.Message,
+    modelName = this.modelName,
+  ): number | undefined {
+    return getAnthropicCostFromMessage(modelName, config, message);
+  }
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private samplingParamsDeprecationWarned = false;
@@ -740,7 +748,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       tokenUsage: getTokenUsage(message, cached),
       ...(finishReason && { finishReason }),
       ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-      cost: getAnthropicCostFromMessage(this.modelName, config, message),
+      cost: this.calculateMessageCost(config, message),
       ...(cached && { cached: true }),
     };
   }
@@ -1113,7 +1121,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return {
           error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
-          cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+          cost: this.calculateMessageCost(config, resolvedMessage),
           ...(mcpMetadata ? { metadata: mcpMetadata } : {}),
         };
       }

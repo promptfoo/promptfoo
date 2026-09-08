@@ -32,8 +32,9 @@ providers:
       max_tokens: 2500
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
-      web_search_options:
-        search_context_size: 'high'
+      passthrough:
+        web_search_options:
+          search_context_size: 'high'
 
 tests:
   - vars:

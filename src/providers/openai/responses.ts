@@ -1061,6 +1061,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
           }),
     };
+    // A nullable prompt tier clears an inherited provider tier. Preserve an
+    // explicitly nullable passthrough field, but never leave a stale string on
+    // the wire while the effective billing tier is null.
+    if (effectiveServiceTier === null && config.passthrough?.service_tier !== null) {
+      delete body.service_tier;
+    }
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning parameters for reasoning models

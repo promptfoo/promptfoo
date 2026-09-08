@@ -64,9 +64,9 @@ useful starting points:
 
 | Model ID                                  | Context (tokens) |
 | ----------------------------------------- | ---------------: |
-| `moonshotai/Kimi-K3`                      |        1,000,000 |
+| `moonshotai/Kimi-K3`                      |        1,048,576 |
 | `deepseek-ai/DeepSeek-V4-Pro-0813`        |        1,048,576 |
-| `deepseek-ai/DeepSeek-V4-Flash-0731`      |        1,000,000 |
+| `deepseek-ai/DeepSeek-V4-Flash-0731`      |        1,048,576 |
 | `Qwen/Qwen3.6-Plus`                       |        1,000,000 |
 | `thinkingmachines/Inkling`                |          524,288 |
 | `zai-org/GLM-5.2`                         |        1,048,575 |

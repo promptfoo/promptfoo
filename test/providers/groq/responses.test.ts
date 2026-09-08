@@ -9,6 +9,33 @@ const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 vi.mock('../../../src/util/fetch/index.ts');
 
 describe('GroqResponsesProvider', () => {
+  it.each(['provider', 'prompt'] as const)(
+    'accepts nullable %s passthrough service tier',
+    async (layer) => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          apiKey: 'test-key',
+          ...(layer === 'provider' && { passthrough: { service_tier: null } }),
+        },
+      });
+      const result = await provider.getOpenAiBody(
+        'Hello',
+        layer === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'nullable',
+                config: { passthrough: { service_tier: null } },
+              },
+            }
+          : undefined,
+      );
+      expect(result.body.service_tier).toBeNull();
+      expect(result.config.service_tier).toBeNull();
+    },
+  );
+
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   beforeEach(() => {

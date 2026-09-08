@@ -155,6 +155,15 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       flexMultiplier: 0.5,
       flexCacheRead: 0.08 / 1e6,
     },
+    vertexCost: {
+      input: 1.5 / 1e6,
+      output: 9.0 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      audioInput: 1.5 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+      flexCacheRead: 0.075 / 1e6,
+    },
     vertexRegionalCost: {
       input: 1.65 / 1e6,
       output: 9.9 / 1e6,

@@ -5,9 +5,11 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import type Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { AnthropicMessageOptions } from '../anthropic/types';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
@@ -56,6 +58,39 @@ export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): 
 }
 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
+  protected override calculateMessageCost(
+    config: AnthropicMessageOptions,
+    message: Anthropic.Messages.Message,
+  ): number | undefined {
+    const modelName =
+      typeof config.extra_body?.model === 'string' ? config.extra_body.model : this.modelName;
+    let endpointRegion: string | undefined;
+    try {
+      endpointRegion = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(
+        new URL(this.getApiBaseUrl() ?? '').hostname,
+      )?.[1];
+    } catch {
+      // Opaque provisioned endpoints retain the factory's resolved billing region.
+    }
+    const region =
+      endpointRegion ??
+      resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
+    const usesGovCloudOpusPricing =
+      modelName === 'anthropic.claude-opus-4-8' &&
+      (region === 'us-gov-west-1' || region === 'us-gov-east-1');
+    // AWS publishes these GovCloud rates directly. Selecting them at billing time
+    // preserves prompt-level flat overrides and avoids the commercial 1.1 premium.
+    const pricingConfig =
+      usesGovCloudOpusPricing && config.cost == null
+        ? {
+            ...config,
+            inputCost: config.inputCost ?? 6 / 1e6,
+            outputCost: config.outputCost ?? 30 / 1e6,
+          }
+        : config;
+    return super.calculateMessageCost(pricingConfig, message, modelName);
+  }
+
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
   // x-api-key (the factory guarantees one). Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
@@ -151,9 +186,10 @@ export function createBedrockAnthropicMessagesProvider(
 
   const apiBaseUrl =
     config.apiBaseUrl || getBedrockAnthropicBaseUrl(region, RUNTIME_MESSAGES_MODELS.has(modelName));
+  const resolvedConfig = { ...config, region, apiBaseUrl, apiKey };
 
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey },
+    config: resolvedConfig,
   });
 }

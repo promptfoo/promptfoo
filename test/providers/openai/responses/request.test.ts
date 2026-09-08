@@ -63,6 +63,59 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
+  it.each([
+    { promptTier: null, passthrough: undefined, wire: undefined, reported: undefined, cost: 10 },
+    { promptTier: null, passthrough: undefined, wire: undefined, reported: 'priority', cost: 17.5 },
+    {
+      promptTier: undefined,
+      passthrough: { service_tier: null },
+      wire: null,
+      reported: undefined,
+      cost: 10,
+    },
+  ])(
+    'keeps nullable request tier and fallback billing consistent: %j',
+    async ({ promptTier, passthrough, wire, reported, cost }) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_null_tier',
+          status: 'completed',
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          service_tier: reported,
+          usage: { input_tokens: 1_000_000, output_tokens: 1_000_000, total_tokens: 2_000_000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+      const result = await provider.callApi('Hello', {
+        vars: {},
+        prompt: {
+          raw: 'Hello',
+          label: 'null tier',
+          config: {
+            ...(promptTier !== undefined && { service_tier: promptTier }),
+            ...(passthrough && { passthrough }),
+          },
+        },
+      });
+      expect(result.error).toBeUndefined();
+      const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.service_tier).toBe(wire);
+      expect(result.cost).toBeCloseTo(cost, 10);
+      expect(provider.config.passthrough).toEqual({ service_tier: 'priority' });
+    },
+  );
+
   it('should format and call the responses API correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

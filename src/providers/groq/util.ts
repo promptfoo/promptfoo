@@ -9,7 +9,7 @@
 const GROQ_REASONING_MODEL_PATTERNS = ['gpt-oss', 'qwen'] as const;
 
 const GROQ_CHAT_SERVICE_TIERS = new Set(['auto', 'on_demand', 'flex', 'performance', null]);
-const GROQ_RESPONSES_SERVICE_TIERS = new Set(['auto', 'default', 'flex']);
+const GROQ_RESPONSES_SERVICE_TIERS = new Set(['auto', 'default', 'flex', null]);
 
 function assertGroqServiceTier(
   serviceTier: unknown,
