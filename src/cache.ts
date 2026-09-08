@@ -854,12 +854,14 @@ export async function fetchWithCache<T = unknown>(
     }
     const operation = Promise.resolve(work);
     return new Promise<V>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason);
-      signal.addEventListener('abort', onAbort, { once: true });
-      try {
-        signal.throwIfAborted();
-      } catch (error) {
-        reject(error);
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort);
+        reject(signal.reason);
+      };
+      if (signal.aborted) {
+        reject(signal.reason);
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
       }
       operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
     });
