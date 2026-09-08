@@ -19,6 +19,10 @@ import type {
 const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
 
+function singleRow(data: unknown): unknown {
+  return Array.isArray(data) && data.length === 1 && Array.isArray(data[0]) ? data[0] : data;
+}
+
 interface HuggingfaceProviderOptions {
   apiKey?: string;
   apiEndpoint?: string;
@@ -338,14 +342,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
           error: `API call error: ${response.data.error}`,
         };
       }
-      // Current Inference Providers return one flat list; older task endpoints
-      // wrap a single input's scores in an outer list.
-      const items =
-        Array.isArray(response.data) &&
-        response.data.length === 1 &&
-        Array.isArray(response.data[0])
-          ? response.data[0]
-          : response.data;
+      const items = singleRow(response.data);
       if (
         !Array.isArray(items) ||
         items.length === 0 ||
@@ -455,14 +452,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
           error: `API call error: ${response.data.error}`,
         };
       }
-      // A single input can be returned as one row or as a legacy flat vector.
-      // Do not flatten token-level or multiple-input matrices into one embedding.
-      const embedding =
-        Array.isArray(response.data) &&
-        response.data.length === 1 &&
-        Array.isArray(response.data[0])
-          ? response.data[0]
-          : response.data;
+      const embedding = singleRow(response.data);
       if (
         !Array.isArray(embedding) ||
         embedding.length === 0 ||
