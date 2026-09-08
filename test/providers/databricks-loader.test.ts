@@ -74,7 +74,7 @@ describe('Databricks loader request configuration', () => {
   );
 
   it.each(['process', 'registered suite'])(
-    'keeps the %s workspace and token paired when provider env also supplies a pair',
+    'keeps the provider workspace and token paired ahead of %s settings',
     async (source) => {
       vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
       vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
@@ -96,10 +96,9 @@ describe('Databricks loader request configuration', () => {
       });
 
       expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
-      const expectedSource = source === 'registered suite' ? 'suite' : 'process';
       expectRequest(
-        `https://${expectedSource}.example.test/serving-endpoints/chat/completions`,
-        `${expectedSource}-token`,
+        'https://provider.example.test/serving-endpoints/chat/completions',
+        'provider-token',
       );
     },
   );
@@ -151,8 +150,8 @@ describe('Databricks loader request configuration', () => {
     });
     expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
     expectRequest(
-      'https://process.example.test/serving-endpoints/chat/completions',
-      'custom-process-token',
+      'https://provider.example.test/serving-endpoints/chat/completions',
+      'custom-provider-token',
     );
   });
 

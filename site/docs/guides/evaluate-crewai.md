@@ -192,15 +192,11 @@ Inside your project folder, create a file called `agent.py` that contains the Cr
 ````python
 import asyncio
 import json
-import os
 import re
 import textwrap
 from typing import Any, Dict
 
 from crewai import LLM, Agent, Crew, Task
-
-# ✅ Load the OpenAI API key from the environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
@@ -216,7 +212,7 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        llm=LLM(model=model, api_key=OPENAI_API_KEY)
+        llm=LLM(model=model)
     )
 
     task = Task(
@@ -252,12 +248,6 @@ async def run_recruitment_agent(prompt, model='openai/gpt-4.1'):
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
     """
-    # Check if API key is set
-    if not OPENAI_API_KEY:
-        return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
-        }
-
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
@@ -335,6 +325,9 @@ if __name__ == "__main__":
 
 CrewAI receives the model through `Agent(llm=LLM(...))`. Use its `provider/model`
 format, such as `openai/gpt-4.1`, for the custom provider’s `config.model` field.
+CrewAI resolves credentials for the selected provider. If you change providers,
+install that provider’s required CrewAI dependencies and set its credentials,
+such as `ANTHROPIC_API_KEY` for Anthropic.
 
 ### Edit `promptfooconfig.yaml`
 
@@ -392,7 +385,7 @@ tests:
 
 Now that everything is set up, it’s time to run your first real evaluation!
 
-In your terminal, you first **export your OpenAI API key** so CrewAI and Promptfoo can connect securely:
+For the default OpenAI model, first **export your OpenAI API key**:
 
 ```
 export OPENAI_API_KEY="sk-xxx-your-api-key-here"
@@ -412,13 +405,13 @@ Promptfoo kicks off the evaluation job you set up.
 
 - It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py).
 - It feeds in the job requirements prompt and collects the structured output.
-- It checks the results against your Python and YAML assertions (like checking for a `candidates` list and a summary).
+- It checks the results against your YAML assertions, including the output shape and `candidates` list.
 - It shows a clear table: did the agent PASS or FAIL?
 
 In this example, you can see:
 
 - The CrewAI Recruitment Agent ran against the input “List top candidates with RoR and React.”
-- It returned a mock structured JSON with Alex, William, and Stanislav, plus a summary.
+- It returned structured JSON with candidate information.
 - Pass rate: **100%**
 
 <img width="800" height="499" alt="Promptfoo eval results" src="/img/docs/crewai/promptfoo-eval.png" />

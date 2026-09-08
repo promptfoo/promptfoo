@@ -121,6 +121,7 @@ export const ProviderEnvOverridesSchema = z.object({
   SLACK_BOT_TOKEN: z.string().optional(),
   SNOWFLAKE_ACCOUNT_IDENTIFIER: z.string().optional(),
   SNOWFLAKE_API_KEY: z.string().optional(),
+  TOGETHER_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),
