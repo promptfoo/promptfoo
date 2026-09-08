@@ -1,18 +1,10 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { GITHUB_MODELS_RETIREMENT_MESSAGE } from './index';
 
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../../types/index';
-
 class RetiredGitHubProvider extends OpenAiChatCompletionProvider {
   async callApi(
-    _prompt: string,
-    _context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+    ..._args: Parameters<OpenAiChatCompletionProvider['callApi']>
+  ): ReturnType<OpenAiChatCompletionProvider['callApi']> {
     return { error: GITHUB_MODELS_RETIREMENT_MESSAGE };
   }
 }
