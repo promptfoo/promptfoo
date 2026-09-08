@@ -49,7 +49,7 @@ describe('Envoy gateway URLs', () => {
     expect(fetchWithCache).toHaveBeenCalledTimes(1);
     const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
     expect(requestUrl).toBe('https://gateway.example/v1/chat/completions');
-    expect(JSON.parse(request.body as string)).toMatchObject({ model: 'route:stable' });
+    expect(JSON.parse(request?.body as string)).toMatchObject({ model: 'route:stable' });
   });
 
   it.each([
@@ -75,8 +75,8 @@ describe('Envoy gateway URLs', () => {
     expect(fetchWithCache).toHaveBeenCalledTimes(1);
     const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
     expect(requestUrl).toBe(expectedUrl);
-    expect(request.headers).toMatchObject({ 'X-Gateway': 'configured' });
-    expect(JSON.parse(request.body as string)).toMatchObject({
+    expect(request?.headers).toMatchObject({ 'X-Gateway': 'configured' });
+    expect(JSON.parse(request?.body as string)).toMatchObject({
       model: 'route:stable',
       temperature: 0.25,
     });
