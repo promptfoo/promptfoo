@@ -1981,6 +1981,63 @@ describe('runAssertion', () => {
     expect(result.score).toBeCloseTo(0.78, 2);
   });
 
+  // rouge-l / rouge-s reach users only if they are registered in ASSERTION_HANDLERS and
+  // the assertion-type schema. These run through runAssertion() rather than calling the
+  // handler directly, so they fail if either registration is dropped.
+  it.each([
+    ['rouge-l', 'ROUGE-L'],
+    ['rouge-s', 'ROUGE-S'],
+  ])('should pass when the %s assertion passes', async (type, label) => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type, value: 'This is the expected output.', threshold: 0.75 } as Assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: `${label} score 1.00 is greater than or equal to threshold 0.75`,
+    });
+  });
+
+  it.each([
+    ['rouge-l', 'ROUGE-L'],
+    ['rouge-s', 'ROUGE-S'],
+  ])('should fail when the %s assertion fails', async (type, label) => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type, value: 'This is the expected output.', threshold: 0.75 } as Assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain(`${label} score`);
+    expect(result.reason).toContain('is less than threshold 0.75');
+  });
+
+  it.each([
+    ['not-rouge-l', 'ROUGE-L'],
+    ['not-rouge-s', 'ROUGE-S'],
+  ])('should pass when the %s assertion score is below threshold', async (type, label) => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type, value: 'This is the expected output.', threshold: 0.75 } as Assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain(`${label} score`);
+  });
+
   it('should fail when the not-rouge-n assertion score is above threshold', async () => {
     const output = 'This is the expected output.';
 
