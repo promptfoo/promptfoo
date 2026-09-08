@@ -85,6 +85,30 @@ describe('N8nProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each(['HEAD', 'head'])('sends %s requests without a body', async (method) => {
+      vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+        // Use the native Fetch contract without sending a network request.
+        new Request(url, options);
+        return createMockResponse('');
+      });
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({ method: 'HEAD' }),
+        expect.any(Number),
+        'text',
+        true,
+        undefined,
+      );
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
     it('should call n8n webhook with default body structure without response caching', async () => {
       const mockResponse = createMockResponse({ output: 'Hello from n8n!' }, { latencyMs: 100 });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);

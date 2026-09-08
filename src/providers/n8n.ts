@@ -547,12 +547,12 @@ export class N8nProvider implements ApiProvider {
       ...(callOptions?.abortSignal && { signal: callOptions.abortSignal }),
     };
 
-    if (method !== 'GET') {
+    if (method !== 'GET' && method !== 'HEAD') {
       fetchOptions.body = renderedBody;
     }
 
     logger.debug('[n8n] Calling webhook', {
-      hasBody: method !== 'GET',
+      hasBody: fetchOptions.body !== undefined,
       hasCustomHeaders: Object.keys(this.config.headers ?? {}).length > 0,
       hasSessionId: Boolean(this.getRequestSessionId(context)),
       method,
