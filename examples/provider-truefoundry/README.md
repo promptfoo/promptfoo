@@ -108,7 +108,6 @@ TrueFoundry provides access to models from multiple providers. Use the format `p
 - truefoundry:openai-main/gpt-4o
 - truefoundry:openai-main/gpt-4o-mini
 - truefoundry:openai-main/o1
-- truefoundry:openai-main/o1-mini
 ```
 
 ### Anthropic

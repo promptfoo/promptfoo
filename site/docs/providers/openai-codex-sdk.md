@@ -151,11 +151,11 @@ The provider creates an ephemeral thread for each eval test case.
 
 ### With Custom Model
 
-Specify which OpenAI model to use for code generation:
+Specify a current model such as GPT-6 Astra for code generation. Astra requires account access; use `gpt-5.6-terra` for an alternative that balances capability and cost:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:codex:gpt-5.5
+  - openai:codex:gpt-6-astra
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -167,7 +167,7 @@ If you need additional Codex settings, you can still set the model via `config.m
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.5
+      model: gpt-6-astra
 ```
 
 ### With Working Directory
@@ -272,23 +272,14 @@ providers:
       model_reasoning_effort: max
 ```
 
-Supported models include:
+For new evals, choose from the current models in [OpenAI's model guide](https://developers.openai.com/api/docs/models):
 
-- **GPT-6 Astra** - Complex reasoning and coding (`gpt-6-astra`)
-- **GPT-5.6** - Sol, Terra, and Luna (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`)
-- **GPT-5.5** - Previous frontier model for professional work (`gpt-5.5`)
-- **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
-- **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
-- **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
-- **GPT-5.3 Codex** - GPT-5.3 coding generation (`gpt-5.3-codex`). `gpt-5.3-codex-spark` is available through eligible ChatGPT Pro/Codex authentication, not the public Responses API.
-- **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
-- **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
-- **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
-- **GPT-5** - Base GPT-5 model (`gpt-5`)
+- **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
+- **GPT-5.6 Sol** (`gpt-5.6-sol`) - Use for complex professional and coding workflows.
+- **GPT-5.6 Terra** (`gpt-5.6-terra`) - Start here to balance capability and cost.
+- **GPT-5.6 Luna** (`gpt-5.6-luna`) - Use for cost-sensitive, high-volume evals.
 
-`gpt-5-codex-mini` is also OpenAI's documented Responses API replacement for the retired
-`codex-mini-latest` model. Use `openai:responses:gpt-5-codex-mini` when migrating existing API
-evals, or configure it here when running through the Codex SDK.
+Earlier supported models include `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.3-codex`, `gpt-5.2`, `gpt-5-codex-mini`, and `gpt-5`. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
@@ -296,13 +287,13 @@ GPT-6 Astra, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the t
 
 ### Mini Models
 
-For faster or lower-cost evals, use mini model variants:
+For lower-cost evals, use the current GPT-5.6 Luna model:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex-mini
+      model: gpt-5.6-luna
 ```
 
 ## Thread Management
@@ -606,7 +597,7 @@ Codex gates optional capabilities behind [feature flags](https://developers.open
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.5
+  - id: openai:codex-sdk:gpt-6-astra
     config:
       cli_config:
         features:
@@ -629,15 +620,15 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                                     | Supported Models                                                                                                                                            |
-| --------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                                                   |
-| `low`     | Light reasoning, faster responses               | All models                                                                                                                                                  |
-| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                                                  |
-| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                                  |
-| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
-| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                                                       |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                                                     |
+| Level     | Description                                     | Supported Models                                                                                                          |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                 |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                                |
+| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
+| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                   |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
@@ -724,7 +715,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.2
+      model: gpt-5.6-terra
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
@@ -766,7 +757,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.2
+      model: gpt-5.6-terra
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
