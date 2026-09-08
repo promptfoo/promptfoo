@@ -253,7 +253,15 @@ def call_api(prompt, options, context):
   assert.equal(data[0].description, 'Docker smoke success');
   const detail = await request(`/api/results/${data[0].evalId}`);
   assert(detail.ok);
-  assert.equal((await detail.json()).data.config.description, 'Docker smoke success');
+  const persisted = (await detail.json()).data;
+  assert.equal(persisted.config.description, 'Docker smoke success');
+  assert.equal(persisted.results.results.length, 2);
+  for (const result of persisted.results.results) {
+    assert.equal(result.success, true);
+    assert.equal(result.score, 1);
+    assert.equal(result.response.output, 'fixture:hello');
+    assert.equal(result.error, undefined);
+  }
   assert.equal((await request('/api/results/missing-eval')).status, 404);
 
   if (process.env.PROMPTFOO_TEST_PRODUCTION_DEPS === '1') {
