@@ -1157,6 +1157,9 @@ providers:
       model: MAI-Image-2.6
       width: 1024 # min 768; width * height must be <= 1,048,576
       height: 1024
+      passthrough:
+        auto_aspect_ratio: false # Set true to let the model choose the aspect ratio
+        web_grounding: false # Set true to use Bing Search context
 
 tests:
   - vars:
