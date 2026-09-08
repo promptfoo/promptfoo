@@ -82,12 +82,15 @@ Generate high-quality voice synthesis with multiple models and voices:
 - `elevenlabs:tts:<voice_id>` - TTS with specified voice ID (e.g., `elevenlabs:tts:21m00Tcm4TlvDq8ikWAM` for Rachel)
 - `elevenlabs:tts` - TTS with default voice
 
+Use a voice ID from your [ElevenLabs voice list](https://elevenlabs.io/docs/api-reference/voices/search), not a display name such as `rachel`. Set it in the provider ID or `config.voiceId`; an explicit `voiceId` takes precedence. Voice availability depends on your account.
+
 **Models available:**
 
 - `eleven_flash_v2_5` - Fastest, lowest latency (~200ms)
-- `eleven_turbo_v2_5` - High quality, fast
-- `eleven_multilingual_v2` - Best for non-English languages
-- `eleven_monolingual_v1` - English only, high quality
+- `eleven_turbo_v2_5` - Deprecated low-latency model; prefer Flash v2.5 for new configurations
+- `eleven_multilingual_v2` - Default model, suited to consistent long-form speech
+
+[ElevenLabs scheduled monolingual and multilingual v1 for removal on July 9, 2026](https://elevenlabs.io/docs/changelog/2026/6/8). Legacy type values remain for compatible endpoints; use a current model for the native API.
 
 **Example:**
 
@@ -237,7 +240,7 @@ providers:
     config:
       modelId: eleven_flash_v2_5
 
-  - id: elevenlabs:tts:clyde
+  - id: elevenlabs:tts:2EiwWnXFnvU5JabPnv8n
     config:
       modelId: eleven_turbo_v2_5
 
@@ -463,27 +466,23 @@ prompts:
   - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
 providers:
-  - id: flash-model
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     label: Flash Model (Fastest)
     config:
       modelId: eleven_flash_v2_5
-      voiceId: rachel
 
-  - id: turbo-model
-    label: Turbo Model (Best Quality)
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    label: Turbo Model (Legacy Comparison)
     config:
       modelId: eleven_turbo_v2_5
-      voiceId: rachel
 
 tests:
-  - description: Flash model completes quickly
-    provider: flash-model
+  - description: Audio generation completes quickly
     assert:
       - type: latency
         threshold: 1000
 
-  - description: Turbo model has better quality
-    provider: turbo-model
+  - description: Audio generation stays within the cost budget
     assert:
       - type: cost
         threshold: 0.01
@@ -491,37 +490,7 @@ tests:
 
 ### Transcription Accuracy Pipeline
 
-Test end-to-end TTS → STT accuracy:
-
-```yaml
-prompts:
-  - |
-    The meeting is scheduled for Thursday at 2 PM in conference room B.
-    Please bring your laptop and quarterly report.
-
-providers:
-  - id: tts-generator
-    label: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-    config:
-      modelId: eleven_flash_v2_5
-
-  - id: stt-transcriber
-    label: elevenlabs:stt
-    config:
-      calculateWER: true
-
-tests:
-  - vars:
-      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
-    assert:
-      - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          if (result.wer_result) {
-            return result.wer_result.wer < 0.03; // Less than 3% error
-          }
-          return true;
-```
+Generate and save speech in a TTS eval, then pass the saved audio file path and `config.referenceText` to a separate STT eval. The [transcription pipeline guide](/docs/guides/evaluate-elevenlabs/#part-3-speech-to-text-accuracy) shows both configs and an assertion using `context.providerResponse.metadata.wer`.
 
 ### Agent Regression Testing
 
@@ -565,9 +534,8 @@ tests:
 ### 1. Choose the Right Model
 
 - **Flash v2.5**: Use for real-time applications, live streaming, or when latency is critical (&lt;200ms)
-- **Turbo v2.5**: Use for high-quality pre-recorded content where quality matters more than speed
+- **Turbo v2.5**: Keep for legacy comparisons; [ElevenLabs recommends Flash for new configurations](https://elevenlabs.io/docs/overview/models#deprecated-models)
 - **Multilingual v2**: Use for non-English languages or when switching between languages
-- **Monolingual v1**: Use for English-only content requiring the highest quality
 
 ### 2. Optimize Voice Settings
 

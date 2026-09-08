@@ -9,7 +9,7 @@ This guide walks you through testing ElevenLabs voice AI capabilities using Prom
 
 ## Part 1: Text-to-Speech Quality Testing
 
-Let's start by comparing different voice models and measuring their quality.
+Let's start by comparing different voice models and measuring their quality. Turbo is retained here for comparison; [ElevenLabs recommends Flash over Turbo](https://elevenlabs.io/docs/overview/models#deprecated-models) for new configurations.
 
 ### Step 1: Setup
 
@@ -22,7 +22,7 @@ export ELEVENLABS_API_KEY=your_api_key_here
 
 ### Step 2: Create Your First Config
 
-Create `promptfooconfig.yaml`:
+Create `promptfooconfig.yaml`. The snippets use an example voice ID; replace it with a voice ID available in your [ElevenLabs voice list](https://elevenlabs.io/docs/api-reference/voices/search). Display names such as `rachel` are not resolved to IDs:
 
 ```yaml
 description: 'Compare ElevenLabs TTS models for customer service greetings'
@@ -32,13 +32,13 @@ prompts:
 
 providers:
   - label: Flash Model (Fastest)
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       outputFormat: mp3_44100_128
 
-  - label: Turbo Model (Best Quality)
-    id: elevenlabs:tts:rachel
+  - label: Turbo Model (Legacy Comparison)
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_turbo_v2_5
       outputFormat: mp3_44100_128
@@ -99,7 +99,7 @@ prompts:
 
 providers:
   - label: Professional Voice
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
@@ -108,7 +108,7 @@ providers:
         speed: 0.95
 
   - label: Friendly Voice
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
@@ -117,7 +117,7 @@ providers:
         speed: 1.1 # Slightly faster
 
   - label: Empathetic Voice
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
@@ -129,21 +129,18 @@ providers:
 tests:
   - vars:
       scenario: formal
-    provider: Professional Voice
     assert:
       - type: javascript
-        value: output.includes("Welcome") || output.includes("system")
+        value: Boolean(context.providerResponse.audio?.data)
 
   - vars:
       scenario: casual
-    provider: Friendly Voice
     assert:
       - type: latency
         threshold: 2000
 
   - vars:
       scenario: empathy
-    provider: Empathetic Voice
     assert:
       - type: cost
         threshold: 0.01
@@ -176,48 +173,45 @@ prompts:
 providers:
   # Step 1: Generate audio
   - label: tts-generator
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
+      saveAudio: true
+      audioOutputPath: audio
 
 tests:
   - description: Generate audio and verify quality
-    provider: tts-generator
     assert:
       - type: javascript
         value: |
           // Verify audio was generated
-          const result = JSON.parse(output);
-          return result.audio && result.audio.sizeBytes > 0;
+          return Boolean(context.providerResponse.audio?.data);
 ```
 
-Now add STT to verify accuracy. Create a second config `stt-accuracy.yaml`:
+Run `promptfoo eval -c transcription-test.yaml --no-cache` to save `audio/tts-<timestamp>.mp3`, then copy the generated file to `audio/generated-speech.mp3`. Add STT to verify accuracy in a second config, `stt-accuracy.yaml`:
 
 ```yaml
 description: 'Test STT accuracy'
 
 prompts:
-  - file://audio/generated-speech.mp3 # Audio from previous eval
+  - '{{audioFile}}'
 
 providers:
   - id: elevenlabs:stt
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v2
       calculateWER: true
+      referenceText: 'The quarterly sales meeting is scheduled for Thursday, March 15th at 2:30 PM. Please bring your laptop, quarterly reports, and the Q4 projections spreadsheet. Conference room B has been reserved for this meeting.'
 
 tests:
   - vars:
-      referenceText: 'The quarterly sales meeting is scheduled for Thursday, March 15th at 2:30 PM. Please bring your laptop, quarterly reports, and the Q4 projections spreadsheet. Conference room B has been reserved for this meeting.'
+      audioFile: audio/generated-speech.mp3 # File path from the previous eval
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          // Check Word Error Rate is under 5%
-          if (result.wer_result) {
-            console.log('WER:', result.wer_result.wer);
-            return result.wer_result.wer < 0.05;
-          }
-          return false;
+          // Transcription text is output; WER is in response metadata.
+          const wer = context.providerResponse.metadata?.wer?.wer;
+          return typeof wer === 'number' && wer < 0.05;
 ```
 
 Run the STT eval:
@@ -488,7 +482,7 @@ Check out complete examples:
 - Try different `outputFormat` settings
 - Adjust voice settings (stability, similarity_boost)
 - Test with different models
-- Consider using Turbo over Flash for quality
+- Compare `eleven_multilingual_v2` with Flash for your speech-quality requirements
 
 ### Getting Help
 

@@ -20,7 +20,7 @@ export interface ElevenLabsSTTConfig extends ElevenLabsBaseConfig {
 }
 
 /**
- * Available STT models
+ * STT model identifiers; scribe_v1 is retained for compatible endpoints.
  */
 export type STTModel = 'scribe_v1' | 'scribe_v2';
 

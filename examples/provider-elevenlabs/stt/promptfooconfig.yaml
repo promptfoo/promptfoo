@@ -10,14 +10,14 @@ providers:
   - id: elevenlabs:stt:basic
     label: Basic Transcription
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
 
   # Transcription with speaker diarization
   - id: elevenlabs:stt:diarization
     label: With Speaker Diarization
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
       diarization: true
       maxSpeakers: 3
@@ -26,7 +26,7 @@ providers:
   - id: elevenlabs:stt:accuracy
     label: Accuracy Testing (WER)
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
       calculateWER: true
       referenceText: The quick brown fox jumps over the lazy dog
