@@ -1266,6 +1266,24 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
   return evidence;
 }
 
+async function readTrustedChange(name: string, roots: string[]): Promise<string | undefined> {
+  for (const root of roots) {
+    const filePath = path.resolve(root, name);
+    if (!(await isTrustedVerifierArtifactPath(filePath, [root]))) {
+      continue;
+    }
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile() && stat.size <= 1024 * 1024) {
+        return await fs.readFile(filePath, 'utf8');
+      }
+    } catch {
+      // The changed file may have been removed or be unreadable.
+    }
+  }
+  return undefined;
+}
+
 async function evidenceFromChangedFiles(
   gradingContext: RedteamGradingContext | undefined,
   test: AtomicTestCase,
@@ -1279,34 +1297,22 @@ async function evidenceFromChangedFiles(
   const evidence: TargetEvidence[] = [];
   for (const [index, item] of items.entries()) {
     const entry = getObject(item);
-    if (entry && normalizedProviderRawItemType(entry) === 'file_change') {
-      for (const change of Array.isArray(entry.changes) ? entry.changes : []) {
-        const detail = getObject(change);
-        const name = getString(detail?.path);
-        if (!name || getString(detail?.kind)?.toLowerCase() === 'delete') {
-          continue;
-        }
-        for (const root of roots) {
-          const filePath = path.resolve(root, name);
-          if (!(await isTrustedVerifierArtifactPath(filePath, [root]))) {
-            continue;
-          }
-          try {
-            const stat = await fs.stat(filePath);
-            if (!stat.isFile() || stat.size > 1024 * 1024) {
-              continue;
-            }
-            const text = await fs.readFile(filePath, 'utf8');
-            evidence.push({
-              evidenceSource: 'artifact-file',
-              location: providerRawItemLocation(index, `file change ${name}`),
-              text,
-            });
-            break;
-          } catch {
-            // A removed or unreadable artifact supplies no authored content.
-          }
-        }
+    if (!entry || normalizedProviderRawItemType(entry) !== 'file_change') {
+      continue;
+    }
+    for (const change of Array.isArray(entry.changes) ? entry.changes : []) {
+      const detail = getObject(change);
+      const name = getString(detail?.path);
+      if (!name || getString(detail?.kind)?.toLowerCase() === 'delete') {
+        continue;
+      }
+      const text = await readTrustedChange(name, roots);
+      if (text) {
+        evidence.push({
+          evidenceSource: 'artifact-file',
+          location: providerRawItemLocation(index, `file change ${name}`),
+          text,
+        });
       }
     }
   }
