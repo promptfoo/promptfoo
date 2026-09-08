@@ -282,7 +282,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
-- `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
+- `google:gemini-omni-1.1-flash` - Stable Gemini Omni Flash for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output); `google:gemini-omni-flash-preview` remains available
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
@@ -455,11 +455,13 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Video Generation Models (Gemini Omni Flash)
 
-Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+The stable [Gemini Omni Flash](https://ai.google.dev/gemini-api/docs/models/gemini-omni-flash) model uses `google:gemini-omni-1.1-flash`. Promptfoo routes it and `google:gemini-omni-flash-preview` through the Gemini Interactions API and stores returned video in blob storage. Use `store: true` and `previousInteractionId` to conversationally edit a prior result. Omni does not support grounding, code execution, or function-calling tools.
+
+For Vertex, use `vertex:gemini-omni-1.1-flash-preview` or `vertex:gemini-omni-flash-preview`; both route through Interactions with OAuth and the configured Google Cloud project. [Vertex Omni 1.1](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/omni-1-1-flash) uses a different model ID from the native stable model and does not currently support follow-up interactions in promptfoo.
 
 ```yaml
 providers:
-  - id: google:gemini-omni-flash-preview
+  - id: google:gemini-omni-1.1-flash
     config:
       aspectRatio: '9:16'
       store: true
@@ -468,7 +470,7 @@ prompts:
   - 'Generate a short video of {{subject}}'
 ```
 
-Video output is billed at $17.50/1M tokens (about $0.10/second at 720p); text and thinking output use the $9/1M rate.
+The [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-omni-flash) for both Omni models is $1.50/1M input tokens, $9/1M text and thinking output tokens, and $17.50/1M video output tokens (about $0.10/second at 720p).
 
 ### Video Generation Models (Veo)
 
