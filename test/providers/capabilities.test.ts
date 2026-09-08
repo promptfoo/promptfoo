@@ -351,6 +351,28 @@ it('constructs the backward-compatible LiteLLM provider without options', () => 
   expect(new LiteLLMProvider('fixture').id()).toBe('litellm:fixture');
 });
 
+it('does not invoke subclass hook getters on the prototype during LiteLLM construction', async () => {
+  class AccessorHooks extends LiteLLMProvider {
+    calls: string[] = [];
+  }
+  for (const hook of ['cleanup', 'validateFunctionToolCall'] as const) {
+    Object.defineProperty(AccessorHooks.prototype, hook, {
+      get(this: AccessorHooks) {
+        if (!(this instanceof AccessorHooks)) {
+          throw new Error(`${hook} getter received prototype`);
+        }
+        return () => {
+          this.calls.push(hook);
+        };
+      },
+    });
+  }
+  const provider = new AccessorHooks('fixture');
+  provider.validateFunctionToolCall?.('{}', {});
+  await provider.cleanup?.();
+  expect(provider.calls).toEqual(['validateFunctionToolCall', 'cleanup']);
+});
+
 it('retains MCP tools and cleanup ownership when a LiteLLM wrapper is reused', async () => {
   mcp.initialize.mockReset().mockResolvedValue(undefined);
   mcp.cleanup.mockReset().mockResolvedValue(undefined);
