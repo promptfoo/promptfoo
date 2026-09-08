@@ -344,7 +344,9 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         return { error: 'Empty response from S3' };
       }
 
-      const buffer = Buffer.from(await response.Body.transformToByteArray());
+      const buffer = Buffer.from(
+        await awaitProviderOperation(response.Body.transformToByteArray(), options?.abortSignal),
+      );
 
       options?.abortSignal?.throwIfAborted();
 

@@ -239,6 +239,27 @@ describe('LumaRayVideoProvider', () => {
   });
 
   describe('Text-to-Video Generation', () => {
+    it('stops waiting for an S3 response body after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: () => {
+            started();
+            return new Promise(() => {});
+          },
+        },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await reading;
+      controller.abort(new Error('cancelled S3 body'));
+      await expect(call).rejects.toThrow('cancelled S3 body');
+      expect(mockStoreBlob).not.toHaveBeenCalled();
+    });
+
     it('stops waiting for a blob write after cancellation', async () => {
       const controller = new AbortController();
       let started!: () => void;

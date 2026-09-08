@@ -360,6 +360,19 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('does not register an abort listener if the cache read already cancelled', async () => {
+      const controller = new AbortController();
+      const listener = vi.spyOn(controller.signal, 'addEventListener');
+      vi.mocked(getCache().get).mockImplementationOnce(() => {
+        controller.abort();
+        return new Promise(() => {});
+      });
+      await expect(fetchWithCache(url, { signal: controller.signal }, 1000)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('aborts while waiting for a cache read', async () => {
       const controller = new AbortController();
       const cache = getCache();
