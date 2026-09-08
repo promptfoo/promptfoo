@@ -173,6 +173,8 @@ config:
 
 Connect agents to knowledge bases for RAG capabilities:
 
+Configure the knowledge-base association on the deployed agent first. Entries with `retrievalConfiguration` override retrieval settings for the request. Legacy entries containing only `knowledgeBaseId` use the deployed settings and are omitted from the request's session overrides.
+
 ```yaml
 config:
   knowledgeBaseConfigurations:

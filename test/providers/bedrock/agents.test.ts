@@ -158,6 +158,7 @@ describe('AwsBedrockAgentsProvider', () => {
         knowledgeBaseId: 'kb-123',
         retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } },
       },
+      { knowledgeBaseId: 'kb-deployed-defaults' },
     ];
     const provider = new AwsBedrockAgentsProvider('agent-123', {
       config: {
@@ -171,11 +172,28 @@ describe('AwsBedrockAgentsProvider', () => {
     mockSend.mockResolvedValueOnce(makeCompletionResponse('A quiet garden'));
     const result = await provider.callApi('Describe the garden');
     expect(result.output).toBe('A quiet garden');
-    expect(mockSend.mock.calls[0][0].sessionState.knowledgeBaseConfigurations).toEqual(
-      knowledgeBaseConfigurations,
-    );
+    expect(mockSend.mock.calls[0][0].sessionState.knowledgeBaseConfigurations).toEqual([
+      knowledgeBaseConfigurations[0],
+    ]);
+    expect(knowledgeBaseConfigurations).toHaveLength(2);
     expect(mockSend.mock.calls[0][0]).not.toHaveProperty('knowledgeBaseConfigurations');
     expect(result.metadata).not.toHaveProperty('guardrails');
+  });
+
+  it('uses deployed knowledge-base defaults for legacy ID-only configuration', async () => {
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        knowledgeBaseConfigurations: [{ knowledgeBaseId: 'kb-123' }],
+      },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('A quiet garden'));
+
+    const result = await provider.callApi('Describe the garden');
+
+    expect(result.output).toBe('A quiet garden');
+    expect(mockSend.mock.calls[0][0].sessionState).toBeUndefined();
   });
 
   it('does not replay legacy cached guardrail claims', async () => {

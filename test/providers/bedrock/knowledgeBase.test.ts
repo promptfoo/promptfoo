@@ -369,6 +369,45 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
+  it.each(['default', ''])(
+    'rejects missing generation model %j before acquiring a client',
+    async (modelName) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'kb-123' },
+      });
+      const getClient = vi.spyOn(provider, 'getKnowledgeBaseClient');
+
+      const result = await provider.callApi('Describe the garden');
+
+      expect(result.error).toContain('Set bedrock:kb:<model-id> or provide config.modelArn');
+      expect(getClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts an explicit modelArn with the default route and preserves custom identity', async () => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+    const provider = new AwsBedrockKnowledgeBaseProvider('default', {
+      id: 'custom-kb',
+      config: {
+        knowledgeBaseId: 'kb-123',
+        modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
+      },
+    });
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+    expect(provider.id()).toBe('custom-kb');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({
+            modelArn: provider.kbConfig.modelArn,
+          }),
+        }),
+      }),
+    );
+  });
+
   it('should leave generationConfiguration omitted when no generation settings are provided', async () => {
     const mockResponse = {
       output: {
@@ -423,6 +462,33 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
             generationConfiguration: {
               inferenceConfig: { textInferenceConfig: { temperature: 0, maxTokens: 128, topP: 0 } },
               additionalModelRequestFields: { top_k: 4 },
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('preserves max_tokens when the effective model does not support sampling', async () => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-7',
+        temperature: 0,
+        max_tokens: 128,
+        top_p: 0.75,
+        top_k: 20,
+      },
+    });
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({
+            generationConfiguration: {
+              inferenceConfig: { textInferenceConfig: { maxTokens: 128 } },
             },
           }),
         }),

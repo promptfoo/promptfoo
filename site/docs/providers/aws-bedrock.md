@@ -1826,6 +1826,10 @@ providers:
 
 The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
+A generation model is required: specify it in the provider ID or supply `config.modelArn`. The provider returns a configuration error before contacting AWS if both are missing.
+
+System-defined inference profile IDs with `us.`, `eu.`, `apac.`, `global.`, `jp.`, or `au.` prefixes and full Bedrock ARNs are passed through unchanged, including ARNs for other AWS partitions. Choose a model or profile available to your AWS account and Knowledge Base region; promptfoo does not select a default or create a profile.
+
 For example:
 
 - `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
@@ -1834,6 +1838,7 @@ For example:
 Configuration options include:
 
 - `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
+- `modelArn`: Optional explicit generation model ARN, overriding the model in the provider ID
 - `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
 - `temperature`: Controls randomness in response generation (uses the model default when omitted)
 - `max_tokens`: Maximum number of tokens in the generated response
@@ -1842,6 +1847,8 @@ Configuration options include:
 - `numberOfResults`: Number of chunks to retrieve from the knowledge base (optional, uses AWS default when not specified)
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
+
+For Claude models that no longer support sampling parameters, such as [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
 ### Knowledge Base Example
 

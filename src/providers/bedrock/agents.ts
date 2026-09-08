@@ -255,7 +255,12 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Build the session state from configuration
    */
   private buildSessionState(): SessionState | undefined {
-    if (!this.config.sessionState && !this.config.knowledgeBaseConfigurations) {
+    // ID-only entries use the agent's deployed configuration. Runtime overrides
+    // require retrievalConfiguration, so do not send those legacy entries.
+    const knowledgeBaseConfigurations = this.config.knowledgeBaseConfigurations?.filter(
+      (configuration) => configuration.retrievalConfiguration,
+    );
+    if (!this.config.sessionState && !knowledgeBaseConfigurations?.length) {
       return undefined;
     }
 
@@ -265,7 +270,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       sessionAttributes: this.config.sessionState?.sessionAttributes,
       promptSessionAttributes: this.config.sessionState?.promptSessionAttributes,
       invocationId: this.config.sessionState?.invocationId,
-      knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+      ...(knowledgeBaseConfigurations?.length && { knowledgeBaseConfigurations }),
     } as SessionState;
 
     // Handle returnControlInvocationResults if present
