@@ -40,14 +40,16 @@ export const googleProviderFactories: ProviderFactory[] = [
         const modelName = splits.slice(2).join(':');
         validateGoogleModelRoute(modelName, firstPart);
         throw new Error(
-          `Vertex AI does not support the Gemini Live API. Use google:live:${modelName}.`,
+          'The promptfoo vertex: adapter does not implement Vertex Live. ' +
+            'Use google:live: only with a model supported by the native Gemini Live API and native credentials.',
         );
       }
       if (firstPart === 'image') {
         const modelName = splits.slice(2).join(':');
         validateGoogleModelRoute(modelName, firstPart);
         throw new Error(
-          `Vertex AI image generation is not supported. Use google:image:${modelName}.`,
+          'The promptfoo vertex: adapter does not implement Vertex image generation. ' +
+            'Use google:image: only with a model supported by the native Gemini image API and native credentials.',
         );
       }
       const explicitServiceType = ['chat', 'video', 'embedding', 'embeddings'].includes(firstPart)

@@ -1848,14 +1848,13 @@ describe('Provider Registry', () => {
     ])(
       'rejects unsupported Vertex Live route %s with Google Live guidance',
       async (providerPath) => {
-        const modelName = providerPath.split(':').slice(2).join(':');
         const factory = (await getProviderFactories(providerPath)).find((f) =>
           f.test(providerPath),
         );
         expect(factory).toBeDefined();
 
         await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-          `Use google:live:${modelName}`,
+          'The promptfoo vertex: adapter does not implement Vertex Live.',
         );
       },
     );
@@ -1915,7 +1914,7 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-        'Use google:image:imagen-4.0-generate-001',
+        'The promptfoo vertex: adapter does not implement Vertex image generation.',
       );
     });
 

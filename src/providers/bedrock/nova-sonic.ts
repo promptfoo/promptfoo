@@ -151,16 +151,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     }
 
     const region = this.getRegion();
-    if (
-      this.modelName === 'amazon.nova-2-sonic-v1:0' &&
-      !this.config.endpoint &&
-      !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
-    ) {
-      throw new Error(
-        `Amazon Bedrock model "${this.modelName}" is not available in AWS region "${region}". ` +
-          `Supported Regions: ${NOVA_2_SONIC_REGIONS.join(', ')}.`,
-      );
-    }
+    this.validateRegionConfig(region);
 
     // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
     const sessionTimeout = this.config?.sessionTimeout ?? 300000;
@@ -312,6 +303,19 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     return this.sendTextMessage(sessionId, role, prompt);
   }
 
+  private validateRegionConfig(region = this.getRegion()): void {
+    if (
+      this.modelName === 'amazon.nova-2-sonic-v1:0' &&
+      !this.config.endpoint &&
+      !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
+    ) {
+      throw new Error(
+        `Amazon Bedrock model "${this.modelName}" is not available in AWS region "${region}". ` +
+          `Supported Regions: ${NOVA_2_SONIC_REGIONS.join(', ')}.`,
+      );
+    }
+  }
+
   private validateModelConfig(): void {
     if (this.modelName === 'amazon.nova-sonic-v1:0' && this.config.turnDetectionConfiguration) {
       throw new Error(
@@ -323,6 +327,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     this.validateModelConfig();
+    this.validateRegionConfig();
 
     const sessionId = crypto.randomUUID();
     const session = this.createSession(sessionId);

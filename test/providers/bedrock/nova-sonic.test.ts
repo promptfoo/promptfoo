@@ -410,6 +410,25 @@ describe('NovaSonic Provider', () => {
       expect(BedrockRuntimeClient).not.toHaveBeenCalled();
     });
 
+    it('rejects an invalid region before creating or cleaning up a session', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: { region: 'eu-west-1' },
+      });
+      const createSession = vi.spyOn(testProvider as any, 'createSession');
+      const endSession = vi.spyOn(testProvider as any, 'endSession');
+      vi.useFakeTimers();
+      try {
+        await expect(testProvider.callApi('Test prompt')).rejects.toThrow('Supported Regions:');
+        expect(createSession).not.toHaveBeenCalled();
+        expect(endSession).not.toHaveBeenCalled();
+        expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should allow Nova 2 Sonic custom endpoints outside published regions and retain the signing region', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
       const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {

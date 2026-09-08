@@ -445,6 +445,16 @@ describe('loadApiProvider', () => {
     );
   });
 
+  it.each(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'])(
+    'preserves the requested Nova generation when rejecting a geo-prefixed %s route',
+    async (model) => {
+      await expect(loadApiProvider(`bedrock:us.${model}`)).rejects.toThrow(
+        `Amazon Bedrock model "us.${model}" does not support geo inference IDs. ` +
+          `Use the bare "bedrock:${model}" model ID in a supported region.`,
+      );
+    },
+  );
+
   it('should load OpenAI chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-4.1');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4.1', expect.any(Object));
