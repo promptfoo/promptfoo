@@ -7,6 +7,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
+import type { LanguageModelUsage } from 'ai';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -119,15 +120,13 @@ async function createGatewayInstance(
 /**
  * Maps Vercel AI SDK usage to promptfoo TokenUsage format.
  */
-function mapTokenUsage(usage?: {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-}): TokenUsage {
+function mapTokenUsage(
+  usage?: Partial<Pick<LanguageModelUsage, 'inputTokens' | 'outputTokens' | 'totalTokens'>>,
+): TokenUsage {
   return {
-    prompt: usage?.promptTokens,
-    completion: usage?.completionTokens,
-    total: usage?.totalTokens ?? (usage?.promptTokens ?? 0) + (usage?.completionTokens ?? 0),
+    prompt: usage?.inputTokens,
+    completion: usage?.outputTokens,
+    total: usage?.totalTokens ?? (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
     numRequests: 1,
   };
 }
@@ -182,7 +181,7 @@ function pickGenerateOptions(config: VercelAiConfig) {
   return Object.fromEntries(
     Object.entries({
       temperature,
-      maxTokens,
+      maxOutputTokens: maxTokens,
       topP,
       topK,
       frequencyPenalty,
@@ -277,7 +276,8 @@ export class VercelAiProvider implements ApiProvider {
   }
 
   private getCacheKey(prompt: string): string {
-    return `vercel:${this.modelName}:${sha256(
+    // Version generation responses because AI SDK 6 caps and usage changed.
+    return `vercel:v2:${this.modelName}:${sha256(
       JSON.stringify({
         prompt,
         gateway: getGatewayCacheConfig(this.config, this.env),
@@ -325,12 +325,8 @@ export class VercelAiProvider implements ApiProvider {
       });
 
       let output = '';
-      try {
-        for await (const chunk of result.textStream) {
-          output += chunk;
-        }
-      } finally {
-        cleanup();
+      for await (const chunk of result.textStream) {
+        output += chunk;
       }
 
       const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
@@ -344,6 +340,8 @@ export class VercelAiProvider implements ApiProvider {
       return { output, tokenUsage: mapTokenUsage(usage), finishReason };
     } catch (error) {
       return handleApiError(error, timeout, 'streaming API call');
+    } finally {
+      cleanup();
     }
   }
 
