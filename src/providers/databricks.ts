@@ -18,8 +18,7 @@ export interface DatabricksMosaicAiCompletionOptions extends OpenAiCompletionOpt
   workspaceUrl?: string;
 
   /**
-   * Whether this is a pay-per-token endpoint (true) or custom deployed endpoint (false)
-   * Defaults to false for backward compatibility
+   * Legacy endpoint classification. Both values use the OpenAI-compatible chat endpoint.
    */
   isPayPerToken?: boolean;
 
@@ -30,8 +29,8 @@ export interface DatabricksMosaicAiCompletionOptions extends OpenAiCompletionOpt
   usageContext?: Record<string, string>;
 
   /**
-   * Enable AI Gateway features like guardrails, PII detection, etc.
-   * Only available on endpoints with AI Gateway enabled
+   * @deprecated Configure guardrails on the Databricks serving endpoint.
+   * This option does not configure server-side safety or PII handling.
    */
   aiGatewayConfig?: {
     enableSafety?: boolean;
@@ -69,20 +68,18 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
     // Ensure workspace URL doesn't have trailing slash
     const cleanWorkspaceUrl = workspaceUrl.replace(/\/$/, '');
 
-    // For pay-per-token endpoints, the model name is the full endpoint name
-    // For custom endpoints, we use the serving-endpoints path
-    const apiBaseUrl = providerOptions.config?.isPayPerToken
-      ? cleanWorkspaceUrl
-      : `${cleanWorkspaceUrl}/serving-endpoints`;
+    // Databricks accepts both foundation and custom endpoint names in the model field.
+    // The inherited chat transport appends /chat/completions to this base URL.
+    const apiBaseUrl = `${cleanWorkspaceUrl}/serving-endpoints`;
 
     const mergedConfig: DatabricksMosaicAiCompletionOptions = {
       ...providerOptions.config,
       apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'DATABRICKS_TOKEN',
       apiBaseUrl,
-      // Pass through usage context and AI Gateway config as extra body params
+      // The shared OpenAI transport sends additional request fields via passthrough.
       ...(providerOptions.config?.usageContext && {
-        extraBodyParams: {
-          ...providerOptions.config.extraBodyParams,
+        passthrough: {
+          ...providerOptions.config.passthrough,
           usage_context: providerOptions.config.usageContext,
         },
       }),
@@ -95,17 +92,5 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
 
     // Set the config property with the full Databricks-specific configuration
     this.config = mergedConfig;
-  }
-
-  /**
-   * Override getApiUrl to handle Databricks-specific endpoint patterns
-   */
-  public getApiUrl(): string {
-    // For pay-per-token endpoints, use the model name directly in the path
-    if (this.config.isPayPerToken) {
-      return `${this.config.apiBaseUrl}/serving-endpoints/${this.modelName}/invocations`;
-    }
-    // For custom endpoints, use standard OpenAI chat completions path
-    return super.getApiUrl();
   }
 }

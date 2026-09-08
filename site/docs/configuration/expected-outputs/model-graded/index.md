@@ -226,7 +226,7 @@ tests:
 
 By default, model-graded asserts use promptfoo's built-in grading provider. Promptfoo chooses that
 provider from the credentials available in the environment; for example, OpenAI, Anthropic, Gemini,
-Mistral, GitHub Models, Azure OpenAI, and Codex login credentials can each activate a different
+Mistral, Azure OpenAI, and Codex login credentials can each activate a different
 default. If you do not have access to the selected default or prefer a different judge, you can
 override the grader. There are several ways to do this, depending on your preferred workflow:
 
