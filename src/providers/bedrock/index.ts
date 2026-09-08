@@ -2339,7 +2339,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
-  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2443,7 +2442,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2660,6 +2658,11 @@ export function getHandlerForModel(
       'us.anthropic.claude-3-opus-20240229-v1:0',
       'anthropic.claude-opus-4-20250514-v1:0',
       'us.anthropic.claude-opus-4-20250514-v1:0',
+      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
+      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
+      // falling through to the `anthropic.claude` catch-all and failing at request time.
+      'anthropic.claude-3-5-haiku-20241022-v1:0',
+      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
       'anthropic.claude-instant-v1',
       'anthropic.claude-v1',
       'anthropic.claude-v2',
@@ -2953,10 +2956,27 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+interface BedrockEmbeddingOptions extends BedrockOptions {
+  input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+}
+
 export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  declare config: BedrockEmbeddingOptions;
+
+  constructor(
+    modelName: string,
+    options: {
+      config?: BedrockEmbeddingOptions;
+      id?: string;
+      env?: AwsBedrockGenericProvider['env'];
+    } = {},
+  ) {
+    super(modelName, options);
+  }
+
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');
   }
@@ -2965,6 +2985,7 @@ export class AwsBedrockEmbeddingProvider
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
+          input_type: this.config.input_type ?? 'search_document',
         }
       : {
           inputText: text,
@@ -2993,9 +3014,16 @@ export class AwsBedrockEmbeddingProvider
       const data = JSON.parse(response.body.transformToString());
       // Titan Text API returns embeddings in the `embedding` field
       // Cohere API returns embeddings in the `embeddings` field
-      const embedding = data?.embedding || data?.embeddings;
-      if (!embedding) {
-        throw new Error('No embedding found in AWS Bedrock API response');
+      const embeddings = data?.embeddings?.float ?? data?.embeddings;
+      const embedding =
+        data?.embedding ??
+        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
+      if (
+        !Array.isArray(embedding) ||
+        embedding.length === 0 ||
+        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        throw new Error('No valid embedding found in AWS Bedrock API response');
       }
       return {
         embedding,

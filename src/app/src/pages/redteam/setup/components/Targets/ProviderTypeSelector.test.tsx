@@ -40,6 +40,7 @@ describe('ProviderTypeSelector', () => {
     // Provider list is always expanded
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('GitHub Models')).not.toBeInTheDocument();
 
     // Select Python provider
     const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
@@ -195,6 +196,32 @@ describe('ProviderTypeSelector', () => {
     // HTTP should be hidden since it's in 'My Application' tag
     const httpProvider = screen.queryByText('HTTP/HTTPS Endpoint');
     expect(httpProvider).toBeNull();
+  });
+
+  it('updates available providers after the parent changes the allowed IDs', () => {
+    const provider: ProviderOptions = { id: '', config: {} };
+    const setProvider = vi.fn();
+    const { rerender } = renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={provider}
+        setProvider={setProvider}
+        availableProviderIds={['http']}
+      />,
+    );
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.queryByText('Python')).not.toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ProviderTypeSelector
+          provider={provider}
+          setProvider={setProvider}
+          availableProviderIds={['python']}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).not.toBeInTheDocument();
   });
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {

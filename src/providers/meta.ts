@@ -171,29 +171,36 @@ function assertSupportedReasoningEffort(effort: unknown): void {
 // configured — strip a leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
 // env default so reasoning keeps the full output budget. A passthrough
 // max_tokens alias is mapped to the canonical field.
-function applyMetaOutputCap(
+function applyMetaChatOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
-  field: 'max_completion_tokens' | 'max_output_tokens',
   value: number | undefined,
 ): void {
-  if (field in passthrough) {
-    if (field === 'max_output_tokens') {
-      delete body.max_completion_tokens;
-    }
+  if ('max_completion_tokens' in passthrough) {
     return;
   }
-  const outputCap =
-    (field === 'max_output_tokens' ? passthrough.max_completion_tokens : undefined) ??
-    passthrough.max_tokens ??
-    value;
-  if (field === 'max_output_tokens') {
-    delete body.max_completion_tokens;
-  }
+  const outputCap = passthrough.max_tokens ?? value;
   if (outputCap === undefined) {
-    delete body[field];
+    delete body.max_completion_tokens;
   } else {
-    body[field] = outputCap;
+    body.max_completion_tokens = outputCap;
+  }
+}
+
+function applyMetaResponsesOutputCap(
+  body: Record<string, unknown>,
+  passthrough: Record<string, unknown>,
+  value: number | undefined,
+): void {
+  delete body.max_completion_tokens;
+  if ('max_output_tokens' in passthrough) {
+    return;
+  }
+  const outputCap = passthrough.max_completion_tokens ?? passthrough.max_tokens ?? value;
+  if (outputCap === undefined) {
+    delete body.max_output_tokens;
+  } else {
+    body.max_output_tokens = outputCap;
   }
 }
 
@@ -417,12 +424,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
     // field rather than silently dropping it.
-    applyMetaOutputCap(
-      body,
-      passthrough,
-      'max_completion_tokens',
-      config.max_completion_tokens ?? config.max_tokens,
-    );
+    applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
     applyMetaSamplingHygiene(body, config, passthrough, [
       'top_p',
       'presence_penalty',
@@ -517,10 +519,9 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
-    applyMetaOutputCap(
+    applyMetaResponsesOutputCap(
       body,
       passthrough,
-      'max_output_tokens',
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
     );
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);

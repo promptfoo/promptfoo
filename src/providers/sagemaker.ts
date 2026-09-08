@@ -640,29 +640,21 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   }
 
   /**
-   * Generate a consistent cache key for SageMaker requests
-   * Uses crypto.createHash to generate a shorter, more efficient key
+   * Include the serialized request and response parsing settings in the cache identity.
    */
-  private getCacheKey(prompt: string): string {
-    // Create a deterministic representation of the request parameters
+  private getCacheKey(payload: string): string {
     const configForKey = {
+      payload,
       endpoint: this.getEndpointName(),
-      modelType: this.config.modelType,
+      modelType: this.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),
-      maxTokens: this.config.maxTokens,
-      temperature: this.config.temperature,
-      topP: this.config.topP,
+      responsePath: this.config.responseFormat?.path,
       region: this.getRegion(),
     };
 
-    const configStr = JSON.stringify(configForKey);
-
-    // Generate shorter, more efficient hashed keys
-    const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
-
-    return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
+    const hash = crypto.createHash('sha256').update(JSON.stringify(configForKey)).digest('hex');
+    return `sagemaker:v2:${this.getEndpointName()}:${hash}`;
   }
 
   /**
@@ -698,10 +690,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       );
     }
 
-    // Check if we should use cache - use the transformed prompt for cache key
+    // Snapshot generation defaults before cache lookup or the endpoint request can yield.
+    const payload = this.formatPayload(transformedPrompt);
+    const cacheKey = this.getCacheKey(payload);
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
@@ -742,7 +735,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();
-    const payload = this.formatPayload(transformedPrompt);
 
     logger.debug(`Calling SageMaker endpoint ${this.getEndpointName()}`);
     logger.debug(
@@ -815,7 +807,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       // Save result to cache if successful and caching enabled
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cacheKey = this.getCacheKey(transformedPrompt);
         const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
 

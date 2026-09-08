@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isSecretEnvVarName,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -170,7 +171,103 @@ describe('sanitizeTracingConfigForPersistence', () => {
   });
 });
 
+describe('isSecretEnvVarName', () => {
+  it.each([
+    'GITHUB_TOKEN',
+    'STRIPE_SECRET_KEY',
+    'PGPASSWORD',
+    'MY_SERVICE_SECRET',
+    'DB_PASSWD',
+    'OPENAI_API_KEY',
+    'AWS_SECRETKEY',
+    'SIGNING_PASSPHRASE',
+  ])('treats %s as credential-bearing', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(true);
+  });
+
+  it.each([
+    // Plurals: words are matched by suffix, and TOKENS does not end with TOKEN.
+    'MAX_TOKENS',
+    'RETRY_KEYS',
+    'LOG_LEVEL',
+    'AWS_REGION',
+    'SERVICE_URL',
+    'NODE_ENV',
+    // Ordinary config fields keep the exact-name behavior; the env-var rule is
+    // SCREAMING_SNAKE_CASE only, so it can never widen them.
+    'maxTokens',
+    'tokenCount',
+    'keyName',
+    'max_tokens',
+  ])('leaves %s alone', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(false);
+  });
+});
+
 describe('sanitizeObject', () => {
+  describe('environment variable maps', () => {
+    it('redacts credential-named variables inside an env map', () => {
+      // Regression: `env` is handed verbatim to a subprocess, so it is where a config
+      // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES
+      // caught only `API_KEY`, leaving project-specific names in cleartext in the
+      // provider config persisted with every eval result.
+      const result = sanitizeObject({
+        env: {
+          API_KEY: 'sk-value',
+          GITHUB_TOKEN: 'ghp_value',
+          MY_SERVICE_SECRET: 'plainvalue123',
+          PGPASSWORD: 'hunter2',
+          LOG_LEVEL: 'debug',
+          MAX_TOKENS: '4096',
+          AWS_REGION: 'us-east-1',
+        },
+      });
+
+      expect(result.env).toEqual({
+        API_KEY: '[REDACTED]',
+        GITHUB_TOKEN: '[REDACTED]',
+        MY_SERVICE_SECRET: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        // Non-credential variables stay readable - they are what makes a failed run
+        // debuggable from the persisted config.
+        LOG_LEVEL: 'debug',
+        MAX_TOKENS: '4096',
+        AWS_REGION: 'us-east-1',
+      });
+    });
+
+    it('reaches an env map nested in a provider config', () => {
+      const result = sanitizeObject(
+        {
+          config: {
+            mcp: { servers: [{ command: 'node', env: { GITHUB_TOKEN: 'ghp_value' } }] },
+          },
+        },
+        // Match the persistence boundary, which lifts the default depth cap so nested
+        // provider configs are walked in full.
+        { maxDepth: Number.POSITIVE_INFINITY },
+      );
+
+      expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
+    });
+
+    it('does not widen redaction outside env maps', () => {
+      const result = sanitizeObject({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+
+      expect(result).toEqual({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+    });
+  });
+
   describe('primitives and basic types', () => {
     it('should handle null', () => {
       expect(sanitizeObject(null)).toBeNull();

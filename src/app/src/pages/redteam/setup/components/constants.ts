@@ -1,7 +1,7 @@
 import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.5';
-export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4';
+export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-6-astra, openai:gpt-5.6-sol, openai:gpt-5.5';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
 export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
@@ -10,6 +10,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
+  { value: 'openai:gpt-6-astra', label: 'OpenAI GPT-6 Astra' },
   { value: 'openai:gpt-5.6', label: 'OpenAI GPT-5.6 (Sol alias)' },
   { value: 'openai:gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol' },
   { value: 'openai:gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra' },
