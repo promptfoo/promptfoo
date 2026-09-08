@@ -1942,17 +1942,19 @@ describe('Provider Registry', () => {
         );
         const provider = await factory!.create(providerPath, bareOptions, bareContext);
         expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
-        expect((provider as GoogleInteractionsProvider).modelName).toBe(
+        expect((provider as InstanceType<typeof GoogleInteractionsProvider>).modelName).toBe(
           'gemini-robotics-er-2-preview',
         );
-        expect((provider as GoogleInteractionsProvider).config.basePath).toBe('/test');
+        expect((provider as InstanceType<typeof GoogleInteractionsProvider>).config.basePath).toBe(
+          '/test',
+        );
         expect(provider.id()).toBe(providerPath);
         const explicit = await factory!.create(
           providerPath,
           { config: { basePath: '/explicit', apiKey: 'test-key' } },
           bareContext,
         );
-        expect((explicit as GoogleInteractionsProvider).config).toMatchObject({
+        expect((explicit as InstanceType<typeof GoogleInteractionsProvider>).config).toMatchObject({
           basePath: '/explicit',
           apiKey: 'test-key',
         });
