@@ -101,6 +101,7 @@ describe('matchesModeration', () => {
       setTestEnv({ OPENAI_API_KEY: 'test-key' });
       const abortSignal = withSignal ? new AbortController().signal : undefined;
       const tracedContext = {
+        prompt: { raw: 'test prompt', label: 'moderation' },
         vars: {},
         traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
       };
