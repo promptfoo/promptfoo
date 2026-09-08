@@ -128,6 +128,10 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
 }
 
 function shouldDefaultToOpenAiResponses(modelName: string): boolean {
+  // Some compatible gateways spell the legacy GPT-3.5 family as GPT-35.
+  if (/^gpt-35(?:-|$)/.test(modelName)) {
+    return false;
+  }
   const version = /^gpt-(\d+)(?:\.(\d+))?(?:-|$)/.exec(modelName);
   if (!version) {
     return false;

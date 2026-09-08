@@ -311,6 +311,8 @@ describe('Provider Registry', () => {
       );
 
       it.each([
+        'gpt-35-turbo',
+        'gpt-35-turbo-0125',
         'gpt-4.1',
         'gpt-5',
         'gpt-5.5',
