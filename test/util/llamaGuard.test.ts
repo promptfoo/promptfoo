@@ -62,6 +62,27 @@ describe('parseLlamaGuardOutput', () => {
     expect(result.raw).toBe('safe');
     expect(result.safe).toBe(true);
   });
+
+  it('should reject a "safe" verdict followed by a contradictory category line', () => {
+    // Regression: a first line of `safe` was previously accepted regardless of what
+    // followed, so a contradictory `safe\nS1` verdict passed as safe.
+    const result = parseLlamaGuardOutput('safe\nS1');
+    expect(result.safe).toBe(false);
+    expect(result.categories).toEqual([]);
+    expect(result.unknownCategories).toEqual([]);
+  });
+
+  it('should reject a "safe" verdict followed by unexpected trailing output', () => {
+    const result = parseLlamaGuardOutput('safe\nunexpected classifier output');
+    expect(result.safe).toBe(false);
+    expect(result.categories).toEqual([]);
+    expect(result.unknownCategories).toEqual([]);
+  });
+
+  it('should still accept "safe" followed only by blank lines', () => {
+    const result = parseLlamaGuardOutput('safe\n\n  \n');
+    expect(result.safe).toBe(true);
+  });
 });
 
 describe('describeLlamaGuardCategory', () => {
@@ -70,7 +91,7 @@ describe('describeLlamaGuardCategory', () => {
     expect(describeLlamaGuardCategory('S10')).toBe('Hate');
   });
 
-  it('should include the LlamaGuard-4-only S14 category', () => {
+  it('should include the S14 Code Interpreter Abuse category', () => {
     expect(LLAMAGUARD_CATEGORY_DESCRIPTIONS.S14).toBe('Code Interpreter Abuse');
   });
 

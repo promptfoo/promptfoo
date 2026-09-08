@@ -376,8 +376,8 @@ export class ReplicateProvider implements ApiProvider {
 }
 
 // Map of LlamaGuard category codes to descriptions.
-// Supports both LlamaGuard 3 (S1-S13) and LlamaGuard 4 (S1-S14). Re-exported here (as
-// the pre-existing name) from the shared, dependency-free src/util/llamaGuard.ts, which
+// LlamaGuard 3 and LlamaGuard 4 both cover S1-S14. Re-exported here (as the
+// pre-existing name) from the shared, dependency-free src/util/llamaGuard.ts, which
 // also backs the provider-portable `llama-guard` assertion type.
 export const LLAMAGUARD_DESCRIPTIONS = LLAMAGUARD_CATEGORY_DESCRIPTIONS;
 

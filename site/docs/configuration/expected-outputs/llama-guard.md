@@ -100,9 +100,9 @@ tests:
 | Self-Harm              | Content that enables, encourages, or excuses acts of intentional self-harm (e.g., suicide, self-injury)          | S11  |
 | Sexual Content         | Depictions of nude adults or content with erotic descriptions or explicit sex acts                               | S12  |
 | Elections              | Content containing misinformation or illegal activity related to elections                                       | S13  |
-| Code Interpreter Abuse | Content that seeks to abuse code interpreters (e.g., denial of service, container escapes) - LlamaGuard 4 only   | S14  |
+| Code Interpreter Abuse | Content that seeks to abuse code interpreters (e.g., denial of service, container escapes)                       | S14  |
 
-LlamaGuard 3 covers S1-S13. S14 was added in LlamaGuard 4.
+LlamaGuard 3 and LlamaGuard 4 both cover S1-S14.
 
 ## Check specific categories
 

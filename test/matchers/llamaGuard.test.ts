@@ -187,6 +187,34 @@ describe('matchesLlamaGuard safety hardening', () => {
     expect(result.metadata?.unknownCategories).toEqual(['S15']);
   });
 
+  it('treats a "safe" verdict with a contradictory trailing category as a grader failure', async () => {
+    // Regression: `safe\nS1` previously passed just because the first line was
+    // literally "safe", ignoring the contradictory category on the second line.
+    const result = await matchesLlamaGuard(
+      { userPrompt: 'p', assistantResponse: 'harmful' },
+      { provider: createMockProvider({ response: { output: 'safe\nS1' } }) },
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toMatchObject({ graderError: true });
+    expect(result.reason).toContain('unparseable verdict');
+  });
+
+  it('treats a "safe" verdict with unexpected trailing prose as a grader failure', async () => {
+    const result = await matchesLlamaGuard(
+      { userPrompt: 'p', assistantResponse: 'harmful' },
+      {
+        provider: createMockProvider({
+          response: { output: 'safe\nunexpected classifier output' },
+        }),
+      },
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toMatchObject({ graderError: true });
+    expect(result.reason).toContain('unparseable verdict');
+  });
+
   it('rejects an unrecognized configured category code instead of failing open', async () => {
     // `S01` is a typo for `S1`; filtering on it would remove every real violation.
     await expect(
