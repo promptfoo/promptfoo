@@ -5,13 +5,13 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, Task
+from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent's goal: find the best Ruby on Rails + React candidates.
@@ -25,8 +25,7 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY,  # ✅ Make sure to pass the API key
+        llm=LLM(model=model, api_key=OPENAI_API_KEY),
     )
 
     task = Task(
@@ -58,7 +57,7 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
     return crew
 
 
-async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
+async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -72,7 +71,7 @@ async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        crew.kickoff(inputs={"job_requirements": prompt})
+        result = crew.kickoff(inputs={"job_requirements": prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""
@@ -118,7 +117,7 @@ def call_api(
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-4.1")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
