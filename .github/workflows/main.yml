@@ -211,7 +211,8 @@ jobs:
           fi
 
       - name: Test Isolated Contracts Workspace
-        run: npm run test:contracts-workspace
+        # Nested installs must use npm 11 too; the earlier npx ci does not replace bundled npm.
+        run: npx -y npm@11.18.0 run test:contracts-workspace
 
       - name: Test Package Artifact
         env:
