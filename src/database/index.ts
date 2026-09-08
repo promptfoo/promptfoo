@@ -151,28 +151,26 @@ export function getDbSignalPath() {
 async function configureConnection(
   execute: Client['execute'],
   busyTimeoutMs: number,
-  skipWalMode: boolean,
+  walMode: 'enable' | 'preserve' | 'skip',
 ): Promise<void> {
   await execute('PRAGMA foreign_keys = ON');
   await execute(`PRAGMA busy_timeout = ${busyTimeoutMs}`);
-  if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
-    await execute('PRAGMA wal_autocheckpoint = 1000');
-    await execute('PRAGMA synchronous = NORMAL');
-  }
-}
 
-async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
-  await configureConnection(client.execute.bind(client), 5000, skipWalMode);
-
-  if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+  if (walMode !== 'skip' && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
     try {
-      await client.execute('PRAGMA journal_mode = WAL');
-      const result = await client.execute('PRAGMA journal_mode');
+      if (walMode === 'enable') {
+        await execute('PRAGMA journal_mode = WAL');
+      }
+      const result = await execute('PRAGMA journal_mode');
       const journalMode = String(result.rows[0]?.journal_mode ?? '');
 
       if (journalMode.toLowerCase() === 'wal') {
-        logger.debug('Successfully enabled SQLite WAL mode');
-      } else {
+        await execute('PRAGMA wal_autocheckpoint = 1000');
+        await execute('PRAGMA synchronous = NORMAL');
+        if (walMode === 'enable') {
+          logger.debug('Successfully enabled SQLite WAL mode');
+        }
+      } else if (walMode === 'enable') {
         logger.warn(
           `Failed to enable WAL mode (got '${journalMode}'). ` +
             'Database performance may be reduced. This can happen on network filesystems. ' +
@@ -180,6 +178,10 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
         );
       }
     } catch (err) {
+      // Recovery must fail closed if it cannot restore the connection settings.
+      if (walMode === 'preserve') {
+        throw err;
+      }
       logger.warn(
         `Error configuring SQLite WAL mode: ${err}. ` +
           'Database will use default journal mode. Performance may be reduced. ' +
@@ -261,7 +263,7 @@ function serializeTopLevelOperations(
             const busyTimeoutMs = Number(result.rows[0]?.timeout ?? 5000);
             await client.reconnect();
             // journal_mode persists in the file; restore only connection settings.
-            await configureConnection(rawExecute, busyTimeoutMs, false);
+            await configureConnection(rawExecute, busyTimeoutMs, 'preserve');
           } catch (recoveryError) {
             logger.warn('Could not recover database connection after lock failure', {
               error: recoveryError,
@@ -361,7 +363,7 @@ export async function getDb() {
         await registerTestDatabaseClient(client);
       }
 
-      await configureDatabase(client, isTesting);
+      await configureConnection(client.execute.bind(client), 5000, isTesting ? 'skip' : 'enable');
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
       dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }), {

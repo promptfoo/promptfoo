@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { createClient } from '@libsql/client/node';
+import { Sqlite3Client } from '@libsql/client/sqlite3';
 import { closeDb, getDb, getDbPath } from '../../../src/database/index';
 import type { Client } from '@libsql/client/node';
 
@@ -15,6 +16,8 @@ export interface LockRecoveryProbeResult {
   afterCloseIds: number[];
   attachedRowCount: number | null;
   pragmas: Record<string, number>;
+  initialJournalMode: string;
+  initialSynchronous: number;
 }
 
 if (!process.env.PROMPTFOO_CONFIG_DIR) {
@@ -33,7 +36,24 @@ async function captureError(operation: () => Promise<unknown>): Promise<string |
 }
 
 const mode = process.argv[2];
-const db = await getDb();
+const execute = Sqlite3Client.prototype.execute;
+let db: Awaited<ReturnType<typeof getDb>>;
+try {
+  if (mode === 'wal-failure' || mode === 'wal-refused') {
+    Sqlite3Client.prototype.execute = function (statement) {
+      if (statement === 'PRAGMA journal_mode = WAL') {
+        if (mode === 'wal-failure') {
+          return Promise.reject(new Error('Injected WAL setup failure'));
+        }
+        return execute.call(this, 'PRAGMA journal_mode');
+      }
+      return execute.call(this, statement);
+    };
+  }
+  db = await getDb();
+} finally {
+  Sqlite3Client.prototype.execute = execute;
+}
 const client = (db as typeof db & { $client: Client }).$client;
 const url = pathToFileURL(getDbPath()).href;
 const attachedPath = `${getDbPath()}.attached`;
@@ -49,6 +69,8 @@ const result: LockRecoveryProbeResult = {
   afterCloseIds: [],
   attachedRowCount: null,
   pragmas: {},
+  initialJournalMode: String((await client.execute('PRAGMA journal_mode')).rows[0].journal_mode),
+  initialSynchronous: Number((await client.execute('PRAGMA synchronous')).rows[0].synchronous),
 };
 
 async function readPersistedIds(): Promise<number[]> {
@@ -119,6 +141,8 @@ try {
           break;
         }
         case 'terminal':
+        case 'wal-failure':
+        case 'wal-refused':
           result.firstError = await captureError(() =>
             db.run('INSERT INTO lock_recovery_test VALUES (2)'),
           );

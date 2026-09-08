@@ -792,6 +792,26 @@ describe('database', () => {
   });
 
   describe('file-backed lock recovery', () => {
+    it.each(['wal-failure', 'wal-refused'])(
+      'preserves FULL synchronization at startup and after lock recovery when %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
+
+        expect(result.initialJournalMode).toBe('delete');
+        expect(result.initialSynchronous).toBe(2);
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.pragmas.synchronous).toBe(2);
+        expect(result.followupError).toBeNull();
+        expect(result.followupRowsAffected).toBe(1);
+        expect(result.beforeCloseIds).toEqual([1, 3]);
+        expect(result.afterCloseIds).toEqual([1, 3]);
+      },
+    );
+
     it.each([
       { mode: 'terminal', ids: [1, 3], callbackCalls: 0 },
       { mode: 'begin', ids: [1, 3], callbackCalls: 0 },
