@@ -341,12 +341,12 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   ...['gpt-5.6', 'gpt-5.6-sol'].map((model) => ({
     id: model,
     cost: {
-      input: 5 / 1e6,
-      output: 30 / 1e6,
+      input: 4 / 1e6,
+      output: 20 / 1e6,
       longContext: {
         threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 10 / 1e6,
-        output: 45 / 1e6,
+        input: 8 / 1e6,
+        output: 30 / 1e6,
       },
     },
   })),

@@ -92,6 +92,24 @@ describe('Provider override tests', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['process', 'scoped'])(
+    'ignores a GitHub Models token from %s when choosing defaults',
+    async (source) => {
+      mockProcessEnv({ GITHUB_TOKEN: undefined });
+      const baseline = await getDefaultProviders();
+      if (source === 'process') {
+        mockProcessEnv({ GITHUB_TOKEN: 'fixture-github-token' });
+      }
+      const providers = await getDefaultProviders(
+        source === 'scoped' ? { GITHUB_TOKEN: 'fixture-github-token' } : undefined,
+      );
+      expect(providers.gradingProvider).toBe(baseline.gradingProvider);
+      expect(providers.gradingJsonProvider).toBe(baseline.gradingJsonProvider);
+      expect(providers.suggestionsProvider).toBe(baseline.suggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(baseline.synthesizeProvider);
+    },
+  );
+
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
     const mockProvider = new MockProvider('test-completion-provider');
     await setDefaultCompletionProviders(mockProvider);

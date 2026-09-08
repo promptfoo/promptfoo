@@ -1095,26 +1095,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load GitHub provider with default model', async () => {
-    const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
-  });
-
-  it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
+  it.each(['github:', 'github:openai/gpt-4o-mini'])('rejects retired provider %s', async (id) => {
+    await expect(loadApiProvider(id)).rejects.toThrow('GitHub Models was retired');
   });
 
   it('should load HTTP provider', async () => {

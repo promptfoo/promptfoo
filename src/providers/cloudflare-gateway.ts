@@ -220,6 +220,11 @@ function buildGatewayUrl(
     return `${baseUrl}/azure-openai/${resourceName}/${deploymentName}`;
   }
 
+  // Mistral's native gateway proxy retains the upstream /v1 path.
+  if (provider === 'mistral') {
+    return `${baseUrl}/mistral/v1`;
+  }
+
   if (provider === 'workers-ai') {
     invariant(modelName, 'Workers AI requires a model name (e.g., @cf/meta/llama-3.1-8b-instruct)');
     return `${baseUrl}/workers-ai/${modelName}`;
