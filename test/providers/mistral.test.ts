@@ -354,6 +354,70 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
+    it.each([
+      { seconds: 60, expected: 0.00426 },
+      { seconds: 0, expected: 0.00026 },
+      { seconds: undefined, expected: 0.00026 },
+      { seconds: null, expected: 0.00026 },
+    ])('includes reported Voxtral audio duration: $seconds', async ({ seconds, expected }) => {
+      const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Audio summary' } }],
+          usage: { prompt_tokens: 1000, completion_tokens: 400, prompt_audio_seconds: seconds },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      expect((await voxtral.callApi('Summarize the input')).cost).toBeCloseTo(expected, 8);
+    });
+
+    it('keeps Voxtral audio charges alongside explicit zero token prices and cached usage', async () => {
+      const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+        config: { apiKey: 'test-key', cost: 0 },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Audio summary' } }],
+          usage: {
+            total_tokens: 1400,
+            prompt_tokens: 1000,
+            completion_tokens: 400,
+            prompt_audio_seconds: 60,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      expect(await voxtral.callApi('Summarize the input')).toMatchObject({
+        cached: true,
+        cost: 0.004,
+      });
+    });
+
+    it.each([-1, Number.NaN, '60'])(
+      'leaves Voxtral cost unknown for invalid reported audio duration %s',
+      async (seconds) => {
+        const voxtral = new MistralChatCompletionProvider('voxtral-small-2507', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Audio summary' } }],
+            usage: { prompt_tokens: 1000, completion_tokens: 400, prompt_audio_seconds: seconds },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        expect((await voxtral.callApi('Summarize the input')).cost).toBeUndefined();
+      },
+    );
+
     // Regression coverage for active aliases and retained historical pricing.
     it.each([
       // [model, input price/M, output price/M, expected cost for 400 in / 600 out]
@@ -372,7 +436,7 @@ describe('Mistral', () => {
       // Leanstral 1.5 is free during its public preview.
       ['labs-leanstral-1-5', 0],
       // Voxtral Small token pricing excludes its separate per-audio-minute charge.
-      ['voxtral-small-2507', 0.00022],
+      ['voxtral-small-2507', 0.00028],
       // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00

@@ -57,15 +57,41 @@ export const googleProviderFactories: ProviderFactory[] = [
             'Use google:image: only with a model supported by the native Gemini image API and native credentials.',
         );
       }
-      const explicitServiceType = ['chat', 'video', 'embedding', 'embeddings'].includes(firstPart)
+      const explicitServiceType = [
+        'chat',
+        'interactions',
+        'video',
+        'embedding',
+        'embeddings',
+      ].includes(firstPart)
         ? firstPart
         : undefined;
       const routedModelName = explicitServiceType
         ? splits.slice(2).join(':')
         : splits.slice(1).join(':');
+      if (
+        explicitServiceType === 'interactions' &&
+        routedModelName === GEMINI_ROBOTICS_STANDARD_MODEL
+      ) {
+        throw new Error(
+          'The Vertex Interactions provider does not support gemini-robotics-er-2-preview. ' +
+            'For the documented Gemini API route, use google:interactions:gemini-robotics-er-2-preview ' +
+            'with vertexai: false and Gemini API credentials.',
+        );
+      }
       validateGoogleModelRoute(routedModelName, explicitServiceType);
+      if (
+        explicitServiceType === 'interactions' &&
+        !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(routedModelName)
+      ) {
+        throw new Error(
+          `The Vertex Interactions provider does not support model "${routedModelName}".`,
+        );
+      }
       const modelName =
-        firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
+        firstPart === 'chat' || firstPart === 'interactions'
+          ? splits.slice(2).join(':')
+          : splits.slice(1).join(':');
       if (
         modelName === 'gemini-omni-flash-preview' ||
         modelName === 'gemini-omni-1.1-flash-preview' ||
@@ -124,7 +150,18 @@ export const googleProviderFactories: ProviderFactory[] = [
         }
         validateGoogleModelRoute(modelName, serviceType, true);
 
-        if (serviceType === 'interactions' && modelName === GEMINI_ROBOTICS_STANDARD_MODEL) {
+        if (serviceType === 'interactions') {
+          if (
+            ![
+              'gemini-omni-flash-preview',
+              'gemini-omni-1.1-flash',
+              GEMINI_ROBOTICS_STANDARD_MODEL,
+            ].includes(modelName)
+          ) {
+            throw new Error(
+              `The Gemini Interactions provider does not support model "${modelName}".`,
+            );
+          }
           const { GoogleInteractionsProvider } = await import('../google/interactions');
           return new GoogleInteractionsProvider(modelName, {
             ...providerOptions,
@@ -133,6 +170,7 @@ export const googleProviderFactories: ProviderFactory[] = [
             config: {
               ...(context.basePath && { basePath: context.basePath }),
               ...providerOptions.config,
+              ...(modelName === 'gemini-omni-1.1-flash' && { vertexai: false }),
             },
           });
         } else if (serviceType === 'live') {

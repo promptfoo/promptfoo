@@ -186,16 +186,17 @@ source of truth for availability and pricing.
 | `mistral-small-latest`  | 256k    | $0.15/1M                       | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding |
 | `codestral-latest`      | 128k    | $0.30/1M                       | $0.90/1M     | Code, FIM                | Code generation and completion         |
 | `labs-leanstral-1-5`    | 256k    | $0 (Public Preview)            | $0           | Text, tools              | Lean 4 proof engineering               |
-| `voxtral-small-2507`    | 32k     | $0.10/1M + $0.004/audio minute | $0.30/1M     | Text, audio              | Audio-aware chat                       |
+| `voxtral-small-2507`    | 32k     | $0.10/1M + $0.004/audio minute | $0.40/1M     | Text, audio              | Audio-aware chat                       |
 | `ministral-14b-latest`  | 256k    | $0.20/1M                       | $0.20/1M     | Text, vision             | Compact multimodal deployments         |
 | `ministral-8b-latest`   | 256k    | $0.15/1M                       | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments     |
 | `ministral-3b-latest`   | 256k    | $0.10/1M                       | $0.10/1M     | Text, vision             | Smallest multimodal deployments        |
 
 ¹ Enable adjustable reasoning with `reasoning_effort: high`.
 
-Leanstral 1.5 is scheduled to retire September 30, 2026. Promptfoo's Voxtral Small cost estimate
-uses the reported text token counts; Mistral's separate audio-minute charge is not included unless
-the API reports that usage separately.
+Leanstral 1.5 is scheduled to retire September 30, 2026. The [Voxtral Small estimate](https://docs.mistral.ai/models/voxtral-small-25-07)
+adds $0.004 per audio minute when the API reports `usage.prompt_audio_seconds`, alongside text
+input and output token charges. If audio duration is omitted, only the token subtotal is available.
+Token price overrides apply to the token charges; the reported audio duration is billed separately.
 
 :::note Aliases move — pin a snapshot for stability
 

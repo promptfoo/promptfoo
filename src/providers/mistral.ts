@@ -212,7 +212,7 @@ const MISTRAL_CHAT_MODELS = [
     id: 'voxtral-small-2507',
     cost: {
       input: 0.1 / 1000000,
-      output: 0.3 / 1000000,
+      output: 0.4 / 1000000,
     },
   },
   // Devstral 2 (deprecated 2026-05-22) — retained for historical cost scoring.
@@ -518,11 +518,24 @@ function calculateMistralCost(
   config: MistralChatCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
+  promptAudioSeconds?: unknown,
 ): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, [
+  const tokenCost = calculateCost(modelName, config, promptTokens, completionTokens, [
     ...MISTRAL_CHAT_MODELS,
     ...MISTRAL_EMBEDDING_MODELS,
   ]);
+  if (modelName !== 'voxtral-small-2507' || promptAudioSeconds == null) {
+    return tokenCost;
+  }
+  if (
+    tokenCost === undefined ||
+    typeof promptAudioSeconds !== 'number' ||
+    !Number.isFinite(promptAudioSeconds) ||
+    promptAudioSeconds < 0
+  ) {
+    return undefined;
+  }
+  return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
 export class MistralChatCompletionProvider implements ApiProvider {
@@ -745,6 +758,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         config,
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
+        data.usage?.prompt_audio_seconds,
       ),
       ...(data.choices.length > 1 && {
         metadata: {

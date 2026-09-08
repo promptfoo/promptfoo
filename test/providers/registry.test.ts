@@ -2052,6 +2052,65 @@ describe('Provider Registry', () => {
       },
     );
 
+    it.each([
+      ['google:interactions:gemini-omni-flash-preview', true],
+      ['palm:interactions:gemini-omni-flash-preview', true],
+      ['google:interactions:gemini-omni-1.1-flash', false],
+      ['palm:interactions:gemini-omni-1.1-flash', false],
+      ['vertex:interactions:gemini-omni-flash-preview', true],
+      ['vertex:interactions:gemini-omni-1.1-flash-preview', true],
+    ])(
+      'routes explicit Interactions selector %s without losing its model',
+      async (providerPath, vertexai) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const provider = await factory!.create(
+          providerPath,
+          { config: { vertexai: true, apiKey: 'test-key' } },
+          bareContext,
+        );
+        const { GoogleInteractionsProvider } = await import(
+          '../../src/providers/google/interactions'
+        );
+        expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
+        expect(provider).toHaveProperty('modelName', providerPath.split(':').slice(2).join(':'));
+        expect(provider).toHaveProperty('config.vertexai', vertexai);
+        expect(provider).toHaveProperty('config.basePath', '/test');
+        expect(provider.id()).toBe(providerPath);
+      },
+    );
+
+    it.each([
+      'google:interactions:gemini-3.5-flash',
+      'palm:interactions:gemini-3.5-flash',
+      'vertex:interactions:gemini-robotics-er-2-preview',
+      'vertex:interactions:gemini-omni-1.1-flash',
+    ])(
+      'rejects unimplemented explicit Interactions selector %s before chat fallback',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          'Interactions',
+        );
+      },
+    );
+
+    it.each(['google', 'palm', 'vertex'])(
+      'validates Live-only models before explicit %s Interactions dispatch',
+      async (prefix) => {
+        const providerPath = `${prefix}:interactions:gemini-3.5-live-translate-preview`;
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          'requires the Gemini Live API',
+        );
+      },
+    );
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
