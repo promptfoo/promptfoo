@@ -1,9 +1,11 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  buildArchitectureReport,
   buildEdgeBaseline,
   type CrossLayerEdge,
   compareEdgesToBaseline,
@@ -42,6 +44,115 @@ describe('computeCrossLayerEdges', () => {
     fs.mkdirSync(path.dirname(absolute), { recursive: true });
     fs.writeFileSync(absolute, contents);
   }
+
+  it('reports facade reach, type-only cycles, deferred edges, and incomplete resolution without changing ratchets', () => {
+    const config = configWith([
+      { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+      { name: 'a', roots: ['src/a'], allowedDependencies: ['b'] },
+      { name: 'b', roots: ['src/b'], allowedDependencies: ['a'] },
+    ]);
+    write('src/index.ts', "export * from './a/entry';");
+    write(
+      'src/a/entry.ts',
+      "import type { B } from '../b/types'; import('./later'); import './missing'; require.resolve('./resolved'); import(target); import 'external';",
+    );
+    write('src/b/types.ts', "import type { A } from '../a/entry';");
+    write('src/a/later.ts', "import './later';");
+    write('src/a/resolved.ts');
+    const ordinaryScan = scanArchitectureSources(repoRoot, config);
+    const fullScan = scanArchitectureSources(repoRoot, config, { includeFacade: true });
+    expect(computeCrossLayerEdges(repoRoot, config, fullScan)).toEqual(
+      computeCrossLayerEdges(repoRoot, config, ordinaryScan),
+    );
+    const report = buildArchitectureReport(repoRoot, config, fullScan);
+    expect(report.views.type.fileCycles).toEqual([['src/a/entry.ts', 'src/b/types.ts']]);
+    expect(report.views.value.fileCycles).toEqual([['src/a/later.ts']]);
+    expect(report.entrypoints['src/index.ts'].value.files).toEqual([
+      'src/a/entry.ts',
+      'src/index.ts',
+    ]);
+    expect(report.entrypoints['src/index.ts'].valueAndDeferred.files).toEqual([
+      'src/a/entry.ts',
+      'src/a/later.ts',
+      'src/index.ts',
+    ]);
+    expect(report.entrypoints['src/index.ts'].combined.files).toHaveLength(5);
+    expect(report.entrypoints['src/index.ts'].value.externalSpecifiers).toEqual(['external']);
+    expect(report.unresolvedInternal).toEqual([
+      expect.objectContaining({ importer: 'src/a/entry.ts', specifier: './missing', line: 1 }),
+    ]);
+    expect(report.computedReferences).toEqual([
+      expect.objectContaining({ importer: 'src/a/entry.ts', kind: 'deferred', line: 1 }),
+    ]);
+    expect(() => buildArchitectureReport(repoRoot, config, fullScan, ['src/missing.ts'])).toThrow(
+      'not in the checked source tree',
+    );
+  });
+
+  it('surfaces reach that crosses ignored/declaration files and requires a facade-inclusive scan', () => {
+    const config = {
+      ...configWith([{ name: 'facade', roots: ['src'], allowedDependencies: [] }]),
+      ignoredRoots: ['src/ignored'],
+    };
+    write('src/index.ts', "import './ignored/load'; import type { A } from './types.d.ts';");
+    write('src/ignored/load.ts', "import 'hidden';");
+    write('src/types.d.ts');
+    const scan = scanArchitectureSources(repoRoot, config, { includeFacade: true });
+    const report = buildArchitectureReport(repoRoot, config, scan);
+    expect(report.unscannedInternal.map((reference) => reference.resolvedImport)).toEqual([
+      'src/ignored/load.ts',
+      'src/types.d.ts',
+    ]);
+    expect(report.entrypoints['src/index.ts'].value.unscannedInternal).toHaveLength(1);
+    expect(() =>
+      buildArchitectureReport(repoRoot, config, scanArchitectureSources(repoRoot, config)),
+    ).toThrow('includeFacade: true');
+  });
+
+  it('runs the real JSON checker with clean stdout and preserves failure exit status', () => {
+    const config = configWith([
+      { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+      { name: 'a', roots: ['src/a'], allowedDependencies: ['b'] },
+      { name: 'b', roots: ['src/b'], allowedDependencies: [] },
+    ]);
+    write('architecture/layers.json', JSON.stringify(config));
+    write('architecture/edge-baseline.json', JSON.stringify({ 'a -> b': 1 }));
+    write('src/index.ts', "export * from './a/entry';");
+    write('src/a/entry.ts', "import '../b/entry';");
+    write('src/b/entry.ts');
+    for (const script of ['architectureUtils.ts', 'checkArchitectureBoundaries.ts']) {
+      write(
+        `scripts/${script}`,
+        fs.readFileSync(path.join(process.cwd(), 'scripts', script), 'utf8'),
+      );
+    }
+    write('package.json', JSON.stringify({ type: 'module' }));
+    fs.symlinkSync(
+      path.join(process.cwd(), 'node_modules'),
+      path.join(repoRoot, 'node_modules'),
+      'dir',
+    );
+    const run = () =>
+      spawnSync(
+        process.execPath,
+        [
+          '--import',
+          import.meta.resolve('tsx'),
+          path.join(repoRoot, 'scripts/checkArchitectureBoundaries.ts'),
+          '--json',
+        ],
+        { encoding: 'utf8', cwd: repoRoot },
+      );
+    const passing = run();
+    expect(passing.status, passing.stderr).toBe(0);
+    expect(JSON.parse(passing.stdout).views.combined.crossLayerReferences).toBe(1);
+    expect(passing.stderr).toContain('Architecture boundaries passed.');
+    write('src/a/entry.ts', "import '../b/entry'; export * from '../b/entry';");
+    const failing = run();
+    expect(failing.status, failing.stderr).toBe(1);
+    expect(JSON.parse(failing.stdout).views.combined.crossLayerReferences).toBe(2);
+    expect(failing.stderr).toContain('baseline regressions');
+  });
 
   it('tallies cross-layer import edges and skips the facade importer and same-layer imports', () => {
     write(

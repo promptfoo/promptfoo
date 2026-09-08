@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  buildArchitectureReport,
   compareEdgesToBaseline,
   computeCrossLayerEdges,
   computeStronglyConnectedComponents,
@@ -16,7 +17,40 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = readLayerConfig(repoRoot);
-const sourceScan = scanArchitectureSources(repoRoot, config);
+const reportMode = process.argv.includes('--report') || process.argv.includes('--json');
+const sourceScan = scanArchitectureSources(repoRoot, config, { includeFacade: reportMode });
+if (reportMode) {
+  const entrypoints = process.argv
+    .filter((arg) => arg.startsWith('--entrypoint='))
+    .map((arg) => arg.slice('--entrypoint='.length));
+  const report = buildArchitectureReport(
+    repoRoot,
+    config,
+    sourceScan,
+    entrypoints.length > 0 ? entrypoints : undefined,
+  );
+  if (process.argv.includes('--json')) {
+    console.log(JSON.stringify(report, null, 2));
+    // Keep stdout machine-readable; the normal checks still run and set the exit status.
+    console.log = (...args) => console.error(...args);
+  } else {
+    console.log('Architecture source views (syntax classification; not emitted or bundled code):');
+    for (const [kind, view] of Object.entries(report.views)) {
+      console.log(
+        `- ${kind}: ${view.references} references, ${view.crossLayerReferences} cross-layer references, ${view.fileCycles.length} file cycles`,
+      );
+    }
+    console.log(
+      `- ${report.unresolvedInternal.length} unresolved internal references (including non-TypeScript assets); ${report.computedReferences.length} computed loaders; ${report.unscannedInternal.length} references beyond the scanned scope`,
+    );
+    for (const [entrypoint, reach] of Object.entries(report.entrypoints)) {
+      console.log(
+        `- ${entrypoint}: ${reach.combined.files.length} combined / ${reach.value.files.length} value-capable / ${reach.valueAndDeferred.files.length} value-capable plus deferred reachable files`,
+      );
+    }
+    console.log('Use --json for reference locations, cycles, and reachable files.');
+  }
+}
 const violations = findViolations(repoRoot, config, sourceScan);
 
 const facadeViolations = violations.filter((v) => v.kind === 'facade');
@@ -165,7 +199,7 @@ if (config.tierOrder !== undefined) {
   if (backEdges.length > 0) {
     const totalBackImports = backEdges.reduce((sum, edge) => sum + edge.count, 0);
     console.log(
-      `\nRemaining back-edges versus target order (${backEdges.length} edges / ${totalBackImports} imports to reach a DAG):`,
+      `\nRemaining back-edges versus target order (${backEdges.length} edges / ${totalBackImports} references; informational order violations):`,
     );
     for (const edge of [...backEdges].sort((left, right) => left.count - right.count)) {
       console.log(`- ${edge.from} -> ${edge.to}: ${edge.count} imports`);
