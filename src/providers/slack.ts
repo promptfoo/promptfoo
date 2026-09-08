@@ -2,6 +2,7 @@ import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/w
 import logger from '../logger';
 import { fetchWithProviderProxy } from './fetch';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -11,6 +12,7 @@ import type {
 
 export interface SlackProviderOptions {
   id?: string;
+  env?: EnvOverrides;
   config?: {
     /** Slack Bot User OAuth Token (xoxb-...) */
     token?: string;
@@ -49,7 +51,8 @@ export class SlackProvider implements ApiProvider {
   constructor(options: SlackProviderOptions = {}) {
     this.options = options;
 
-    const token = options.config?.token || process.env.SLACK_BOT_TOKEN;
+    const token =
+      options.config?.token || options.env?.SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN;
     if (!token) {
       throw new Error(
         'Slack provider requires a token. Set SLACK_BOT_TOKEN or provide it in config.',
@@ -103,18 +106,24 @@ export class SlackProvider implements ApiProvider {
       }
 
       const messageTs = postResult.ts;
+      // User targets open a DM whose conversation ID is returned by Slack.
+      const responseChannel = postResult.channel || channel;
 
       // Handle different response collection strategies
       let responseText: string;
       const responseMetadata: Record<string, any> = {
         messageTs,
-        channel,
+        channel: responseChannel,
       };
 
       switch (responseStrategy) {
         case 'timeout':
           // Just wait for the timeout and collect all responses
-          responseText = await this.collectResponsesUntilTimeout(channel, messageTs, timeout);
+          responseText = await this.collectResponsesUntilTimeout(
+            responseChannel,
+            messageTs,
+            timeout,
+          );
           break;
 
         case 'user':
@@ -122,7 +131,7 @@ export class SlackProvider implements ApiProvider {
             throw new Error('waitForUser must be specified when using "user" response strategy');
           }
           responseText = await this.waitForUserResponse(
-            channel,
+            responseChannel,
             messageTs,
             config.waitForUser,
             timeout,
@@ -132,7 +141,7 @@ export class SlackProvider implements ApiProvider {
 
         case 'first':
         default:
-          responseText = await this.waitForFirstResponse(channel, messageTs, timeout);
+          responseText = await this.waitForFirstResponse(responseChannel, messageTs, timeout);
           break;
       }
 
