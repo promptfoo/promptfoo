@@ -196,6 +196,28 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText(/France is in Europe\./)).toBeInTheDocument();
   });
 
+  it('renders numbered citation passages from metadata.context for citation-faithfulness', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Citations are correctly attributed.',
+        assertion: {
+          type: 'citation-faithfulness',
+        },
+        metadata: {
+          context: ['CITE-A-height passage', 'CITE-B-completion passage'],
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    // Without citation-faithfulness in the context-display allowlist, the Value
+    // cell would fall through to '-' and the graded passages would be hidden.
+    expect(screen.getByText(/CITE-A-height passage/)).toBeInTheDocument();
+  });
+
   it('expands accordion to show full grading prompt', async () => {
     const gradingPrompt = JSON.stringify([
       { role: 'system', content: 'You are grading output' },
