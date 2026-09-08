@@ -62,6 +62,10 @@ controls, which promptfoo removes automatically. Configure reasoning with
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 
+:::warning Vertex model retirement
+Google schedules `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite` for [retirement on October 20, 2026](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions). Test a supported replacement before that date, including any explicitly configured grading provider. This is the Vertex lifecycle; native Gemini API dates are separate.
+:::
+
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
