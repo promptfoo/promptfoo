@@ -13,6 +13,19 @@ const consumer = path.join(temporaryRoot, 'consumer');
 const npmPath = process.env.npm_execpath;
 assert(npmPath, 'Run through npm run test:contracts-workspace');
 const env = { ...process.env, npm_config_cache: path.join(temporaryRoot, 'npm-cache') };
+// Honor the invoking npm's registry locally; CI sets it explicitly on the npx command.
+const registry =
+  process.env.npm_config_registry ??
+  process.env.NPM_CONFIG_REGISTRY ??
+  npm(['config', 'get', 'registry'], root).trim();
+const installFlags = ['--ignore-scripts', `--registry=${registry}`, '--no-audit', '--no-fund'];
+// Inert sentinels make the real npm installs fail if install hooks are ever enabled.
+const installHookSentinels = Object.fromEntries(
+  ['preinstall', 'install', 'postinstall'].map((hook) => [
+    hook,
+    'node -e "throw new Error(\'Install lifecycle scripts must stay disabled\')"',
+  ]),
+);
 
 function run(args: string[], cwd: string): string {
   return execFileSync(process.execPath, args, {
@@ -44,8 +57,12 @@ try {
   const manifest = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
   assert.equal(manifest.private, true);
   assert.deepEqual(Object.keys(manifest.dependencies), ['zod']);
+  writeJson(path.join(workspace, 'package.json'), {
+    ...manifest,
+    scripts: { ...manifest.scripts, ...installHookSentinels },
+  });
   console.log('Installing isolated contracts build dependencies');
-  npm(['install', '--no-audit', '--no-fund'], workspace);
+  npm(['install', ...installFlags], workspace);
   console.log(npm(['run', 'typecheck'], workspace));
   console.log(npm(['run', 'build'], workspace));
   const [packed] = JSON.parse(npm(['pack', '--ignore-scripts', '--json'], workspace));
@@ -57,12 +74,12 @@ try {
     name: 'contracts-workspace-consumer',
     private: true,
     type: 'module',
+    scripts: installHookSentinels,
   });
   npm(
     [
       'install',
-      '--no-audit',
-      '--no-fund',
+      ...installFlags,
       path.join(workspace, packed.filename),
       `typescript@${manifest.devDependencies.typescript}`,
     ],

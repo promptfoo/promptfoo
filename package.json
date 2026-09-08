@@ -110,7 +110,7 @@
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0",
-    "test:contracts-workspace": "tsx scripts/testContractsWorkspace.ts"
+    "test:contracts-workspace": "node scripts/testContractsWorkspace.ts"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",

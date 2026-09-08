@@ -1,6 +1,7 @@
 packages:
   - 'src/app'
   - 'site'
+  - 'packages/contracts'
 
 # Supply-chain floor for local pnpm installs. The unit is MINUTES, so 14400 = 10 days,
 # matching the "10 days" minimumReleaseAge renovate.json already applies to the npm
