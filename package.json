@@ -28,7 +28,8 @@
   },
   "workspaces": [
     "src/app",
-    "site"
+    "site",
+    "packages/contracts"
   ],
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
@@ -108,7 +109,8 @@
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
-    "prepare": "husky || exit 0"
+    "prepare": "husky || exit 0",
+    "test:contracts-workspace": "tsx scripts/testContractsWorkspace.ts"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",

@@ -210,6 +210,9 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Test Isolated Contracts Workspace
+        run: npm run test:contracts-workspace
+
       - name: Test Package Artifact
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1

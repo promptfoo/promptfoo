@@ -1,0 +1,34 @@
+{
+  "name": "@promptfoo-internal/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private portable contracts workspace; bundled into promptfoo/contracts",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.14",
+    "typescript": "^7.0.0"
+  }
+}

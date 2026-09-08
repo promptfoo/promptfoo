@@ -37,6 +37,7 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 COPY src/app/package.json ./src/app/package.json
 COPY site/package.json ./site/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
 # Block dependency lifecycle scripts during install, then rebuild only the two native
 # packages the build needs. The specs must be exact directories: `npm rebuild esbuild`
 # matches every folder of that name anywhere in the tree, so a nested dependency aliased

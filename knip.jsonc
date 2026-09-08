@@ -49,6 +49,11 @@
         "@promptfoo/*": ["./src/*"]
       }
     },
+    "packages/contracts": {
+      // Source shims and the private build consume these portable entrypoints.
+      "entry": ["src/traceProviderEndpoint.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "src/app": {
       "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
@@ -101,7 +106,7 @@
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
     // Internal intentional alias/duplicate-export patterns.
-    "src/contracts/api/user.ts": ["duplicates"],
+    "packages/contracts/src/api/user.ts": ["duplicates"],
     // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l
     // import @promptfoo/redteam/plugins/multiInputFormat.
     "src/redteam/plugins/multiInputFormat.ts": ["exports"],

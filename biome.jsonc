@@ -339,6 +339,7 @@
         "src/commands/**/*",
         "src/node/doEval.ts",
         "src/contracts/**/*",
+        "packages/contracts/src/**/*",
         "src/types/**/*",
         "src/tracing/**/*"
       ],

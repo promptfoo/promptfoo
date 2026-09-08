@@ -36,6 +36,7 @@ interface FileCoverage {
 type CoverageMap = Record<string, FileCoverage>;
 
 export interface CoverageReportConfig {
+  additionalSourcePrefixes?: string[];
   coverageFile: string;
   criticalFiles: string[];
   criticalPrefixes: string[];
@@ -101,6 +102,7 @@ export const COVERAGE_RATCHET_REPORTS: CoverageReportConfig[] = [
     name: 'backend',
     coverageFile: 'coverage/coverage-final.json',
     sourcePrefix: 'src/',
+    additionalSourcePrefixes: ['packages/contracts/src/'],
     excludePrefixes: ['src/app/', 'src/__mocks__/'],
     excludeFiles: ['src/entrypoint.ts', 'src/main.ts', 'src/migrate.ts'],
     criticalPrefixes: ['src/assertions/', 'src/matchers/', 'src/util/config/'],
@@ -279,7 +281,9 @@ function isSourceFile(filePath: string): boolean {
 function isReportSourceFile(report: CoverageReportConfig, filePath: string): boolean {
   return (
     isSourceFile(filePath) &&
-    filePath.startsWith(report.sourcePrefix) &&
+    [report.sourcePrefix, ...(report.additionalSourcePrefixes ?? [])].some((prefix) =>
+      filePath.startsWith(prefix),
+    ) &&
     !report.excludeFiles.includes(filePath) &&
     !report.excludePrefixes.some((prefix) => filePath.startsWith(prefix))
   );
