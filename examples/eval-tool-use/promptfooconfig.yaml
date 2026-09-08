@@ -71,6 +71,7 @@ providers:
   - id: groq:openai/gpt-oss-120b
     config:
       reasoning_effort: low
+      include_reasoning: false
       max_completion_tokens: 4096
       tools:
         - type: function
