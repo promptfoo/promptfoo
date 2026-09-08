@@ -359,6 +359,14 @@ export interface OpenCodeSDKConfig {
   persist_sessions?: boolean;
 
   /**
+   * Restart Promptfoo's owned OpenCode server for each distinct traceparent.
+   * This lets OpenCode telemetry plugins that read OPENCODE_TRACEPARENT at
+   * process startup correlate spans with the current promptfoo test case.
+   * @default false
+   */
+  restart_server_per_call?: boolean;
+
+  /**
    * MCP server configuration
    */
   mcp?: Record<string, OpenCodeMCPServerConfig>;
@@ -839,9 +847,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
+  private activeTraceparent?: string;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
   private sessionQueues = new Map<string, Promise<void>>();
+  private serverLifecycleQueue: Promise<void> = Promise.resolve();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
 
@@ -914,15 +924,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.sessionQueues.clear();
 
     // Close server if we started one
-    if (this.server) {
-      try {
-        this.server.close();
-      } catch (err) {
-        logger.debug(`Failed to close OpenCode server: ${err}`);
-      }
-      this.server = undefined;
-    }
+    this.closeOwnedServer();
     this.client = undefined;
+    this.activeTraceparent = undefined;
+  }
+
+  private closeOwnedServer(): void {
+    if (!this.server) {
+      return;
+    }
+    try {
+      this.server.close();
+    } catch (err) {
+      logger.debug(`Failed to close OpenCode server: ${err}`);
+    }
+    this.server = undefined;
   }
 
   /**
@@ -1296,10 +1312,55 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return this.opencodeModule;
   }
 
-  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+  private withTemporaryOpenCodeTraceparent<T>(traceparent: string | undefined, run: () => T): T {
+    const previousTraceparent = process.env.OPENCODE_TRACEPARENT;
+    try {
+      if (traceparent) {
+        // biome-ignore lint: OpenCode SDK v2 ignores options.env, so the child can only inherit this from process.env at spawn time.
+        process.env.OPENCODE_TRACEPARENT = traceparent;
+      } else {
+        // biome-ignore lint: OpenCode SDK v2 ignores options.env, so the child can only inherit this from process.env at spawn time.
+        delete process.env.OPENCODE_TRACEPARENT;
+      }
+      return run();
+    } finally {
+      if (previousTraceparent === undefined) {
+        // biome-ignore lint: Restore the ambient process environment immediately after spawning OpenCode.
+        delete process.env.OPENCODE_TRACEPARENT;
+      } else {
+        // biome-ignore lint: Restore the ambient process environment immediately after spawning OpenCode.
+        process.env.OPENCODE_TRACEPARENT = previousTraceparent;
+      }
+    }
+  }
+
+  private async ensureClient(
+    config: OpenCodeSDKConfig,
+    traceparent: string | undefined,
+  ): Promise<void> {
     const opencodeModule = await this.ensureOpenCodeModule();
 
     this.validateSessionPolicyConfiguration(config);
+
+    if (config.restart_server_per_call && config.baseUrl) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call cannot be used with baseUrl because promptfoo cannot restart or retag an external server.',
+      );
+    }
+    if (config.restart_server_per_call && config.persist_sessions) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call cannot be used with persist_sessions because each traceparent needs an isolated server session lifecycle.',
+      );
+    }
+
+    if (config.restart_server_per_call && this.client && this.activeTraceparent !== traceparent) {
+      this.closeOwnedServer();
+      this.client = undefined;
+      this.sessions.clear();
+      this.sessionOrder = [];
+      this.sessionQueues.clear();
+      this.activeTraceparent = undefined;
+    }
 
     if (this.client) {
       return;
@@ -1336,9 +1397,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await createOpencode(serverOptions);
+      const opencodePromise = this.withTemporaryOpenCodeTraceparent(traceparent, () =>
+        createOpencode(serverOptions),
+      );
+      const opencode = await opencodePromise;
       this.client = opencode.client;
       this.server = opencode.server;
+      this.activeTraceparent = traceparent;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
     })();
     this.clientInitialization = initialization;
@@ -1593,6 +1658,29 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
+  private async runSerializedServerLifecycleCall<T>(
+    enabled: boolean | undefined,
+    abortSignal: AbortSignal | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (!enabled) {
+      return run();
+    }
+
+    const previous = this.serverLifecycleQueue;
+    let release: () => void = () => {};
+    this.serverLifecycleQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    try {
+      await this.waitForPreviousSessionCall(previous, abortSignal);
+      return await run();
+    } finally {
+      release();
+    }
+  }
+
   private async waitForPreviousSessionCall(
     previous: Promise<void>,
     abortSignal: AbortSignal | undefined,
@@ -1779,60 +1867,92 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      await this.ensureClient(config);
-      const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
-      return await this.runSerializedSessionCall(
-        sessionQueueKey,
+      return await this.runSerializedServerLifecycleCall(
+        config.restart_server_per_call,
         callOptions?.abortSignal,
         async () => {
-          const session = await this.getOrCreateSession(config, workingDir);
-          ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted before it started' };
-          }
-
-          const promptOptions = this.buildPromptParameters(
+          await this.ensureClient(
             config,
-            prompt,
-            session.sessionId,
-            session.sessionQuery,
+            config.restart_server_per_call ? context?.traceparent : undefined,
           );
-          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
+          const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
+          return await this.runSerializedSessionCall(
+            sessionQueueKey,
+            callOptions?.abortSignal,
+            async () => {
+              const session = await this.getOrCreateSession(config, workingDir);
+              ephemeralSession = session.ephemeralSession;
+              try {
+                if (callOptions?.abortSignal?.aborted) {
+                  return { error: 'OpenCode SDK call aborted before it started' };
+                }
 
-          const client = this.client;
-          if (!client) {
-            throw new Error('OpenCode SDK client is not initialized');
-          }
+                const promptOptions = this.buildPromptParameters(
+                  config,
+                  prompt,
+                  session.sessionId,
+                  session.sessionQuery,
+                );
+                logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
-          const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-            const abortParams = this.buildAbortSessionParameters(
-              session.sessionId,
-              session.sessionQuery,
-            );
-            abortListener = () => {
-              client.session.abort?.(abortParams).catch((err) => {
-                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
-              });
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
-          }
+                const client = this.client;
+                if (!client) {
+                  throw new Error('OpenCode SDK client is not initialized');
+                }
 
-          const response = await client.session.prompt(promptOptions);
-          logger.debug(`OpenCode SDK response received`);
+                // If the caller's abortSignal fires mid-prompt, ask the server to stop
+                // rather than letting it run to completion while we discard the result.
+                // session.abort is only on v2; v1 has no abort primitive, so we still
+                // honor cancellation locally via the response check below.
+                const abortSignal = callOptions?.abortSignal;
+                if (
+                  abortSignal &&
+                  client.session.abort &&
+                  this.opencodeModule?.apiVersion === 'v2'
+                ) {
+                  const abortParams = this.buildAbortSessionParameters(
+                    session.sessionId,
+                    session.sessionQuery,
+                  );
+                  abortListener = () => {
+                    client.session.abort?.(abortParams).catch((err) => {
+                      logger.debug(
+                        `[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`,
+                      );
+                    });
+                  };
+                  abortSignal.addEventListener('abort', abortListener, { once: true });
+                }
 
-          if (abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted' };
-          }
+                const response = await client.session.prompt(promptOptions);
+                logger.debug(`OpenCode SDK response received`);
 
-          const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
-          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
-          return providerResponse;
+                if (abortSignal?.aborted) {
+                  return { error: 'OpenCode SDK call aborted' };
+                }
+
+                const providerResponse = this.buildProviderResponse(
+                  config,
+                  response,
+                  session.sessionId,
+                );
+                await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+                logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
+                return providerResponse;
+              } finally {
+                if (config.restart_server_per_call && ephemeralSession) {
+                  try {
+                    await this.deleteSession(ephemeralSession);
+                  } catch (err) {
+                    logger.debug(
+                      `Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`,
+                    );
+                  }
+                  ephemeralSession = undefined;
+                }
+              }
+            },
+          );
         },
       );
     } catch (error) {

@@ -992,6 +992,125 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
       });
 
+      it('restarts the owned server when traceparent changes under restart_server_per_call', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First', {
+          traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+        } as CallApiContextParams);
+        await provider.callApi('Second', {
+          traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+        } as CallApiContextParams);
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        expect(mockServerClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('sets OPENCODE_TRACEPARENT only while spawning a restarted owned server', async () => {
+        const originalTraceparent = process.env.OPENCODE_TRACEPARENT;
+        const seenTraceparents: Array<string | undefined> = [];
+        mockCreateOpencode.mockImplementation(async () => {
+          seenTraceparents.push(process.env.OPENCODE_TRACEPARENT);
+          return {
+            client: {
+              session: {
+                create: mockSessionCreate,
+                prompt: mockSessionPrompt,
+                messages: mockSessionMessages,
+                delete: mockSessionDelete,
+                list: mockSessionList,
+                abort: mockSessionAbort,
+              },
+            },
+            server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First', {
+          traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+        } as CallApiContextParams);
+
+        expect(seenTraceparents).toEqual([
+          '00-33333333333333333333333333333333-3333333333333333-01',
+        ]);
+        expect(process.env.OPENCODE_TRACEPARENT).toBe(originalTraceparent);
+      });
+
+      it('does not restart the owned server for traceparent changes unless restart_server_per_call is enabled', async () => {
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First', {
+          traceparent: '00-44444444444444444444444444444444-4444444444444444-01',
+        } as CallApiContextParams);
+        await provider.callApi('Second', {
+          traceparent: '00-55555555555555555555555555555555-5555555555555555-01',
+        } as CallApiContextParams);
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockServerClose).not.toHaveBeenCalled();
+      });
+
+      it('does not set OPENCODE_TRACEPARENT unless restart_server_per_call is enabled', async () => {
+        const originalTraceparent = process.env.OPENCODE_TRACEPARENT;
+        const seenTraceparents: Array<string | undefined> = [];
+        mockCreateOpencode.mockImplementation(async () => {
+          seenTraceparents.push(process.env.OPENCODE_TRACEPARENT);
+          return {
+            client: {
+              session: {
+                create: mockSessionCreate,
+                prompt: mockSessionPrompt,
+                messages: mockSessionMessages,
+                delete: mockSessionDelete,
+                list: mockSessionList,
+                abort: mockSessionAbort,
+              },
+            },
+            server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+          };
+        });
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First', {
+          traceparent: '00-66666666666666666666666666666666-6666666666666666-01',
+        } as CallApiContextParams);
+
+        expect(seenTraceparents).toEqual([originalTraceparent]);
+        expect(process.env.OPENCODE_TRACEPARENT).toBe(originalTraceparent);
+      });
+
+      it('rejects restart_server_per_call with external baseUrl or persisted sessions', async () => {
+        const remoteProvider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'https://opencode.example.test',
+            restart_server_per_call: true,
+          },
+        });
+        const persistedProvider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true, restart_server_per_call: true },
+        });
+
+        await expect(remoteProvider.callApi('Test prompt')).resolves.toEqual({
+          error:
+            'Error calling OpenCode SDK: OpenCode SDK restart_server_per_call cannot be used with baseUrl because promptfoo cannot restart or retag an external server.',
+        });
+        await expect(persistedProvider.callApi('Test prompt')).resolves.toEqual({
+          error:
+            'Error calling OpenCode SDK: OpenCode SDK restart_server_per_call cannot be used with persist_sessions because each traceparent needs an isolated server session lifecycle.',
+        });
+      });
+
       it('should resume session when session_id provided', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { session_id: 'existing-session' },
