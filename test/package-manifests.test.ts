@@ -100,6 +100,44 @@ function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: str
 }
 
 describe('package manifests', () => {
+  it.each([
+    ['src/app/package.json', ['dedent', 'fast-deep-equal', 'zod']],
+    ['site/package.json', ['ajv']],
+  ] as const)('declares shared imports in their owning workspace: %s', (manifest, dependencies) => {
+    const root = readPackageJson<PackageManifest>('package.json');
+    const workspace = readPackageJson<PackageManifest>(manifest);
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const workspacePath = path.posix.dirname(manifest);
+
+    for (const dependency of dependencies) {
+      const range = workspace.devDependencies?.[dependency];
+      expect(range, `${manifest} must declare its direct ${dependency} import`).toBeDefined();
+      expect(range).toBe(root.dependencies?.[dependency]);
+      expect(lock.packages[workspacePath].devDependencies?.[dependency]).toBe(range);
+      expect(satisfies(lock.packages[`node_modules/${dependency}`].version!, range!)).toBe(true);
+    }
+  });
+
+  it('declares concrete Docusaurus type and theme imports alongside the docs build', () => {
+    const site = readPackageJson<PackageManifest>('site/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const coreRange = site.devDependencies?.['@docusaurus/core'];
+    const coreVersion = lock.packages['node_modules/@docusaurus/core'].version;
+
+    for (const dependency of [
+      '@docusaurus/plugin-content-blog',
+      '@docusaurus/theme-common',
+      '@docusaurus/types',
+    ]) {
+      const range = site.devDependencies?.[dependency];
+      expect(range, `${dependency} is a package import, not a virtual alias`).toBeDefined();
+      expect(range).toBe(coreRange);
+      expect(lock.packages.site.devDependencies?.[dependency]).toBe(range);
+      expect(lock.packages[`node_modules/${dependency}`].version).toBe(coreVersion);
+      expect(satisfies(coreVersion!, range!)).toBe(true);
+    }
+  });
+
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
