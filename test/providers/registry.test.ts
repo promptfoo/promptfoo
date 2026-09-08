@@ -55,6 +55,26 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each([
+    ['localai:chat:served-model:q4:latest', 'LocalAiChatProvider'],
+    ['localai:completion:served-model:q4:latest', 'LocalAiCompletionProvider'],
+    ['localai:embedding:served-model:q4:latest', 'LocalAiEmbeddingProvider'],
+    ['localai:embeddings:served-model:q4:latest', 'LocalAiEmbeddingProvider'],
+    ['localai:served-model:q4:latest', 'LocalAiChatProvider'],
+  ])('preserves the full served model name for %s', async (providerPath, className) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    const provider = await factory!.create(
+      providerPath,
+      { id: 'custom-local-id', env: { LOCALAI_BASE_URL: 'http://localhost:1234/v1' } },
+      { basePath: '.', options: {} },
+    );
+    expect(provider.constructor.name).toBe(className);
+    expect(provider).toHaveProperty('modelName', 'served-model:q4:latest');
+    expect(provider.id()).toBe('custom-local-id');
+    expect(provider).toHaveProperty('apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
   describe('Provider Factories', () => {
     const mockProviderOptions: ProviderOptions = {
       id: 'test-provider',
