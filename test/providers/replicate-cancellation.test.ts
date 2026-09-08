@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
+import { matchesModeration } from '../../src/matchers/moderation';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -15,10 +17,13 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 beforeEach(() => {
   vi.mocked(fetchWithCache).mockReset();
   vi.mocked(getCache).mockReset();
-  vi.mocked(isCacheEnabled).mockReturnValue(false);
+  vi.mocked(isCacheEnabled).mockReset().mockReturnValue(false);
   vi.useFakeTimers();
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.resetAllMocks();
+  vi.useRealTimers();
+});
 function reply(status: string, output?: unknown) {
   return {
     data: { id: 'fixture-prediction', status, output },
@@ -35,7 +40,7 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
     const provider = new Provider('owner/model:version', { config: { apiKey: 'fixture' } });
     await expect(
       provider.callApi('Hello', undefined, { abortSignal: controller.signal }),
-    ).rejects.toThrow('fixture abort');
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'fixture abort' });
     expect(fetchWithCache).not.toHaveBeenCalled();
     expect(getCache).not.toHaveBeenCalled();
   });
@@ -75,7 +80,7 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
       .callApi('Hello', undefined, { abortSignal: controller.signal })
       .then(
         (response) => response.error,
-        (error) => String(error),
+        (error) => error,
       );
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchWithCache).toHaveBeenCalledTimes(2);
@@ -83,13 +88,22 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
       expect(request?.signal).toBe(controller.signal);
     }
     controller.abort();
-    expect(await result).toContain('cancelled by user');
+    expect(await result).toMatchObject({ name: 'AbortError' });
     await vi.advanceTimersByTimeAsync(2000);
     expect(fetchWithCache).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
     expect(
       vi.mocked(fetchWithCache).mock.calls.every(([url]) => !String(url).endsWith('/cancel')),
     ).toBe(true);
+  });
+
+  it('preserves an in-flight transport AbortError', async () => {
+    const error = new Error('transport aborted');
+    error.name = 'AbortError';
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    await expect(
+      new Provider('owner/model', { config: { apiKey: 'fixture' } }).callApi('Hello'),
+    ).rejects.toBe(error);
   });
 
   it('finishes an un-aborted prediction using the shared polling path', async () => {
@@ -117,11 +131,80 @@ describe('Replicate moderation cancellation', () => {
   it('forwards cancellation to its prediction call', async () => {
     const controller = new AbortController();
     controller.abort(new Error('fixture abort'));
-    const result = await new ReplicateModerationProvider('owner/model', {
+    const result = new ReplicateModerationProvider('owner/model', {
       config: { apiKey: 'fixture' },
     }).callModerationApi('Hello', 'World', undefined, { abortSignal: controller.signal });
-    expect(result.error).toContain('fixture abort');
+    await expect(result).rejects.toMatchObject({ name: 'AbortError', message: 'fixture abort' });
     expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('cancels through the actual two-argument moderation matcher', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(reply('processing'));
+    const controller = new AbortController();
+    const provider = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+      matchesModeration({ userPrompt: 'Hello', assistantResponse: 'World' }, { provider }),
+    ).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    controller.abort(new Error('fixture matcher abort'));
+    expect(await result).toMatchObject({ name: 'AbortError', message: 'fixture matcher abort' });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(
+      vi
+        .mocked(fetchWithCache)
+        .mock.calls.every(([, request]) => request?.signal === controller.signal),
+    ).toBe(true);
+  });
+
+  it('prefers an explicit signal over the ambient evaluation signal', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(reply('succeeded', 'safe'));
+    const ambientController = new AbortController();
+    ambientController.abort();
+    const explicitSignal = new AbortController().signal;
+    const provider = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: ambientController.signal }, () =>
+        provider.callModerationApi('Hello', 'World', undefined, { abortSignal: explicitSignal }),
+      ),
+    ).resolves.toMatchObject({ flags: [] });
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(explicitSignal);
+  });
+
+  it('reports transport failures as API errors rather than malformed moderation', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('fixture transport failure'));
+    const provider = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    await expect(provider.callModerationApi('Hello', 'World')).resolves.toMatchObject({
+      error: 'API call error: Error: fixture transport failure',
+    });
+  });
+
+  it('preserves transport aborts through moderation parsing', async () => {
+    const error = new Error('transport aborted');
+    error.name = 'AbortError';
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const provider = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    await expect(provider.callModerationApi('Hello', 'World')).rejects.toBe(error);
+  });
+
+  it('identifies a rejected prediction call as an API failure', async () => {
+    const provider = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    vi.spyOn(provider, 'callApi').mockRejectedValue(new Error('fixture configuration failure'));
+    await expect(provider.callModerationApi('Hello', 'World')).resolves.toEqual({
+      error: 'API call error: Error: fixture configuration failure',
+    });
   });
 
   it('preserves moderation parsing on a successful signalled call', async () => {

@@ -4,7 +4,9 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { isAbortError } from '../util/fetch/errors';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
@@ -63,6 +65,19 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) {
+    return;
+  }
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    throw reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  throw error;
+}
 
 function normalizeReplicateCacheValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -152,7 +167,7 @@ export class ReplicateProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+    throwIfAborted(options?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'replicate',
@@ -294,6 +309,10 @@ export class ReplicateProvider implements ApiProvider {
 
       response = response.output;
     } catch (err) {
+      throwIfAborted(options?.abortSignal);
+      if (isAbortError(err)) {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
         ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
@@ -357,7 +376,7 @@ export class ReplicateProvider implements ApiProvider {
     const pollInterval = 1000; // 1 second
 
     for (let i = 0; i < maxPolls; i++) {
-      signal?.throwIfAborted();
+      throwIfAborted(signal);
       const pollResponse = await fetchWithCache(
         `https://api.replicate.com/v1/predictions/${predictionId}`,
         {
@@ -383,7 +402,13 @@ export class ReplicateProvider implements ApiProvider {
       }
 
       if (signal) {
-        await sleepWithAbort(pollInterval, signal);
+        try {
+          await sleepWithAbort(pollInterval, signal);
+        } catch (err) {
+          // The shared delay throws a plain Error; preserve the evaluator's abort contract.
+          throwIfAborted(signal);
+          throw err;
+        }
       } else {
         await sleep(pollInterval);
       }
@@ -422,12 +447,24 @@ export class ReplicateModerationProvider
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
+    // Modality matchers can invoke the two-argument public interface. Recover their
+    // evaluation signal from the same execution context used by grading providers.
+    const abortSignal = options?.abortSignal ?? getProviderCallExecutionContext()?.abortSignal;
+    let response: ProviderResponse;
     try {
-      const response = await this.callApi(
+      response = await this.callApi(
         `Human: ${prompt}\n\nAssistant: ${assistant}`,
         context,
-        options,
+        abortSignal ? { ...options, abortSignal } : options,
       );
+    } catch (err) {
+      throwIfAborted(abortSignal);
+      if (isAbortError(err)) {
+        throw err;
+      }
+      return { error: `API call error: ${String(err)}` };
+    }
+    try {
       // LlamaGuard moderation runs as a chat completion. Preserve any token usage
       // reported by that provider response for downstream assertion metrics.
       const tokenUsageResult = response.tokenUsage ? { tokenUsage: response.tokenUsage } : {};
@@ -496,7 +533,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+    throwIfAborted(options?.abortSignal);
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',
