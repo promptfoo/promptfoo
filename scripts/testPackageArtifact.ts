@@ -622,6 +622,7 @@ async function main(): Promise<void> {
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
       tarball: { type: 'string' },
       'runtime-assets': { type: 'string', default: 'none' },
+      browser: { type: 'boolean', default: false },
     },
   });
   assert(
@@ -799,6 +800,36 @@ async function main(): Promise<void> {
           consumerEnv,
         ),
       );
+    }
+
+    if (values.browser) {
+      const browserArgs = ['browser.mjs', '--profile', values.profile];
+      if (values.profile === 'default') {
+        // Resolve from Promptfoo so shallow installs cannot borrow checkout dependencies.
+        // Fail undeclared capabilities before downloading the consumer's matching browser.
+        packageRequire.resolve('puppeteer-extra-plugin-stealth');
+        const playwrightManifest = packageRequire.resolve('playwright/package.json');
+        const playwright = JSON.parse(fs.readFileSync(playwrightManifest, 'utf8')) as {
+          bin: { playwright: string };
+        };
+        assert.equal(typeof playwright.bin.playwright, 'string');
+        const browsersPath = path.join(tempDir, 'browsers');
+        console.log(
+          await runAsync(
+            process.execPath,
+            [
+              path.resolve(path.dirname(playwrightManifest), playwright.bin.playwright),
+              'install',
+              'chromium',
+              '--only-shell',
+            ],
+            consumerDir,
+            { ...consumerEnv, PLAYWRIGHT_BROWSERS_PATH: browsersPath },
+          ),
+        );
+        browserArgs.push('--browsers-path', browsersPath);
+      }
+      console.log(await runAsync(process.execPath, browserArgs, consumerDir, consumerEnv));
     }
 
     if (suppliedTarball) {
