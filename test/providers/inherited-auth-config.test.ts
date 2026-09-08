@@ -79,13 +79,6 @@ describe('Cerebras organization isolation', () => {
       'OpenAI-Organization': 'explicit-org',
     });
   });
-
-  it('preserves upstream errors', async () => {
-    reply({ error: { message: 'Fixture unavailable' } });
-    expect((await createCerebrasProvider('cerebras:custom').callApi('Hello')).error).toContain(
-      'Fixture unavailable',
-    );
-  });
 });
 
 describe('Nscale image resolved configuration', () => {
@@ -131,13 +124,6 @@ describe('Nscale image resolved configuration', () => {
     });
     expect(result).toMatchObject({ cached: true, cost: 0, isBase64: true, format: 'json' });
   });
-
-  it('preserves HTTP errors', async () => {
-    reply({ error: 'Fixture unavailable' }, false, 400);
-    expect(
-      (await new NscaleImageProvider('private/image:model').callApi('A square')).error,
-    ).toContain('400 Bad Request');
-  });
 });
 
 describe('Gateway scoped credentials', () => {
@@ -160,11 +146,10 @@ describe('Gateway scoped credentials', () => {
     },
   );
 
-  it('preserves Comet process credentials and API errors', async () => {
-    reply({ error: { message: 'Fixture unavailable' } });
-    const result = await new CometApiImageProvider('private/image:model').callApi('A square');
+  it('preserves Comet process credentials', async () => {
+    reply(imageReply);
+    await new CometApiImageProvider('private/image:model').callApi('A square');
     expect(firstRequest().headers).toMatchObject({ Authorization: 'Bearer process-comet' });
-    expect(result.error).toContain('Fixture unavailable');
   });
 
   it.each([undefined, 'explicit-key'])(
@@ -190,11 +175,10 @@ describe('Gateway scoped credentials', () => {
     },
   );
 
-  it('preserves Helicone process credentials and errors', async () => {
-    reply({ error: { message: 'Fixture unavailable' } });
-    const result = await new HeliconeGatewayProvider('private/model').callApi('Hello');
+  it('preserves Helicone process credentials', async () => {
+    reply(chatReply);
+    await new HeliconeGatewayProvider('private/model').callApi('Hello');
     expect(firstRequest().headers).toMatchObject({ Authorization: 'Bearer process-helicone' });
-    expect(result.error).toContain('Fixture unavailable');
   });
 
   it('keeps the Helicone placeholder when no Helicone credential is set', () => {

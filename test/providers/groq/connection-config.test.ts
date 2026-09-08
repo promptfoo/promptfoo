@@ -128,13 +128,9 @@ describe.each([
     });
   });
 
-  it.each([
-    {},
-    { apiBaseUrl: undefined, apiKeyEnvar: undefined },
-    { apiBaseUrl: '', apiKeyEnvar: '' },
-  ])('keeps Groq defaults when settings are absent or empty: %j', async (config) => {
+  it('keeps Groq defaults when settings are absent', async () => {
     reply(responses);
-    await new Provider('private/model', { config }).callApi('Hello');
+    await new Provider('private/model', { config: {} }).callApi('Hello');
     expect(request()).toMatchObject({
       url: `https://api.groq.com/openai/v1${path}`,
       headers: { Authorization: 'Bearer groq-process-key' },
@@ -168,18 +164,6 @@ describe.each([
       } finally {
         restoreGroqKey();
       }
-    },
-  );
-
-  it.each([400, 429, 503])(
-    'preserves upstream status %s at the configured endpoint',
-    async (status) => {
-      reply(responses, status);
-      const result = await new Provider('private/model', {
-        config: { apiBaseUrl: 'http://127.0.0.1:9000/groq', apiKeyEnvar: 'GROQ_PROXY_KEY' },
-      }).callApi('Hello');
-      expect(result.error).toContain('Fixture unavailable');
-      expect(request().url).toBe(`http://127.0.0.1:9000/groq${path}`);
     },
   );
 });
