@@ -176,6 +176,10 @@ describe('Vertex cache bypass for non-Gemini models', () => {
     mockIsCacheEnabled.mockReset().mockReturnValue(true);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it.each([
     [
       'claude-3-5-sonnet-v2@20241022',
