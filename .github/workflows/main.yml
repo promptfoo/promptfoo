@@ -215,6 +215,12 @@ jobs:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact
 
+      - name: Test Package Artifact Without Optional Dependencies
+        if: matrix.node == '24.x'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --profile omit-optional
+
   style-check:
     name: Style Check
     timeout-minutes: 10
