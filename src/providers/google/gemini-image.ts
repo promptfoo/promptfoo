@@ -25,8 +25,13 @@ import type {
 } from '../../types/index';
 import type { CompletionOptions } from './types';
 
+interface GeminiImageConfig extends CompletionOptions {
+  apiKeyRequired?: boolean;
+  vertexai?: boolean;
+}
+
 interface GeminiImageOptions {
-  config?: CompletionOptions;
+  config?: GeminiImageConfig;
   id?: string;
   env?: EnvOverrides;
 }
@@ -99,7 +104,7 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: GeminiImageConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
@@ -114,6 +119,13 @@ export class GeminiImageProvider implements ApiProvider {
 
   toString(): string {
     return `[Google Gemini Image Generation Provider ${this.modelName}]`;
+  }
+
+  requiresApiKey(): boolean {
+    // Match the request route while preserving the explicit preflight opt-out.
+    return (
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
+    );
   }
 
   private getApiKey(): string | undefined {
