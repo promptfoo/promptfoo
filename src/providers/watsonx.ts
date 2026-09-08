@@ -365,6 +365,11 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    // Bearer authentication is already resolved by the same precedence used by getAuth().
+    return this.getAuthSelection().type !== 'bearertoken';
+  }
+
   private getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
