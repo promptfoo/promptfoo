@@ -146,7 +146,7 @@ describe('standalone artifact tooling', () => {
 });
 
 describe('installed migration fixture lifetime', () => {
-  it('loads native bindings in a child and cleans owned state when that child fails', () => {
+  function prepareConsumer(nativeSource: string) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-lifetime-'));
     directories.push(root);
     const temporary = path.join(root, 'temporary');
@@ -166,15 +166,40 @@ describe('installed migration fixture lifetime', () => {
     fs.writeFileSync(
       path.join(nativeDir, 'index.js'),
       `require('node:fs').writeFileSync(__dirname + '/native-pid', String(process.pid));
-throw new Error('artifact-native-binding-sentinel');`,
+${nativeSource}`,
     );
     const fixture = path.join(root, 'migrations.mjs');
     fs.copyFileSync(
       path.resolve(__dirname, '../fixtures/package-artifact/migrations.mjs'),
       fixture,
     );
+    return { root, temporary, nativeDir, fixture };
+  }
+
+  function processIsRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      if (process.platform === 'linux') {
+        // A killed grandchild may await reaping by init; a zombie cannot hold the database open.
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
+      }
+      return true;
+    } catch (error) {
+      if (['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  it('loads native bindings in a child and cleans owned state when that child fails', () => {
+    const { temporary, nativeDir, fixture } = prepareConsumer(
+      "throw new Error('artifact-native-binding-sentinel');",
+    );
     const result = spawnSync(process.execPath, [fixture], {
       encoding: 'utf8',
+      timeout: 8_000,
       env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
     });
     expect(result.status).not.toBe(0);
@@ -184,4 +209,68 @@ throw new Error('artifact-native-binding-sentinel');`,
     );
     expect(fs.readdirSync(temporary)).toEqual([]);
   });
+
+  it.each([false, true])(
+    'terminates a stalled native check and cleans owned state (descendant: %s)',
+    async (withDescendant) => {
+      const timeoutMs = 1_500;
+      const descendant = `require('node:fs').writeFileSync(process.argv[1], String(process.pid));
+setInterval(() => {}, 1000);`;
+      const { root, temporary, nativeDir, fixture } = prepareConsumer(
+        withDescendant
+          ? `require('node:child_process').spawnSync(process.execPath,
+['-e', ${JSON.stringify(descendant)}, __dirname + '/descendant-pid'], { stdio: 'inherit' });`
+          : 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
+      );
+      const pidFiles = ['native-pid', ...(withDescendant ? ['descendant-pid'] : [])].map((name) =>
+        path.join(nativeDir, name),
+      );
+      const output = path.join(root, 'supervisor.log');
+      const descriptor = fs.openSync(output, 'w');
+      try {
+        // File descriptors prevent orphaned inherited pipes from hanging the outer watchdog.
+        const result = spawnSync(process.execPath, [fixture, '--timeout-ms', String(timeoutMs)], {
+          stdio: ['ignore', descriptor, descriptor],
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.status).not.toBeNull();
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(output, 'utf8')).toContain(
+          `Installed migration check timed out after ${timeoutMs}ms`,
+        );
+        const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));
+        expect(new Set([result.pid, ...pids]).size).toBe(pids.length + 1);
+        for (const pid of pids) {
+          expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid).toBe(true);
+        }
+        const deadline = Date.now() + 1_000;
+        while (pids.some(processIsRunning) && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(pids.filter(processIsRunning)).toEqual([]);
+        expect(fs.readdirSync(temporary)).toEqual([]);
+      } finally {
+        fs.closeSync(descriptor);
+        // Clean only PIDs recorded by these owned fixtures, even if the supervisor regresses.
+        for (const file of pidFiles) {
+          if (!fs.existsSync(file)) {
+            continue;
+          }
+          const pid = Number(fs.readFileSync(file, 'utf8'));
+          if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
+            try {
+              process.kill(pid, 'SIGKILL');
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+                throw error;
+              }
+            }
+          }
+        }
+      }
+    },
+  );
 });
