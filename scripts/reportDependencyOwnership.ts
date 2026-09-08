@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { globSync } from 'glob';
+import { minimatch } from 'minimatch';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 import { z } from 'zod';
 import {
@@ -83,18 +84,36 @@ function discoverManifests(repoRoot: string): string[] {
   const workspaces = Array.isArray(root.workspaces)
     ? root.workspaces
     : (root.workspaces?.packages ?? []);
-  return [
-    'package.json',
-    ...new Set(
-      workspaces.flatMap((workspace) =>
-        globSync(`${workspace}/package.json`, {
-          cwd: repoRoot,
-          nodir: true,
-          ignore: ignored,
-        }).map(normalizePath),
-      ),
-    ),
-  ].sort();
+  const patterns: string[] = [];
+  const exclusions: string[] = [];
+  // Match npm's workspace negation handling: exclusions apply across the list,
+  // but a later positive pattern matching an exclusion removes that exclusion.
+  for (const workspace of workspaces) {
+    const bangs = workspace.match(/^!+/)?.[0].length ?? 0;
+    const pattern = workspace.slice(bangs).replace(/^\.?\/+/, '');
+    if (bangs % 2 === 1) {
+      exclusions.push(pattern);
+    } else {
+      // Preserve npm's forward-splice behavior for overlapping exclusions.
+      for (let index = 0; index < exclusions.length; index++) {
+        if (minimatch(pattern, exclusions[index])) {
+          exclusions.splice(index, 1);
+        }
+      }
+      patterns.push(pattern);
+    }
+  }
+  const included = patterns.filter(
+    (pattern) => !exclusions.some((excluded) => minimatch(pattern, excluded)),
+  );
+  const workspaceDirectories = globSync(
+    included.map((pattern) => `${pattern.replace(/\\/g, '/').replace(/\/$/, '')}/`),
+    { cwd: repoRoot, ignore: [...ignored, ...exclusions] },
+  );
+  const manifests = workspaceDirectories
+    .map((directory) => normalizePath(path.join(directory, 'package.json')))
+    .filter((manifest) => fs.existsSync(path.join(repoRoot, manifest)));
+  return [...new Set(['package.json', ...manifests])].sort();
 }
 
 function manifestFor(file: string, manifests: string[]): string {
@@ -106,7 +125,7 @@ function manifestFor(file: string, manifests: string[]): string {
   );
 }
 
-function scopeFor(file: string, manifest: string): Scope {
+function scopeFor(file: string, manifest: string, configuredRoots: string[]): Scope {
   const relative =
     manifest === 'package.json' ? file : path.posix.relative(path.posix.dirname(manifest), file);
   if (/\.d\.(?:ts|mts|cts)$/.test(relative)) {
@@ -115,8 +134,17 @@ function scopeFor(file: string, manifest: string): Scope {
   if (/(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)\.[^.]+$/.test(relative)) {
     return 'test';
   }
+  const workspaceRoot = manifest === 'package.json' ? '' : path.posix.dirname(manifest);
+  const configuredSource = configuredRoots.some(
+    (root) =>
+      (file === root || file.startsWith(`${root}/`)) &&
+      // A broad layer containing a workspace also includes its build configuration.
+      root !== workspaceRoot &&
+      !workspaceRoot.startsWith(`${root}/`),
+  );
   return relative.startsWith('src/') ||
-    (manifest === 'site/package.json' && /^(?:docs|blog)\//.test(relative))
+    (manifest === 'site/package.json' && /^(?:docs|blog)\//.test(relative)) ||
+    configuredSource
     ? 'source'
     : 'build';
 }
@@ -131,7 +159,7 @@ function staticSpecifier(node: Node): string | undefined {
   return undefined;
 }
 
-function discoverFiles(repoRoot: string, manifests: string[]) {
+function discoverFiles(repoRoot: string, manifests: string[], configuredRoots: string[]) {
   const files = new Set<string>();
   const declarationFiles = new Set<string>();
   for (const manifest of manifests) {
@@ -161,6 +189,18 @@ function discoverFiles(repoRoot: string, manifests: string[]) {
     }
   }
 
+  for (const root of configuredRoots) {
+    for (const file of globSync([root, `${root}/**/*.${extensions}`], {
+      cwd: repoRoot,
+      nodir: true,
+      ignore: ignored,
+    }).map(normalizePath)) {
+      if (/\.(?:[cm]?[jt]s|[jt]sx)$/.test(file)) {
+        files.add(file);
+      }
+    }
+  }
+
   return { files, declarationFiles };
 }
 
@@ -177,7 +217,15 @@ export function reportDependencyOwnership(
   const packages = new Map(
     manifests.map((manifest) => [manifest, readPackage(repoRoot, manifest)]),
   );
-  const { files, declarationFiles } = discoverFiles(repoRoot, manifests);
+  const sourceConfig = {
+    ...config,
+    layers: config.layers.map((layer) => ({
+      ...layer,
+      roots: layer.roots.map((root) => normalizePath(root).replace(/\/+$/, '')),
+    })),
+  };
+  const configuredRoots = sourceConfig.layers.flatMap((layer) => layer.roots);
+  const { files, declarationFiles } = discoverFiles(repoRoot, manifests, configuredRoots);
 
   const usages = new Map<string, Reference[]>();
   const computedImports: Array<{
@@ -230,8 +278,8 @@ export function reportDependencyOwnership(
     if (result.errors.length > 0) {
       throw new Error(`Could not parse ${file}: ${result.errors[0].message}`);
     }
-    const scope = scopeFor(file, manifest);
-    const layer = getLayerForFile(file, config);
+    const scope = scopeFor(file, manifest, configuredRoots);
+    const layer = getLayerForFile(file, sourceConfig);
     const aliases = [...Object.keys(config.aliases ?? {}), ...(ledger.aliases[manifest] ?? [])];
     const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
     const add = (node: Node, specifier: string, kind: Reference['kind']) => {
@@ -251,7 +299,7 @@ export function reportDependencyOwnership(
       }
       record(manifest, dependency, {
         file,
-        line: source.slice(0, node.start).split('\n').length,
+        line: source.slice(0, node.start).split(/\r\n|[\r\n\u2028\u2029]/u).length,
         scope,
         kind,
         layer,
@@ -263,7 +311,7 @@ export function reportDependencyOwnership(
       if (specifier === undefined) {
         computedImports.push({
           file,
-          line: source.slice(0, node.start).split('\n').length,
+          line: source.slice(0, node.start).split(/\r\n|[\r\n\u2028\u2029]/u).length,
           expression: source.slice(node.start, node.end),
           fileAnnotations: validAnnotations
             .filter(
@@ -350,9 +398,9 @@ export function reportDependencyOwnership(
       record(annotation.manifest, annotation.dependency, {
         file,
         line: 0,
-        scope: scopeFor(file, annotation.manifest),
+        scope: scopeFor(file, annotation.manifest, configuredRoots),
         kind: 'annotation',
-        layer: getLayerForFile(file, config),
+        layer: getLayerForFile(file, sourceConfig),
         specifier: annotation.dependency,
       });
     }
@@ -429,7 +477,7 @@ export function reportDependencyOwnership(
     )
     .map((entry) => {
       const sourceRefs = entry.references.filter(
-        (ref) => ref.file.startsWith('src/') && ref.scope === 'source' && ref.kind !== 'annotation',
+        (ref) => ref.scope === 'source' && ref.kind !== 'annotation',
       );
       const layers = [...new Set(sourceRefs.map((ref) => ref.layer))].sort();
       return {

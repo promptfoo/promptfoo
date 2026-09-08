@@ -82,6 +82,121 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it.each([
+    { patterns: ['packages/*', '!packages/skip'], included: ['contracts'] },
+    { patterns: ['!packages/skip', 'packages/*'], included: ['contracts'] },
+    {
+      patterns: ['packages/*', '!packages/skip', 'packages/skip'],
+      included: ['contracts', 'skip'],
+    },
+    { patterns: ['./packages/*/', '!/packages/skip/'], included: ['contracts'] },
+    { patterns: ['!!packages/*', '!!!packages/skip'], included: ['contracts'] },
+    {
+      patterns: ['packages/*', '!packages/**', '!packages/skip', 'packages/skip'],
+      included: ['contracts'],
+    },
+  ])('matches npm workspace exclusions for $patterns', ({ patterns, included }) => {
+    json('package.json', { workspaces: { packages: patterns } });
+    json('packages/skip/package.json', { name: 'skip', dependencies: { ignored: '1' } });
+    write('packages/skip/src/index.ts', "import 'skip-only';");
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: Object.fromEntries(
+        ['package.json', ...included.map((name) => `packages/${name}/package.json`)].map(
+          (manifest) => [manifest, 'owner'],
+        ),
+      ),
+    });
+    const report = reportDependencyOwnership(root, config);
+    expect(report.coverage.manifests).toEqual([
+      'package.json',
+      ...included.map((name) => `packages/${name}/package.json`),
+    ]);
+    expect(report.unassignedManifests).toEqual([]);
+    expect(report.annotationErrors).toEqual([]);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(
+      included.includes('skip') ? ['skip-only'] : [],
+    );
+  });
+
+  it.each([
+    ['LF', '\n'],
+    ['CR', '\r'],
+    ['CRLF', '\r\n'],
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+  ])('reports literal and computed import lines with %s terminators', (_name, terminator) => {
+    write(
+      'src/index.ts',
+      [
+        '// Unicode 🌍 comment',
+        "import 'shared';",
+        'import(candidate);',
+        "import('missing');",
+      ].join(terminator),
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(
+      report.declarations.find((entry) => entry.dependency === 'shared')?.references[0].line,
+    ).toBe(2);
+    expect(report.computedImports[0].line).toBe(3);
+    expect(report.undeclaredUsages[0].references[0].line).toBe(4);
+  });
+
+  it('discovers configured production roots outside conventional source directories', () => {
+    json('package.json', {
+      workspaces: ['packages/*', 'src/app'],
+      dependencies: { portable: '1' },
+    });
+    json('packages/leaf/package.json', { name: 'leaf', dependencies: { schema: '1' } });
+    write('packages/leaf/lib/index.ts', "import 'schema'; import 'leaf-missing';");
+    write('packages/leaf/lib/types.d.ts', "import 'declaration-missing';");
+    write('packages/leaf/lib/index.test.ts', "import 'test-missing';");
+    write('tools/portable/index.js', "import 'portable'; import 'external-missing';");
+    write('tools/portable/node_modules/nested/index.js', "import 'ignored';");
+    write('tools/entry.mts', "import 'entry-missing';");
+    write('src/app/vite.config.ts', "import 'build-missing';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [
+        ...config.layers,
+        { name: 'leaf', roots: ['packages/leaf/lib/'], allowedDependencies: [] },
+        {
+          name: 'portable',
+          roots: ['tools/portable/', 'tools/entry.mts'],
+          allowedDependencies: [],
+        },
+      ],
+    });
+    expect(report.declarations.find((entry) => entry.dependency === 'schema')).toMatchObject({
+      manifest: 'packages/leaf/package.json',
+      scopes: ['source'],
+      references: [expect.objectContaining({ layer: 'leaf' })],
+    });
+    expect(report.rows).toEqual([
+      {
+        dependency: 'portable',
+        kind: 'dependency',
+        owner: 'portable',
+        layers: 'portable',
+        files: 1,
+      },
+    ]);
+    expect(
+      report.undeclaredUsages.map((entry) => [
+        entry.dependency,
+        entry.manifest,
+        entry.references[0].scope,
+      ]),
+    ).toEqual([
+      ['entry-missing', 'package.json', 'source'],
+      ['external-missing', 'package.json', 'source'],
+      ['declaration-missing', 'packages/leaf/package.json', 'declaration'],
+      ['leaf-missing', 'packages/leaf/package.json', 'source'],
+      ['test-missing', 'packages/leaf/package.json', 'test'],
+      ['build-missing', 'src/app/package.json', 'build'],
+    ]);
+  });
+
   it('covers executable site docs and blog components as workspace source without parsing Markdown', () => {
     json('package.json', { dependencies: { motion: '1' }, workspaces: ['site'] });
     json('site/package.json', { name: 'docs', devDependencies: { react: '1' } });
