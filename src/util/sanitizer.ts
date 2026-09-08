@@ -2,7 +2,6 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
-import safeStringify from 'fast-safe-stringify';
 
 import type { EvalRuntimeOptions } from '../types';
 
@@ -732,6 +731,7 @@ export function sanitizeObject(
   options: {
     context?: string;
     redactErrorMessages?: boolean;
+    omitCircularRefs?: boolean;
     throwOnError?: boolean;
     maxDepth?: number;
   } = {},
@@ -739,6 +739,7 @@ export function sanitizeObject(
   const {
     context = 'object',
     redactErrorMessages = false,
+    omitCircularRefs = false,
     throwOnError = false,
     maxDepth = MAX_DEPTH,
   } = options;
@@ -759,32 +760,36 @@ export function sanitizeObject(
       return obj;
     }
 
-    // Use safeStringify only to handle circular references
-    // Custom replacer to handle Error objects which don't serialize properly
-    // (Error objects have no enumerable properties, so JSON.stringify returns "{}")
+    const ancestors: object[] = [];
     const safeObj = JSON.parse(
-      safeStringify(
-        obj,
-        function (this: Record<string, unknown>, key, val) {
-          if (typeof val === 'bigint') {
-            return val.toString();
-          }
-          const originalValue = this[key];
-          if (val instanceof Error || (redactErrorMessages && originalValue instanceof Error)) {
-            const error = originalValue instanceof Error ? originalValue : val;
-            return {
+      JSON.stringify(obj, function (this: Record<string, unknown>, key, val) {
+        if (typeof val === 'bigint') {
+          return val.toString();
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(this, key);
+        if (descriptor?.get) {
+          return REDACTED;
+        }
+        const originalValue = descriptor?.value;
+        const error =
+          originalValue instanceof Error ? originalValue : val instanceof Error ? val : undefined;
+        const value = error
+          ? {
               name: error.name,
               message: redactErrorMessages ? REDACTED : error.message,
-            };
+            }
+          : val;
+        if (typeof value === 'object' && value !== null) {
+          while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
+            ancestors.pop();
           }
-          return val;
-        },
-        undefined,
-        {
-          depthLimit: Number.MAX_SAFE_INTEGER,
-          edgesLimit: Number.MAX_SAFE_INTEGER,
-        },
-      ),
+          if (ancestors.includes(value)) {
+            return omitCircularRefs ? undefined : '[Circular]';
+          }
+          ancestors.push(value);
+        }
+        return value;
+      }),
     );
 
     // Apply recursive sanitization with depth limiting
@@ -795,9 +800,9 @@ export function sanitizeObject(
     }
 
     // Can't use logger here as it would create circular dependency
-    console.error(`Error sanitizing ${context}:`, error);
+    console.error(`Error sanitizing ${context}`);
 
-    return obj;
+    return Array.isArray(obj) ? [] : typeof obj === 'object' ? {} : REDACTED;
   }
 }
 

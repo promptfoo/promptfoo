@@ -821,6 +821,23 @@ describe('sanitizeObject', () => {
       expect(JSON.stringify(result)).not.toContain(secret);
     });
 
+    it('reads accessor values once and omits them without exposing other secrets', () => {
+      let reads = 0;
+      const input = {
+        apiKey: 'fixture-key',
+        get lastError() {
+          reads++;
+          if (reads > 1) {
+            throw new Error('Unexpected repeated accessor read: fixture-marker');
+          }
+          return new Error('A local error: fixture-marker');
+        },
+      };
+
+      expect(sanitizeObject(input)).toEqual({ apiKey: '[REDACTED]', lastError: '[REDACTED]' });
+      expect(reads).toBe(1);
+    });
+
     it('should convert Map objects to empty objects via JSON', () => {
       const map = new Map([['key', 'value']]);
       const result = sanitizeObject({ map });
@@ -1002,7 +1019,7 @@ describe('sanitizeObject', () => {
       });
 
       const result = sanitizeObject(input, { throwOnError: false });
-      expect(result).toEqual(input);
+      expect(result).toEqual({});
     });
 
     it('should throw errors when throwOnError is true', () => {
@@ -1021,10 +1038,7 @@ describe('sanitizeObject', () => {
       });
 
       sanitizeObject(input, { context: 'test context', throwOnError: false });
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('test context'),
-        expect.any(Error),
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('test context'));
     });
   });
 

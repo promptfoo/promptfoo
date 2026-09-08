@@ -124,6 +124,13 @@ describe('EvalResult', () => {
         },
       });
       expect(JSON.stringify(result)).not.toContain(errorSecret);
+
+      const withoutBigInt = sanitizeProvider({
+        id: 'test-provider',
+        config: { lastError },
+      } as unknown as ProviderOptions);
+      expect(withoutBigInt.config?.lastError).toEqual({ name: 'Error', message: '[REDACTED]' });
+      expect(JSON.stringify(withoutBigInt)).not.toContain(errorSecret);
     });
 
     it('redacts AWS/Azure credential fields in provider config (name-based)', () => {

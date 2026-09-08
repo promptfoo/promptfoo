@@ -34,16 +34,11 @@ import type { ProviderConfig } from '../providers/shared';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   try {
-    let configToSanitize: ProviderConfig = config;
-    const serialized = safeJsonStringify(config);
-    if (serialized !== undefined) {
-      configToSanitize = JSON.parse(serialized);
-    }
-
-    return sanitizeObject(configToSanitize, {
+    return sanitizeObject(config, {
       context: 'provider config',
       maxDepth: Number.POSITIVE_INFINITY,
       redactErrorMessages: true,
+      omitCircularRefs: true,
       throwOnError: true,
     }) as ProviderConfig;
   } catch {
