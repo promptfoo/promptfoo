@@ -427,6 +427,8 @@ describe('dependency ownership report', () => {
     write('src/external/library.d.ts', "export type Public = import('source-types').Public;");
     write('dist/src/index.d.ts', "export type Public = import('public-types').Public;");
     write('dist/src/index.d.cts', "import api = require('public-cjs-types'); export = api;");
+    write('dist/tests/ignored.d.ts', "export type Test = import('test-types').Test;");
+    write('dist/src/index.test.d.ts', "export type Test = import('test-types').Test;");
     write('dist/src/index.js', "import 'ignored-generated-runtime';");
     const report = reportDependencyOwnership(root, config);
     expect(
@@ -518,6 +520,20 @@ describe('dependency ownership report', () => {
     expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['literal-package']);
   });
 
+  it('records JSDoc import types and audits the standalone action package', () => {
+    json('code-scan-action/package.json', {
+      name: 'action',
+      dependencies: { '@actions/core': '1' },
+    });
+    write('code-scan-action/src/index.ts', "import '@actions/core';");
+    write('src/index.js', "/** @type {import('shared').Thing} */\nexport {};");
+    const report = reportDependencyOwnership(root, config);
+    expect(report.coverage.manifests).toContain('code-scan-action/package.json');
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
+      expect.objectContaining({ kind: 'type', specifier: 'shared' }),
+    ]);
+  });
+
   it('records documented computed usage without pretending it is a literal import', () => {
     write('src/index.ts', 'import(candidate);');
     json('architecture/dependency-ownership.json', {
@@ -528,7 +544,7 @@ describe('dependency ownership report', () => {
           dependency: 'shared',
           disposition: 'computed-loader',
           reason: 'A candidate table selects the package export.',
-          evidence: ['src/index.ts'],
+          evidence: ['./src/index.ts'],
         },
       ],
     });

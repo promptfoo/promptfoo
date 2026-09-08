@@ -119,7 +119,15 @@ function discoverManifests(repoRoot: string): string[] {
     )
     .map((directory) => normalizePath(path.join(directory, 'package.json')))
     .filter((manifest) => fs.existsSync(path.join(repoRoot, manifest)));
-  return [...new Set(['package.json', ...manifests])].sort();
+  return [
+    ...new Set([
+      'package.json',
+      ...manifests,
+      ...(fs.existsSync(path.join(repoRoot, 'code-scan-action/package.json'))
+        ? ['code-scan-action/package.json']
+        : []),
+    ]),
+  ].sort();
 }
 
 function manifestFor(file: string, manifests: string[]): string {
@@ -131,13 +139,17 @@ function manifestFor(file: string, manifests: string[]): string {
   );
 }
 
+function isTestFile(file: string): boolean {
+  return /(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)(?:\.d)?\.[^.]+$/.test(file);
+}
+
 function scopeFor(file: string, manifest: string, configuredRoots: string[]): Scope {
   const relative =
     manifest === 'package.json' ? file : path.posix.relative(path.posix.dirname(manifest), file);
   if (/\.d\.(?:ts|mts|cts)$/.test(relative)) {
     return 'declaration';
   }
-  if (/(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)\.[^.]+$/.test(relative)) {
+  if (isTestFile(relative)) {
     return 'test';
   }
   const workspaceRoot = manifest === 'package.json' ? '' : path.posix.dirname(manifest);
@@ -202,7 +214,7 @@ function discoverFiles(
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/test/**', ...configuredIgnores],
     }).map(normalizePath)) {
-      if (manifestFor(file, manifests) !== manifest) {
+      if (manifestFor(file, manifests) !== manifest || isTestFile(file)) {
         continue;
       }
       files.add(file);
@@ -329,7 +341,12 @@ export function reportDependencyOwnership(
       }
     }
     if (annotationErrors.length === errorCount) {
-      validAnnotations.push(annotation);
+      validAnnotations.push({
+        ...annotation,
+        evidence: annotation.evidence.map((evidence) =>
+          path.posix.normalize(normalizePath(evidence)),
+        ),
+      });
     }
   }
 
@@ -405,6 +422,11 @@ export function reportDependencyOwnership(
       packages,
     )) {
       add(reference, reference.specifier, 'type', reference.dependency);
+    }
+    for (const comment of result.comments) {
+      for (const match of comment.value.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+        add(comment, match[1], 'type');
+      }
     }
     new Visitor({
       ImportDeclaration(node) {
