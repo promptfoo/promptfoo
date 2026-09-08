@@ -117,11 +117,13 @@ export class HyperbolicAudioProvider implements ApiProvider {
 
     // The native endpoint uses Melo TTS without a model selector. Keep explicit
     // model/voice passthrough for compatibility with existing custom endpoints.
-    if (config.model) {
-      body.model = config.model;
-    }
-    if (config.voice) {
-      body.voice = config.voice;
+    if (!this.isHyperbolicApi()) {
+      if (config.model) {
+        body.model = config.model;
+      }
+      if (config.voice) {
+        body.voice = config.voice;
+      }
     }
     if (config.speed !== undefined) {
       body.speed = config.speed;
