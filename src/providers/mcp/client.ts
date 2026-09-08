@@ -500,16 +500,12 @@ export class MCPClient {
     // Close existing connection
     const existingTransport = this.transports.get(serverKey);
     const existingClient = this.clients.get(serverKey);
-    if (existingTransport) {
-      await existingTransport.close().catch(() => {});
-    }
-    if (existingClient) {
-      await existingClient.close().catch(() => {});
-    }
-
     // Remove old entries (keep tools and oauthConfig)
     this.clients.delete(serverKey);
     this.transports.delete(serverKey);
+    if (existingTransport || existingClient) {
+      await awaitProviderOperation(this.closeConnection(existingClient, existingTransport), signal);
+    }
 
     // Reconnect with fresh token
     if (this.shuttingDown) {
@@ -658,7 +654,7 @@ export class MCPClient {
   }
 
   private async closeConnection(
-    client: Client,
+    client?: Client,
     transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
   ): Promise<void> {
     // Always attempt both closes, even if transport teardown fails.
