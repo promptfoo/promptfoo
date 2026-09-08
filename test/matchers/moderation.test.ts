@@ -95,29 +95,45 @@ describe('matchesModeration', () => {
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
-  it('records moderation providers beneath the grading trace', async () => {
-    setTestEnv({ OPENAI_API_KEY: 'test-key' });
-    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue(
-      mockModerationResponse,
-    );
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async ({ callContext }, invoke) => invoke(callContext),
-    );
+  it.each([false, true])(
+    'preserves traced context and call arity, signal=%s',
+    async (withSignal) => {
+      setTestEnv({ OPENAI_API_KEY: 'test-key' });
+      const abortSignal = withSignal ? new AbortController().signal : undefined;
+      const tracedContext = {
+        vars: {},
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      };
+      const call = vi
+        .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
+        .mockResolvedValue(mockModerationResponse);
+      const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+        async (_options, invoke) => invoke(tracedContext),
+      );
 
-    await withProviderCallTracingContext(
-      {
-        getActiveTraceparent: () => undefined,
-        withGraderSpan: async (_options, invoke) => invoke(),
-        withProviderSpan: providerSpan,
-      },
-      () => matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
-    );
+      await withProviderCallExecutionContext({ abortSignal }, () =>
+        withProviderCallTracingContext(
+          {
+            getActiveTraceparent: () => tracedContext.traceparent,
+            withGraderSpan: async (_options, invoke) => invoke(),
+            withProviderSpan: providerSpan,
+          },
+          () =>
+            matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
+        ),
+      );
 
-    expect(providerSpan).toHaveBeenCalledWith(
-      expect.objectContaining({ role: 'grader', promptLabel: 'moderation' }),
-      expect.any(Function),
-    );
-  });
+      expect(providerSpan).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'grader', promptLabel: 'moderation' }),
+        expect.any(Function),
+      );
+      expect(call.mock.calls[0]).toEqual([
+        'test prompt',
+        'test response',
+        ...(abortSignal ? [tracedContext, { abortSignal }] : []),
+      ]);
+    },
+  );
 
   it('should propagate token usage returned by moderation provider', async () => {
     setTestEnv({ OPENAI_API_KEY: 'test-key' });
