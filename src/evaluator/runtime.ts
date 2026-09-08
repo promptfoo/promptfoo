@@ -1,4 +1,11 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  CompletedPrompt,
+  EvaluateResult,
+  PromptMetrics,
+  RunEvalOptions,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -65,11 +72,43 @@ export interface EvaluatorResultWriterOptions {
   append: boolean;
 }
 
+/** Optional progress sinks; the runtime decides whether a terminal or CI reporter is appropriate. */
+export interface EvaluatorProgressBar {
+  initialize(rows: RunEvalOptions[], concurrency: number, compareRowsCount: number): Promise<void>;
+  installLogInterceptor(): void;
+  removeLogInterceptor(): void;
+  updateProgress(
+    index: number,
+    row: RunEvalOptions | undefined,
+    phase?: 'serial' | 'concurrent',
+    metrics?: PromptMetrics,
+  ): void;
+  updateComparisonProgress(prompt: string): void;
+  updateTotalCount(additionalCount: number): void;
+  complete(): void;
+  stop(): void;
+}
+
+export interface EvaluatorCiProgressReporter {
+  start(): void;
+  update(completed: number): void;
+  updateTotalTests(total: number): void;
+  error(message: string): void;
+  finish(): void;
+}
+
 export interface EvaluatorRuntime<
   TEvaluation extends EvaluationRecord = EvaluationRecord,
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
+  /** Without a selector, all requested generated prompts are evaluated without interaction. */
+  selectPrompt?(prompt: string): Promise<boolean>;
+  createProgressReporters?(
+    total: number,
+  ):
+    | { progressBarManager?: EvaluatorProgressBar | null; ciProgressReporter?: never }
+    | { progressBarManager?: never; ciProgressReporter?: EvaluatorCiProgressReporter | null };
   createEvaluationStore(evaluation: TEvaluation): EvaluationStore<TEvaluation, TResult>;
   createResultWriters(
     outputPath: string | string[] | undefined,
