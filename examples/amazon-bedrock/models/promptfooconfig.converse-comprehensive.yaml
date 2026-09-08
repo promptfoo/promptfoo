@@ -79,7 +79,8 @@ providers:
   # Amazon Nova Models
   # ============================================================================
 
-  # Nova Premier (most capable)
+  # Legacy Nova Premier: Bedrock end of life is September 14, 2026.
+  # https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html
   - id: bedrock:converse:us.amazon.nova-premier-v1:0
     label: Nova Premier
     config:
