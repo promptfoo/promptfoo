@@ -92,7 +92,7 @@ function buildKnowledgeBaseCacheKey({
   };
   const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
 
-  return `bedrock-kb:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
+  return `bedrock-kb:v2:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
     JSON.stringify({
       configStr,
       prompt,
@@ -369,7 +369,46 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
-  it('should pass along config parameters but not create generationConfiguration', async () => {
+  it.each(['default', ''])(
+    'rejects missing generation model %j before acquiring a client',
+    async (modelName) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'kb-123' },
+      });
+      const getClient = vi.spyOn(provider, 'getKnowledgeBaseClient');
+
+      const result = await provider.callApi('Describe the garden');
+
+      expect(result.error).toContain('Set bedrock:kb:<model-id> or provide config.modelArn');
+      expect(getClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts an explicit modelArn with the default route and preserves custom identity', async () => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+    const provider = new AwsBedrockKnowledgeBaseProvider('default', {
+      id: 'custom-kb',
+      config: {
+        knowledgeBaseId: 'kb-123',
+        modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
+      },
+    });
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+    expect(provider.id()).toBe('custom-kb');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({
+            modelArn: provider.kbConfig.modelArn,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should leave generationConfiguration omitted when no generation settings are provided', async () => {
     const mockResponse = {
       output: {
         text: 'This is the response from the knowledge base',
@@ -401,6 +440,85 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
+
+  it('serializes configured generation settings, including zero values', async () => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        region: 'us-east-1',
+        temperature: 0,
+        max_tokens: 128,
+        top_p: 0,
+        top_k: 4,
+      },
+    });
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({
+            generationConfiguration: {
+              inferenceConfig: { textInferenceConfig: { temperature: 0, maxTokens: 128, topP: 0 } },
+              additionalModelRequestFields: { inferenceConfig: { topK: 4 } },
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('preserves max_tokens when the effective model does not support sampling', async () => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-7',
+        temperature: 0,
+        max_tokens: 128,
+        top_p: 0.75,
+        top_k: 20,
+      },
+    });
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({
+            generationConfiguration: {
+              inferenceConfig: { textInferenceConfig: { maxTokens: 128 } },
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each(['sonnet-4-5-20250929', 'haiku-4-5-20251001'])(
+    'preserves top_p and top_k when Claude %s cannot also use temperature',
+    async (model) => {
+      mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+      const provider = new AwsBedrockKnowledgeBaseProvider(`anthropic.claude-${model}-v1:0`, {
+        config: { knowledgeBaseId: 'kb-123', temperature: 0, top_p: 0.75, top_k: 20 },
+      });
+
+      expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+      expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          retrieveAndGenerateConfiguration: expect.objectContaining({
+            knowledgeBaseConfiguration: expect.objectContaining({
+              generationConfiguration: {
+                inferenceConfig: { textInferenceConfig: { topP: 0.75 } },
+                additionalModelRequestFields: { top_k: 20 },
+              },
+            }),
+          }),
+        }),
+      );
+    },
+  );
 
   it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
     const mockResponse = {
@@ -478,6 +596,25 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     };
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('does not replay legacy results that ignored generation settings', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockImplementation(async (key: string) =>
+      key.startsWith('bedrock-kb:v2:')
+        ? null
+        : JSON.stringify({ output: 'legacy response', citations: [] }),
+    );
+    const provider = new AwsBedrockKnowledgeBaseProvider('custom-model', {
+      config: { knowledgeBaseId: 'kb-123', region: 'us-east-1', temperature: 0 },
+    });
+    mockSend.mockResolvedValueOnce({ output: { text: 'fresh response' }, citations: [] });
+
+    const result = await provider.callApi('Describe a quiet garden');
+
+    expect(result.output).toBe('fresh response');
+    expect(result.cached).not.toBe(true);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
   it('should retrieve citations from cache when available', async () => {

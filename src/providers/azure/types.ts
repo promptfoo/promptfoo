@@ -50,6 +50,8 @@ export interface AzureCompletionOptions {
   systemPrompt?: string;
 
   // OpenAI params
+  /** Output vector size for embeddings from text-embedding-3 and later models. */
+  dimensions?: number;
   max_tokens?: number;
   temperature?: number;
   top_p?: number;

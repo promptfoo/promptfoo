@@ -53,7 +53,6 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'function-tools-callback': 'eval-function-tools-callback',
   'g-eval': 'eval-g-eval',
   'github-action': 'integration-github-action',
-  'github-models': 'provider-github-models',
   'golang-provider': 'provider-golang',
   'google-adk-example': 'integration-google-adk',
   'google-sheets': 'integration-google-sheets',
