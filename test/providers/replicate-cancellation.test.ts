@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
-import { matchesModeration } from '../../src/matchers/moderation';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
-import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -138,15 +136,17 @@ describe('Replicate moderation cancellation', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it('cancels through the actual two-argument moderation matcher', async () => {
+  it('cancels moderation polling when call options carry a signal', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('processing'));
     const controller = new AbortController();
     const provider = new ReplicateModerationProvider('owner/model', {
       config: { apiKey: 'fixture' },
     });
-    const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
-      matchesModeration({ userPrompt: 'Hello', assistantResponse: 'World' }, { provider }),
-    ).catch((error) => error);
+    const result = provider
+      .callModerationApi('Hello', 'World', undefined, {
+        abortSignal: controller.signal,
+      })
+      .catch((error) => error);
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchWithCache).toHaveBeenCalledTimes(2);
     controller.abort(new Error('fixture matcher abort'));
@@ -161,18 +161,14 @@ describe('Replicate moderation cancellation', () => {
     ).toBe(true);
   });
 
-  it('prefers an explicit signal over the ambient evaluation signal', async () => {
+  it('preserves successful moderation with an explicit signal', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('succeeded', 'safe'));
-    const ambientController = new AbortController();
-    ambientController.abort();
     const explicitSignal = new AbortController().signal;
     const provider = new ReplicateModerationProvider('owner/model', {
       config: { apiKey: 'fixture' },
     });
     await expect(
-      withProviderCallExecutionContext({ abortSignal: ambientController.signal }, () =>
-        provider.callModerationApi('Hello', 'World', undefined, { abortSignal: explicitSignal }),
-      ),
+      provider.callModerationApi('Hello', 'World', undefined, { abortSignal: explicitSignal }),
     ).resolves.toMatchObject({ flags: [] });
     expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(explicitSignal);
   });

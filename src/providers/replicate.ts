@@ -4,9 +4,7 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { isAbortError } from '../util/fetch/errors';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
@@ -65,6 +63,10 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
 
 function throwIfAborted(signal?: AbortSignal) {
   if (!signal?.aborted) {
@@ -447,18 +449,15 @@ export class ReplicateModerationProvider
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
-    // Modality matchers can invoke the two-argument public interface. Recover their
-    // evaluation signal from the same execution context used by grading providers.
-    const abortSignal = options?.abortSignal ?? getProviderCallExecutionContext()?.abortSignal;
     let response: ProviderResponse;
     try {
       response = await this.callApi(
         `Human: ${prompt}\n\nAssistant: ${assistant}`,
         context,
-        abortSignal ? { ...options, abortSignal } : options,
+        options,
       );
     } catch (err) {
-      throwIfAborted(abortSignal);
+      throwIfAborted(options?.abortSignal);
       if (isAbortError(err)) {
         throw err;
       }
@@ -534,6 +533,19 @@ export class ReplicateImageProvider extends ReplicateProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throwIfAborted(options?.abortSignal);
+    try {
+      return await this.callImageApiInternal(prompt, options);
+    } catch (err) {
+      // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
+      throwIfAborted(options?.abortSignal);
+      throw err;
+    }
+  }
+
+  private async callImageApiInternal(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',

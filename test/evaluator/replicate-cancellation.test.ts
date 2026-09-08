@@ -3,11 +3,7 @@ import { fetchWithCache, isCacheEnabled } from '../../src/cache';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import {
-  ReplicateImageProvider,
-  ReplicateModerationProvider,
-  ReplicateProvider,
-} from '../../src/providers/replicate';
+import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
 import { ResultFailureReason } from '../../src/types/index';
 
 import type { TestSuite } from '../../src/types/index';
@@ -38,7 +34,7 @@ afterEach(() => {
 });
 
 describe('Replicate evaluation cancellation', () => {
-  it.each(['text', 'image', 'moderation'])(
+  it.each(['text', 'image'])(
     'stops %s creation/polling after the actual evaluation timeout',
     async (mode) => {
       const options = { config: { apiKey: 'fixture' } };
@@ -47,25 +43,9 @@ describe('Replicate evaluation cancellation', () => {
           ? new ReplicateImageProvider('owner/model', options)
           : new ReplicateProvider('owner/model', options);
       const testSuite: TestSuite = {
-        providers:
-          mode === 'moderation'
-            ? [
-                {
-                  id: () => 'fixture-target',
-                  callApi: async () => ({ output: 'fixture response' }),
-                },
-              ]
-            : [provider],
+        providers: [provider],
         prompts: [{ raw: 'fixture prompt', label: 'fixture prompt' }],
-        tests:
-          mode === 'moderation'
-            ? [
-                {
-                  assert: [{ type: 'moderation' }],
-                  options: { provider: new ReplicateModerationProvider('owner/model', options) },
-                },
-              ]
-            : [{}],
+        tests: [{}],
       };
       const errorSpy = vi.spyOn(logger, 'error');
       const evalRecord = new Eval({});
