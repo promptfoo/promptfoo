@@ -446,8 +446,10 @@ export class ReplicateProvider implements ApiProvider {
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
     };
 
+    if (Array.isArray(response) && response.every((item) => typeof item === 'string')) {
+      response = response.join('');
+    }
     if (typeof response === 'string') {
-      // It's text
       const ret = {
         output: response,
         ...responseMetadata,
@@ -460,23 +462,6 @@ export class ReplicateProvider implements ApiProvider {
         }
       }
       return ret;
-    } else if (Array.isArray(response)) {
-      // It's a list of generative outputs
-      if (response.every((item) => typeof item === 'string')) {
-        const output = response.join('');
-        const ret = {
-          output,
-          ...responseMetadata,
-        };
-        if (cache && cacheKey) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(ret));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-        return ret;
-      }
     }
 
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
