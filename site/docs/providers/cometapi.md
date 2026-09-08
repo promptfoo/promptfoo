@@ -82,8 +82,7 @@ Each mode accepts its corresponding OpenAI-compatible configuration options. Par
 providers:
   - id: cometapi:chat:gpt-5-mini
     config:
-      temperature: 0.7
-      max_tokens: 512
+      max_completion_tokens: 512
   - id: cometapi:image:dall-e-3
     config:
       n: 1
