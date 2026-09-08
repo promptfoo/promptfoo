@@ -175,17 +175,25 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
   let prototype = Object.getPrototypeOf(provider);
   let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
   while (prototype && prototype !== Object.prototype) {
-    if (
+    const hasDeclaration =
       prototype.constructor &&
-      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities')
+      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
+    // A capability map (LiteLLM) declares shared forwarding stubs, not implementations.
+    if (
+      Object.prototype.hasOwnProperty.call(prototype, capability) &&
+      (!hasDeclaration ||
+        Array.isArray(
+          (prototype.constructor as { declaredProviderCapabilities?: unknown })
+            .declaredProviderCapabilities,
+        ))
     ) {
+      overridden = true;
+    }
+    if (hasDeclaration) {
       const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
         overridden && Array.isArray(capabilities) && inheritedProviderCapabilities.has(capabilities)
       );
-    }
-    if (Object.prototype.hasOwnProperty.call(prototype, capability)) {
-      overridden = true;
     }
     prototype = Object.getPrototypeOf(prototype);
   }
