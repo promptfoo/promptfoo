@@ -319,6 +319,7 @@ export class VercelAiProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
+    let streamError: { error: unknown } | undefined;
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
@@ -343,8 +344,12 @@ export class VercelAiProvider implements ApiProvider {
         if (part.type === 'text-delta') {
           output += part.text;
         } else if (part.type === 'error') {
-          throw part.error;
+          // Drain under the request deadline so the SDK can finish its telemetry spans.
+          streamError ??= part;
         }
+      }
+      if (streamError) {
+        throw streamError.error;
       }
       const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
       signal.throwIfAborted();
@@ -357,7 +362,12 @@ export class VercelAiProvider implements ApiProvider {
 
       return { output, tokenUsage: mapTokenUsage(usage), finishReason };
     } catch (error) {
-      return handleApiError(error, timeout, 'streaming API call', abortSignal);
+      return handleApiError(
+        streamError ? streamError.error : error,
+        timeout,
+        'streaming API call',
+        abortSignal,
+      );
     } finally {
       cleanup();
     }

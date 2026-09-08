@@ -1,4 +1,5 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
+import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
@@ -48,7 +49,10 @@ beforeEach(() => {
 afterEach(() => restoreEnv());
 
 const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
-const testTracerProvider = new NodeTracerProvider();
+const spanExporter = new InMemorySpanExporter();
+const testTracerProvider = new NodeTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+});
 
 beforeAll(() => {
   testTracerProvider.register();
@@ -405,6 +409,58 @@ describe('VercelAiProvider', () => {
   });
 
   describe('callApi() - streaming', () => {
+    it.each(['Stream failed', undefined, null, false, 0, ''])(
+      'finishes native SDK spans after an in-band stream error: %s',
+      async (error) => {
+        const actualAi = await vi.importActual<typeof import('ai')>('ai');
+        const { createGateway, streamText } = await import('ai');
+        spanExporter.reset();
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        const parts = [
+          { type: 'text-start', id: 'text' },
+          { type: 'text-delta', id: 'text', delta: 'Partial response' },
+          { type: 'error', error },
+          { type: 'text-end', id: 'text' },
+          {
+            type: 'finish',
+            finishReason: { unified: 'error' },
+            usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
+          },
+        ];
+        const fetch = vi.fn().mockResolvedValue(
+          new Response(parts.map((part) => `data: ${JSON.stringify(part)}\n\n`).join(''), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+        );
+        vi.mocked(createGateway).mockReturnValueOnce(
+          actualAi.createGateway({ apiKey: 'fixture-key', fetch }),
+        );
+        vi.mocked(streamText).mockImplementationOnce(actualAi.streamText);
+        const provider = new VercelAiProvider('fixture/model', { config: { streaming: true } });
+
+        const result = await provider.callApi('Hello', {
+          prompt: { raw: 'Hello', label: 'test' },
+          traceparent: testTraceparent,
+          vars: {},
+        });
+        await testTracerProvider.forceFlush();
+
+        expect(result).toEqual({ error: `API call error: ${error}` });
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(mockCache.set).not.toHaveBeenCalled();
+        const spans = spanExporter.getFinishedSpans();
+        expect(spans.map((span) => span.name).sort()).toEqual([
+          'ai.streamText',
+          'ai.streamText.doStream',
+        ]);
+        const outer = spans.find((span) => span.name === 'ai.streamText')!;
+        const inner = spans.find((span) => span.name === 'ai.streamText.doStream')!;
+        expect(outer.spanContext().traceId).toBe('0123456789abcdef0123456789abcdef');
+        expect(outer.parentSpanContext?.spanId).toBe('0123456789abcdef');
+        expect(inner.parentSpanContext?.spanId).toBe(outer.spanContext().spanId);
+      },
+    );
+
     it('enables native SDK telemetry for traced streaming calls', async () => {
       const { streamText } = await import('ai');
       async function* textStream() {
@@ -537,6 +593,74 @@ describe('VercelAiProvider', () => {
         vi.mocked(streamText).mock.calls.every(([options]) => options.abortSignal?.aborted),
       ).toBe(true);
       expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, null, false, 0, ''])(
+      'retains an in-band error with payload %s while draining',
+      async (error) => {
+        const { streamText } = await import('ai');
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        const drained = vi.fn();
+        vi.mocked(streamText).mockReturnValueOnce({
+          fullStream: (async function* () {
+            yield { type: 'error', error };
+            yield { type: 'error', error: new Error('Later error') };
+            drained();
+            throw new Error('Later transport failure');
+          })(),
+        } as any);
+        const provider = new VercelAiProvider('fixture/model', { config: { streaming: true } });
+
+        expect(await provider.callApi('Hello')).toEqual({ error: `API call error: ${error}` });
+        expect(drained).toHaveBeenCalledOnce();
+        expect(mockCache.set).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['timeout', 'caller abort'])('bounds error draining with %s', async (stop) => {
+      vi.useFakeTimers();
+      try {
+        const { streamText } = await import('ai');
+        const caller = new AbortController();
+        const draining = Promise.withResolvers<void>();
+        const closed = vi.fn();
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(streamText).mockImplementationOnce(
+          ({ abortSignal }) =>
+            ({
+              fullStream: (async function* () {
+                yield { type: 'error', error: new Error('Stream failed') };
+                const aborted = new Promise<void>((resolve) =>
+                  abortSignal!.addEventListener('abort', () => resolve(), { once: true }),
+                );
+                draining.resolve();
+                await aborted;
+                closed();
+                abortSignal!.throwIfAborted();
+              })(),
+            }) as any,
+        );
+        const provider = new VercelAiProvider('fixture/model', {
+          config: { streaming: true, timeout: 1000 },
+        });
+
+        const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
+        await draining.promise;
+        if (stop === 'caller abort') {
+          caller.abort();
+        } else {
+          await vi.advanceTimersByTimeAsync(1000);
+        }
+
+        expect(await result).toEqual({
+          error: stop === 'caller abort' ? 'Request aborted' : 'API call error: Stream failed',
+        });
+        expect(closed).toHaveBeenCalledOnce();
+        expect(vi.mocked(streamText).mock.calls[0][0].abortSignal?.aborted).toBe(true);
+        expect(mockCache.set).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('cleans up the timeout when stream creation fails before iteration', async () => {
