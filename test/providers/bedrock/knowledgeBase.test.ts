@@ -461,7 +461,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
           knowledgeBaseConfiguration: expect.objectContaining({
             generationConfiguration: {
               inferenceConfig: { textInferenceConfig: { temperature: 0, maxTokens: 128, topP: 0 } },
-              additionalModelRequestFields: { top_k: 4 },
+              additionalModelRequestFields: { inferenceConfig: { topK: 4 } },
             },
           }),
         }),
@@ -495,6 +495,30 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       }),
     );
   });
+
+  it.each(['sonnet-4-5-20250929', 'haiku-4-5-20251001'])(
+    'preserves top_p and top_k when Claude %s cannot also use temperature',
+    async (model) => {
+      mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+      const provider = new AwsBedrockKnowledgeBaseProvider(`anthropic.claude-${model}-v1:0`, {
+        config: { knowledgeBaseId: 'kb-123', temperature: 0, top_p: 0.75, top_k: 20 },
+      });
+
+      expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+      expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          retrieveAndGenerateConfiguration: expect.objectContaining({
+            knowledgeBaseConfiguration: expect.objectContaining({
+              generationConfiguration: {
+                inferenceConfig: { textInferenceConfig: { topP: 0.75 } },
+                additionalModelRequestFields: { top_k: 20 },
+              },
+            }),
+          }),
+        }),
+      );
+    },
+  );
 
   it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
     const mockResponse = {

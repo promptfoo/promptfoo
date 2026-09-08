@@ -176,9 +176,145 @@ describe('Bedrock agent-runtime SDK serialization', () => {
       request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
     ).toEqual({
       inferenceConfig: { textInferenceConfig: { temperature: 0, topP: 0.75 } },
-      additionalModelRequestFields: { top_k: 20 },
+      additionalModelRequestFields: { inferenceConfig: { topK: 20 } },
     });
   });
+
+  it.each([
+    ['amazon.nova-lite-v1:0', undefined],
+    ['amazon.nova-pro-v1:0', undefined],
+    ['amazon.nova-micro-v1:0', undefined],
+    ['us.amazon.nova-premier-v1:0', undefined],
+    ['arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0', undefined],
+    ['custom-model', 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0'],
+  ] as const)(
+    'serializes Nova top-k in native inferenceConfig for %s / %s',
+    async (modelName, modelArn) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'KB12345678', modelArn, top_k: 0 },
+      });
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
+      ).toEqual({
+        additionalModelRequestFields: { inferenceConfig: { topK: 0 } },
+      });
+    },
+  );
+
+  it.each([
+    ['anthropic.claude-sonnet-4-5-20250929-v1:0', undefined],
+    ['anthropic.claude-haiku-4-5-20251001-v1:0', undefined],
+    ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', undefined],
+    [
+      'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0',
+      undefined,
+    ],
+    [
+      'amazon.nova-lite-v1:0',
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    ],
+  ] as const)(
+    'prefers top_p over temperature for Claude 4.5 %s / %s',
+    async (modelName, modelArn) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: {
+          knowledgeBaseId: 'KB12345678',
+          modelArn,
+          temperature: 0.5,
+          top_p: 0,
+          top_k: 20,
+          max_tokens: 128,
+        },
+      });
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
+      ).toEqual({
+        inferenceConfig: { textInferenceConfig: { topP: 0, maxTokens: 128 } },
+        additionalModelRequestFields: { top_k: 20 },
+      });
+    },
+  );
+
+  it.each([
+    { sampling: { temperature: 0 }, expected: { temperature: 0 } },
+    { sampling: { top_p: 0.75 }, expected: { topP: 0.75 } },
+  ])(
+    'preserves individual Claude 4.5 sampling option $sampling',
+    async ({ sampling, expected }) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(
+        'anthropic.claude-sonnet-4-5-20250929-v1:0',
+        {
+          config: { knowledgeBaseId: 'KB12345678', ...sampling },
+        },
+      );
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
+      ).toEqual({
+        inferenceConfig: { textInferenceConfig: expected },
+      });
+    },
+  );
+
+  it.each([
+    ['anthropic.claude-3-5-sonnet-20241022-v2:0', undefined],
+    ['custom-model', undefined],
+    ['custom-amazon.nova-model', undefined],
+    ['anthropic.claude-sonnet-4-50', undefined],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+      undefined,
+    ],
+    [
+      'amazon.nova-lite-v1:0',
+      'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',
+    ],
+    ['anthropic.claude-sonnet-4-5-20250929-v1:0', 'custom-model'],
+  ] as const)(
+    'preserves other model sampling and top-k shapes for %s / %s',
+    async (modelName, modelArn) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'KB12345678', modelArn, temperature: 0, top_p: 0.75, top_k: 20 },
+      });
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration,
+      ).toEqual({
+        inferenceConfig: { textInferenceConfig: { temperature: 0, topP: 0.75 } },
+        additionalModelRequestFields: { top_k: 20 },
+      });
+    },
+  );
 
   it('omits generationConfiguration when all configured fields are unsupported', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-opus-4-7', {
