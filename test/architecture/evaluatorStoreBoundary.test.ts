@@ -14,7 +14,7 @@ describe('evaluator store boundary', () => {
 
     expect(
       extractModuleSpecifiers(source, evaluatorPath).filter((specifier) =>
-        specifier.includes('/models/'),
+        /(?:^|\/)models(?:\/|$)/.test(specifier),
       ),
     ).toEqual([]);
   });
