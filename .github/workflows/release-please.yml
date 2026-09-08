@@ -223,13 +223,18 @@ jobs:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
       - name: Pack npm package
         id: package-artifact
-        # Older tags do not contain package:pack. Pack their prebuilt output directly.
+        # Preserve inventory checks on capable tags; older tags pack prebuilt output directly.
         run: |
           artifact_dir="$RUNNER_TEMP/promptfoo-package"
           mkdir -p "$artifact_dir"
-          npm pack --ignore-scripts --json --pack-destination "$artifact_dir" > "$RUNNER_TEMP/npm-pack.json"
-          filename="$(node -p "const r = require(process.env.RUNNER_TEMP + '/npm-pack.json'); if (r.length !== 1 || r[0].name !== 'promptfoo' || r[0].version !== process.env.TAG_NAME) throw new Error('Unexpected packed metadata'); r[0].filename")"
-          echo "tarball=$artifact_dir/$filename" >> "$GITHUB_OUTPUT"
+          if node -e "process.exit(require('./package.json').scripts?.['package:pack'] ? 0 : 1)"; then
+            tarball="$(npm run --silent package:pack -- --destination "$artifact_dir")"
+          else
+            npm pack --ignore-scripts --json --pack-destination "$artifact_dir" > "$RUNNER_TEMP/npm-pack.json"
+            filename="$(node -p "const r = require(process.env.RUNNER_TEMP + '/npm-pack.json'); if (r.length !== 1 || r[0].name !== 'promptfoo' || r[0].version !== process.env.TAG_NAME) throw new Error('Unexpected packed metadata'); r[0].filename")"
+            tarball="$artifact_dir/$filename"
+          fi
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
       - name: Validate historical npm package
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
@@ -247,12 +252,19 @@ jobs:
             export PROMPTFOO_DISABLE_UPDATE=true
             export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
             export npm_config_userconfig="$consumer_dir/.npmrc"
+            export npm_config_cache="$consumer_dir/npm-cache"
+            export npm_config_devdir="$consumer_dir/node-gyp"
             touch "$npm_config_userconfig"
             printf '{"private":true}' > "$consumer_dir/package.json"
             npm install --prefix "$consumer_dir" --ignore-scripts --no-audit --no-fund --no-package-lock --registry=https://registry.npmjs.org/ "$PACKAGE_TARBALL"
+            # Before libSQL, the CLI needs better-sqlite3's native binding even for
+            # --version. Build only that dependency, in this tokenless consumer job.
+            if node -e "process.exit(require(process.argv[1]).dependencies?.['better-sqlite3'] ? 0 : 1)" "$consumer_dir/node_modules/promptfoo/package.json"; then
+              npm rebuild --prefix "$consumer_dir" --ignore-scripts=false --registry=https://registry.npmjs.org/ better-sqlite3
+            fi
             printf '{"prompts":["artifact"],"providers":["echo"],"tests":[{"assert":[{"type":"equals","value":"artifact"}]}]}' > "$consumer_dir/config.json"
             "$consumer_dir/node_modules/.bin/promptfoo" --version
-            "$consumer_dir/node_modules/.bin/promptfoo" eval --config "$consumer_dir/config.json" --output "$consumer_dir/results.json" --no-cache --no-write
+            "$consumer_dir/node_modules/.bin/promptfoo" eval --config "$consumer_dir/config.json" --output "$consumer_dir/results.json" --no-cache
             node - "$consumer_dir/results.json" <<'NODE'
           const assert = require('node:assert/strict');
           const fs = require('node:fs');

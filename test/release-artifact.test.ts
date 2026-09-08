@@ -63,7 +63,7 @@ describe('exact artifact release', () => {
       expect(publisher.if).toContain(`needs.${buildName}.result == 'success'`);
       expect(publisher.steps.some((s) => s.uses?.startsWith('actions/checkout@'))).toBe(false);
       expect(publisher.steps.map((s) => s.run ?? '').join('\n')).not.toMatch(
-        /npm (?:ci|install|run)/,
+        /npm (?:ci|install|run|rebuild)/,
       );
       const publish = publisher.steps.find((s) => s.name === 'Publish verified npm package')!;
       expect(publish.env?.NODE_AUTH_TOKEN).toBe('');
@@ -82,6 +82,51 @@ describe('exact artifact release', () => {
     expect(mirror.if).toContain("needs.build.result == 'success'");
     expect(mirror.if).not.toContain('needs.build-npm');
     expect(mirror.if).not.toContain('needs.publish-npm.result');
+  });
+
+  it('detects current packers and legacy native SQLite from tag manifests', () => {
+    const steps = workflow.jobs['build-npm-backfill'].steps;
+    const pack = steps.find((step) => step.name === 'Pack npm package')!.run!;
+    const validate = steps.find((step) => step.name === 'Validate historical npm package')!.run!;
+    const packProbe = pack.match(/if node -e "([^"]+)"/)?.[1];
+    const nativeProbe = validate.match(/if node -e "([^"]+)"/)?.[1];
+    expect(packProbe).toBeDefined();
+    expect(nativeProbe).toBeDefined();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-capabilities-'));
+    directories.push(root);
+    const manifestPath = path.join(root, 'package.json');
+    for (const [manifest, hasPacker, needsNativeBuild] of [
+      [
+        {
+          scripts: { 'package:pack': 'tsx scripts/packPackageArtifact.ts' },
+          dependencies: { '@libsql/client': '^0.17.0' },
+        },
+        true,
+        false,
+      ],
+      [{ dependencies: { 'better-sqlite3': '^12.8.0' } }, false, true],
+      [
+        {
+          dependencies: { '@libsql/client': '^0.17.0' },
+          devDependencies: { 'better-sqlite3': '^12.8.0' },
+        },
+        false,
+        false,
+      ],
+    ] as const) {
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+      expect(spawnSync(process.execPath, ['-e', packProbe!], { cwd: root }).status === 0).toBe(
+        hasPacker,
+      );
+      expect(
+        spawnSync(process.execPath, ['-e', nativeProbe!, manifestPath], { cwd: root }).status === 0,
+      ).toBe(needsNativeBuild);
+    }
+    expect(pack).toContain('npm run --silent package:pack -- --destination');
+    expect(validate).toContain('npm rebuild --prefix "$consumer_dir" --ignore-scripts=false');
+    // Older releases only export per-test rows when their isolated database is written.
+    expect(validate).not.toContain('--no-write');
+    expect(validate).toContain('PROMPTFOO_CONFIG_DIR="$consumer_dir/config"');
   });
 
   for (const jobName of ['publish-npm', 'publish-npm-backfill']) {
