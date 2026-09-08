@@ -10,7 +10,7 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
-import { extractJsonObjects, safeJsonStringify } from '../util/json';
+import { extractJsonObjects, extractLastVerdictJsonObject, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
@@ -766,7 +766,25 @@ function parseJsonGradingResponse(
     };
   }
 
-  const parsed = jsonObjects[0];
+  // Select the last JSON object carrying a `pass` or `score` key (a verdict-
+  // shaped object). When the grader references the model-under-test's output
+  // (which may embed an early JSON object) in its reasoning, this binds the
+  // verdict to the grader's own concluding object rather than to an injected
+  // one. Falls back to the first object for non-string outputs (structured
+  // provider responses, which are inherently single-object).
+  let parsed: Record<string, unknown> | undefined;
+  if (typeof resp.output === 'string') {
+    parsed = extractLastVerdictJsonObject<Record<string, unknown>>(resp.output);
+    if (!parsed) {
+      return {
+        failure: failWithTokens(
+          `${label} produced no verdict-shaped JSON object (expected a \`pass\` or \`score\` key). Output: ${JSON.stringify(resp.output)}`,
+        ),
+      };
+    }
+  } else {
+    parsed = jsonObjects[0] as Record<string, unknown>;
+  }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
@@ -860,9 +878,30 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  // Fail closed: when `pass` is absent, a verdict-shaped object that was
+  // selected via its `score` key should not default to pass=true. Only objects
+  // that explicitly carry `pass` (or whose `pass` maps to a truthy string)
+  // pass; otherwise we derive from the score vs threshold, and if there is no
+  // threshold either, fail closed.
+  let pass: boolean;
+  if (parsed.pass !== undefined) {
+    pass =
+      typeof parsed.pass === 'boolean'
+        ? parsed.pass
+        : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  } else if (parsed.score === undefined) {
+    pass = false;
+  } else {
+    // No explicit pass key but score is present — coerce to number and
+    // check positivity. The threshold check below may override this.
+    const rawScore = parsed.score;
+    const numericScore =
+      typeof rawScore === 'number'
+        ? rawScore
+        : Number.isFinite(Number(rawScore))
+          ? Number(rawScore)
+          : NaN;
+    pass = Number.isFinite(numericScore) ? numericScore > 0 : false;
   }
 
   let score = parsed.score;

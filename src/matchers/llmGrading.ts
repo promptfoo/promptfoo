@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractLastVerdictJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -87,7 +87,10 @@ function parseFactualityJsonResponse(
   responseText: string,
 ): { option: string; reason: string } | undefined {
   try {
-    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(responseText);
+    const jsonData = extractLastVerdictJsonObject<{ category?: string; reason?: string }>(
+      responseText,
+      ['category', 'reason'],
+    );
     if (!jsonData?.category || typeof jsonData.category !== 'string') {
       return undefined;
     }

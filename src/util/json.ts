@@ -270,6 +270,31 @@ export function extractFirstJsonObject<T>(str: string): T {
 }
 
 /**
+ * Returns the last JSON object in the string that carries at least one of the
+ * supplied verdict keys (default: `pass`, `score`). This resists verdict
+ * injection: when a grader echoes a model-under-test's output (which may
+ * contain an early JSON object) while reasoning, the last verdict-shaped object
+ * binds to the grader's own concluding verdict rather than to the injected one.
+ *
+ * Returns `undefined` if no verdict-shaped object is found.
+ */
+export function extractLastVerdictJsonObject<T>(
+  str: string,
+  verdictKeys: readonly string[] = ['pass', 'score'] as const,
+): T | undefined {
+  const jsonObjects = extractJsonObjects(str);
+  for (let i = jsonObjects.length - 1; i >= 0; i--) {
+    const obj = jsonObjects[i];
+    if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+      if (verdictKeys.some((key) => key in (obj as Record<string, unknown>))) {
+        return obj as T;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Reorders the keys of an object based on a specified order, preserving any unspecified keys.
  * Symbol keys are preserved and added at the end.
  *

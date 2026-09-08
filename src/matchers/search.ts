@@ -3,7 +3,7 @@ import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
 import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
-import { extractFirstJsonObject } from '../util/json';
+import { extractLastVerdictJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -102,12 +102,17 @@ export async function matchesSearchRubric(
   }
 
   try {
-    const result = extractFirstJsonObject(String(resp.output)) as {
-      pass?: boolean;
-      score?: number;
-      reason?: string;
-      searchResults?: unknown;
-    };
+    const result = extractLastVerdictJsonObject(String(resp.output)) as
+      | {
+          pass?: boolean;
+          score?: number;
+          reason?: string;
+          searchResults?: unknown;
+        }
+      | undefined;
+    if (!result) {
+      throw new Error('No verdict-shaped JSON object found in search response');
+    }
 
     // Apply threshold if specified
     let pass = result.pass ?? false;
