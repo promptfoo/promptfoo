@@ -862,7 +862,7 @@ defaultTest:
           modalities: [text]
 ```
 
-Promptfoo sends the generated audio to this grader and requests a text grade. Text-only graders continue to evaluate the transcript. Audio must be inline base64 WAV or MP3, up to 20 MiB; the Realtime provider converts its output to WAV. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
+Promptfoo sends the generated audio to this grader and requests a text grade. Text-only graders continue to evaluate the transcript. Audio must be inline base64 WAV or MP3, up to 20 MiB. Keep the Realtime provider's default `output_audio_format: pcm16`; Promptfoo converts it to WAV for both single requests and persistent conversations. G.711 output requires conversion before audio grading. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
 
 ### Session settings {#realtime-specific-configuration-options}
 

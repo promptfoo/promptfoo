@@ -218,7 +218,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Add audio state management
   private lastAudioItemId: string | null = null;
   private currentAudioBuffer: Buffer[] = [];
-  private currentAudioFormat: string = 'wav';
   private isProcessingAudio: boolean = false;
   private audioTimeout: NodeJS.Timeout | null = null;
 
@@ -668,6 +667,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return wsBase.replace(/\/+$/, '');
   }
 
+  private encodeAudioOutput(data: Buffer): { data: string; format: string } {
+    const format = this.config.output_audio_format || 'pcm16';
+    return format === 'pcm16'
+      ? { data: convertPcm16ToWav(data).toString('base64'), format: 'wav' }
+      : { data: data.toString('base64'), format };
+  }
+
   // Build WebSocket URL for realtime model endpoint
   private getWebSocketUrl(modelName: string): string {
     const wsBase = this.getWebSocketBase();
@@ -726,7 +732,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private resetAudioState(): void {
     this.lastAudioItemId = null;
     this.currentAudioBuffer = [];
-    this.currentAudioFormat = 'wav';
     this.isProcessingAudio = false;
     if (this.audioTimeout) {
       clearTimeout(this.audioTimeout);
@@ -1131,10 +1136,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 try {
                   const rawPcmData = Buffer.concat(audioContent);
                   // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
+                  const encodedAudio = this.encodeAudioOutput(rawPcmData);
+                  finalAudioData = encodedAudio.data;
+                  audioFormat = encodedAudio.format;
                   logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
+                    `Audio output: ${rawPcmData.length} bytes encoded as ${audioFormat}`,
                   );
                 } catch (error) {
                   logger.error(`Error converting audio data to WAV format: ${error}`);
@@ -1848,10 +1854,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 try {
                   const rawPcmData = Buffer.concat(audioContent);
                   // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
+                  const encodedAudio = this.encodeAudioOutput(rawPcmData);
+                  finalAudioData = encodedAudio.data;
+                  audioFormat = encodedAudio.format;
                   logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
+                    `Audio output: ${rawPcmData.length} bytes encoded as ${audioFormat}`,
                   );
                 } catch (error) {
                   logger.error(`Error converting audio data to WAV format: ${error}`);
@@ -2275,13 +2282,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
 
       // Prepare final response with audio if available
-      const finalAudioData =
+      const encodedAudio =
         this.currentAudioBuffer.length > 0
-          ? Buffer.concat(this.currentAudioBuffer).toString('base64')
+          ? this.encodeAudioOutput(Buffer.concat(this.currentAudioBuffer))
           : null;
-
-      const hadAudio = this.currentAudioBuffer.length > 0;
-      const finalAudioFormat = this.currentAudioFormat;
 
       this.resetAudioState();
 
@@ -2300,17 +2304,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           messageId: _messageId,
           usage: _usage,
           usageEvents,
-          ...(hadAudio && {
-            audio: {
-              data: finalAudioData,
-              format: finalAudioFormat,
-            },
-          }),
+          ...(encodedAudio && { audio: encodedAudio }),
         },
-        ...(hadAudio && {
+        ...(encodedAudio && {
           audio: {
-            data: finalAudioData,
-            format: finalAudioFormat,
+            ...encodedAudio,
             transcript: responseText,
           },
         }),
@@ -2409,9 +2407,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           case 'response.audio.done':
           case 'response.output_audio.done':
-            if (message.format) {
-              this.currentAudioFormat = message.format;
-            }
             this.isProcessingAudio = false;
             audioDone = true;
             checkAndResolve();

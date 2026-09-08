@@ -81,7 +81,7 @@ assert:
 
 `modalities: [text]` requests the grader's JSON result as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
 
-The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider returns WAV. Text-only graders retain their existing behavior and evaluate the text output or transcript.
+The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading. Text-only graders retain their existing behavior and evaluate the text output or transcript.
 
 An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
