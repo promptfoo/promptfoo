@@ -136,27 +136,36 @@ TrueFoundry provides access to models from multiple providers. Use the format `p
 
 ## Embeddings
 
-TrueFoundry also supports embedding models:
+Set `task: embedding` explicitly and use the provider for embedding-based assertions such as `similar`:
 
 ```yaml
-providers:
-  - id: truefoundry:openai-main/text-embedding-3-large
-    config:
-      metadata:
-        user_id: 'embedding-user'
-      loggingConfig:
-        enabled: true
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:openai-main/text-embedding-3-large
+        config:
+          task: embedding
+          metadata:
+            user_id: 'embedding-user'
+          loggingConfig:
+            enabled: true
 ```
 
 ### Cohere Embeddings
 
-When using Cohere models, specify the `input_type`:
+For Cohere, select the embedding task and pass the required `input_type` through `passthrough`:
 
 ```yaml
-providers:
-  - id: truefoundry:cohere-main/embed-english-v3.0
-    config:
-      input_type: 'search_query' # Options: search_query, search_document, classification, clustering
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: truefoundry:cohere-main/embed-english-v3.0
+        config:
+          task: embedding
+          passthrough:
+            input_type: search_query # Or search_document, classification, clustering
 ```
 
 ## Observability
