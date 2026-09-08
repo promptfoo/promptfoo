@@ -22,7 +22,7 @@ export CDP_DOMAIN=your-domain-here
 export CDP_TOKEN=your-token-here
 ```
 
-`CDP_DOMAIN` and `CDP_TOKEN` are also accepted in the eval or provider `env` block. To override a token already set in the process environment, use `config.apiKey`.
+For per-provider connections, set `config.domain` and `config.apiKey` together. The eval or provider `env` block can supply `CDP_TOKEN`; a token registered globally or set in the process takes precedence over a provider `env` token.
 
 ## Basic Usage
 
