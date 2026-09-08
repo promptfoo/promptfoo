@@ -1529,7 +1529,7 @@ describe('Provider Registry', () => {
         const options = {
           id: 'custom-omni-id',
           config: { apiKey: 'test-key', aspectRatio: '9:16' },
-          env: { GOOGLE_API_KEY: 'env-test-key' },
+          env: { GOOGLE_API_KEY: 'env-test-key', PALM_API_HOST: 'scoped-palm.example' },
         };
         const provider = await factory!.create(providerPath, options, bareContext);
         expect(provider.id()).toBe('custom-omni-id');

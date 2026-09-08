@@ -24,6 +24,7 @@ describe('GoogleInteractionsProvider', () => {
     vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
     vi.stubEnv('VERTEX_API_HOST', '');
     vi.stubEnv('GOOGLE_API_HOST', '');
+    vi.stubEnv('PALM_API_HOST', '');
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,
@@ -1008,6 +1009,7 @@ describe('GoogleInteractionsProvider', () => {
 
   it.each([
     [{ GOOGLE_API_HOST: 'proxy-host.example' }, 'https://proxy-host.example/v1beta/interactions'],
+    [{ PALM_API_HOST: 'palm-proxy.example' }, 'https://palm-proxy.example/v1beta/interactions'],
     [
       { GOOGLE_API_BASE_URL: 'https://proxy.example/google' },
       'https://proxy.example/google/v1beta/interactions',
@@ -1042,14 +1044,81 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it.each([
+    {
+      env: { GOOGLE_API_HOST: 'scoped-google.example', PALM_API_HOST: 'scoped-palm.example' },
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'https://scoped-google.example/v1beta/interactions',
+    },
+    {
+      env: { PALM_API_HOST: 'http://scoped-palm.example/proxy/' },
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'http://scoped-palm.example/proxy/v1beta/interactions',
+    },
+    {
+      env: {},
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'https://process-google.example/v1beta/interactions',
+    },
+    {
+      env: {},
+      processEnv: { GOOGLE_API_HOST: '', PALM_API_HOST: 'http://process-palm.example/proxy/' },
+      endpoint: 'http://process-palm.example/proxy/v1beta/interactions',
+    },
+  ])(
+    'preserves Google/Palm host precedence for $endpoint',
+    async ({ env, processEnv, endpoint }) => {
+      for (const [name, value] of Object.entries(processEnv)) {
+        vi.stubEnv(name, value);
+      }
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          steps: [
+            {
+              type: 'model_output',
+              content: [{ type: 'video', mime_type: 'video/mp4', data: 'aGVsbG8=' }],
+            },
+          ],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+        config: { apiKey: 'test-key' },
+        env,
+      });
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('[Video:');
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        endpoint,
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
+
+  it.each([
     [
-      { apiHost: 'http://127.0.0.1:15500/proxy' },
-      { GOOGLE_API_HOST: 'wrong.example' },
+      { apiHost: 'http://127.0.0.1:15500/proxy', apiBaseUrl: 'http://wrong-base.example' },
+      { GOOGLE_API_HOST: 'wrong.example', PALM_API_HOST: 'palm-wrong.example' },
       'http://127.0.0.1:15500/proxy/v1beta/interactions',
     ],
     [
       { apiBaseUrl: 'http://127.0.0.1:15500/proxy' },
-      { GOOGLE_API_HOST: 'wrong.example' },
+      { GOOGLE_API_HOST: 'wrong.example', PALM_API_HOST: 'palm-wrong.example' },
       'http://127.0.0.1:15500/proxy/v1beta/interactions',
     ],
   ])(

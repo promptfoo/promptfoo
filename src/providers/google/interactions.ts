@@ -205,7 +205,11 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
     return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
 
-  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  const apiHost =
+    env?.GOOGLE_API_HOST ||
+    env?.PALM_API_HOST ||
+    getEnvString('GOOGLE_API_HOST') ||
+    getEnvString('PALM_API_HOST');
   if (apiHost) {
     return endpointFromHost(apiHost);
   }
