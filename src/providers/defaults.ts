@@ -4,11 +4,6 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import {
-  DefaultGitHubGradingJsonProvider,
-  DefaultGitHubGradingProvider,
-  DefaultGitHubSuggestionsProvider,
-} from './github/defaults';
 import { getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
@@ -50,7 +45,6 @@ interface DefaultProviderPreferences {
   preferAnthropic: boolean;
   preferAzure: boolean;
   useCodexDefaults: boolean;
-  useGitHubDefaults: boolean;
   useGoogleAiStudioDefaults: boolean;
   useGoogleVertexDefaults: boolean;
   useMistralDefaults: boolean;
@@ -64,7 +58,6 @@ async function getDefaultProviderPreferences(
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
   );
   const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
-  const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
   const hasGoogleAiStudioCredentials = Boolean(
     getEnvString('GEMINI_API_KEY') ||
       env?.GEMINI_API_KEY ||
@@ -111,12 +104,6 @@ async function getDefaultProviderPreferences(
     preferAnthropic,
     preferAzure,
     useCodexDefaults: hasCodexCredentials,
-    useGitHubDefaults:
-      useNonGoogleFallbackDefaults &&
-      !hasMistralCredentials &&
-      !hasXAICredentials &&
-      !hasCodexCredentials &&
-      hasGitHubCredentials,
     useGoogleAiStudioDefaults:
       !hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials,
     useGoogleVertexDefaults,
@@ -142,7 +129,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     preferAnthropic,
     preferAzure,
     useCodexDefaults,
-    useGitHubDefaults,
     useGoogleAiStudioDefaults,
     useGoogleVertexDefaults,
     useMistralDefaults,
@@ -229,16 +215,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       embeddingProvider: OpenAiEmbeddingProvider,
       moderationProvider: OpenAiModerationProvider,
       ...getCodexDefaultProviders(env),
-    };
-  } else if (useGitHubDefaults) {
-    logger.debug('Using GitHub Models default providers');
-    providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
-      gradingJsonProvider: DefaultGitHubGradingJsonProvider,
-      gradingProvider: DefaultGitHubGradingProvider,
-      moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
-      suggestionsProvider: DefaultGitHubSuggestionsProvider,
-      synthesizeProvider: DefaultGitHubGradingJsonProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');

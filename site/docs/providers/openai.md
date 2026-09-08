@@ -603,9 +603,11 @@ the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selectio
 
 | Model           | Tier                    | Input      | Cached input | Output      |
 | --------------- | ----------------------- | ---------- | ------------ | ----------- |
-| `gpt-5.6-sol`   | Flagship                | $5.00 / 1M | $0.50 / 1M   | $30.00 / 1M |
+| `gpt-5.6-sol`   | Flagship                | $4.00 / 1M | $0.40 / 1M   | $20.00 / 1M |
 | `gpt-5.6-terra` | Balanced                | $2.00 / 1M | $0.20 / 1M   | $12.00 / 1M |
 | `gpt-5.6-luna`  | Fast and cost-efficient | $0.20 / 1M | $0.02 / 1M   | $1.20 / 1M  |
+
+Sol's [current promotional pricing](https://developers.openai.com/api/docs/models/gpt-5.6-sol) is available at least through November 21, 2026.
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
@@ -2241,8 +2243,8 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
-- `gpt-5.6` - Alias for GPT-5.6 Sol ($5/$30 per 1M tokens)
-- `gpt-5.6-sol` - GPT-5.6 flagship model ($5/$30 per 1M tokens)
+- `gpt-5.6` - Alias for GPT-5.6 Sol ($4/$20 per 1M tokens)
+- `gpt-5.6-sol` - GPT-5.6 flagship model ($4/$20 per 1M tokens)
 - `gpt-5.6-terra` - GPT-5.6 balanced model ($2/$12 per 1M tokens)
 - `gpt-5.6-luna` - GPT-5.6 efficient model ($0.20/$1.20 per 1M tokens)
 - `gpt-5.5` - GPT-5.5 model ($5/$30 per 1M tokens)

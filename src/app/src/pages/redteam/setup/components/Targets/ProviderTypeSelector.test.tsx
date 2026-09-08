@@ -40,6 +40,7 @@ describe('ProviderTypeSelector', () => {
     // Provider list is always expanded
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('GitHub Models')).not.toBeInTheDocument();
 
     // Select Python provider
     const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
