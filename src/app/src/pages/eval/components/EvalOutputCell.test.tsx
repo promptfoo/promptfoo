@@ -858,6 +858,94 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
+  it.each(['google:gemini-3.1-flash-image', 'media-eval-label'])(
+    'keeps mixed text and structured images visible with provider ID %s',
+    (provider) => {
+      const text = 'Generated image description. '.repeat(20);
+      const imageUrl = 'https://example.com/generated.png';
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text,
+            images: [{ data: imageUrl, mimeType: 'image/png' }],
+          }}
+        />,
+      );
+
+      expect(screen.getByRole('img')).toHaveAttribute('src', imageUrl);
+      expect(container.querySelector('.truncation-toggler')).toBeNull();
+      expect(container.textContent).toContain(text.trim());
+    },
+  );
+
+  it.each(['google:gemini-3.1-flash-image', 'media-eval-label'])(
+    'keeps a deduplicated markdown image visible after long text with provider ID %s',
+    (provider) => {
+      const description = 'Generated image description. '.repeat(20);
+      const imageUrl = 'https://example.com/generated.png';
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: `${description}\n\n![Generated image](${imageUrl})`,
+            images: [{ data: imageUrl, mimeType: 'image/png' }],
+          }}
+        />,
+      );
+
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('src', imageUrl);
+      expect(container.querySelector('.truncation-toggler')).toBeNull();
+    },
+  );
+
+  it.each(['google:image:imagen-4.0-generate-001', 'media-eval-label'])(
+    'keeps image-only outputs deduplicated with provider ID %s',
+    (provider) => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: dataUri,
+            images: [{ data: dataUri, mimeType: 'image/png' }],
+          }}
+        />,
+      );
+
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('src', dataUri);
+    },
+  );
+
+  it.each([undefined, [], [{}]])(
+    'still truncates long text without renderable structured images (%j)',
+    (images) => {
+      const text = 'Text response without an image. '.repeat(20);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{ ...defaultProps.output, provider: 'media-eval-label', text, images }}
+        />,
+      );
+
+      expect(screen.queryByRole('img')).toBeNull();
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+      expect(container.textContent).not.toContain(text.trim());
+    },
+  );
+
   it('falls back to text when all structured images are invalid/skipped', () => {
     const propsWithInvalidStructuredImages: MockEvalOutputCellProps = {
       ...defaultProps,
