@@ -12,7 +12,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       const firstPart = splits[1];
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName)) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,

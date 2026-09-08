@@ -1474,6 +1474,11 @@ describe('Provider Registry', () => {
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
+      [
+        'vertex:chat:gemini-omni-1.1-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
       // (distinct from the vertex:chat: branch, which slices from index 2).
       [
@@ -1482,6 +1487,11 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
+        'vertex:gemini-omni-1.1-flash-preview',
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],

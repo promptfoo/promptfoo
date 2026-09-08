@@ -457,7 +457,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 The stable [Gemini Omni Flash](https://ai.google.dev/gemini-api/docs/models/gemini-omni-flash) model uses `google:gemini-omni-1.1-flash`. Promptfoo routes it and `google:gemini-omni-flash-preview` through the Gemini Interactions API and stores returned video in blob storage. Use `store: true` and `previousInteractionId` to conversationally edit a prior result. Omni does not support grounding, code execution, or function-calling tools.
 
-The existing `vertex:gemini-omni-flash-preview` route uses OAuth and the configured Google Cloud project; Vertex does not currently support follow-up interactions. Google's [Vertex Omni 1.1 model](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/omni-1-1-flash) has a separate preview ID, `gemini-omni-1.1-flash-preview`. The native stable ID is not a Vertex alias.
+For Vertex, use `vertex:gemini-omni-1.1-flash-preview` or `vertex:gemini-omni-flash-preview`; both route through Interactions with OAuth and the configured Google Cloud project. [Vertex Omni 1.1](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/omni-1-1-flash) uses a different model ID from the native stable model and does not currently support follow-up interactions in promptfoo.
 
 ```yaml
 providers:
