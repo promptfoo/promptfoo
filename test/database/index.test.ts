@@ -19,6 +19,7 @@ import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { mockProcessEnv } from '../util/utils';
 
+import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
 
 vi.mock('../../src/envars', async (importOriginal) => {
@@ -90,15 +91,16 @@ function withTestRunnerMarkers<T>(
 }
 
 const execFileAsync = promisify(execFile);
-const WAL_PROBE_RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
+const DATABASE_PROBE_RESULT_PREFIX = 'PROMPTFOO_DATABASE_PROBE_RESULT=';
 
-async function runWalCheckpointProbe(
+async function runDatabaseProbe<T>(
+  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe',
   tempConfigDir: string,
-  contention: 'none' | 'reader' | 'writer',
-): Promise<WalCheckpointProbeResult> {
+  mode: string,
+): Promise<T> {
   const { stdout } = await execFileAsync(
     process.execPath,
-    ['--import', 'tsx', 'test/database/fixtures/walCheckpointProbe.ts'],
+    ['--import', 'tsx', `test/database/fixtures/${fixture}.ts`, mode],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -108,18 +110,20 @@ async function runWalCheckpointProbe(
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
         PROMPTFOO_DISABLE_WAL_MODE: 'false',
-        PROMPTFOO_WAL_HOLD_READER: String(contention === 'reader'),
-        PROMPTFOO_WAL_HOLD_WRITER: String(contention === 'writer'),
+        PROMPTFOO_DISABLE_TELEMETRY: 'true',
+        PROMPTFOO_DISABLE_UPDATE_CHECK: 'true',
       },
     },
   );
-  const resultLine = stdout.split(/\r?\n/).find((line) => line.startsWith(WAL_PROBE_RESULT_PREFIX));
+  const resultLine = stdout
+    .split(/\r?\n/)
+    .find((line) => line.startsWith(DATABASE_PROBE_RESULT_PREFIX));
 
   if (!resultLine) {
-    throw new Error(`WAL checkpoint probe did not return a result: ${stdout}`);
+    throw new Error(`Database probe did not return a result: ${stdout}`);
   }
 
-  return JSON.parse(resultLine.slice(WAL_PROBE_RESULT_PREFIX.length));
+  return JSON.parse(resultLine.slice(DATABASE_PROBE_RESULT_PREFIX.length));
 }
 
 describe('database', () => {
@@ -676,7 +680,11 @@ describe('database', () => {
 
   describe('closeDb', () => {
     it('logs a successful file-backed WAL checkpoint', async () => {
-      const result = await runWalCheckpointProbe(tempConfigDir, 'none');
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'none',
+      );
 
       expect(result.logs).toContainEqual(
         expect.objectContaining({
@@ -695,7 +703,11 @@ describe('database', () => {
     });
 
     it('warns when a file-backed WAL checkpoint is incomplete', async () => {
-      const result = await runWalCheckpointProbe(tempConfigDir, 'reader');
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'reader',
+      );
 
       expect(result.logs).toContainEqual(
         expect.objectContaining({
@@ -715,22 +727,42 @@ describe('database', () => {
       ).toBe(false);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(2);
-      // The checkpoint uses a bounded 1500ms busy timeout, not the default 5000ms.
-      // Assert only a regression to that stall (generous headroom for slow/loaded
-      // CI, where close overhead on top of the 1500ms wait varies widely).
-      expect(result.elapsedMs).toBeLessThan(4_500);
+      expect(result.elapsedMs).toBeLessThan(2_500);
     });
 
     it('preserves acknowledged writes when a competing writer briefly holds the lock', async () => {
-      const result = await runWalCheckpointProbe(tempConfigDir, 'writer');
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'writer',
+      );
 
-      // A checkpoint racing a short-lived writer must not discard the insert that
-      // already reported success before close (regression for the zeroed busy
-      // timeout, which made the checkpoint fail instantly and lose the row).
+      // Reopen from an independent connection to catch falsely acknowledged writes
+      // left uncommitted by libsql after a transient lock failure.
       expect(result.insertAcknowledged).toBe(true);
       expect(result.rowCount).toBe(2);
       expect(result.isDbOpen).toBe(false);
-      expect(result.elapsedMs).toBeLessThan(4_500);
+      expect(result.elapsedMs).toBeLessThan(2_500);
+    });
+
+    it('exits gracefully below the watchdog while a reader holds the WAL open', async () => {
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'shutdown',
+      );
+
+      expect(result.elapsedMs).toBeLessThan(2_500);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.rowCount).toBe(2);
+      const warningIndex = result.logs.findIndex(
+        (entry) => entry.message === 'WAL checkpoint incomplete before closing database',
+      );
+      const loggerCloseIndex = result.logs.findIndex(
+        (entry) => entry.message === 'Closing logger file transports',
+      );
+      expect(warningIndex).toBeGreaterThanOrEqual(0);
+      expect(loggerCloseIndex).toBeGreaterThan(warningIndex);
     });
 
     it('should close database connection and reset instances', async () => {
@@ -757,6 +789,60 @@ describe('database', () => {
       await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
     });
+  });
+
+  describe('file-backed lock recovery', () => {
+    it.each([
+      { mode: 'terminal', ids: [1, 3], callbackCalls: 0 },
+      { mode: 'begin', ids: [1, 3], callbackCalls: 0 },
+      { mode: 'root-in-transaction', ids: [1, 2, 4], callbackCalls: 1 },
+      { mode: 'script', ids: [1, 2, 3], callbackCalls: 0 },
+    ])(
+      'preserves later writes after a $mode failure without replaying partial work',
+      async ({ mode, ids, callbackCalls }) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
+
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.followupError).toBeNull();
+        expect(result.followupRowsAffected).toBe(1);
+        expect(result.callbackCalls).toBe(callbackCalls);
+        expect(result.beforeCloseIds).toEqual(ids);
+        expect(result.afterCloseIds).toEqual(ids);
+        expect(result.pragmas).toEqual({
+          busy_timeout: 0,
+          foreign_keys: 1,
+          synchronous: 1,
+          wal_autocheckpoint: 1000,
+        });
+        if (mode === 'script') {
+          expect(result.attachedRowCount).toBe(0);
+        }
+      },
+    );
+
+    it.each(['reconnect-failure', 'configuration-failure'])(
+      'rejects later statements and transactions after %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
+
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.clientClosedAfterFailure).toBe(true);
+        expect(result.followupRowsAffected).toBeNull();
+        expect(result.followupError).toMatch(/closed/i);
+        expect(result.transactionAfterFailureError).toMatch(/closed/i);
+        expect(result.callbackCalls).toBe(0);
+        expect(result.beforeCloseIds).toEqual([1]);
+        expect(result.afterCloseIds).toEqual([1]);
+      },
+    );
   });
 
   describe('isDbOpen', () => {

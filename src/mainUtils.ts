@@ -260,8 +260,7 @@ export const shutdownGracefully = async (): Promise<void> => {
     // Silently handle dispatcher destroy errors.
   }
 
-  // Preserve the original shutdown safety window for in-flight database work. If the close is
-  // still pending, the force-exit watchdog remains the hard upper bound.
+  // Keep logging available until the database cleanup settles.
   await dbClosePromise;
 
   logger.debug('Closing logger file transports');
