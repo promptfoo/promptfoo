@@ -102,14 +102,14 @@ describe.each([
       tokenUsage: { prompt: 3, completion: 2, total: 5 },
     };
 
-    it('keeps process destination and token paired when provider env supplies another pair', async () => {
+    it('uses the provider destination and token ahead of the process pair', async () => {
       const provider = await loadApiProvider(providerPath, { options: { env: providerEnvB } });
 
       expect(await provider.callApi('hello')).toMatchObject(successResponse);
-      expectRequest(destinationA, 'fixture-process-token-a');
+      expectRequest(destinationB, 'fixture-provider-token-b');
     });
 
-    it('keeps registered suite destination and token paired when provider env supplies another pair', async () => {
+    it('uses the provider destination and token ahead of the suite pair', async () => {
       const suiteEnv = scopeEnv(destinationA, 'fixture-suite-token-a');
       setEnvOverridesProvider(() => suiteEnv);
       const provider = await loadApiProvider(providerPath, {
@@ -118,7 +118,7 @@ describe.each([
       });
 
       expect(await provider.callApi('hello')).toMatchObject(successResponse);
-      expectRequest(destinationA, 'fixture-suite-token-a');
+      expectRequest(destinationB, 'fixture-provider-token-b');
     });
 
     it('uses the registered suite destination and token ahead of the process pair', async () => {
@@ -172,10 +172,7 @@ describe.each([
           `API error: ${status} ${statusText}\n${JSON.stringify(errorData)}`,
         );
         expect(response.output).toBeUndefined();
-        expectRequest(
-          destinationA,
-          registeredSuite ? 'fixture-suite-token-a' : 'fixture-process-token-a',
-        );
+        expectRequest(destinationB, 'fixture-provider-token-b');
       },
     );
   },
