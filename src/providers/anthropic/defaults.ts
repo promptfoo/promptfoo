@@ -126,15 +126,6 @@ const webSearchProviderFactory = createLazyProvider(
     }),
 );
 
-const redteamProviderFactory = {
-  // Recreate request-scoped attack providers so ambient keys and settings can rotate.
-  getInstance: (env?: EnvOverrides) =>
-    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
-      env,
-      config: { temperature: getDefaultRedteamTemperature(env) },
-    }),
-};
-
 /**
  * Gets all default Anthropic providers with the given environment overrides
  * @param env - Optional environment overrides
@@ -157,7 +148,10 @@ export function getAnthropicProviders(
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
   const webSearchProvider = webSearchProviderFactory.getInstance(env);
-  const redteamProvider = redteamProviderFactory.getInstance(env);
+  const redteamProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env,
+    config: { temperature: getDefaultRedteamTemperature(env) },
+  });
 
   return {
     gradingJsonProvider: gradingProvider,

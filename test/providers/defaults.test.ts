@@ -87,19 +87,21 @@ describe('Provider override tests', () => {
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
     clearCodexDefaultProvidersForTesting();
-    mockProcessEnv({ OPENAI_API_KEY: undefined });
-    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
-    mockProcessEnv({ MISTRAL_API_KEY: undefined });
-    mockProcessEnv({ XAI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ PALM_API_KEY: undefined });
-    mockProcessEnv({ AZURE_OPENAI_API_KEY: undefined });
-    mockProcessEnv({ AZURE_API_KEY: undefined });
-    mockProcessEnv({ AZURE_DEPLOYMENT_NAME: undefined });
-    mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: undefined });
-    mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: undefined });
-    mockProcessEnv({ VOYAGE_API_KEY: undefined });
+    mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      MISTRAL_API_KEY: undefined,
+      XAI_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+      AZURE_OPENAI_API_KEY: undefined,
+      AZURE_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: undefined,
+      VOYAGE_API_KEY: undefined,
+    });
   });
 
   afterEach(async () => {

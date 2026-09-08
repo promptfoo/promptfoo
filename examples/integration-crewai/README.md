@@ -64,6 +64,10 @@ npm install -g promptfoo
 - `agent.py`: Contains the CrewAI agent setup and promptfoo provider interface
 - `promptfooconfig.yaml`: Configures prompts, providers, and tests for evaluation
 
+Set `providers[0].config.model` to a CrewAI model ID such as `openai/gpt-4.1`.
+The provider passes it to `LLM(model=...)` through the agent's `llm` field. CrewAI
+uses a slash between provider and model names.
+
 ### Note on Reliability
 
 When using a real LLM, you may notice that the agent's output is not always reliable, especially for more complex queries. For example, the agent may fail to return valid JSON or may not return a response at all. This is a common challenge when working with LLMs.

@@ -674,6 +674,29 @@ async function doGenerateRedteamInternal(
     defaultTestConfig?.options?.provider ||
     undefined;
 
+  const generateForPurpose = (purpose: string | undefined) =>
+    withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      withEnvOverrides(generationEnv, () =>
+        synthesize({
+          ...parsedConfig.data,
+          requestScoped: true,
+          fallbackProvider: defaultTestProvider,
+          inputs: targetInputs,
+          purpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          redteamGenerationContext,
+          cloudTargetDatabaseId,
+          targetIds,
+          showProgressBar: options.progressBar !== false,
+          testGenerationInstructions: augmentedTestGenerationInstructions,
+        } as SynthesizeOptions),
+      ),
+    );
+
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
@@ -708,30 +731,7 @@ async function doGenerateRedteamInternal(
         testSuite,
       });
 
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          withEnvOverrides(generationEnv, () =>
-            synthesize({
-              ...parsedConfig.data,
-              requestScoped: true,
-              fallbackProvider: defaultTestProvider,
-              inputs: targetInputs,
-              purpose: contextPurpose,
-              numTests: config.numTests,
-              prompts: testSuite.prompts.map((prompt) => prompt.raw),
-              maxConcurrency: config.maxConcurrency,
-              delay: config.delay,
-              abortSignal: options.abortSignal,
-              redteamGenerationContext,
-              cloudTargetDatabaseId,
-              targetIds,
-              showProgressBar: options.progressBar !== false,
-              testGenerationInstructions: augmentedTestGenerationInstructions,
-            } as SynthesizeOptions),
-          ),
-      );
+      const contextResult = await generateForPurpose(contextPurpose);
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -782,27 +782,7 @@ async function doGenerateRedteamInternal(
       rootPurpose,
       testSuite,
     });
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      withEnvOverrides(generationEnv, () =>
-        synthesize({
-          ...parsedConfig.data,
-          requestScoped: true,
-          fallbackProvider: defaultTestProvider,
-          inputs: targetInputs,
-          purpose: effectivePurpose,
-          numTests: config.numTests,
-          prompts: testSuite.prompts.map((prompt) => prompt.raw),
-          maxConcurrency: config.maxConcurrency,
-          delay: config.delay,
-          abortSignal: options.abortSignal,
-          redteamGenerationContext,
-          cloudTargetDatabaseId,
-          targetIds,
-          showProgressBar: options.progressBar !== false,
-          testGenerationInstructions: augmentedTestGenerationInstructions,
-        } as SynthesizeOptions),
-      ),
-    );
+    const result = await generateForPurpose(effectivePurpose);
 
     redteamTests = result.testCases;
     purpose = result.purpose;

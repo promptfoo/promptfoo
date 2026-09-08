@@ -327,36 +327,42 @@ describe('doGenerateRedteam', () => {
     });
   });
 
-  it('keeps the resolved request environment during generation despite another config load', async () => {
-    const env = { ANTHROPIC_API_KEY: 'fixture-request-key' };
-    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-        defaultTest: { options: { provider: 'request-default-provider' } },
-      },
-      config: { env, redteam: {} },
-    });
-    vi.mocked(synthesize).mockImplementationOnce(async (options) => {
-      cliState.config = { env: { OPENAI_API_KEY: 'fixture-other-request' } };
-      await Promise.resolve();
-      expect(getEnvOverrides()).toEqual(env);
-      expect(options.requestScoped).toBe(true);
-      expect(options.fallbackProvider).toBe('request-default-provider');
-      return {
-        testCases: [],
-        purpose: 'hello',
-        entities: [],
-        injectVar: 'input',
-        failedPlugins: [],
-      };
-    });
-    mockReadFileSync({ prompts: [], providers: [], tests: [] });
-    await doGenerateRedteam({ config: 'config.yaml', output: 'isolated.yaml', force: true });
-    expect(synthesize).toHaveBeenCalledOnce();
-  });
+  it.each([
+    { mode: 'single-purpose', contexts: undefined, expectedCalls: 1 },
+    { mode: 'multiple-context', contexts: [{ id: 'first' }, { id: 'second' }], expectedCalls: 2 },
+  ])(
+    'keeps the request environment during $mode generation despite another config load',
+    async ({ contexts, expectedCalls }) => {
+      const env = { ANTHROPIC_API_KEY: 'fixture-request-key' };
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [],
+          tests: [],
+          defaultTest: { options: { provider: 'request-default-provider' } },
+        },
+        config: { env, redteam: { contexts } },
+      });
+      vi.mocked(synthesize).mockImplementation(async (options) => {
+        cliState.config = { env: { OPENAI_API_KEY: 'fixture-other-request' } };
+        await Promise.resolve();
+        expect(getEnvOverrides()).toEqual(env);
+        expect(options.requestScoped).toBe(true);
+        expect(options.fallbackProvider).toBe('request-default-provider');
+        return {
+          testCases: [],
+          purpose: 'hello',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+        };
+      });
+      mockReadFileSync({ prompts: [], providers: [], tests: [] });
+      await doGenerateRedteam({ config: 'config.yaml', output: 'isolated.yaml', force: true });
+      expect(synthesize).toHaveBeenCalledTimes(expectedCalls);
+    },
+  );
 
   it('uses the resolved relative default provider as the request-owned generation fallback', async () => {
     const resolvedProvider = createMockProvider({ id: 'request-owned-file-provider' });
