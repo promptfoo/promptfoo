@@ -200,6 +200,8 @@ All providers support these common parameters:
 | `voiceDesign`               | Generate voice from text description                      |
 | `voiceRemix`                | Modify voice characteristics (gender, accent, age)        |
 
+`ulaw_8000` returns raw 8 kHz μ-law audio with media type `audio/basic`. Saved files use the `.ulaw` extension.
+
 ### STT-Specific Parameters
 
 | Parameter     | Description                                |
@@ -255,23 +257,7 @@ tests:
 
 ### Speech-to-Text: Accuracy Testing
 
-```yaml
-prompts:
-  - file://audio/test-recording.mp3
-
-providers:
-  - id: elevenlabs:stt
-    config:
-      diarization: true
-
-tests:
-  - description: WER is acceptable
-    assert:
-      - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          return result.wer < 0.05; // Less than 5% error
-```
+Use the [transcription accuracy guide](/docs/guides/evaluate-elevenlabs/#part-3-speech-to-text-accuracy) to provide a recording and reference transcript, then assert on the word error rate in `context.providerResponse.metadata.wer`.
 
 ### Conversational Agents: Evaluation
 
