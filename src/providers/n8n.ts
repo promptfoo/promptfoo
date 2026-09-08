@@ -22,7 +22,7 @@ export interface N8nProviderConfig {
   /**
    * HTTP method to use (default: POST)
    */
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH';
 
   /**
    * Additional headers to include in requests

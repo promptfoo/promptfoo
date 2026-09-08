@@ -3,6 +3,8 @@ import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
 
+import type { N8nProviderConfig } from '../../src/providers/n8n';
+
 vi.mock('../../src/cache');
 vi.mock('../../src/logger', () => ({
   default: {
@@ -85,14 +87,18 @@ describe('N8nProvider', () => {
   });
 
   describe('callApi', () => {
-    it.each(['HEAD', 'head'])('sends %s requests without a body', async (method) => {
+    it.each([
+      { method: 'HEAD' } satisfies N8nProviderConfig,
+      { method: 'head' },
+      { method: 'HeAd' },
+    ])('sends $method requests without a body', async (config) => {
       vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
         // Use the native Fetch contract without sending a network request.
         new Request(url, options);
         return createMockResponse('');
       });
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
-        config: { method },
+        config,
       });
 
       const result = await provider.callApi('Hello');
