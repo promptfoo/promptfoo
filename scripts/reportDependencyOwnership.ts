@@ -202,6 +202,9 @@ function discoverFiles(
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/test/**', ...configuredIgnores],
     }).map(normalizePath)) {
+      if (manifestFor(file, manifests) !== manifest) {
+        continue;
+      }
       files.add(file);
       declarationFiles.add(file);
     }
@@ -239,7 +242,7 @@ function leadingTypeReferences(
       continue;
     }
     const directive = comment.value.match(
-      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>\s*$/,
+      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
     );
     const typeAttribute =
       directive &&

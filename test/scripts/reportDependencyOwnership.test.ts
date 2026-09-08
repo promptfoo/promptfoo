@@ -165,6 +165,36 @@ describe('dependency ownership report', () => {
     },
   );
 
+  it.each(['dist/pkg', 'packages/pkg'])(
+    'keeps handwritten and generated declarations distinct for workspace %s',
+    (workspace) => {
+      json('package.json', { workspaces: [workspace], dependencies: { 'root-types': '1' } });
+      json(`${workspace}/package.json`, { name: 'child', dependencies: { 'child-types': '1' } });
+      json('architecture/dependency-ownership.json', {
+        manifestOwners: { 'package.json': 'root', [`${workspace}/package.json`]: 'child' },
+      });
+      write('dist/root.d.ts', "import 'root-types';");
+      write(`${workspace}/src/index.ts`, 'export const value = 1;');
+      write(`${workspace}/src/env.d.ts`, "import 'child-types';");
+      write(`${workspace}/dist/index.d.ts`, "import 'child-types';");
+      const report = reportDependencyOwnership(root, config);
+      expect(report.coverage.sourceFiles).toBe(2);
+      expect(report.coverage.generatedDeclarations).toEqual(
+        ['dist/root.d.ts', `${workspace}/dist/index.d.ts`].sort(),
+      );
+      expect(report.declarations.find((entry) => entry.dependency === 'child-types')).toMatchObject(
+        {
+          manifest: `${workspace}/package.json`,
+          references: [
+            expect.objectContaining({ file: `${workspace}/dist/index.d.ts`, scope: 'declaration' }),
+            expect.objectContaining({ file: `${workspace}/src/env.d.ts`, scope: 'declaration' }),
+          ],
+        },
+      );
+      expect(report.undeclaredUsages).toEqual([]);
+    },
+  );
+
   it('honors configured ignored roots across workspace, configured, and emitted declaration scans', () => {
     write('src/keep.ts', "import 'shared';");
     for (const file of [
@@ -228,6 +258,21 @@ describe('dependency ownership report', () => {
     ]);
     expect(report.runtimeDeclarationGaps).toEqual([]);
   });
+
+  it.each([' // reason', ' trailing prose', ' // <reference types="ignored-tail" />'])(
+    'recognizes a type directive followed by %s',
+    (suffix) => {
+      write('src/env.d.ts', `/// <reference types="missingref" />${suffix}\nexport {};`);
+      const report = reportDependencyOwnership(root, config);
+      expect(report.undeclaredUsages).toEqual([
+        expect.objectContaining({
+          dependency: 'missingref',
+          references: [expect.objectContaining({ kind: 'type', scope: 'declaration', line: 1 })],
+        }),
+      ]);
+      expect(report.runtimeDeclarationGaps).toEqual([]);
+    },
+  );
 
   it('ignores triple-slash lookalikes and directives following a statement', () => {
     write(
