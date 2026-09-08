@@ -13,7 +13,7 @@ import type { GeminiApiResponse } from '../../../src/providers/google/util';
 
 const facades = ['ai-studio', 'unified', 'vertex'] as const;
 
-it('rejects a malformed Vertex candidate after partial stream output', () => {
+it('rejects malformed Vertex candidates but preserves finish-only frames', () => {
   const data = [
     { candidates: [{ content: { parts: [{ text: 'partial' }] } }] },
     { candidates: [{}] },
@@ -22,6 +22,12 @@ it('rejects a malformed Vertex candidate after partial stream output', () => {
     kind: 'response',
     response: { error: expect.stringContaining('No output found in response') },
   });
+  expect(
+    parseGeminiContent(
+      [data[0], { candidates: [{ finishReason: 'MAX_TOKENS' }] }] as GeminiApiResponse,
+      'vertex',
+    ),
+  ).toMatchObject({ kind: 'content', output: 'partial' });
 });
 
 it.each([
