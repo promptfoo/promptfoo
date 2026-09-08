@@ -1738,8 +1738,6 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response, abortSignal);
-
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
           // graders. state.vars itself is left intact — it is shared by reference
@@ -1764,6 +1762,19 @@ async function runEvalInternal({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+          try {
+            await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          } catch (err) {
+            if (!abortSignal?.aborted) {
+              throw err;
+            }
+            ret.error = err instanceof Error ? err.message : String(err);
+            ret.failureReason = ResultFailureReason.ERROR;
+            return [ret];
+          }
           await applyRunEvalResponseOutcome({
             // Row timeouts do not cancel deferred grading; the evaluation deadline does.
             abortSignal:
@@ -1788,11 +1799,6 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
