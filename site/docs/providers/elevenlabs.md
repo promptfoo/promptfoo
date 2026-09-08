@@ -104,7 +104,7 @@ providers:
 
 ### Speech-to-Text (STT)
 
-Transcribe audio with speaker diarization and accuracy metrics:
+Transcribe audio with speaker diarization and accuracy metrics. The default is `scribe_v2`, the [recommended replacement for deprecated Scribe v1](https://elevenlabs.io/docs/overview/models#deprecated-models). Explicit `modelId: scribe_v1` remains supported:
 
 - `elevenlabs:stt` - Speech-to-text transcription
 
@@ -120,7 +120,7 @@ Transcribe audio with speaker diarization and accuracy metrics:
 providers:
   - id: elevenlabs:stt
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       diarization: true
       maxSpeakers: 3
 ```
@@ -201,7 +201,7 @@ All providers support these common parameters:
 
 | Parameter     | Description                                |
 | ------------- | ------------------------------------------ |
-| `modelId`     | STT model (default: `scribe_v1`)           |
+| `modelId`     | STT model (default: `scribe_v2`)           |
 | `language`    | ISO 639-1 language code (e.g., `en`, `es`) |
 | `diarization` | Enable speaker diarization                 |
 | `maxSpeakers` | Expected number of speakers (hint)         |
