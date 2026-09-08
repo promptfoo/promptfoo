@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { extractJsonObjects } from '../agentic/json';
+import { parseEvidenceCandidates } from '../agentic/json';
 import {
   type AgentObservation,
   type AgentRunFinding,
@@ -274,52 +274,6 @@ function getAttribute(
   return undefined;
 }
 
-function parseEvidenceCandidates(value: unknown): AgenticRuntimeEvidence[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => parseEvidenceCandidates(item));
-  }
-
-  if (isRecord(value)) {
-    const nested = value.agenticEvidence ?? value.agentSdkEvidence;
-    if (nested !== undefined) {
-      return parseEvidenceCandidates(nested);
-    }
-    return [value as AgenticRuntimeEvidence];
-  }
-
-  if (typeof value !== 'string' || !value.trim()) {
-    return [];
-  }
-
-  try {
-    return parseEvidenceCandidates(JSON.parse(value));
-  } catch {
-    const candidates: AgenticRuntimeEvidence[] = [];
-    let untaggedValue = value;
-    const tagPatterns = [
-      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
-      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
-      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
-    ];
-    for (const pattern of tagPatterns) {
-      for (const tagged of value.matchAll(pattern)) {
-        candidates.push(...parseEvidenceCandidates(tagged[1]));
-      }
-      untaggedValue = untaggedValue.replace(pattern, '');
-    }
-
-    for (const object of extractJsonObjects(untaggedValue)) {
-      for (const evidence of parseEvidenceCandidates(object)) {
-        if (evidence?.findings || evidence?.pluginId || evidence?.mode) {
-          candidates.push(evidence);
-        }
-      }
-    }
-
-    return candidates;
-  }
-}
-
 function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
   const spans: TraceLikeSpan[] = [];
   if (Array.isArray(gradingContext?.traceContext?.spans)) {
@@ -393,8 +347,8 @@ function controlRunsBeforeTool(
 }
 
 function toolInvocationKey(observation: AgentObservation, index: number): string {
-  if (observation.spanId && observation.source !== 'trace-event') {
-    return `span:${observation.spanId}`;
+  if (observation.spanId) {
+    return `span:${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? ''}`;
   }
 
   if (observation.spanName || observation.timestamp !== undefined) {
@@ -464,7 +418,9 @@ function namedControlObservationMentionsTool(
   const spanName = observation.spanName?.toLowerCase();
   return Boolean(
     spanName &&
-      (spanName.includes('guardrail') || spanName.includes('approval')) &&
+      (spanName.includes('guardrail') ||
+        spanName.includes('approval') ||
+        (observation.kind === 'guardrail' && observation.text !== observation.spanName)) &&
       observationMentionsTool(observation, toolName),
   );
 }
@@ -477,6 +433,7 @@ function routeControlCoversTool(
   return (
     controlRunsBeforeTool(controlObservation, toolObservation) &&
     observationsShareRoute(controlObservation, toolObservation) &&
+    !/^(blocked|denied|rejected|error|skipped)$/i.test(controlObservation.outcome?.trim() ?? '') &&
     namedControlObservationMentionsTool(controlObservation, toolName)
   );
 }
@@ -560,13 +517,15 @@ function inferredTraceFindings(
 }
 
 function evidenceCandidateMatchesPlugin(value: unknown, pluginId: AgenticRuntimePluginId): boolean {
-  return parseEvidenceCandidates(value).some(
-    (evidence) =>
+  return parseEvidenceCandidates(value).some((candidate) => {
+    const evidence = candidate as AgenticRuntimeEvidence;
+    return (
       hasVerifierEvidence(evidence) &&
       (normalizePluginId(evidence.pluginId) === pluginId ||
         (Array.isArray(evidence.findings) &&
-          evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId))),
-  );
+          evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId)))
+    );
+  });
 }
 
 function findingMatchesPlugin(
@@ -600,6 +559,9 @@ function normalizeEvidenceForPlugin(
 ): AgenticRuntimeEvidence | undefined {
   if (!evidence || !pluginId) {
     return evidence;
+  }
+  if (Array.isArray(evidence.findings) && !evidence.findings.every(isRecord)) {
+    return undefined;
   }
 
   const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId);
@@ -639,7 +601,7 @@ function hasVerifierEvidence(
     return false;
   }
 
-  return Array.isArray(evidence.findings);
+  return Array.isArray(evidence.findings) && evidence.findings.every(isRecord);
 }
 
 function traceAttributesMatchPlugin(
@@ -729,7 +691,7 @@ function extractAgenticRuntimeEvidence(
 
   const scopedEvidenceCandidates = candidates.flatMap((candidate) =>
     parseEvidenceCandidates(candidate)
-      .map((evidence) => normalizeEvidenceForPlugin(evidence, pluginId))
+      .map((evidence) => normalizeEvidenceForPlugin(evidence as AgenticRuntimeEvidence, pluginId))
       .filter(hasVerifierEvidence),
   );
   if (scopedEvidenceCandidates.length > 0) {

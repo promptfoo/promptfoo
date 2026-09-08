@@ -16,6 +16,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { AGENTIC_RUNTIME_PLUGINS } from '../constants/agentic';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -37,6 +38,7 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { AgenticRuntimePlugin } from './agentic';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -689,6 +691,11 @@ remotePlugins.push(
 
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
+  ...AGENTIC_RUNTIME_PLUGINS.map((key) => ({
+    key,
+    action: ({ provider, purpose, injectVar, n, config }: PluginActionParams) =>
+      new AgenticRuntimePlugin(provider, purpose, injectVar, config ?? {}, key).generateTests(n),
+  })),
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,

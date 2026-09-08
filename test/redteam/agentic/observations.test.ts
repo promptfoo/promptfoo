@@ -7,6 +7,31 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it('preserves the actual finding location rather than its evidence attribute', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'location',
+          testCaseId: 'location',
+          traceId: '0123456789abcdef0123456789abcdef',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [{ evidence: 'synthetic', location: 'tool update_seat' }],
+                  pluginId: 'agentic:guardrail-coverage-gap',
+                }),
+              },
+              name: 'verifier',
+              spanId: 'location',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)[0].location).toBe('tool update_seat');
+  });
   it('normalizes final output, provider raw Codex items, trace spans, and Agentic Runtime findings', () => {
     const gradingContext: RedteamGradingContext = {
       providerResponse: {

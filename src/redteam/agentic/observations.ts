@@ -1,4 +1,4 @@
-import { extractJsonObjects } from './json';
+import { parseEvidenceCandidates } from './json';
 
 import type { RedteamGradingContext } from '../grading/types';
 
@@ -28,6 +28,7 @@ export type AgentObservationSource =
 
 export type AgentObservation = {
   actor?: string;
+  callId?: string;
   command?: string;
   connector?: string;
   endTimestamp?: number;
@@ -257,54 +258,6 @@ function parseRawValue(raw: unknown): unknown {
   }
 }
 
-function parseAgentEvidenceCandidates(
-  value: unknown,
-): { findings?: AgentRunFinding[]; pluginId?: unknown }[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => parseAgentEvidenceCandidates(item));
-  }
-
-  if (isRecord(value)) {
-    const nested = value.agenticEvidence ?? value.agentSdkEvidence;
-    if (nested !== undefined) {
-      return parseAgentEvidenceCandidates(nested);
-    }
-    return [value as { findings?: AgentRunFinding[] }];
-  }
-
-  if (typeof value !== 'string' || !value.trim()) {
-    return [];
-  }
-
-  try {
-    return parseAgentEvidenceCandidates(JSON.parse(value));
-  } catch {
-    const candidates: { findings?: AgentRunFinding[]; pluginId?: unknown }[] = [];
-    let untaggedValue = value;
-    const tagPatterns = [
-      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
-      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
-      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
-    ];
-    for (const pattern of tagPatterns) {
-      for (const tagged of value.matchAll(pattern)) {
-        candidates.push(...parseAgentEvidenceCandidates(tagged[1]));
-      }
-      untaggedValue = untaggedValue.replace(pattern, '');
-    }
-
-    for (const object of extractJsonObjects(untaggedValue)) {
-      for (const evidence of parseAgentEvidenceCandidates(object)) {
-        if (evidence?.findings) {
-          candidates.push(evidence);
-        }
-      }
-    }
-
-    return candidates;
-  }
-}
-
 function traceAttributeField(
   normalizedAttributeName: string,
 ):
@@ -411,7 +364,7 @@ function controlObservationFromSpan(
       spanId: span.spanId,
       spanName: span.name,
       timestamp: span.startTime,
-      text: span.name,
+      text: stringifyValue(attributes['guardrail.name']) ?? span.name,
     };
   }
 
@@ -445,30 +398,31 @@ function findingObservationsFromAttributes(
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
   const evidenceJson = getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS);
-  const parsedEvidenceCandidates = parseAgentEvidenceCandidates(evidenceJson);
+  const parsedEvidenceCandidates = parseEvidenceCandidates(evidenceJson);
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
-  if (parsedEvidenceCandidates.some((evidence) => Array.isArray(evidence.findings))) {
-    parsedEvidenceCandidates.forEach((parsedEvidence) => {
-      parsedEvidence.findings?.forEach((finding, index) => {
-        observations.push({
-          evidence: stringifyValue(finding.evidence),
-          fieldLocations: { evidence: location },
-          findingKind: stringifyValue(finding.kind),
-          kind: 'finding',
-          location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
-          pluginId:
-            normalizePluginId(finding.pluginId) ??
-            normalizePluginId(parsedEvidence.pluginId) ??
-            spanPluginId,
-          parentSpanId: span?.parentSpanId,
-          severity: stringifyValue(finding.severity),
-          source,
-          spanId: span?.spanId,
-          spanName: span?.name,
-          timestamp: span?.startTime,
-          text: stringifyValue(finding.evidence),
-        });
+  for (const parsedEvidence of parsedEvidenceCandidates) {
+    if (!Array.isArray(parsedEvidence.findings) || !parsedEvidence.findings.every(isRecord)) {
+      continue;
+    }
+    parsedEvidence.findings.forEach((finding, index) => {
+      observations.push({
+        evidence: stringifyValue(finding.evidence),
+        fieldLocations: { evidence: location },
+        findingKind: stringifyValue(finding.kind),
+        kind: 'finding',
+        location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
+        pluginId:
+          normalizePluginId(finding.pluginId) ??
+          normalizePluginId(parsedEvidence.pluginId) ??
+          spanPluginId,
+        parentSpanId: span?.parentSpanId,
+        severity: stringifyValue(finding.severity),
+        source,
+        spanId: span?.spanId,
+        spanName: span?.name,
+        timestamp: span?.startTime,
+        text: stringifyValue(finding.evidence),
       });
     });
   }
@@ -536,9 +490,13 @@ function normalizedToolObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const tool = getToolNameFromAttributes(attributes);
+  const callId = getString(
+    getAttribute(attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
+  );
   return tool
     ? [
         {
+          callId,
           fieldLocations: { tool: baseLocation },
           kind: 'tool_call',
           location: baseLocation,
@@ -569,6 +527,9 @@ function observationFromMappedTraceAttribute(
   span?: TraceLikeSpan,
 ): AgentObservation {
   const baseObservation = {
+    callId: getString(
+      getAttribute(span?.attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
+    ),
     fieldLocations: { [mapped.field]: location },
     location,
     parentSpanId: span?.parentSpanId,
@@ -647,6 +608,9 @@ function observationsFromTraceAttributes(
   const spanTool = inferredToolFromSpanName(span?.name);
   if (spanTool) {
     observations.push({
+      callId: getString(
+        getAttribute(attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
+      ),
       fieldLocations: { tool: baseLocation },
       kind: 'tool_call',
       location: baseLocation,
@@ -909,7 +873,7 @@ export function findingsFromObservations(observations: AgentObservation[]): Agen
     .map((observation) => ({
       evidence: observation.evidence ?? observation.text,
       kind: observation.findingKind,
-      location: observation.fieldLocations?.evidence ?? observation.location,
+      location: observation.location,
       pluginId: observation.pluginId,
       severity: observation.severity,
     }));

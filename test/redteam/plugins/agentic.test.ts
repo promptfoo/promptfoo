@@ -1,32 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { hasTraceAwareAssertions } from '../../../src/assertions';
-import { fetchWithCache } from '../../../src/cache';
 import { AGENTIC_RUNTIME_PLUGINS } from '../../../src/redteam/constants/agentic';
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
 import { AgenticRuntimePlugin } from '../../../src/redteam/plugins/agentic';
-import {
-  getRemoteGenerationUrl,
-  getRemoteHealthUrl,
-  neverGenerateRemote,
-} from '../../../src/redteam/remoteGeneration';
-import { checkRemoteHealth } from '../../../src/util/apiHealth';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 import type { TraceData } from '../../../src/types/tracing';
-
-vi.mock('../../../src/cache');
-vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
-  ...(await importOriginal()),
-  getRemoteGenerationUrl: vi.fn(),
-  getRemoteHealthUrl: vi.fn(),
-  neverGenerateRemote: vi.fn(),
-}));
-vi.mock('../../../src/util/apiHealth', async (importOriginal) => ({
-  ...(await importOriginal()),
-  checkRemoteHealth: vi.fn(),
-}));
 
 const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContext => ({
   providerResponse: {
@@ -41,52 +22,117 @@ describe('Agentic redteam plugins', () => {
     callApi: vi.fn(),
   } as unknown as ApiProvider;
 
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://remote.example.test/api/v1/task');
-    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://remote.example.test/health');
-    vi.mocked(neverGenerateRemote).mockReturnValue(false);
-    vi.mocked(checkRemoteHealth).mockResolvedValue({
-      message: 'API is healthy',
-      status: 'OK',
-    });
-    vi.mocked(fetchWithCache).mockImplementation(async (_url, options) => {
-      const body = JSON.parse(String(options?.body));
-      return {
-        cached: false,
-        data: {
-          result: [
+  it('rejects malformed provider and trace findings without throwing', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById('promptfoo:redteam:agentic:approval-continuity')!;
+    for (const context of [
+      providerEvidenceContext({ findings: [null], pluginId }),
+      {
+        traceData: {
+          evaluationId: 'malformed',
+          testCaseId: 'malformed',
+          traceId: '0123456789abcdef0123456789abcdef',
+          spans: [
             {
-              assert: [
-                {
-                  metric: 'AgenticRuntimeRemote',
-                  type: `promptfoo:redteam:${body.task}`,
-                },
-              ],
-              metadata: {
-                agenticScenario: {
-                  expectedFinding: `remote expected finding for ${body.task}`,
-                  goal: `remote goal for ${body.task}`,
-                  id: `remote-${body.task}`,
-                },
-                pluginId: body.task,
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({ findings: [null], pluginId }),
               },
-              vars: {
-                [body.injectVar]: `remote goal for ${body.task}`,
-                agenticExpectedFinding: `remote expected finding for ${body.task}`,
-                agenticPluginId: body.task,
-                agenticScenarioId: `remote-${body.task}`,
-              },
+              name: 'verifier',
+              spanId: 'malformed',
+              startTime: 0,
             },
           ],
         },
-        status: 200,
-        statusText: 'OK',
-      };
-    });
+      },
+    ]) {
+      const result = await grader.getResult(
+        'prompt',
+        'synthetic output',
+        {} as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        context,
+      );
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+    }
   });
 
-  it('routes generation for every Agentic runtime plugin through remote generation', async () => {
+  it.each([
+    {
+      name: 'matches an explicit guardrail name despite a generic span name',
+      outcome: 'allowed',
+      duplicateEvent: false,
+      expectedPass: true,
+    },
+    {
+      name: 'does not reuse a blocked guardrail for a later tool call',
+      outcome: 'blocked',
+      duplicateEvent: false,
+      expectedPass: false,
+    },
+    {
+      name: 'counts matching tool span and event as one invocation',
+      outcome: 'allowed',
+      duplicateEvent: true,
+      expectedPass: true,
+    },
+  ])('$name', async ({ outcome, duplicateEvent, expectedPass }) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById('promptfoo:redteam:agentic:guardrail-coverage-gap')!;
+    const result = await grader.getResult(
+      'prompt',
+      'synthetic output',
+      {} as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId }),
+        traceData: {
+          evaluationId: 'control-correlation',
+          testCaseId: 'control-correlation',
+          traceId: '0123456789abcdef0123456789abcdef',
+          spans: [
+            {
+              attributes: {
+                'guardrail.name': 'update_seat_policy',
+                'guardrail.outcome': outcome,
+                'openai.agents.span_type': 'guardrail',
+              },
+              endTime: 1,
+              name: 'input policy check',
+              parentSpanId: 'route',
+              spanId: 'control',
+              startTime: 0,
+            },
+            {
+              attributes: { 'codex.tool.name': 'update_seat' },
+              events: duplicateEvent
+                ? [
+                    {
+                      attributes: { 'codex.tool.name': 'update_seat' },
+                      name: 'tool call',
+                      timestamp: 2,
+                    },
+                  ]
+                : [],
+              name: 'tool update_seat',
+              parentSpanId: 'route',
+              spanId: 'tool',
+              startTime: 2,
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(expectedPass);
+  });
+
+  it('registers every Agentic runtime plugin for deterministic local generation', async () => {
     for (const pluginId of AGENTIC_RUNTIME_PLUGINS) {
       const factory = Plugins.find((plugin) => plugin.key === pluginId);
       expect(factory, `${pluginId} should be registered`).toBeDefined();
@@ -100,47 +146,14 @@ describe('Agentic redteam plugins', () => {
         purpose: 'OpenAI agentic runtime support workflow',
       });
 
-      expect(tests).toHaveLength(1);
-      expect(tests[0].vars?.prompt).toBe(`remote goal for ${pluginId}`);
+      expect(tests).toHaveLength(2);
+      expect(tests[0].vars?.prompt).toBeTruthy();
       expect(tests[0].vars?.agenticPluginId).toBe(pluginId);
       expect(tests[0].assert?.[0].type).toBe(`promptfoo:redteam:${pluginId}`);
       expect(tests[0].metadata?.pluginId).toBe(pluginId);
-      expect(tests[0].metadata?.pluginConfig).toEqual({ modifiers: {} });
+      expect(tests[0].metadata?.pluginConfig).toEqual({});
     }
     expect(provider.callApi).not.toHaveBeenCalled();
-    expect(fetchWithCache).toHaveBeenCalledTimes(AGENTIC_RUNTIME_PLUGINS.length);
-    const requestTasks = vi
-      .mocked(fetchWithCache)
-      .mock.calls.map((call) => JSON.parse(String(call[1]?.body)).task);
-    expect(requestTasks).toEqual([...AGENTIC_RUNTIME_PLUGINS]);
-  });
-
-  it('passes target manifests through to remote Agentic runtime generation', async () => {
-    const factory = Plugins.find((plugin) => plugin.key === 'agentic:guardrail-coverage-gap');
-    expect(factory).toBeDefined();
-
-    const targetManifest = {
-      name: 'Agents SDK customer service example',
-      files: ['examples/redteam-agents-sdk/customer_service_sample_provider.py'],
-      commands: ['python examples/redteam-agents-sdk/customer_service_sample_provider.py'],
-      tools: ['handoff', 'refund_user'],
-      connectors: ['github'],
-      sensitivePaths: ['tmp/outside-secret.txt'],
-    };
-
-    await factory!.action({
-      config: { targetManifest } as any,
-      delayMs: 0,
-      injectVar: 'prompt',
-      n: 1,
-      provider,
-      purpose: 'OpenAI agentic runtime support workflow',
-    });
-
-    const body = JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body));
-    expect(body.task).toBe('agentic:guardrail-coverage-gap');
-    expect(body.config.targetManifest).toEqual(targetManifest);
-    expect(body.targetManifest).toEqual(targetManifest);
   });
 
   it('generates local synthetic Agentic runtime scenarios when used directly', async () => {

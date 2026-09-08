@@ -142,20 +142,16 @@ describe('constants', () => {
     ]);
   });
 
-  it('remote-only UI guards should include agentic runtime and coding-agent plugins', () => {
+  it('remote-only UI guards should exclude local agentic runtime plugins', () => {
     expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([
-        ...AGENTIC_RUNTIME_PLUGINS,
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
+    for (const plugin of AGENTIC_RUNTIME_PLUGINS) {
+      expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain(plugin);
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(plugin);
+    }
     expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([
-        ...AGENTIC_RUNTIME_PLUGINS,
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
   });
 
