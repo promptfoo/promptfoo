@@ -1081,6 +1081,16 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load Volcengine provider with default model', async () => {
+    const provider = await loadApiProvider('volcengine:');
+    expect(provider).toBeDefined();
+  });
+
+  it('should load Volcengine provider with specific model', async () => {
+    const provider = await loadApiProvider('volcengine:doubao-seed-evolving');
+    expect(provider).toBeDefined();
+  });
+
   it('should load Hyperbolic provider with specific model', async () => {
     const provider = await loadApiProvider('hyperbolic:meta-llama/Meta-Llama-3-8B-Instruct-Turbo');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
