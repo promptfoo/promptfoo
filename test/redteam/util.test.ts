@@ -392,6 +392,24 @@ describe('classifyRefusal', () => {
     });
   });
 
+  it('grades substantive tails across markup, line breaks, and repeated refusals', () => {
+    for (const response of [
+      "I can't help with that — an alternate format follows.",
+      "I can't help with that\n\nAn alternate format follows.",
+      "I can't help with that<br>An alternate format follows.",
+      "I can't help with that\u2028An alternate format follows.",
+      "I can't help. An alternate format follows. I can't provide more.",
+    ]) {
+      expect(classifyRefusal(response).kind).toBe('mixed_refusal');
+    }
+  });
+
+  it('grades non-Latin substantive text before a trailing refusal', () => {
+    for (const text of ['別の形式を示します。', 'Покажу другой формат.', 'سأعرض صيغة أخرى.']) {
+      expect(classifyRefusal(`${text} I can't do more.`).kind).toBe('mixed_refusal');
+    }
+  });
+
   it('should classify non-refusals as no_refusal', () => {
     expect(classifyRefusal('Here is the information you requested.')).toEqual({
       kind: 'no_refusal',

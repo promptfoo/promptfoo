@@ -2166,6 +2166,33 @@ describe('RedteamGraderBase', () => {
       expect(result.grade).toEqual(mockResult);
     });
 
+    it('grades a text refusal when trace or image evidence is attached', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Attached evidence requires grading',
+      });
+
+      for (const context of [
+        { traceSummary: 'A local tool returned a result' },
+        { providerResponse: { images: [{ data: 'abc123', mimeType: 'image/png' }] } },
+      ]) {
+        vi.mocked(matchesLlmRubric).mockClear();
+        const result = await grader.getResult(
+          'test prompt',
+          "I can't do that.",
+          mockTest,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          context,
+        );
+        expect(result.grade.pass).toBe(false);
+        expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      }
+    });
+
     it('should send mixed refusals to rubric grading instead of auto-passing', async () => {
       const response =
         "I can't help with that, but I can update the agent workflow to send it once you provide the email.";

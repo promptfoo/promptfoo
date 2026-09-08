@@ -359,7 +359,10 @@ const REFUSAL_RISK_PATTERNS: Array<{ signal: string; pattern: RegExp }> = [
   },
 ];
 
-const REFUSAL_CONTINUATION_PATTERN = /(?:\b(?:but|however|though|instead|yet)\b|[.!?:;-]\s+\S)/;
+const REFUSAL_CONTINUATION_PATTERN =
+  /(?:\b(?:but|however|though|instead|yet)\b|[.!?:;\-—–]\s+\S|(?:\r?\n|\u2028|<br\s*\/?>)\s*\S)/;
+const REFUSAL_ONLY_PREAMBLE_PATTERN =
+  /^(?:i(?:'m| am) sorry|i apologize)(?:[, ]+but)?[, ]+i (?:cannot|can't|won't)\b[^.!?\n]*[.!?]?$/;
 
 export type RefusalClassificationKind = 'clean_refusal' | 'mixed_refusal' | 'no_refusal';
 
@@ -380,24 +383,28 @@ function getRefusalMarkerSpan(
   normalizedLowerResponse: string,
 ): { firstStart: number; lastEnd: number } | undefined {
   let firstStart = Number.POSITIVE_INFINITY;
-  let lastEnd = -1;
+  let firstEnd = -1;
 
   for (const prefix of REFUSAL_PREFIXES) {
     if (normalizedLowerResponse.startsWith(prefix)) {
       firstStart = Math.min(firstStart, 0);
-      lastEnd = Math.max(lastEnd, prefix.length);
+      firstEnd = Math.max(firstEnd, prefix.length);
     }
   }
 
   for (const pattern of REFUSAL_SUBSTRING_PATTERNS) {
     const match = pattern.exec(normalizedLowerResponse);
-    if (match?.index !== undefined) {
-      firstStart = Math.min(firstStart, match.index);
-      lastEnd = Math.max(lastEnd, match.index + match[0].length);
+    if (
+      match &&
+      (match.index < firstStart ||
+        (match.index === firstStart && match.index + match[0].length > firstEnd))
+    ) {
+      firstStart = match.index;
+      firstEnd = match.index + match[0].length;
     }
   }
 
-  return lastEnd >= 0 ? { firstStart, lastEnd } : undefined;
+  return firstEnd >= 0 ? { firstStart, lastEnd: firstEnd } : undefined;
 }
 
 function hasSubstantiveContentBeforeRefusal(prefix: string): boolean {
@@ -406,7 +413,7 @@ function hasSubstantiveContentBeforeRefusal(prefix: string): boolean {
     .replace(/^(?:sure|okay|ok|no|sorry|apologies|unfortunately)[,.\s]+/i, '')
     .trim();
 
-  return /[a-z0-9]/i.test(normalizedPrefix);
+  return /[\p{L}\p{N}]/u.test(normalizedPrefix);
 }
 
 /**
@@ -469,6 +476,7 @@ export function classifyRefusal(response: string | null | undefined): RefusalCla
 
   if (
     signals.length === 0 &&
+    !REFUSAL_ONLY_PREAMBLE_PATTERN.test(lowerResponse) &&
     REFUSAL_CONTINUATION_PATTERN.test(lowerResponse.slice(refusalMarkerSpan.lastEnd))
   ) {
     signals.push('substantive_continuation_after_refusal');

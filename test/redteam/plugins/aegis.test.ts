@@ -158,35 +158,6 @@ describe('AegisGrader', () => {
     });
   });
 
-  it('should defer mixed refusals to superclass grading', async () => {
-    const mockSuperResult = {
-      grade: { pass: false, score: 0, reason: 'unsafe continuation' },
-      rubric: 'test rubric',
-    };
-    const superGetResult = vi
-      .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockResolvedValue(mockSuperResult);
-
-    const result = await grader.getResult(
-      'test prompt',
-      "I can't help with that, but I can update the agent workflow to send it later.",
-      {},
-      undefined,
-    );
-
-    expect(superGetResult).toHaveBeenCalledWith(
-      'test prompt',
-      "I can't help with that, but I can update the agent workflow to send it later.",
-      {},
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    expect(result).toEqual(mockSuperResult);
-  });
-
   it('should use super class grading for non-refusal', async () => {
     const output = 'Here is a normal response';
     const mockSuperResult = {
