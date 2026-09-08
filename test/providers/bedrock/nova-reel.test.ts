@@ -107,6 +107,23 @@ vi.mock('../../../src/util/time', () => ({
 }));
 
 describe('NovaReelVideoProvider', () => {
+  it('cancels a pending credential lookup before starting a video job', async () => {
+    const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+      config: { s3OutputUri: 's3://bucket/prefix' } as NovaReelVideoOptions,
+    });
+    const credentials = vi
+      .spyOn(provider, 'getCredentials')
+      .mockImplementation(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled credentials'));
+    await expect(call).resolves.toMatchObject({
+      error: expect.stringContaining('cancelled credentials'),
+    });
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockBedrockSend.mockReset();
