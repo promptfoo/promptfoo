@@ -15,6 +15,39 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each([1, 2])(
+    'grades native audio after blob extraction with concurrency %s',
+    async (maxConcurrency) => {
+      const audioData = Buffer.alloc(2048, 1).toString('base64');
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({
+        output: 'Hello.',
+        audio: { data: audioData, format: 'wav', transcript: 'Hello.' },
+      });
+      const grader: ApiProvider = {
+        ...mockGradingApiProviderPasses,
+        getAudioInputFormat: () => 'openai',
+      };
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Say hello')],
+        tests: [
+          { assert: [{ type: 'llm-rubric', value: 'The speaker sounds calm.', provider: grader }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].success).toBe(true);
+      expect(summary.results[0].response?.audio?.blobRef).toBeDefined();
+      expect(summary.results[0].response?.audio?.data).toBeUndefined();
+      const messages = JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0]);
+      expect(messages.flatMap((message: { content: unknown }) => message.content)).toContainEqual({
+        type: 'input_audio',
+        input_audio: { data: audioData, format: 'wav' },
+      });
+    },
+  );
+
   it('evaluate with expected value matching output', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

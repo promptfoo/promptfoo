@@ -849,7 +849,20 @@ providers:
 
 For audio output, set `modalities: [text, audio]` and a top-level `voice`, such as `marin`. Promptfoo sends the current Realtime API schema; if the requested modalities include audio, it selects audio output with a transcript.
 
-The result includes audio for playback and a transcript for text assertions. The built-in `llm-rubric` assertion grades the transcript; it does not automatically send the generated audio to the grader. Grading voice quality or other acoustic properties requires a custom grading integration.
+The result includes audio for playback and a transcript for text assertions. To grade tone, pacing, or pronunciation, select an audio-capable Chat Completions grader:
+
+```yaml
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: The speaker sounds calm and speaks at a steady pace.
+      provider:
+        id: openai:chat:gpt-audio-1.5
+        config:
+          modalities: [text]
+```
+
+Promptfoo sends the generated audio to this grader and requests a text grade. Text-only graders continue to evaluate the transcript. Audio must be inline base64 WAV or MP3, up to 20 MiB; the Realtime provider converts its output to WAV. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
 
 ### Session settings {#realtime-specific-configuration-options}
 

@@ -229,6 +229,7 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      audio: options?.providerResponse?.audio,
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),
