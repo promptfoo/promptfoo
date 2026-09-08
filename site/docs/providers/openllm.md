@@ -1,6 +1,6 @@
 ---
 sidebar_label: OpenLLM
-description: "Deploy and serve open-source LLMs using BentoML's OpenLLM with an OpenAI-compatible API"
+description: "Serve open-source models with BentoML OpenLLM and configure promptfoo's OpenAI provider using your server URL, API key, and deployed model name for evals."
 ---
 
 # OpenLLM

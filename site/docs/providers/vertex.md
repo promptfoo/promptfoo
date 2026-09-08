@@ -63,7 +63,7 @@ controls, which promptfoo removes automatically. Configure reasoning with
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 
 :::warning Vertex model retirement
-Google schedules `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite` for [retirement on October 20, 2026](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions). Test a supported replacement before that date, including any explicitly configured grading provider. This is the Vertex lifecycle; native Gemini API dates are separate.
+Google schedules `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite` for [retirement on October 20, 2026](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions). Google now documents Vertex AI under its [Gemini Enterprise Agent Platform name](https://docs.cloud.google.com/gemini-enterprise-agent-platform/vertex-ai-name-changes). Test a supported replacement before that date, including any explicitly configured grading provider. This is the Vertex lifecycle; native Gemini API dates are separate.
 :::
 
 ### Claude Models
@@ -227,7 +227,7 @@ Upgrading between embedding model families changes the vector space, so re-embed
 ### Image Generation Models
 
 :::note
-For Vertex Imagen requests, use the [Imagen adapter](/docs/providers/google#image-generation-models) with `google:image:<model>` and `config.projectId`; model availability depends on your Vertex project and region. For native Gemini image generation, use [Google AI Studio](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image`.
+For Vertex Imagen requests, use the [Imagen adapter](/docs/providers/google#image-generation-models) with `google:image:<model>` and `config.projectId`; model availability depends on your Vertex project and region. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
 :::
 
 ### Video Generation Models
@@ -1211,20 +1211,20 @@ For more details, see:
 
 The Vertex AI provider supports core functionality for LLM evaluation:
 
-| Feature                  | Supported | Notes                                              |
-| ------------------------ | --------- | -------------------------------------------------- |
-| Chat completions         | ✅        | Full support for Gemini, Claude, Llama             |
-| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`            |
-| Function calling / Tools | ✅        | Including MCP tools                                |
-| Search grounding         | ✅        | Google Search integration                          |
-| Safety settings          | ✅        | Full configuration                                 |
-| Structured output        | ✅        | JSON schema support                                |
-| Streaming                | ✅        | Optional via `streaming: true`                     |
-| Files API                | ❌        | Upload/manage files not supported                  |
-| Caching API              | ❌        | Context caching not supported                      |
-| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider         |
-| Video generation         | ✅        | Use `vertex:video:` provider                       |
-| Image generation         | ⚠️        | Imagen via `google:image:` with `config.projectId` |
+| Feature                  | Supported | Notes                                                                                |
+| ------------------------ | --------- | ------------------------------------------------------------------------------------ |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                               |
+| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`                                              |
+| Function calling / Tools | ✅        | Including MCP tools                                                                  |
+| Search grounding         | ✅        | Google Search integration                                                            |
+| Safety settings          | ✅        | Full configuration                                                                   |
+| Structured output        | ✅        | JSON schema support                                                                  |
+| Streaming                | ✅        | Optional via `streaming: true`                                                       |
+| Files API                | ❌        | Upload/manage files not supported                                                    |
+| Caching API              | ❌        | Context caching not supported                                                        |
+| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                           |
+| Video generation         | ✅        | Use `vertex:video:` provider                                                         |
+| Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId` |
 
 These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 

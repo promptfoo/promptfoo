@@ -69,6 +69,8 @@ manual sampling parameters such as `temperature`, `topP`, and `topK`.
 > These IDs remain in several example targets and the basic example's explicit
 > grading provider. Test replacements for both before retirement. This deadline
 > applies to Vertex, not the native Gemini API.
+> Google now documents Vertex AI under its
+> [Gemini Enterprise Agent Platform name](https://docs.cloud.google.com/gemini-enterprise-agent-platform/vertex-ai-name-changes).
 
 ## Running Examples
 
