@@ -14,6 +14,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
+import type { Tracer, TracerProvider } from '@opentelemetry/api';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from './otelConfig';
@@ -27,6 +28,69 @@ interface OtelInstance {
 // Evaluations share one SDK/configuration until its final lease is released.
 let instance: OtelInstance | null = null;
 let shutdownPromise: Promise<void> | undefined;
+
+const noopTracer = new ProxyTracerProvider().getTracer('promptfoo.inactive');
+// Track only the current synchronous forwarding stack. A host may delegate
+// back to a provider it saved before replacing the global registration.
+let forwardingProviders = new Set<TracerProvider>();
+
+// The API's ProxyTracer caches its first delegate. Keep that delegate independent
+// of any SDK generation so instrumentation can safely cache a tracer once.
+const lifecycleProvider: TracerProvider = {
+  getTracer(name, version, options): Tracer {
+    const getOwnedTracer = (): Tracer =>
+      instance && !shutdownPromise
+        ? instance.provider.getTracer(name, version, options)
+        : noopTracer;
+    const callTracer = (method: 'startSpan' | 'startActiveSpan', args: unknown[]) => {
+      const globalProvider = trace.getTracerProvider();
+      if (
+        globalProvider === lifecycleProvider ||
+        (globalProvider instanceof ProxyTracerProvider &&
+          globalProvider.getDelegate() === lifecycleProvider) ||
+        forwardingProviders.has(globalProvider)
+      ) {
+        const tracer = getOwnedTracer();
+        return Reflect.apply(tracer[method], tracer, args);
+      }
+      // Honor an embedding application's replacement provider. With no provider
+      // registered, the API returns a no-op without starting another SDK.
+      const forwarding = forwardingProviders;
+      forwarding.add(globalProvider);
+      try {
+        const tracer = globalProvider.getTracer(name, version, options);
+        const callback = args[args.length - 1];
+        if (method === 'startActiveSpan' && typeof callback === 'function') {
+          args[args.length - 1] = function (this: unknown, ...callbackArgs: unknown[]) {
+            // User callbacks may start nested spans through cached tracers. They
+            // execute outside the forwarding stack, including async callbacks.
+            const previous = forwardingProviders;
+            forwardingProviders = new Set();
+            try {
+              return Reflect.apply(callback, this, callbackArgs);
+            } finally {
+              forwardingProviders = previous;
+            }
+          };
+        }
+        return Reflect.apply(tracer[method], tracer, args);
+      } finally {
+        forwarding.delete(globalProvider);
+      }
+    };
+
+    return {
+      startSpan(...args) {
+        return callTracer('startSpan', args);
+      },
+      startActiveSpan(...args: unknown[]) {
+        // Forward all three public overloads unchanged, including callback return
+        // values and thrown errors, as the API's own ProxyTracer does.
+        return callTracer('startActiveSpan', args);
+      },
+    };
+  },
+};
 
 // Use a global symbol to track handlers across module resets (important for tests)
 const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
@@ -137,6 +201,13 @@ function startOtel(config: OtelConfig, hostOwned: boolean): void {
 
   // Register the provider globally
   provider.register({ propagator: null });
+  const registeredProvider = trace.getTracerProvider();
+  if (
+    registeredProvider instanceof ProxyTracerProvider &&
+    registeredProvider.getDelegate() === provider
+  ) {
+    registeredProvider.setDelegate(lifecycleProvider);
+  }
 
   instance = { provider, leases: 0, hostOwned };
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
@@ -214,12 +285,12 @@ async function shutdownInstance(closing: OtelInstance): Promise<void> {
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
-    // NodeTracerProvider.shutdown() leaves the API pointing at a stopped SDK.
-    // Remove only our own registration so a later evaluation can register again.
+    // Release our API registration so a host SDK can register while idle. Cached
+    // tracers retain lifecycleProvider and dispatch to the next active provider.
     const globalProvider = trace.getTracerProvider();
     if (
       globalProvider instanceof ProxyTracerProvider &&
-      globalProvider.getDelegate() === closing.provider
+      globalProvider.getDelegate() === lifecycleProvider
     ) {
       trace.disable();
     }

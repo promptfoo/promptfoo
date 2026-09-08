@@ -63,7 +63,9 @@ The default Node runtime supplies `src/node/tracingLifecycle.ts`. It keeps local
 OTLP receiver acquisition, SDK ownership, flushing, the existing export grace
 period, and receiver release together. SDK leases keep an evaluation-owned
 provider alive until its final evaluation completes. Repeated evaluations can
-register a fresh provider after shutdown. A host-initialized SDK remains owned by
+register a fresh provider after shutdown. Cached instrumentation tracers follow
+each active SDK generation and remain non-recording between evaluations when no
+host provider is registered. A host-initialized SDK remains owned by
 the host; an externally registered SDK is borrowed without installing Promptfoo
 exporters or shutdown handlers. The external host remains responsible for flushing
 and shutting down its own SDK.
