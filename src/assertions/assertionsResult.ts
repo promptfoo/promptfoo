@@ -61,6 +61,7 @@ export class AssertionsResult {
   private totalScore: number = 0;
   private totalWeight: number = 0;
   private failedReason: string | undefined;
+  private failedHardError = false;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = {};
   private namedScoreWeights: Record<string, number> = {};
@@ -96,6 +97,10 @@ export class AssertionsResult {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
     this.componentResults[index] = result;
+    this.failedHardError ||= [result, ...(result.componentResults ?? [])].some(
+      (component) =>
+        component.metadata?.assertionError === true || component.metadata?.graderError === true,
+    );
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
@@ -246,6 +251,11 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
+    }
+
+    if (this.failedHardError) {
+      this.result.pass = false;
+      this.result.reason = this.failedReason || 'Assertion validation failed';
     }
 
     return this.result;

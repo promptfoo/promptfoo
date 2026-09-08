@@ -697,18 +697,7 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
-/**
- * Splits the flattened assertion list into independent assertions and chain
- * primaries. Independent assertions can run in parallel; chain primaries are
- * dispatched once and walk their successors sequentially via
- * `executeFallbackChain`.
- *
- * A chain extends from a `fallback`-bearing primary forward through every
- * adjacent `fallback`-bearing assertion until it hits a terminal (no
- * `fallback`) or a different `assertResult` parent — the latter is the
- * defensive guard that keeps a chain from bridging two assert-sets even if a
- * future validator change loosens the rule.
- */
+/** Split flattened assertions into independent jobs and fallback chain roots. */
 function categorizeAssertions(
   assertions: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
 ): {
@@ -763,17 +752,7 @@ function sumTokensInto(target: GradingResult, source: GradingResult['tokensUsed'
   target.tokensUsed = tokens;
 }
 
-/**
- * Walks a fallback chain sequentially, returning a single GradingResult that
- * scores the chain plus a trace of every assertion that actually executed.
- *
- * Scoring contract: only the terminating assertion (the first to pass, or the
- * last to fail) contributes weight/score. Intermediate failed primaries are
- * exposed via `componentResults` and their `tokensUsed` is summed into the
- * returned result so cost telemetry remains accurate. Thrown assertion errors
- * and tagged grader failures are not mismatches: they terminate the chain as
- * errors or failures rather than allowing a fallback to mask them.
- */
+/** Execute reached chain links in order; only the terminal link contributes to scoring. */
 async function executeFallbackChain(
   asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
   startIndex: number,
@@ -790,8 +769,9 @@ async function executeFallbackChain(
 ): Promise<{
   result: GradingResult;
   finalIndex: number;
+  intermediates: Array<{ result: GradingResult; assertion: Assertion }>;
 }> {
-  const intermediateResults: GradingResult[] = [];
+  const intermediateResults: Array<{ result: GradingResult; assertion: Assertion }> = [];
   let currentIndex = startIndex;
 
   while (currentIndex < asserts.length) {
@@ -826,20 +806,20 @@ async function executeFallbackChain(
       isRedteamGuardrailFailure(result)
     ) {
       for (const earlier of intermediateResults) {
-        sumTokensInto(result, earlier.tokensUsed);
+        sumTokensInto(result, earlier.result.tokensUsed);
       }
       if (intermediateResults.length > 0) {
-        result.componentResults = [...intermediateResults, ...(result.componentResults ?? [])];
+        result.componentResults = [
+          ...intermediateResults.map(({ result: intermediate }) => intermediate),
+          ...(result.componentResults ?? []),
+        ];
       }
-      return { result, finalIndex: currentIndex };
+      return { result, finalIndex: currentIndex, intermediates: intermediateResults };
     }
 
     intermediateResults.push({
-      ...result,
-      metadata: {
-        ...result.metadata,
-        fallbackIntermediate: true,
-      },
+      assertion,
+      result: { ...result, metadata: { ...result.metadata, fallbackIntermediate: true } },
     });
     currentIndex++;
   }
@@ -1010,15 +990,14 @@ export async function runAssertions({
       });
 
       const finalAssert = asserts[chainResult.finalIndex];
-      for (const intermediateResult of chainResult.result.componentResults ?? []) {
-        if (intermediateResult.metadata?.fallbackIntermediate !== true) {
-          continue;
-        }
-
+      for (const {
+        result: intermediateResult,
+        assertion: configuredAssertion,
+      } of chainResult.intermediates) {
         finalAssert.assertResult.addNamedScores({
           result: intermediateResult,
-          metric: renderMetricName(intermediateResult.assertion?.metric, vars || test.vars || {}),
-          weight: intermediateResult.assertion?.weight,
+          metric: renderMetricName(configuredAssertion.metric, vars || test.vars || {}),
+          weight: configuredAssertion.weight,
         });
       }
       finalAssert.assertResult.addResult({

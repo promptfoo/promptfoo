@@ -66,6 +66,7 @@ describe('Fallback chains fail closed on grader outages (P1)', () => {
     name: string;
     primary: Assertion;
     options?: AtomicTestCase['options'];
+    vars?: Record<string, string>;
   }> = [
     {
       name: 'llm-rubric',
@@ -84,11 +85,33 @@ describe('Fallback chains fail closed on grader outages (P1)', () => {
       primary: { type: 'classifier', value: 'toxic', fallback: 'next' },
       options: { provider: erroringClassificationProvider },
     },
+    {
+      name: 'not-classifier',
+      primary: { type: 'not-classifier', value: 'toxic', fallback: 'next' },
+      options: { provider: erroringClassificationProvider },
+    },
+    {
+      name: 'similar array',
+      primary: { type: 'similar', value: ['first', 'second'], fallback: 'next' },
+      options: {
+        provider: {
+          id: () => 'erroring-similarity',
+          callApi: async () => ({ error: 'similarity unavailable' }),
+          callSimilarityApi: async () => ({ error: 'similarity unavailable' }),
+        },
+      },
+    },
+    {
+      name: 'context-faithfulness',
+      primary: { type: 'context-faithfulness', fallback: 'next' },
+      vars: { query: 'question', context: 'document' },
+    },
   ];
 
   it.each(graderCases)('does not let a passing fallback mask a $name grader outage', async ({
     primary,
     options,
+    vars,
   }) => {
     const assertions: Assertion[] = [
       primary,
@@ -99,7 +122,7 @@ describe('Fallback chains fail closed on grader outages (P1)', () => {
 
     const result = await runAssertions({
       prompt: 'some prompt',
-      test: createTestCase(assertions, options),
+      test: { ...createTestCase(assertions, options), ...(vars && { vars }) },
       providerResponse: mockProviderResponse,
     });
 
@@ -118,9 +141,82 @@ describe('Fallback chains fail closed on grader outages (P1)', () => {
     );
     expect(passingContains).toBe(false);
   });
+
+  it.each([
+    'factuality',
+    'model-graded-closedqa',
+  ] as const)('does not mask a malformed %s grader response', async (type) => {
+    vi.mocked(DefaultGradingProvider.callApi).mockResolvedValueOnce({
+      output: 'no structured verdict',
+    });
+    const result = await runAssertions({
+      prompt: 'some prompt',
+      test: createTestCase([
+        { type, value: 'criterion', fallback: 'next' },
+        { type: 'contains', value: 'test' },
+      ]),
+      providerResponse: mockProviderResponse,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+    expect(result.componentResults).toHaveLength(1);
+  });
+
+  it('keeps context-faithfulness errors from its second grader call terminal', async () => {
+    vi.mocked(DefaultGradingProvider.callApi)
+      .mockResolvedValueOnce({ output: 'one fact.' })
+      .mockResolvedValueOnce({ error: 'second grader unavailable' });
+    const result = await runAssertions({
+      test: {
+        ...createTestCase([
+          { type: 'context-faithfulness', fallback: 'next' },
+          { type: 'contains', value: 'test' },
+        ]),
+        vars: { query: 'question', context: 'document' },
+      },
+      providerResponse: mockProviderResponse,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+    expect(result.componentResults).toHaveLength(1);
+  });
 });
 
 describe('Fallback chains fail closed on validator hard errors', () => {
+  it('keeps an unavailable grader terminal under threshold zero and custom scoring', async () => {
+    const assertions: Assertion[] = [
+      {
+        type: 'javascript',
+        value: () => {
+          throw new Error('validator unavailable');
+        },
+        fallback: 'next',
+      },
+      { type: 'contains', value: 'test' },
+    ];
+    const test = {
+      ...createTestCase(assertions),
+      threshold: 0,
+    };
+    const result = await runAssertions({
+      test,
+      providerResponse: mockProviderResponse,
+      assertScoringFunction: async () => ({ pass: true, score: 1, reason: 'custom score' }),
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('validator unavailable');
+
+    const nestedResult = await runAssertions({
+      test: {
+        assert: [{ type: 'assert-set', threshold: 0, assert: assertions }],
+        vars: {},
+        threshold: 0,
+      },
+      providerResponse: mockProviderResponse,
+    });
+    expect(nestedResult.pass).toBe(false);
+  });
+
   it('does not let weight:0 coerce a hard-erroring primary into a masking pass', async () => {
     const assertions: Assertion[] = [
       {

@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -110,6 +110,9 @@ export async function matchesSearchRubric(
       reason?: string;
       searchResults?: unknown;
     };
+    if (typeof result.pass !== 'boolean') {
+      throw new Error('Missing search-rubric verdict');
+    }
 
     // Apply threshold if specified
     let pass = result.pass ?? false;
@@ -135,8 +138,16 @@ export async function matchesSearchRubric(
     logger.warn(
       `[search-rubric] Could not parse structured JSON from provider response, falling back to substring matching: ${(err as Error).message}`,
     );
-    const outputLower = String(resp.output).toLowerCase();
-    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
+    const verdict = String(resp.output)
+      .toLowerCase()
+      .match(/"pass"\s*:\s*(true|false)/)?.[1];
+    if (!verdict) {
+      return {
+        ...graderFail('Search rubric grader produced no verdict', resp.tokenUsage),
+        assertion,
+      };
+    }
+    const pass = verdict === 'true';
 
     return {
       pass,

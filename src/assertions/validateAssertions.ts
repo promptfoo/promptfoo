@@ -5,6 +5,7 @@ import {
   AssertionOrSetSchema,
   type AssertionSet,
   type GradingResult,
+  type Scenario,
   type TestCase,
 } from '../types/index';
 
@@ -47,11 +48,7 @@ export function isAssertionExecutionFailure(result: GradingResult): boolean {
  * breadcrumbs (e.g. `assert[2].assert[0]`) into recursive calls so users with
  * nested assert-sets can localize a validation failure.
  */
-export function validateFallbackChains(
-  assertions: AssertionOrSet[],
-  path = 'assert',
-  options: { allowTrailingFallback?: boolean } = {},
-): void {
+export function validateFallbackChains(assertions: AssertionOrSet[], path = 'assert'): void {
   for (let i = 0; i < assertions.length; i++) {
     const assertion = assertions[i];
     const here = `${path}[${i}]`;
@@ -80,14 +77,6 @@ export function validateFallbackChains(
     }
 
     if (i === assertions.length - 1) {
-      // Scenario- and data-driven suites build their test cases later and then
-      // prepend defaultTest.assert, so the final default assertion's fallback
-      // can legitimately resolve to the first scenario/data assertion at
-      // runtime. When validating such a default chain in isolation, allow a
-      // trailing fallback to terminate here instead of rejecting it as orphaned.
-      if (options.allowTrailingFallback) {
-        continue;
-      }
       throw new Error(
         `Fallback chain misconfigured at ${here} (type: ${assertion.type}): has fallback but no next assertion to fall through to`,
       );
@@ -174,13 +163,9 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   return result.data;
 }
 
-function validateFallbackChainsForConfig(
-  assertions: AssertionOrSet[],
-  context: string,
-  options: { allowTrailingFallback?: boolean } = {},
-): void {
+function validateFallbackChainsForConfig(assertions: AssertionOrSet[], context: string): void {
   try {
-    validateFallbackChains(assertions, context, options);
+    validateFallbackChains(assertions, context);
   } catch (error) {
     throw new AssertValidationError((error as Error).message);
   }
@@ -198,7 +183,11 @@ const MAX_ASSERTIONS_PER_TEST = 10000;
  * @throws AssertValidationError if any assertion is malformed
  */
 
-export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
+export function validateAssertions(
+  tests: TestCase[],
+  defaultTest?: Partial<TestCase>,
+  scenarios?: Scenario[],
+): void {
   const parsedDefaultAssertions: AssertionOrSet[] = [];
 
   // Validate defaultTest assertions
@@ -223,9 +212,22 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
     throw new AssertValidationError('tests must be an array');
   }
 
+  const validationTests = [
+    ...tests,
+    ...(scenarios?.flatMap((scenario) =>
+      (scenario.config || []).flatMap((data) =>
+        (scenario.tests || [{}]).map((test) => ({
+          ...test,
+          options: { ...data.options, ...test.options },
+          assert: [...(data.assert || []), ...(test.assert || [])],
+        })),
+      ),
+    ) || []),
+  ];
+
   // Validate test case assertions
-  for (let testIdx = 0; testIdx < tests.length; testIdx++) {
-    const test = tests[testIdx];
+  for (let testIdx = 0; testIdx < validationTests.length; testIdx++) {
+    const test = validationTests[testIdx];
     const parsedAssertions: AssertionOrSet[] = [];
     if (test.assert !== undefined) {
       if (!Array.isArray(test.assert)) {
@@ -254,13 +256,7 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
     }
   }
 
-  if (tests.length === 0 && parsedDefaultAssertions.length > 0) {
-    // No concrete test cases are present yet: scenario- and data-driven suites
-    // build them later and prepend these default assertions. A trailing default
-    // fallback therefore resolves to a runtime scenario/data assertion, so
-    // validate structure but allow the chain to terminate with a fallback.
-    validateFallbackChainsForConfig(parsedDefaultAssertions, 'defaultTest.assert', {
-      allowTrailingFallback: true,
-    });
+  if (validationTests.length === 0 && parsedDefaultAssertions.length > 0) {
+    validateFallbackChainsForConfig(parsedDefaultAssertions, 'defaultTest.assert');
   }
 }

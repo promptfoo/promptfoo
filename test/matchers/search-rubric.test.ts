@@ -161,6 +161,11 @@ describe('matchesSearchRubric', () => {
         reason: 'verdict includes "pass": true',
       }),
     );
+
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output: 'no verdict' });
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+    );
   });
 
   it('throws when no web search provider can be resolved', async () => {

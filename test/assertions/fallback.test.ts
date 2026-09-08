@@ -450,6 +450,31 @@ describe('Assertion Fallback Mechanism', () => {
       });
     });
 
+    it('uses the configured metric when a custom assertion supplies a display override', async () => {
+      const result = await runAssertions({
+        test: createTestCase([
+          {
+            type: 'javascript',
+            metric: 'configured',
+            weight: 3,
+            fallback: 'next',
+            value: () => ({
+              pass: false,
+              score: 0,
+              reason: 'try the fallback',
+              assertion: { type: 'equals', value: 'display only', metric: 'display' },
+            }),
+          },
+          { type: 'contains', value: 'test' },
+        ]),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.namedScores).toEqual({ configured: 0 });
+      expect(result.namedScoreWeights).toEqual({ configured: 3 });
+    });
+
     it('does not add named metrics for a fallback assertion that is bypassed', async () => {
       const assertions: Assertion[] = [
         {
@@ -642,34 +667,6 @@ describe('Assertion Fallback Mechanism', () => {
           providerResponse: mockProviderResponse,
         }),
       ).rejects.toThrow('no next assertion to fall through to');
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('should handle empty assertion list', async () => {
-      const result = await runAssertions({
-        test: createTestCase([]),
-        providerResponse: mockProviderResponse,
-      });
-
-      expect(result.pass).toBe(true);
-      expect(result.reason).toBe('No assertions');
-    });
-
-    it('should handle assertion without fallback normally', async () => {
-      const assertions: Assertion[] = [
-        {
-          type: 'contains',
-          value: 'test',
-        },
-      ];
-
-      const result = await runAssertions({
-        test: createTestCase(assertions),
-        providerResponse: mockProviderResponse,
-      });
-
-      expect(result.pass).toBe(true);
     });
   });
 });

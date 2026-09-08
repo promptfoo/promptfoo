@@ -27,7 +27,7 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -350,7 +350,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 
   // Fallback to old pattern matching format
@@ -359,7 +359,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 }
 
@@ -403,25 +403,20 @@ export async function matchesClosedQa(
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
-  try {
-    const pass = resp.output.trimEnd().endsWith('Y');
-    let reason;
-    if (pass) {
-      reason = `The submission meets the criterion:\n${resp.output}`;
-    } else if (resp.output.trimEnd().endsWith('N')) {
-      reason = `The submission does not meet the criterion:\n${resp.output}`;
-    } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
-    }
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
-    };
-  } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+  const verdictText = resp.output.trimEnd();
+  if (!verdictText.endsWith('Y') && !verdictText.endsWith('N')) {
+    return graderFail(
+      `Model grader produced a malformed response:\n${resp.output}`,
+      resp.tokenUsage,
+    );
   }
+  const pass = verdictText.endsWith('Y');
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: `The submission ${pass ? 'meets' : 'does not meet'} the criterion:\n${resp.output}`,
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+  };
 }
 
 /**

@@ -227,16 +227,15 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).toThrow(/tests\[0\]\.assert\[0\].*no next assertion/);
     });
 
-    it('allows an isolated defaultTest chain to terminate with a trailing fallback', () => {
-      // Scenario- and data-driven suites are validated with an empty top-level
-      // `tests` array; the concrete test cases (and their assertions) are built
-      // later, then defaultTest.assert is prepended. A trailing default fallback
-      // therefore resolves to the first scenario/data assertion at runtime, so
-      // it must not be rejected as orphaned here.
+    it('requires a real scenario assertion to terminate a trailing default fallback', () => {
+      const defaultTest = {
+        assert: [{ type: 'equals' as const, value: 'scenario primary', fallback: 'next' as const }],
+      };
+      expect(() => validateAssertions([], defaultTest)).toThrow(/no next assertion/);
       expect(() =>
-        validateAssertions([], {
-          assert: [{ type: 'equals', value: 'scenario primary', fallback: 'next' }],
-        }),
+        validateAssertions([], defaultTest, [
+          { config: [{}], tests: [{ assert: [{ type: 'contains', value: 'scenario' }] }] },
+        ]),
       ).not.toThrow();
     });
 
