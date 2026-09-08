@@ -52,14 +52,10 @@ class ProviderRegistry {
 
   async adopt(provider: object | null): Promise<void> {
     if (provider && hasCleanupHook(provider)) {
-      await this.awaitCleanup(provider);
+      while (this.cleanupsByProvider.has(provider)) {
+        await this.cleanupsByProvider.get(provider);
+      }
       this.register(provider);
-    }
-  }
-
-  private async awaitCleanup(provider: object): Promise<void> {
-    while (this.cleanupsByProvider.has(provider)) {
-      await this.cleanupsByProvider.get(provider);
     }
   }
 
@@ -86,7 +82,9 @@ class ProviderRegistry {
     for (const provider of scopeProviders) {
       // Teardown can outlive the previous scope's registration. Do not let a new
       // evaluation use the same instance until that teardown has finished.
-      await this.awaitCleanup(provider);
+      while (this.cleanupsByProvider.has(provider)) {
+        await this.cleanupsByProvider.get(provider);
+      }
       let owners = this.scopesByProvider.get(provider);
       if (!owners) {
         owners = new Set();
