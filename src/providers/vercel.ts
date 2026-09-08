@@ -231,7 +231,10 @@ function createTimeoutController(
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   return {
     signal: abortSignal ? AbortSignal.any([controller.signal, abortSignal]) : controller.signal,
-    cleanup: () => clearTimeout(timeoutId),
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    },
   };
 }
 

@@ -522,6 +522,9 @@ describe('VercelAiProvider', () => {
       expect(await provider.callApi('Hello')).toEqual({ error: 'API call error: Stream failed' });
       expect(await provider.callApi('Hello')).toEqual({ error: 'API call error: Stream failed' });
       expect(streamText).toHaveBeenCalledTimes(2);
+      expect(
+        vi.mocked(streamText).mock.calls.every(([options]) => options.abortSignal?.aborted),
+      ).toBe(true);
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
