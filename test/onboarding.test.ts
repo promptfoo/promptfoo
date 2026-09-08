@@ -259,6 +259,7 @@ describe('createDummyFiles', () => {
 
   it('offers current Gemini Flash models during interactive onboarding', async () => {
     const googleModels = [
+      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
@@ -274,7 +275,7 @@ describe('createDummyFiles', () => {
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
             value: googleModels,
           }),
         ]),

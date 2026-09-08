@@ -78,15 +78,19 @@ describe('normalizeResponsesInput', () => {
     expect(normalizeResponsesInput(input)).toEqual(input);
   });
 
-  it('does not touch non-message items that carry their own type', () => {
-    // Function calls, tool outputs and reasoning items are input items, not chat messages;
-    // rewriting their shape would corrupt the request.
+  it('normalizes explicitly typed message items but preserves other typed input items', () => {
+    // Responses input messages commonly carry `type: "message"`, while function calls,
+    // tool outputs and reasoning items are not chat messages and must stay verbatim.
     const input = [
       { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{}' },
       { type: 'function_call_output', call_id: 'call_1', output: 'done' },
-      { type: 'message', role: 'user', content: [{ type: 'text', text: 'untouched' }] },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
     ];
-    expect(normalizeResponsesInput(input)).toEqual(input);
+    expect(normalizeResponsesInput(input)).toEqual([
+      { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'done' },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+    ]);
   });
 
   it('leaves string content and unrecognized parts alone', () => {

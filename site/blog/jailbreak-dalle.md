@@ -23,6 +23,12 @@ import ImageJailbreakPreview from '@site/src/components/ImageJailbreakPreview';
 
 # Automated jailbreaking techniques with Dall-E
 
+:::note Historical post
+
+This post preserves results and instructions from 2024. OpenAI [retired DALL·E 2 and DALL·E 3](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The quickstart below is no longer runnable, and its `redteam-dalle` template and example configuration link are no longer available. See the [current OpenAI image models](/docs/providers/openai#generating-images) for new evals.
+
+:::
+
 We all know that image models like OpenAI's Dall-E can be jailbroken to generate violent, disturbing, and offensive images. It turns out this process can be fully automated.
 
 This post shows how to automatically discover one-shot jailbreaks with open-source [LLM red teaming](/docs/red-team) and includes a collection of examples.

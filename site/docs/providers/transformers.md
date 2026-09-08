@@ -59,13 +59,13 @@ These options apply to both embedding and text generation providers:
 providers:
   - id: transformers:feature-extraction:Xenova/bge-small-en-v1.5
     config:
-      prefix: 'query: ' # Required for BGE, E5 models
-      pooling: mean # 'mean', 'cls', 'first_token', 'eos', 'last_token', 'none'
+      prefix: 'Represent this sentence for searching relevant passages: ' # BGE retrieval queries
+      pooling: cls # BGE v1.5 uses the CLS token embedding
       normalize: true # L2 normalize embeddings
       dtype: q8
 ```
 
-**Model prefixes:** BGE and E5 models require `prefix: 'query: '` for queries or `prefix: 'passage: '` for documents. MiniLM models need no prefix.
+**Model prefixes:** Follow the model card for your embedding model. [BGE v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) uses the instruction above for retrieval queries; documents need no prefix. [E5 v2](https://huggingface.co/intfloat/e5-small-v2) uses `prefix: 'query: '` for queries and `prefix: 'passage: '` for documents. MiniLM models need no prefix.
 
 :::tip
 `transformers:embeddings:<model>` is an alias for `transformers:feature-extraction:<model>`.

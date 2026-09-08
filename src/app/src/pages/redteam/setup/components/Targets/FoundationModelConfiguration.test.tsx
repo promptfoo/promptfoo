@@ -126,7 +126,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4',
+      'openai:gpt-6-astra, openai:gpt-5.6-sol, openai:gpt-5.5',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -251,7 +251,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4',
+      'openai:gpt-6-astra, openai:gpt-5.6-sol, openai:gpt-5.5',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
@@ -272,7 +272,7 @@ describe('FoundationModelConfiguration', () => {
     modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'vertex:gemini-3.7-flash, vertex:gemini-3.5-flash-lite',
+      'vertex:gemini-3.8-flash, vertex:gemini-3.5-flash-lite',
     );
     documentationLink = screen.getByRole('link', { name: /Google Vertex AI documentation/ });
     expect(documentationLink).toHaveAttribute(
@@ -293,7 +293,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'google:gemini-3.7-flash, google:gemini-3.5-flash-lite',
+      'google:gemini-3.8-flash, google:gemini-3.5-flash-lite',
     );
 
     const documentationLink = screen.getByRole('link', { name: /Google AI Studio documentation/ });

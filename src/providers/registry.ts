@@ -127,9 +127,10 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
-// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
-// provider configs while allowing every tier through an explicit openai:chat: prefix.
-const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+// Preserve GPT-5.6 preview routing and default Astra to Responses, which supports its tools.
+// Each model also supports explicit openai:chat: requests.
+const OPENAI_BARE_RESPONSES_MODELS = new Set([
+  'gpt-6-astra',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
@@ -158,7 +159,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createAbliterationProvider(providerPath, {
-        config: providerOptions,
+        providerOptions,
         env: context.env,
       });
     },
@@ -206,7 +207,7 @@ export const providerMap: ProviderFactory[] = [
       const { OpenCodeSDKProvider } = await import('./opencode-sdk');
 
       // opencode:sdk or opencode - uses OpenCode's configured default model
-      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
+      // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
         id: providerPath,
@@ -795,7 +796,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
       if (modelType === 'chat') {
         return new LocalAiChatProvider(modelName, providerOptions);
       }
@@ -805,7 +806,7 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new LocalAiEmbeddingProvider(modelName, providerOptions);
       }
-      return new LocalAiChatProvider(modelType, providerOptions);
+      return new LocalAiChatProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {
@@ -1066,7 +1067,7 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+      if (OPENAI_BARE_RESPONSES_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
@@ -1294,16 +1295,9 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('cometapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const { createCometApiProvider } = await import('./cometapi');
-      return createCometApiProvider(providerPath, {
-        ...providerOptions,
-        env: context.env,
-      });
+      return createCometApiProvider(providerPath, providerOptions);
     },
   },
   {

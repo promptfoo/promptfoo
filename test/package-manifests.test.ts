@@ -12,7 +12,7 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-type PackageLockManifest<T = PackageManifest & { version?: string }> = {
+type PackageLockManifest<T = PackageManifest & { version?: string; optional?: boolean }> = {
   packages: Record<string, T>;
 };
 
@@ -22,7 +22,7 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.35.3';
+const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
@@ -100,6 +100,59 @@ function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: str
 }
 
 describe('package manifests', () => {
+  it.each([
+    ['src/app/package.json', ['dedent', 'fast-deep-equal', 'zod']],
+    ['site/package.json', ['ajv']],
+  ] as const)('declares shared imports in their owning workspace: %s', (manifest, dependencies) => {
+    const root = readPackageJson<PackageManifest>('package.json');
+    const workspace = readPackageJson<PackageManifest>(manifest);
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const workspacePath = path.posix.dirname(manifest);
+
+    for (const dependency of dependencies) {
+      const range = workspace.devDependencies?.[dependency];
+      expect(range, `${manifest} must declare its direct ${dependency} import`).toBeDefined();
+      expect(range).toBe(root.dependencies?.[dependency]);
+      expect(lock.packages[workspacePath].devDependencies?.[dependency]).toBe(range);
+      expect(satisfies(lock.packages[`node_modules/${dependency}`].version!, range!)).toBe(true);
+    }
+  });
+
+  it('declares browser matcher types alongside the app browser test runner', () => {
+    const app = readPackageJson<PackageManifest>('src/app/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const range = app.devDependencies?.['@vitest/browser'];
+    const browser = lock.packages['node_modules/@vitest/browser'];
+
+    expect(range, 'browser smoke tests reference @vitest/browser/matchers types').toBeDefined();
+    expect(range).toBe(app.devDependencies?.vitest);
+    expect(range).toBe(app.devDependencies?.['@vitest/browser-playwright']);
+    expect(lock.packages['src/app'].devDependencies?.['@vitest/browser']).toBe(range);
+    expect(browser?.version).toBeDefined();
+    expect(satisfies(browser.version!, range!)).toBe(true);
+    expect(browser.version).toBe(lock.packages['node_modules/vitest'].version);
+  });
+
+  it('declares concrete Docusaurus type and theme imports alongside the docs build', () => {
+    const site = readPackageJson<PackageManifest>('site/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const coreRange = site.devDependencies?.['@docusaurus/core'];
+    const coreVersion = lock.packages['node_modules/@docusaurus/core'].version;
+
+    for (const dependency of [
+      '@docusaurus/plugin-content-blog',
+      '@docusaurus/theme-common',
+      '@docusaurus/types',
+    ]) {
+      const range = site.devDependencies?.[dependency];
+      expect(range, `${dependency} is a package import, not a virtual alias`).toBeDefined();
+      expect(range).toBe(coreRange);
+      expect(lock.packages.site.devDependencies?.[dependency]).toBe(range);
+      expect(lock.packages[`node_modules/${dependency}`].version).toBe(coreVersion);
+      expect(satisfies(coreVersion!, range!)).toBe(true);
+    }
+  });
+
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
@@ -487,9 +540,44 @@ describe('package manifests', () => {
       devDependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     }>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
 
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+    expect(packageLock.packages[''].dependencies?.sharp).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+  });
+
+  it('keeps the Slack SDK optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const sdkName = '@slack/web-api';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+
+    expect(sdkRange).toBe('^8.1.1');
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(packageLock.packages[`node_modules/${sdkName}`].optional).toBe(true);
+    expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
+      true,
+    );
+  });
+
+  it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const binaryName = '@rollup/rollup-linux-x64-gnu';
+    const binaryRange = packageJson.optionalDependencies?.[binaryName];
+    const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+    expect(binaryRange).toBeDefined();
+    expect(minVersion(binaryRange!)?.compare('4.63.1')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBe(binaryRange);
+    expect(binaryPackage.optional).toBe(true);
+    expect(satisfies(binaryPackage.version!, binaryRange!)).toBe(true);
   });
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
@@ -499,25 +587,40 @@ describe('package manifests', () => {
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
     const agentVersion = packageJson.devDependencies?.[agentName];
+    const sdkPackage = packageLock.packages[`node_modules/${sdkName}`];
     const agentPackage = packageLock.packages[`node_modules/${agentName}`];
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(sdkPackage, 'the Anthropic SDK must have a lockfile entry').toBeDefined();
+    expect(agentPackage, 'the Anthropic agent SDK must have a lockfile entry').toBeDefined();
     expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
-    expect(resolvedSdkVersion).toBeDefined();
-    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
-    expect(agentPackage.version).toBe(agentVersion);
+    expect(sdkPackage.version, 'the Anthropic SDK must have a resolved version').toBeDefined();
+    expect(
+      satisfies(sdkPackage.version as string, sdkVersion as string),
+      'the resolved Anthropic SDK must satisfy its declared dependency range',
+    ).toBe(true);
+    expect(
+      agentPackage.version,
+      'the Anthropic agent SDK must have a resolved version',
+    ).toBeDefined();
+    expect(
+      satisfies(agentPackage.version as string, agentVersion as string),
+      'the resolved Anthropic agent SDK must satisfy its declared dependency range',
+    ).toBe(true);
 
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
-      expect(binaryVersion).toBe(agentVersion);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+      const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+      expect(binaryVersion).toBe(agentPackage.version);
+      expect(binaryPackage, `${binaryName} must have a lockfile entry`).toBeDefined();
+      expect(binaryPackage.version).toBe(agentPackage.version);
     }
   });
 
@@ -532,7 +635,7 @@ describe('package manifests', () => {
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
-    expect(minVersion(developmentRange!)?.compare('5.10.1')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(clientVersion).toBeDefined();
@@ -668,14 +771,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.13.2')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.3')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.13.2',
+        '4.13.3',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -718,12 +821,12 @@ describe('package manifests', () => {
     const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(installedVersion).toBeDefined();
-    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(installedVersion!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });
@@ -1073,6 +1176,10 @@ describe('package manifests', () => {
     expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
     expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(
+      validRange(parserTransportRange as string),
+      'the parser transport dependency must declare a valid semver range',
+    ).not.toBeNull();
     expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
@@ -1086,7 +1193,10 @@ describe('package manifests', () => {
     expect(
       subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
     ).toBe(true);
-    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+    expect(
+      subset(parserTransportRange as string, PATCHED_UNDICI_RANGE),
+      `the parser transport dependency must not allow vulnerable undici ${parserTransportRange}`,
+    ).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
