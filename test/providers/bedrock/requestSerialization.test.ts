@@ -1,4 +1,8 @@
-import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
+import {
+  BedrockAgentRuntimeClient,
+  type KnowledgeBaseVectorSearchConfiguration,
+  type RetrievalFilter,
+} from '@aws-sdk/client-bedrock-agent-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
@@ -98,6 +102,125 @@ describe('Bedrock agent-runtime SDK serialization', () => {
       expect(handle).toHaveBeenCalledTimes(1);
       const request = JSON.parse(String(handle.mock.calls[0][0].body));
       expect(request.sessionState).toEqual(sessionState);
+    },
+  );
+
+  it.each([
+    { equals: { key: 'category', value: 'technical' } },
+    {
+      andAll: [
+        { equals: { key: 'documentType', value: 'manual' } },
+        { equals: { key: 'product', value: 'widget-pro' } },
+      ],
+    },
+    {
+      orAll: [
+        { equals: { key: 'category', value: 'technical' } },
+        { equals: { key: 'category', value: 'reference' } },
+      ],
+    },
+    { notEquals: { key: 'archived', value: false } },
+    { greaterThan: { key: 'revision', value: 0 } },
+    { greaterThanOrEquals: { key: 'revision', value: 0 } },
+    { lessThan: { key: 'revision', value: 10 } },
+    { lessThanOrEquals: { key: 'revision', value: 10 } },
+    { in: { key: 'category', value: ['technical', 'reference'] } },
+    { notIn: { key: 'category', value: ['obsolete'] } },
+    { startsWith: { key: 'product', value: 'widget' } },
+    { listContains: { key: 'products', value: 'widget-pro' } },
+    { stringContains: { key: 'product', value: 'widget' } },
+  ] satisfies RetrievalFilter[])(
+    'preserves the SDK retrieval filter %j and other search options',
+    async (filter) => {
+      const vectorSearchConfiguration: KnowledgeBaseVectorSearchConfiguration = {
+        numberOfResults: 10,
+        overrideSearchType: 'HYBRID',
+        filter,
+        implicitFilterConfiguration: {
+          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/local-filter-model',
+          metadataAttributes: [
+            { key: 'category', type: 'STRING', description: 'Document category' },
+          ],
+        },
+        rerankingConfiguration: {
+          type: 'BEDROCK_RERANKING_MODEL',
+          bedrockRerankingConfiguration: {
+            modelConfiguration: {
+              modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/local-reranker',
+              additionalModelRequestFields: { localFixture: true },
+            },
+            numberOfRerankedResults: 2,
+          },
+        },
+      };
+      const provider = new AwsBedrockAgentsProvider('AGENT12345', {
+        config: {
+          agentId: 'AGENT12345',
+          agentAliasId: 'ALIAS12345',
+          sessionId: 'local-fixture-session',
+          sessionState: { sessionAttributes: { topic: 'garden' } },
+          knowledgeBaseConfigurations: [
+            {
+              knowledgeBaseId: 'KB12345678',
+              retrievalConfiguration: { vectorSearchConfiguration },
+            },
+          ],
+        },
+      });
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getAgentRuntimeClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(request.sessionState.sessionAttributes).toEqual({ topic: 'garden' });
+      expect(
+        request.sessionState.knowledgeBaseConfigurations[0].retrievalConfiguration
+          .vectorSearchConfiguration,
+      ).toEqual(vectorSearchConfiguration);
+      expect(vectorSearchConfiguration.filter).toEqual(filter);
+    },
+  );
+
+  it.each([
+    {
+      filter: { equals: { key: 'category', value: 'technical' }, notEquals: undefined },
+      expected: { equals: { key: 'category', value: 'technical' } },
+    },
+    {
+      filter: { $unknown: ['futureOperator', { key: 'category', value: 'technical' }] },
+      expected: { futureOperator: { key: 'category', value: 'technical' } },
+    },
+  ] satisfies { filter: RetrievalFilter; expected: unknown }[])(
+    'preserves SDK union compatibility for $filter',
+    async ({ filter, expected }) => {
+      const provider = new AwsBedrockAgentsProvider('AGENT12345', {
+        config: {
+          agentId: 'AGENT12345',
+          agentAliasId: 'ALIAS12345',
+          sessionId: 'local-fixture-session',
+          knowledgeBaseConfigurations: [
+            {
+              knowledgeBaseId: 'KB12345678',
+              retrievalConfiguration: { vectorSearchConfiguration: { filter } },
+            },
+          ],
+        },
+      });
+      const { client, handle } = captureRequest();
+      vi.spyOn(provider, 'getAgentRuntimeClient').mockResolvedValue(client);
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result.error).toContain('Local serialization fixture');
+      expect(handle).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(handle.mock.calls[0][0].body));
+      expect(
+        request.sessionState.knowledgeBaseConfigurations[0].retrievalConfiguration
+          .vectorSearchConfiguration.filter,
+      ).toEqual(expected);
     },
   );
 

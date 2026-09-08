@@ -196,6 +196,53 @@ describe('AwsBedrockAgentsProvider', () => {
     expect(mockSend.mock.calls[0][0].sessionState).toBeUndefined();
   });
 
+  it.each([
+    { category: 'technical' },
+    { documentType: 'manual', product: 'widget-pro' },
+    {},
+    null,
+    [],
+    'category',
+    { equals: 'technical' },
+    { equals: { key: 'category' } },
+    { equals: { key: 'category', value: 'technical' }, product: 'widget-pro' },
+    {
+      equals: { key: 'category', value: 'technical' },
+      notEquals: { key: 'product', value: 'old' },
+    },
+    { andAll: [{ equals: { key: 'category', value: 'technical' } }] },
+    { orAll: [{ equals: { key: 'category', value: 'technical' } }, { product: 'widget-pro' }] },
+  ])(
+    'rejects unsupported retrieval filter %j before client creation or cache lookup',
+    async (filter) => {
+      const provider = new AwsBedrockAgentsProvider('agent-123', {
+        config: {
+          agentId: 'agent-123',
+          agentAliasId: 'alias-456',
+          knowledgeBaseConfigurations: [
+            {
+              knowledgeBaseId: 'kb-123',
+              retrievalConfiguration: { vectorSearchConfiguration: { filter: filter as any } },
+            },
+          ],
+        },
+      });
+      const getClient = vi.spyOn(provider, 'getAgentRuntimeClient');
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response' }));
+
+      const result = await provider.callApi('Describe a quiet garden');
+
+      expect(result).toEqual({
+        error:
+          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals or andAll. Flat metadata maps are not supported.',
+      });
+      expect(getClient).not.toHaveBeenCalled();
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
@@ -238,7 +285,7 @@ describe('AwsBedrockAgentsProvider', () => {
             retrievalConfiguration: {
               vectorSearchConfiguration: {
                 filter: {
-                  sensitiveFilter: 'SECRET_FILTER_VALUE',
+                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
                 },
               },
             },
@@ -279,7 +326,7 @@ describe('AwsBedrockAgentsProvider', () => {
             retrievalConfiguration: {
               vectorSearchConfiguration: {
                 filter: {
-                  sensitiveFilter: 'SECRET_FILTER_VALUE',
+                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
                 },
               },
             },
