@@ -72,7 +72,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
 | [similar](#similar)                                             | Embedding similarity is above threshold                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
-| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
+| [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
@@ -1106,6 +1106,26 @@ Common patterns:
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
 
+All three trace assertions also accept an optional `attributes` object. Use it when different tools or agents emit the same span name:
+
+```yaml
+assert:
+  - type: trace-span-count
+    value:
+      pattern: '*'
+      attributes:
+        gen_ai.tool.name: search
+      min: 1
+      max: 3
+  - type: trace-span-duration
+    value:
+      attributes:
+        gen_ai.tool.name: search
+      max: 2000
+```
+
+A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`; duration and error assertions retain their existing behavior when no spans match.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
@@ -1140,6 +1160,7 @@ assert:
 Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- `attributes` (optional): Filter by exact span attributes, as described under [Trace-Span-Count](#trace-span-count)
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
@@ -1190,6 +1211,7 @@ Configuration options:
 - `max_count`: Maximum number of error spans allowed
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
+- `attributes`: Filter by exact span attributes; `max_percentage` uses only the matching spans
 
 The assertion provides detailed error information including span names and error messages to help with debugging.
 

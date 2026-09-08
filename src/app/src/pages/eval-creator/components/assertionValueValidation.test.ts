@@ -267,6 +267,51 @@ describe('structured value assertions', () => {
       ),
     ).toBeUndefined();
   });
+
+  it.each([
+    'trace-span-count',
+    'not-trace-span-count',
+    'trace-span-duration',
+    'not-trace-span-duration',
+    'trace-error-spans',
+    'not-trace-error-spans',
+  ] as const)('validates attribute filters before running %s', (type) => {
+    const value = { pattern: '*', max: 250 };
+    for (const attributes of [
+      [],
+      null,
+      'search',
+      new Date(),
+      new Map(),
+      { tool: [] },
+      { tool: {} },
+      { tool: undefined },
+      { count: Infinity },
+      { count: NaN },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toMatch(/attribute filters/);
+    }
+    for (const attributes of [
+      undefined,
+      {},
+      Object.create(null),
+      { 'gen_ai.tool.name': 'search', cached: false, count: 0 },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toBeUndefined();
+    }
+  });
+
+  it('preserves optional and numeric trace error limits', () => {
+    for (const value of [undefined, 0, 2]) {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'trace-error-spans', value })),
+      ).toBeUndefined();
+    }
+  });
 });
 
 describe('required string assertions', () => {
