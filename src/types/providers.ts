@@ -159,14 +159,14 @@ export interface ProviderOperations {
 
 export type ProviderCapability = keyof ProviderOperations;
 
-const inheritedProviderCapabilities = new WeakSet<readonly ProviderCapability[]>();
+const inheritedProviderCapabilities = Symbol.for('promptfoo.inheritedProviderCapabilities');
 
 /** Mark only the built-in declaration as inherited; a subclass assignment remains explicit. */
 export function inheritProviderCapabilities<T extends readonly ProviderCapability[]>(
   declared: T,
 ): T {
   const inherited = [...declared] as unknown as T;
-  inheritedProviderCapabilities.add(inherited);
+  Object.defineProperty(inherited, inheritedProviderCapabilities, { value: true });
   return inherited;
 }
 
@@ -191,7 +191,9 @@ function hasSubclassCapabilityOverride(provider: object, capability: ProviderCap
     if (hasDeclaration) {
       const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
       return (
-        overridden && Array.isArray(capabilities) && inheritedProviderCapabilities.has(capabilities)
+        overridden &&
+        Array.isArray(capabilities) &&
+        Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)
       );
     }
     prototype = Object.getPrototypeOf(prototype);
@@ -221,7 +223,10 @@ export function hasProviderCapability<K extends ProviderCapability>(
         provider.promptfooCapabilities.includes(capability)) ||
       hasSubclassCapabilityOverride(provider, capability) ||
       (Array.isArray(provider.promptfooCapabilities) &&
-        inheritedProviderCapabilities.has(provider.promptfooCapabilities) &&
+        Object.prototype.hasOwnProperty.call(
+          provider.promptfooCapabilities,
+          inheritedProviderCapabilities,
+        ) &&
         delegate !== provider &&
         hasProviderCapability(delegate, capability)))
   );

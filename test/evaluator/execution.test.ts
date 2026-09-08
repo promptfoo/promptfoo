@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as blobExtractor from '../../src/blobs/extractor';
 import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
@@ -34,6 +35,35 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
+  it('stops waiting for binary storage after evaluation cancellation', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const pendingStore = createDeferred<ProviderResponse>();
+    const extraction = vi
+      .spyOn(blobExtractor, 'extractAndStoreBinaryData')
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return pendingStore.promise;
+      });
+    const suite: TestSuite = {
+      providers: [
+        { id: () => 'binary-provider', callApi: vi.fn().mockResolvedValue({ output: 'ready' }) },
+      ],
+      prompts: [toPrompt('hello')],
+      tests: [{}],
+    };
+    const run = evaluate(suite, new Eval({}), { abortSignal: controller.signal });
+    try {
+      await started.promise;
+      controller.abort(new Error('cancelled storage'));
+      await run.catch(() => undefined);
+      expect(extraction).toHaveBeenCalled();
+    } finally {
+      pendingStore.resolve({ output: 'ready' });
+      extraction.mockRestore();
+    }
+  });
+
   it('stops waiting for a pending response transform and skips later transforms on cancellation', async () => {
     const controller = new AbortController();
     const pendingTransform = createDeferred<string>();
@@ -1246,7 +1276,12 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Test prompt {{topic}}')],
       tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
         vars: { topic },
-        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
+        assert: [
+          { type: 'llm-rubric', value: `Judge ${topic}`, provider: judge },
+          ...(topic === 'alpha'
+            ? [{ type: 'select-best' as const, value: 'Choose best', provider: judge }]
+            : []),
+        ],
       })),
     };
 

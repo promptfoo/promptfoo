@@ -164,6 +164,18 @@ it('honors a subclass capability exclusion even when it replaces a stub', () => 
   expect(hasProviderCapability(provider, 'callApi')).toBe(false);
 });
 
+it('recognizes an inherited subclass override through a second package copy', async () => {
+  class CrossCopyEmbedding extends OpenAiEmbeddingProvider {
+    override async callApi() {
+      return { output: 'fixture text' };
+    }
+  }
+  const provider = new CrossCopyEmbedding('fixture');
+  vi.resetModules();
+  const otherCopy = await import('../../src/types/providers');
+  expect(otherCopy.hasProviderCapability(provider, 'callApi')).toBe(true);
+});
+
 it('honors an explicit subclass declaration that reuses the exported tuple', () => {
   class RestrictedEmbeddingProvider extends OpenAiEmbeddingProvider {
     override readonly promptfooCapabilities = OpenAiEmbeddingProvider.declaredProviderCapabilities;
