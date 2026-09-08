@@ -2,6 +2,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -331,6 +332,23 @@ describe('Provider Registry', () => {
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
+
+    it.each(['llamaapi:vendor:model', 'llamaapi:chat:vendor:model'])(
+      'routes %s uniquely to the Llama API provider',
+      async (providerPath) => {
+        const matchingFactories = providerMap.filter((factory) => factory.test(providerPath));
+        expect(matchingFactories).toHaveLength(1);
+
+        const provider = await matchingFactories[0].create(
+          providerPath,
+          { ...mockProviderOptions, id: undefined },
+          mockContext,
+        );
+
+        expect(provider).toBeInstanceOf(LlamaApiProvider);
+        expect(provider.id()).toBe('llamaapi:vendor:model');
+      },
+    );
 
     describe.each(['muse-spark-1.1', 'muse-spark-1.3', 'muse-spark-1.3-contributor'])(
       'Meta model %s',
