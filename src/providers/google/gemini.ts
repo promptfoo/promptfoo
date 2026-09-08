@@ -176,6 +176,9 @@ export function parseGeminiContent(
     if (current.finishReason === 'STOP' && !current.content?.parts) {
       continue;
     }
+    if (facade === 'vertex' && !current.content?.parts) {
+      return respond({ error: `No output found in response: ${JSON.stringify(data)}` });
+    }
     if (facade === 'ai-studio' || current.content?.parts) {
       candidate = current;
       output = mergeParts(output, formatCandidateContents(current));

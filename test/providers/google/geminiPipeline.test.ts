@@ -13,6 +13,17 @@ import type { GeminiApiResponse } from '../../../src/providers/google/util';
 
 const facades = ['ai-studio', 'unified', 'vertex'] as const;
 
+it('rejects a malformed Vertex candidate after partial stream output', () => {
+  const data = [
+    { candidates: [{ content: { parts: [{ text: 'partial' }] } }] },
+    { candidates: [{}] },
+  ] as GeminiApiResponse;
+  expect(parseGeminiContent(data, 'vertex')).toMatchObject({
+    kind: 'response',
+    response: { error: expect.stringContaining('No output found in response') },
+  });
+});
+
 it.each([
   [
     'AI Studio',
