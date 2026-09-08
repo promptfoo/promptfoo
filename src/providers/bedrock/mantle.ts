@@ -11,6 +11,18 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
 }
 
 /**
+ * Whether a Bedrock model id is an open-weight GPT OSS model exposed by the mantle Responses API.
+ *
+ * The mantle ids intentionally omit the -1:0 suffix used by InvokeModel. Keep this separate
+ * from isBedrockOpenAiResponsesModel: bare bedrock:openai.gpt-oss-*-1:0 ids must continue to use
+ * the legacy InvokeModel route for backwards compatibility, while the explicit
+ * bedrock:responses:openai.gpt-oss-* route selects this surface.
+ */
+export function isBedrockGptOssResponsesModel(modelName: string): boolean {
+  return /^openai\.gpt-oss-(?:20b|120b)$/.test(modelName);
+}
+
+/**
  * Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`).
  *
  * @param modelName The Bedrock model identifier to evaluate.

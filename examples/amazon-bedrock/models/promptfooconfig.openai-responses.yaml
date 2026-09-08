@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI GPT OSS through the Amazon Bedrock Responses API'
+
+# Export an Amazon Bedrock API key before running:
+#   export AWS_BEARER_TOKEN_BEDROCK="..."
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  - id: bedrock:responses:openai.gpt-oss-120b
+    label: GPT OSS 120B (Responses API)
+    config:
+      region: us-east-1
+      reasoning_effort: medium
+      max_output_tokens: 1024
+      store: false
+
+tests:
+  - vars:
+      question: What is the capital of France? Reply with only the city name.
+    assert:
+      - type: equals
+        value: Paris
