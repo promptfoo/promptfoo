@@ -125,6 +125,22 @@ it('honors an own child capability exclusion over an ancestor prototype getter',
   );
 });
 
+it('honors a prototype exclusion of a built-in inherited capability', async () => {
+  class ExcludedEmbedding extends OpenAiEmbeddingProvider {
+    override async callEmbeddingApi(): Promise<never> {
+      throw new Error('embedding excluded');
+    }
+  }
+  Object.defineProperty(ExcludedEmbedding.prototype, 'promptfooCapabilities', {
+    get: () => [],
+  });
+  const provider = new ExcludedEmbedding('fixture');
+  expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(false);
+  await expect(getAndCheckProvider('embedding', provider, null, 'similarity')).rejects.toThrow(
+    'not a valid embedding provider',
+  );
+});
+
 it('recognizes an override on the same prototype as its capability declaration', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     static override readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
@@ -271,6 +287,9 @@ it('preserves legacy text capability detection', async () => {
   const provider: ApiProvider = { id: () => 'legacy', callApi: async () => ({ output: 'hello' }) };
   expect(hasProviderCapability(provider, 'callApi')).toBe(true);
   expect(await getAndCheckProvider('text', provider, null, 'rubric')).toBe(provider);
+  expect(hasProviderCapability({ ...provider, promptfooCapabilities: undefined }, 'callApi')).toBe(
+    true,
+  );
 });
 
 it('honors explicit capability restrictions even if a method exists', () => {
