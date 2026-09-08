@@ -7,6 +7,7 @@ import { getEnvString } from '../../envars';
 import { getDirectory, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
+import { bindRedteamProviderEnvironment } from '../redteamDefaults';
 import { OpenAICodexSDKProvider } from './codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
@@ -412,6 +413,7 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
     webSearchProvider,
   };
   trackCodexDefaultProviderUsage(providers);
+  bindRedteamProviderEnvironment(gradingProvider, env);
   return cacheCodexDefaultProviders(cacheKey, providers);
 }
 
