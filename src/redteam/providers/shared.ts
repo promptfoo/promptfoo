@@ -8,7 +8,10 @@ import { getEnvOverrides, getRequestEnvOverrides, withEnvOverrides } from '../..
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { getDefaultRedteamTemperature } from '../../providers/redteamDefaults';
+import {
+  bindRedteamProviderEnvironment,
+  getDefaultRedteamTemperature,
+} from '../../providers/redteamDefaults';
 import {
   getProviderCallTracingContext,
   type RateLimitRegistry,
@@ -163,13 +166,16 @@ async function loadRedteamProvider({
 
   const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
   logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
-  return new OpenAiChatCompletionProvider(defaultModel, {
+  return bindRedteamProviderEnvironment(
+    new OpenAiChatCompletionProvider(defaultModel, {
+      env,
+      config: {
+        temperature: getDefaultRedteamTemperature(env),
+        response_format: jsonOnly ? { type: 'json_object' } : undefined,
+      },
+    }),
     env,
-    config: {
-      temperature: getDefaultRedteamTemperature(env),
-      response_format: jsonOnly ? { type: 'json_object' } : undefined,
-    },
-  });
+  );
 }
 
 class RedteamProviderManager {

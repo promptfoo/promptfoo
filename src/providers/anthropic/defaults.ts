@@ -1,4 +1,4 @@
-import { getDefaultRedteamTemperature } from '../redteamDefaults';
+import { bindRedteamProviderEnvironment, getDefaultRedteamTemperature } from '../redteamDefaults';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
@@ -148,10 +148,13 @@ export function getAnthropicProviders(
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
   const webSearchProvider = webSearchProviderFactory.getInstance(env);
-  const redteamProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+  const redteamProvider = bindRedteamProviderEnvironment(
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+      env,
+      config: { temperature: getDefaultRedteamTemperature(env) },
+    }),
     env,
-    config: { temperature: getDefaultRedteamTemperature(env) },
-  });
+  );
 
   return {
     gradingJsonProvider: gradingProvider,

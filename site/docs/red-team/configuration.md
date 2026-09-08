@@ -831,7 +831,7 @@ The `redteam.provider` field allows you to specify a provider configuration for 
 
 ### Automatic Provider Selection
 
-For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a default model from that provider. Each generation request keeps its own configuration environment when requests run concurrently. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
+For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a default model from that provider. Automatically selected attack providers keep their configuration environment throughout generation and eval-time calls, including when another configuration loads concurrently. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
 
 | Credential or environment variable                 | Vendor           | Default red team model     |
 | :------------------------------------------------- | :--------------- | :------------------------- |

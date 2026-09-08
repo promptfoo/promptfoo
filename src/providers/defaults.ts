@@ -35,7 +35,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
-import { getDefaultRedteamTemperature } from './redteamDefaults';
+import { bindRedteamProviderEnvironment, getDefaultRedteamTemperature } from './redteamDefaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
 
@@ -216,14 +216,20 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
 
-    const azureRedteamProvider = new AzureChatCompletionProvider(deploymentName, {
+    const azureRedteamProvider = bindRedteamProviderEnvironment(
+      new AzureChatCompletionProvider(deploymentName, {
+        env,
+        config: { temperature: redteamTemperature },
+      }),
       env,
-      config: { temperature: redteamTemperature },
-    });
-    const azureRedteamJsonProvider = new AzureChatCompletionProvider(deploymentName, {
+    );
+    const azureRedteamJsonProvider = bindRedteamProviderEnvironment(
+      new AzureChatCompletionProvider(deploymentName, {
+        env,
+        config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
+      }),
       env,
-      config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
-    });
+    );
 
     providers = {
       embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
@@ -254,17 +260,23 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
-    const googleAiStudioRedteamProvider = new AIStudioChatProvider('gemini-2.5-pro', {
+    const googleAiStudioRedteamProvider = bindRedteamProviderEnvironment(
+      new AIStudioChatProvider('gemini-2.5-pro', {
+        env,
+        config: { temperature: redteamTemperature },
+      }),
       env,
-      config: { temperature: redteamTemperature },
-    });
-    const googleAiStudioRedteamJsonProvider = new AIStudioChatProvider('gemini-2.5-pro', {
+    );
+    const googleAiStudioRedteamJsonProvider = bindRedteamProviderEnvironment(
+      new AIStudioChatProvider('gemini-2.5-pro', {
+        env,
+        config: {
+          temperature: redteamTemperature,
+          generationConfig: { response_mime_type: 'application/json' },
+        },
+      }),
       env,
-      config: {
-        temperature: redteamTemperature,
-        generationConfig: { response_mime_type: 'application/json' },
-      },
-    });
+    );
 
     providers = {
       embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
@@ -275,17 +287,23 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (useGoogleVertexDefaults) {
     logger.debug('Using Google Vertex default providers');
-    const vertexRedteamProvider = new VertexChatProvider('gemini-2.5-pro', {
+    const vertexRedteamProvider = bindRedteamProviderEnvironment(
+      new VertexChatProvider('gemini-2.5-pro', {
+        env,
+        config: { temperature: redteamTemperature },
+      }),
       env,
-      config: { temperature: redteamTemperature },
-    });
-    const vertexRedteamJsonProvider = new VertexChatProvider('gemini-2.5-pro', {
+    );
+    const vertexRedteamJsonProvider = bindRedteamProviderEnvironment(
+      new VertexChatProvider('gemini-2.5-pro', {
+        env,
+        config: {
+          temperature: redteamTemperature,
+          generationConfig: { response_mime_type: 'application/json' },
+        },
+      }),
       env,
-      config: {
-        temperature: redteamTemperature,
-        generationConfig: { response_mime_type: 'application/json' },
-      },
-    });
+    );
 
     providers = {
       moderationProvider: OpenAiModerationProvider,
@@ -295,14 +313,20 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
-    const mistralRedteamProvider = new MistralChatCompletionProvider('mistral-large-latest', {
+    const mistralRedteamProvider = bindRedteamProviderEnvironment(
+      new MistralChatCompletionProvider('mistral-large-latest', {
+        env,
+        config: { temperature: redteamTemperature },
+      }),
       env,
-      config: { temperature: redteamTemperature },
-    });
-    const mistralRedteamJsonProvider = new MistralChatCompletionProvider('mistral-large-latest', {
+    );
+    const mistralRedteamJsonProvider = bindRedteamProviderEnvironment(
+      new MistralChatCompletionProvider('mistral-large-latest', {
+        env,
+        config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
+      }),
       env,
-      config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
-    });
+    );
 
     providers = {
       embeddingProvider: MistralEmbeddingProvider,
