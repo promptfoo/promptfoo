@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -103,6 +104,104 @@ describe('providerWrapper', () => {
   });
 
   describe('rate limit detection callbacks', () => {
+    it('detects transient result-level availability failures', () => {
+      const options = createProviderRateLimitOptions();
+
+      expect(
+        options.isRetryableResult?.({
+          error: 'temporary failure',
+          metadata: {
+            retryableErrorKind: 'transient_availability',
+            http: { status: 503, statusText: 'Service Unavailable' },
+          },
+        }),
+      ).toBe(true);
+      expect(
+        options.isRetryableResult?.({
+          error: 'ordinary HTTP failure',
+          metadata: { http: { status: 503, statusText: 'Service Unavailable' } },
+        }),
+      ).toBe(false);
+    });
+
+    it('combines safe retry accounting into the terminal result', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: 5,
+          prompt: 3,
+          completion: 2,
+          numRequests: 1,
+          completionDetails: { reasoning: 1 },
+        },
+        cost: 0.007,
+      };
+
+      const result = options.finalizeResult?.(
+        {
+          output: 'Recovered',
+          tokenUsage: {
+            total: 10,
+            prompt: 7,
+            completion: 3,
+            numRequests: 1,
+            completionDetails: { reasoning: 2 },
+          },
+          cost: 0.013,
+        },
+        [retryResult],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        },
+        cost: 0.02,
+      });
+    });
+
+    it('drops unsafe retry accounting fields', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: Number.POSITIVE_INFINITY,
+          prompt: -1,
+          completion: 2,
+          numRequests: Number.NaN,
+        },
+        cost: Number.POSITIVE_INFINITY,
+      };
+
+      const result = options.finalizeResult?.({ output: 'Recovered' }, [retryResult]);
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { completion: 2, numRequests: 2 },
+      });
+    });
+
+    it('does not retain an unsafe terminal cost', () => {
+      const options = createProviderRateLimitOptions();
+
+      const result = options.finalizeResult?.(
+        { output: 'Recovered', cost: Number.POSITIVE_INFINITY },
+        [{ error: 'temporary failure', cost: 0.01 }],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { numRequests: 2 },
+        cost: 0.01,
+      });
+    });
+
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {
