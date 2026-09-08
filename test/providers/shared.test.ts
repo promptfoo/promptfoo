@@ -256,6 +256,41 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBeUndefined();
     });
 
+    it('should honor a manual inputCost/outputCost override for a model not in the known list', () => {
+      // A model released after this promptfoo version shipped has no built-in pricing entry.
+      // Without an override there's simply no way to get cost tracking for it until an update
+      // bakes in the new pricing - see https://github.com/promptfoo/promptfoo/issues/10501.
+      const cost = calculateCost(
+        'brand-new-unreleased-model',
+        { inputCost: 0.000002, outputCost: 0.00001 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBeCloseTo(0.000002 * 1000 + 0.00001 * 500);
+    });
+
+    it('should honor a manual flat cost override for a model not in the known list', () => {
+      const cost = calculateCost(
+        'brand-new-unreleased-model',
+        { cost: 0.000005 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBeCloseTo(0.000005 * 1500);
+    });
+
+    it('should still return undefined for an unknown model with only a partial override', () => {
+      // inputCost alone (no outputCost, no flat cost) isn't enough to price the completion side.
+      expect(
+        calculateCost('brand-new-unreleased-model', { inputCost: 0.000002 }, 1000, 500, models),
+      ).toBeUndefined();
+      expect(
+        calculateCost('brand-new-unreleased-model', { outputCost: 0.00001 }, 1000, 500, models),
+      ).toBeUndefined();
+    });
+
     it('should return undefined if tokens are not finite', () => {
       expect(calculateCost('model1', {}, Number.NaN, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, Infinity, models)).toBeUndefined();
