@@ -4,19 +4,20 @@ import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opent
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../types/providers';
 import { sha256 } from '../util/createHash';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/providers';
 import type { TokenUsage } from '../types/shared';
 
 /**
@@ -499,7 +500,9 @@ export class VercelAiProvider implements ApiProvider {
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = VercelAiEmbeddingProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VercelAiEmbeddingProvider.declaredProviderCapabilities,
+  );
 
   public modelName: string;
   public config: VercelAiConfig;

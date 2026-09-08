@@ -1,15 +1,16 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
+import {
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../types/providers';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types/index';
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -106,7 +107,9 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = LocalAiEmbeddingProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    LocalAiEmbeddingProvider.declaredProviderCapabilities,
+  );
 
   async callEmbeddingApi(
     text: string,

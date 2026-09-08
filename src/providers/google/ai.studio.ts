@@ -1,6 +1,15 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import {
+  type ApiEmbeddingProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type GuardrailResponse,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
@@ -32,14 +41,6 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiEmbeddingProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GuardrailResponse,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../../types/index';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
@@ -553,7 +554,9 @@ export class AIStudioEmbeddingProvider
   implements ApiEmbeddingProvider
 {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = AIStudioEmbeddingProvider.declaredProviderCapabilities;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AIStudioEmbeddingProvider.declaredProviderCapabilities,
+  );
 
   id(): string {
     if (this.customId) {
