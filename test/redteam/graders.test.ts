@@ -18,6 +18,7 @@ import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
+import { OpenAIGuardrailsGrader } from '../../src/redteam/plugins/openaiGuardrails';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
@@ -76,6 +77,9 @@ describe('getGraderById', () => {
 
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
+
+    const openAIGuardrailsGrader = getGraderById('promptfoo:redteam:openai-guardrails');
+    expect(openAIGuardrailsGrader).toBeInstanceOf(OpenAIGuardrailsGrader);
 
     const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
     expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
