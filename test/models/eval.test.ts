@@ -161,6 +161,28 @@ describe('evaluator', () => {
 
       expect(summary.stats.cachedRows).toBe(1);
     });
+
+    it.each([
+      { label: 'null', value: null },
+      { label: 'string', value: '1' },
+      { label: 'NaN', value: Number.NaN },
+    ])('uses persisted rows when imported cachedRows is $label', async ({ value }) => {
+      const evalRecord = await Eval.create(
+        {},
+        [{ raw: 'imported prompt', label: 'imported prompt' }],
+        { id: `malformed-imported-cached-rows-${String(value)}` },
+      );
+      const prompt = createCompletedPrompt('imported prompt');
+      Object.assign(prompt.metrics!, { cachedRows: value });
+      await evalRecord.addPrompts([prompt]);
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      expect(evalRecord.hasLegacyCachedRowsMetrics()).toBe(true);
+      expect(evalRecord.getStats().cachedRows).toBe(0);
+      expect(await evalRecord.getCachedResponseRowsCount()).toBe(1);
+    });
   });
 
   describe('addPrompts', () => {

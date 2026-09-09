@@ -105,10 +105,12 @@ function countCachedRows(results: unknown): number {
   }, 0);
 }
 
+function isValidCachedRowsMetric(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
-  return prompts.some(
-    (prompt) => prompt.metrics === undefined || prompt.metrics.cachedRows === undefined,
-  );
+  return prompts.some((prompt) => !isValidCachedRowsMetric(prompt.metrics?.cachedRows));
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -1458,7 +1460,9 @@ export default class Eval {
               errors: 0,
               tokenUsage: createEmptyTokenUsage(),
             };
-      const cachedRows = legacyStats.cachedRows ?? countCachedRows(this.oldResults.results);
+      const cachedRows = isValidCachedRowsMetric(legacyStats.cachedRows)
+        ? legacyStats.cachedRows
+        : countCachedRows(this.oldResults.results);
       legacyStats.cachedRows = cachedRows;
       return {
         ...legacyStats,
@@ -1481,7 +1485,10 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
-      stats.cachedRows = (stats.cachedRows ?? 0) + (prompt.metrics?.cachedRows ?? 0);
+      const cachedRows = prompt.metrics?.cachedRows;
+      if (isValidCachedRowsMetric(cachedRows)) {
+        stats.cachedRows = (stats.cachedRows ?? 0) + cachedRows;
+      }
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
