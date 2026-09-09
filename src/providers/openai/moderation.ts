@@ -2,12 +2,14 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getAbortError, getInFlightCacheKey, getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
 
 import type {
   ApiModerationProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
@@ -236,7 +238,14 @@ export class OpenAiModerationProvider
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
+    const abortSignal = options?.abortSignal;
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
+    }
+
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       return handleApiError(this.getMissingApiKeyErrorMessage());
@@ -277,7 +286,7 @@ export class OpenAiModerationProvider
 
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
-        getScopedCacheKey(cacheKey),
+        getInFlightCacheKey(getScopedCacheKey(cacheKey), abortSignal),
         async () =>
           fetchWithCache<OpenAIModerationResponse>(
             appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
@@ -285,6 +294,7 @@ export class OpenAiModerationProvider
               method: 'POST',
               headers,
               body: requestBody,
+              ...(abortSignal ? { signal: abortSignal } : {}),
             },
             getRequestTimeoutMs(),
             'json',
@@ -311,6 +321,9 @@ export class OpenAiModerationProvider
 
       return response;
     } catch (err) {
+      if (abortSignal?.aborted) {
+        throw getAbortError(abortSignal);
+      }
       return handleApiError(err);
     }
   }

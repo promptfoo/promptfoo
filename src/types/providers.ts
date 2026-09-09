@@ -154,11 +154,13 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
+  // `context` and `options` are required so callers cannot drop the evaluator's
+  // abort signal; implementations may still ignore the arguments they don't use.
   callModerationApi: (
     prompt: string,
     response: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    context: CallApiContextParams | undefined,
+    options: CallApiOptionsParams | undefined,
   ) => Promise<ProviderModerationResponse>;
 }
 

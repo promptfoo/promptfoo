@@ -16,6 +16,39 @@ export function getRequestTimeoutMs(): number {
  */
 export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 
+const abortSignalIds = new WeakMap<AbortSignal, number>();
+let nextAbortSignalId = 0;
+
+/**
+ * The error a cancelled provider call should reject with: the signal's own abort reason
+ * when it already carries one, otherwise an `AbortError` callers can recognize.
+ */
+export function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+/**
+ * Partition an in-flight request key by abort signal so callers that can be cancelled
+ * independently never share (and therefore never cancel) each other's request.
+ */
+export function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
+  if (!signal) {
+    return cacheKey;
+  }
+  let signalId = abortSignalIds.get(signal);
+  if (signalId === undefined) {
+    signalId = ++nextAbortSignalId;
+    abortSignalIds.set(signal, signalId);
+  }
+  return `${cacheKey}:signal:${signalId}`;
+}
+
 interface ModelCost {
   input: number;
   output: number;

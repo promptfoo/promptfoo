@@ -296,6 +296,14 @@ describe('Azure Moderation', () => {
       vi.mocked(isCacheEnabled).mockReturnValue(false);
     });
 
+    const createProvider = () =>
+      new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://test.cognitiveservices.azure.com/',
+        },
+      });
+
     it('should set cached flag when returning cached response', async () => {
       const mockCachedResponse = {
         flags: [
@@ -359,6 +367,55 @@ describe('Azure Moderation', () => {
       expect(cacheKey).not.toContain('resolved-endpoint');
       expect(cacheKey).not.toContain('2024-09-15-preview');
       expect(cacheKey).not.toContain('test content');
+    });
+
+    it('forwards the abort signal to the moderation request', async () => {
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        json: async () => ({ categoriesAnalysis: [] }),
+      } as any);
+      const abortSignal = new AbortController().signal;
+
+      await createProvider().callModerationApi('user prompt', 'assistant response', undefined, {
+        abortSignal,
+      });
+
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ method: 'POST' }),
+        abortSignal,
+      );
+    });
+
+    it('rethrows aborts instead of reporting them as moderation errors', async () => {
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      const controller = new AbortController();
+      const abortError = new Error('Evaluation timed out');
+      abortError.name = 'AbortError';
+      vi.mocked(fetchWithProxy).mockImplementation(async () => {
+        controller.abort(abortError);
+        throw abortError;
+      });
+
+      await expect(
+        createProvider().callModerationApi('user prompt', 'assistant response', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toBe(abortError);
+    });
+
+    it('skips the request when the signal is already aborted', async () => {
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        createProvider().callModerationApi('user prompt', 'assistant response', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchWithProxy).not.toHaveBeenCalled();
     });
   });
 });
