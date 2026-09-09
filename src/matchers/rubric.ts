@@ -419,6 +419,9 @@ function appendImagesToContent(
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
   try {
+    if (provider.constructor?.name === 'GeminiImageProvider') {
+      return 'google';
+    }
     const providerId = provider.id();
     if (isResponsesCompatibleProvider(provider, providerId)) {
       return 'responses';

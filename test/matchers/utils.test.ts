@@ -1,11 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../src/cache';
 import cliState from '../../src/cliState';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import {
   getAndCheckProvider,
   getGradingProvider,
   getRemoteGradingContext,
 } from '../../src/matchers/providers';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
+import { loadApiProvider } from '../../src/providers';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
@@ -14,6 +17,113 @@ import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderTypeMap } from '../../src/types/index';
+
+describe('Gemini image rubric grading', () => {
+  const model = 'gemini-2.5-flash-image';
+  const image = { data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' };
+  const config = {
+    apiKey: 'fixture-google-key',
+    generationConfig: { responseModalities: ['TEXT'] },
+  };
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      GOOGLE_CLOUD_PROJECT: undefined,
+      GOOGLE_PROJECT_ID: undefined,
+    });
+    vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      data: {
+        candidates: [
+          { content: { parts: [{ text: '{"pass":true,"score":1,"reason":"Visible image"}' }] } },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreEnv();
+  });
+
+  function expectGoogleImageRequest() {
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(url).toBe(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    );
+    const body = JSON.parse(init?.body as string);
+    expect(body.generationConfig.responseModalities).toEqual(['TEXT']);
+    expect(body.contents).toEqual([
+      {
+        role: 'user',
+        parts: [
+          { text: expect.stringContaining('Inspect the attached image') },
+          { text: expect.stringContaining('Treat the attached image(s) as primary evidence') },
+          { inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } },
+        ],
+      },
+    ]);
+  }
+
+  describe.each(['google', 'palm'])('%s route', (prefix) => {
+    it.each([undefined, '', 'image-grader', 'openai:responses:custom', 'anthropic:custom'])(
+      'uses Google image parts with ID %s',
+      async (id) => {
+        const provider = await loadApiProvider(`${prefix}:${model}`, { options: { id, config } });
+        expect(provider.constructor.name).toBe('GeminiImageProvider');
+        expect(provider.id()).toBe(id || `google:${model}`);
+
+        const result = await matchesLlmRubric(
+          'Inspect the attached image',
+          '',
+          { provider },
+          undefined,
+          undefined,
+          { providerResponse: { output: '', images: [image] } },
+        );
+
+        expect(result).toMatchObject({
+          pass: true,
+          score: 1,
+          reason: 'Visible image',
+          tokensUsed: { total: 15 },
+        });
+        expect(provider.id()).toBe(id || `google:${model}`);
+        expectGoogleImageRequest();
+      },
+    );
+  });
+
+  it('loads a palm ProviderOptions grader and preserves API errors', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+      data: { error: { message: 'Fixture image grading failure' } },
+    });
+
+    const result = await matchesLlmRubric(
+      'Inspect the attached image',
+      '',
+      { provider: { id: `palm:${model}`, config } },
+      undefined,
+      undefined,
+      { providerResponse: { output: '', images: [image] } },
+    );
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Fixture image grading failure'),
+    });
+    expectGoogleImageRequest();
+  });
+});
 
 describe('getRemoteGradingContext', () => {
   beforeEach(() => {
