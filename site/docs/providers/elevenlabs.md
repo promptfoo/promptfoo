@@ -261,6 +261,8 @@ Use the [transcription accuracy guide](/docs/guides/evaluate-elevenlabs/#part-3-
 
 ### Conversational Agents: Evaluation
 
+The provider returns a text summary in `output` and structured evaluation results in `context.providerResponse.metadata.evaluationResults`. Use explicit criterion IDs to check that every required result is present and passed.
+
 ```yaml
 prompts:
   - |
@@ -275,10 +277,12 @@ providers:
         prompt: You are a helpful customer support agent
         llmModel: gpt-4o
       evaluationCriteria:
-        - name: greeting
+        - id: greeting
+          name: greeting
           weight: 0.8
           passingThreshold: 0.8
-        - name: understanding
+        - id: understanding
+          name: understanding
           weight: 1.0
           passingThreshold: 0.9
 
@@ -287,9 +291,11 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const passed = result.analysis.evaluation_criteria_results.filter(r => r.passed);
-          return passed.length >= 2;
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['greeting', 'understanding'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
+          );
 ```
 
 ### Audio Processing: Pipeline
@@ -471,11 +477,13 @@ providers:
         prompt: You are a customer service agent. Always confirm cancellations.
         llmModel: gpt-4o
       evaluationCriteria:
-        - name: confirmation_requested
+        - id: confirmation_requested
+          name: confirmation_requested
           description: Agent asks for confirmation before canceling
           weight: 1.0
           passingThreshold: 0.9
-        - name: professional_tone
+        - id: professional_tone
+          name: professional_tone
           description: Agent maintains professional tone
           weight: 0.8
           passingThreshold: 0.8
@@ -485,9 +493,11 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const criteria = result.analysis.evaluation_criteria_results;
-          return criteria.every(c => c.passed);
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['confirmation_requested', 'professional_tone'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
+          );
 ```
 
 ## Best Practices

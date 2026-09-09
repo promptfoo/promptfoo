@@ -262,32 +262,37 @@ providers:
 
       # Define evaluation criteria
       evaluationCriteria:
-        - name: greeting
+        - id: greeting
+          name: greeting
           description: Agent greets the user warmly
           weight: 0.8
           passingThreshold: 0.8
 
-        - name: information_gathering
+        - id: information_gathering
+          name: information_gathering
           description: Agent asks for email or account details
           weight: 1.0
           passingThreshold: 0.9
 
-        - name: empathy
+        - id: empathy
+          name: empathy
           description: Agent acknowledges user frustration
           weight: 0.9
           passingThreshold: 0.7
 
-        - name: next_steps
+        - id: next_steps
+          name: next_steps
           description: Agent provides clear next steps
           weight: 1.0
           passingThreshold: 0.9
 
-        - name: professionalism
+        - id: professionalism
+          name: professionalism
           description: Agent maintains professional tone
           weight: 0.8
           passingThreshold: 0.8
 
-      # Limit conversation for testing
+      # Limit newly simulated turns, excluding the supplied conversation history
       maxTurns: 8
       timeout: 60000
 
@@ -296,34 +301,26 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const criteria = result.analysis.evaluation_criteria_results;
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['information_gathering', 'next_steps', 'professionalism'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
+          );
 
-          // Check that critical criteria passed
-          const critical = ['information_gathering', 'next_steps', 'professionalism'];
-          const criticalPassed = criteria
-            .filter(c => critical.includes(c.name))
-            .every(c => c.passed);
-
-          console.log('Criteria Results:');
-          criteria.forEach(c => {
-            console.log(`  ${c.name}: ${c.passed ? '✓' : '✗'} (score: ${c.score.toFixed(2)})`);
-          });
-
-          return criticalPassed;
-
-  - description: Agent conversation stays within turn limit
+  - description: Agent returns a conversation history
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          return result.transcript.length <= 8;
+          const history = context.providerResponse.metadata?.conversationHistory;
+          return Array.isArray(history) && history.length > 0;
 
   - description: Agent responds within reasonable time
     assert:
       - type: latency
         threshold: 60000
 ```
+
+`maxTurns` limits newly simulated turns. The returned conversation history can also include the supplied turns.
 
 Run the agent eval:
 
@@ -351,6 +348,8 @@ In the web UI, you'll see:
 
 ### Step 9: Add Tool Mocking
 
+Use an existing ElevenLabs agent configured with an `order_lookup` tool that accepts an `order_number` string. Set its ID in `agentId` below; this example mocks that tool's response.
+
 Create `agent-with-tools.yaml`:
 
 ```yaml
@@ -364,44 +363,26 @@ prompts:
 providers:
   - id: elevenlabs:agents
     config:
-      agentConfig:
-        name: Support Agent with Tools
-        prompt: You are a support agent. Use the order_lookup tool to check order status.
-        voiceId: 21m00Tcm4TlvDq8ikWAM
-        llmModel: gpt-5
-
-        # Define available tools
-        tools:
-          - type: function
-            function:
-              name: order_lookup
-              description: Look up order status by order number
-              parameters:
-                type: object
-                properties:
-                  order_number:
-                    type: string
-                    description: 'The order number (format: ORDER-XXXXX)'
-                required:
-                  - order_number
+      agentId: your-agent-id-with-order-lookup
 
       # Mock tool responses for testing
       toolMockConfig:
         order_lookup:
-          response:
+          returnValue:
             order_number: 'ORDER-12345'
             status: 'Shipped'
             tracking_number: '1Z999AA10123456784'
-            expected_delivery: '2024-03-20'
 
       evaluationCriteria:
-        - name: uses_tool
-          description: Agent uses the order_lookup tool
+        - id: uses_tool
+          name: uses_tool
+          description: Agent calls order_lookup for ORDER-12345.
           weight: 1.0
           passingThreshold: 0.9
 
-        - name: provides_tracking
-          description: Agent provides tracking information
+        - id: provides_tracking
+          name: provides_tracking
+          description: Agent tells the user that tracking number is 1Z999AA10123456784.
           weight: 1.0
           passingThreshold: 0.9
 
@@ -410,15 +391,11 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          // Verify tool was called
-          const toolCalls = result.transcript.filter(t =>
-            t.role === 'tool_call'
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['uses_tool', 'provides_tracking'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
           );
-          return toolCalls.length > 0;
-
-      - type: contains
-        value: '1Z999AA10123456784' # Tracking number from mock
 ```
 
 Run with tool mocking:
