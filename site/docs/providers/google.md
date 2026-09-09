@@ -340,11 +340,13 @@ Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to
 - `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
 - `google:embedding:gemini-embedding-2-preview` - Preview alias for Gemini Embedding 2 ($0.20/1M input tokens)
 
-Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
+Embedding options depend on the model (see Google's [embedding guide](https://ai.google.dev/gemini-api/docs/embeddings)):
 
-- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
-- `outputDimensionality` - truncates the returned vector (useful for storage cost)
-- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+- `taskType` - for `gemini-embedding-001`: one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
+- `outputDimensionality` - requests a smaller vector; Embedding 2 accepts integers from 128 to 3,072
+- `title` - for `gemini-embedding-001`, with `taskType: RETRIEVAL_DOCUMENT`
+
+For Embedding 2, omit `taskType` and `title`; the Gemini API expects instructions in the input instead, such as `task: search result | query: your query` or `title: document title | text: document content`. Embedding 1 and Embedding 2 use different vector spaces: re-embed existing content when switching models. Shortened Embedding 1 vectors require normalization; shortened Embedding 2 vectors are normalized by the API.
 
 If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
@@ -390,8 +392,8 @@ gcloud auth application-default login
 export GOOGLE_PROJECT_ID=your-project-id
 ```
 
-- ✅ Imagen models available to your Vertex project and region
-- ✅ Vertex Imagen parameters supported by the selected model
+- Historical configuration for the discontinued Vertex Imagen models listed above
+- Vertex authentication does not restore access to those retired models
 - ❌ Requires Google Cloud project with billing
 
 The provider automatically selects the appropriate API based on available credentials.

@@ -227,7 +227,7 @@ Upgrading between embedding model families changes the vector space, so re-embed
 ### Image Generation Models
 
 :::note
-For Vertex Imagen requests, use the [Imagen adapter](/docs/providers/google#image-generation-models) with `google:image:<model>` and `config.projectId`; model availability depends on your Vertex project and region. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
+The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses `google:image:<model>` and `config.projectId`. The Imagen 3 and Imagen 4 IDs documented there are discontinued; configuring a Vertex project or region does not restore their availability. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
 :::
 
 ### Video Generation Models
