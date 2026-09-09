@@ -727,7 +727,7 @@ providers:
         display: 'summarized' # Opt in to readable reasoning; default is 'omitted'
       effort: xhigh # Controls reasoning depth instead of a token budget
 
-  # Manual thinking budget — only on Haiku 4.5 and older models
+  # Manual thinking budget — Opus 4.6 / Sonnet 4.6 and older (deprecated on 4.6)
   - id: anthropic:messages:claude-haiku-4-5
     config:
       max_tokens: 20000
@@ -755,7 +755,7 @@ thinking:
   budget_tokens: number # Must be ≥1024 and less than max_tokens
 ```
 
-Fable 5/5.1, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
+Fable 5/5.1, Mythos 5/5.1, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
 (`"thinking.type.enabled" is not supported for this model`); on those models promptfoo
 converts an `enabled` budget to `{ type: 'adaptive' }` and warns once.
 
@@ -826,11 +826,12 @@ Example response with thinking enabled:
 #### Controlling Thinking Output
 
 Two separate controls decide whether you see reasoning. The API's `thinking.display`
-decides whether Claude returns any reasoning text — it defaults to `omitted` on every
-current model, so you must set `display: 'summarized'` first. Promptfoo's `showThinking`
-then decides whether returned reasoning is rendered into the output (default `true`).
-Setting `showThinking: true` cannot reveal reasoning that `display: 'omitted'` never
-returned.
+decides whether Claude returns any reasoning text; on Fable 5/5.1, Mythos 5/5.1, Opus 5,
+Opus 4.7/4.8, and Sonnet 5 it defaults to `omitted`, so you must set
+`display: 'summarized'` first. (Opus 4.6 and Sonnet 4.6 already default to `summarized`
+and need no opt-in.) Promptfoo's `showThinking` then decides whether returned reasoning is
+rendered into the output (default `true`). Setting `showThinking: true` cannot reveal
+reasoning that `display: 'omitted'` never returned.
 
 ```yaml title="promptfooconfig.yaml"
 providers:

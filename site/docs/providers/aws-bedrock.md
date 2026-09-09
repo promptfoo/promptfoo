@@ -183,7 +183,7 @@ providers:
       showThinking: true # Include thinking content in output
 ```
 
-Claude Sonnet 4.6 and the 4.5 generation still take a manual token budget:
+Claude Opus 4.6, Sonnet 4.6, and the 4.5 generation still take a manual token budget:
 
 ```yaml
 providers:
@@ -200,7 +200,7 @@ providers:
 The `thinking` configuration controls Claude's reasoning behavior:
 
 - `type: adaptive` - Activates adaptive thinking (Claude 5, Opus 4.7/4.8); pair with `output_config.effort` on the Converse path
-- `type: enabled` - Activates manual extended thinking (Sonnet 4.6 and the 4.5 generation)
+- `type: enabled` - Activates manual extended thinking (Opus 4.6, Sonnet 4.6, and the 4.5 generation)
 - `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024), manual thinking only
 - For Claude Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
 
@@ -934,7 +934,7 @@ The InvokeModel path exposes no reasoning-effort field. To set the depth, use
 `bedrock:converse:` with `additionalModelRequestFields.output_config.effort`, or the
 [Anthropic provider](/docs/providers/anthropic), which takes a top-level `effort`.
 
-Sonnet 4.6 and the 4.5 generation take a manual token budget instead:
+Opus 4.6, Sonnet 4.6, and the 4.5 generation take a manual token budget instead:
 
 ```yaml
 config:

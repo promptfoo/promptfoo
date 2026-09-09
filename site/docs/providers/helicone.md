@@ -84,6 +84,15 @@ providers:
       router: development
 ```
 
+:::note Claude 5 models on this gateway
+
+This provider extends promptfoo's OpenAI-compatible request builder, which sends
+`temperature: 0` unless you set `omitDefaults: true`. Claude 5 models
+(`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
+`top_p`, and `top_k` with a 400, so add `omitDefaults: true` to their config.
+
+:::
+
 ## Configuration Options
 
 ### Provider Format
@@ -162,6 +171,7 @@ providers:
 
   - id: helicone:anthropic/claude-sonnet-5
     config:
+      omitDefaults: true # Claude 5 rejects the gateway's default temperature
       tags: ['anthropic', 'claude']
       properties:
         model_family: 'claude-5'
