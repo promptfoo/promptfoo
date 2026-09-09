@@ -156,7 +156,8 @@ describe('evaluator', () => {
         createEvaluateResult({ response: { output: 'cached result', cached: true } }),
       );
 
-      const summary = await evalRecord.toEvaluateSummary();
+      const importedEval = await Eval.findById(evalRecord.id);
+      const summary = await importedEval!.toEvaluateSummary();
 
       expect(summary.stats.cachedRows).toBe(1);
     });

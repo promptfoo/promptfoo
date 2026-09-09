@@ -106,11 +106,8 @@ function countCachedRows(results: unknown): number {
 }
 
 function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
-  return (
-    prompts.length === 0 ||
-    prompts.some(
-      (prompt) => prompt.metrics === undefined || prompt.metrics.cachedRows === undefined,
-    )
+  return prompts.some(
+    (prompt) => prompt.metrics === undefined || prompt.metrics.cachedRows === undefined,
   );
 }
 
@@ -435,6 +432,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      legacyCachedRowsMetrics: (eval_.prompts?.length ?? 0) === 0,
       runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
       generationDurationMs,
@@ -478,6 +476,7 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
+          legacyCachedRowsMetrics: (e.prompts?.length ?? 0) === 0,
         }),
     );
   }
@@ -653,6 +652,7 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      legacyCachedRowsMetrics?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -662,7 +662,8 @@ export default class Eval {
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
-    this.legacyCachedRowsMetrics = hasLegacyCachedRowsMetrics(this.prompts);
+    this.legacyCachedRowsMetrics =
+      opts?.legacyCachedRowsMetrics ?? hasLegacyCachedRowsMetrics(this.prompts);
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
