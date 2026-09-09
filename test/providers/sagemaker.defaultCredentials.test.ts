@@ -173,7 +173,10 @@ sso_role_name = TestRole
       // Keep the SDK serializers, signers, and credential providers; replace
       // only the public HTTP boundary, recording its handler identity.
       const call = { handler: this, request };
-      if (request.hostname.startsWith('portal.sso.')) {
+      if (
+        request.hostname.startsWith('portal.sso.') ||
+        request.path === '/federation/credentials'
+      ) {
         ssoCalls.push(call);
         return ssoReply(ssoCalls.length);
       }
@@ -456,6 +459,92 @@ sso_role_name = TestRole
     vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'activated-env-secret');
     await expectSignedRow(provider, 'ACTIVATED_ENV');
     expect(ssoCalls).toHaveLength(1);
+  });
+
+  it.each([
+    ['explicit', 'AWS_ENDPOINT_URL'],
+    ['explicit', 'AWS_ENDPOINT_URL_SSO'],
+    ['named', 'AWS_ENDPOINT_URL'],
+    ['named', 'AWS_ENDPOINT_URL_SSO'],
+    ['default', 'AWS_ENDPOINT_URL'],
+    ['default', 'AWS_ENDPOINT_URL_SSO'],
+    ['shared-ignore', 'AWS_ENDPOINT_URL'],
+    ['shared-ignore', 'AWS_ENDPOINT_URL_SSO'],
+  ] as const)('retains %s SSO credentials when ignored %s changes', async (source, variable) => {
+    const sharedIgnore = source === 'shared-ignore';
+    await configure(
+      ssoProfile(source === 'default' ? 'default' : 'named') +
+        (sharedIgnore ? '[default]\nignore_configured_endpoint_urls = true\n' : ''),
+      source === 'named' ? 'named' : null,
+    );
+    vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', sharedIgnore ? undefined : 'true');
+    vi.stubEnv(variable, 'https://ignored-before.invalid');
+    const provider = createProvider(
+      source === 'explicit' || sharedIgnore ? { profile: 'named' } : {},
+    );
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls[0].request.hostname).toBe('portal.sso.eu-west-1.amazonaws.com');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv(variable, 'https://ignored-after.invalid');
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls).toHaveLength(1);
+  });
+
+  it.each(['explicit', 'default'] as const)(
+    'retains %s SSO credentials when the common endpoint is shadowed',
+    async (source) => {
+      await configure(ssoProfile(source === 'default' ? 'default' : 'named'), null);
+      vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'false');
+      vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'https://selected-sso.invalid');
+      vi.stubEnv(
+        'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME',
+        'https://runtime.sagemaker.us-west-2.amazonaws.com',
+      );
+      vi.stubEnv('AWS_ENDPOINT_URL', 'https://shadowed-before.invalid');
+      const provider = createProvider(source === 'explicit' ? { profile: 'named' } : {});
+      await expectSignedRow(provider, 'SSO_1');
+      expect(ssoCalls[0].request.hostname).toBe('selected-sso.invalid');
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      vi.stubEnv('AWS_ENDPOINT_URL', 'https://shadowed-after.invalid');
+      await expectSignedRow(provider, 'SSO_1');
+      expect(ssoCalls).toHaveLength(1);
+    },
+  );
+
+  it('replaces retained SSO credentials when the endpoint ignore selector changes', async () => {
+    await configure(ssoProfile('named'), null);
+    vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'true');
+    vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'https://selected-sso.invalid');
+    const provider = createProvider({ profile: 'named' });
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls[0].request.hostname).toBe('portal.sso.eu-west-1.amazonaws.com');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'false');
+    expect(await provider.callApi('changed ignore')).toMatchObject({
+      error: expect.stringContaining('The SSO session associated with this profile has expired'),
+    });
+    expect(ssoCalls).toHaveLength(1);
+    expect(sageCalls).toHaveLength(1);
+  });
+
+  it('replaces SSO credentials when a blank service URL leaves the common URL effective', async () => {
+    await configure(ssoProfile('named'), null);
+    vi.stubEnv('AWS_ENDPOINT_URL_SSO', '');
+    vi.stubEnv('AWS_ENDPOINT_URL', 'https://selected-sso.invalid');
+    vi.stubEnv(
+      'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME',
+      'https://runtime.sagemaker.us-west-2.amazonaws.com',
+    );
+    const provider = createProvider({ profile: 'named' });
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls[0].request.hostname).toBe('selected-sso.invalid');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv('AWS_ENDPOINT_URL', 'https://changed-sso.invalid');
+    expect(await provider.callApi('changed common endpoint')).toMatchObject({
+      error: expect.stringContaining('The SSO session associated with this profile has expired'),
+    });
+    expect(ssoCalls).toHaveLength(1);
+    expect(sageCalls).toHaveLength(1);
   });
 
   it('replaces explicit SSO credentials when its effective helper endpoint changes', async () => {

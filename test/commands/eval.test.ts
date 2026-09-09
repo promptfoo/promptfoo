@@ -2103,6 +2103,89 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('cleans up only its own providers when watch evaluations overlap', async () => {
+    const makeRun = (name: string) => {
+      const controller = new AbortController();
+      let start!: () => void;
+      let finish!: () => void;
+      const started = new Promise<void>((resolve) => {
+        start = resolve;
+      });
+      const response = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const provider = {
+        id: () => name,
+        callApi: vi.fn(async () => {
+          start();
+          await response;
+          controller.signal.throwIfAborted();
+          return { output: name };
+        }),
+        cleanup: vi.fn(async () => controller.abort()),
+      } satisfies ApiProvider;
+      return { provider, started, finish, signal: controller.signal };
+    };
+    const runA = makeRun('watch-a');
+    const runB = makeRun('watch-b');
+    const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValue({ defaultConfig: config, defaultConfigPath: undefined });
+    vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    vi.mocked(resolveConfigs).mockReset();
+    for (const providers of [[], [runA.provider], [runB.provider]]) {
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers },
+        basePath: path.dirname(defaultConfigPath),
+      });
+    }
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (suite, evalRecord) => {
+        for (const provider of suite.providers) {
+          await provider.callApi('watch prompt');
+        }
+        return evalRecord as Eval;
+      });
+    const pending: Promise<unknown>[] = [];
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      const evaluationA = Promise.resolve(onChange!(defaultConfigPath));
+      pending.push(evaluationA);
+      await runA.started;
+      const evaluationB = Promise.resolve(onChange!('prompt.txt'));
+      pending.push(evaluationB);
+      await runB.started;
+
+      runA.finish();
+      await evaluationA;
+      expect(runA.provider.cleanup).toHaveBeenCalledTimes(1);
+      expect(runB.provider.cleanup).not.toHaveBeenCalled();
+      expect(runB.signal.aborted).toBe(false);
+
+      runB.finish();
+      await evaluationB;
+      await expect(runB.provider.callApi.mock.results[0].value).resolves.toEqual({
+        output: 'watch-b',
+      });
+      expect(runA.provider.cleanup).toHaveBeenCalledTimes(1);
+      expect(runB.provider.cleanup).toHaveBeenCalledTimes(1);
+    } finally {
+      runA.finish();
+      runB.finish();
+      await Promise.allSettled(pending);
+      loadDefaultConfigSpy.mockRestore();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(resolveConfigs).mockReset();
+    }
+  });
+
   it('should handle redteam config', async () => {
     const cmdObj = {};
     const config = {

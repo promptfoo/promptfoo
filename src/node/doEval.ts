@@ -298,7 +298,6 @@ export async function doEval(
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
 
@@ -341,6 +340,7 @@ export async function doEval(
   let watchTermination: Promise<void> | undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
+    let testSuite: TestSuite | undefined = undefined;
     const startTime = Date.now();
     telemetry.record('command_used', {
       name: 'eval - started',

@@ -387,7 +387,9 @@ abstract class SageMakerGenericProvider {
     );
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
-      const { parseKnownFiles } = await import('@smithy/core/config');
+      const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = await import(
+        '@smithy/core/config'
+      );
       const profiles = await parseKnownFiles({
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
         configFilepath: environment.AWS_CONFIG_FILE,
@@ -406,6 +408,38 @@ abstract class SageMakerGenericProvider {
           // An implicit default profile must yield when environment credentials become available.
           ...(selectedProfile ? [] : ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']),
         ]);
+        const helperEndpoints = inputs.filter((name) => name.startsWith('AWS_ENDPOINT_URL_'));
+        if (helperEndpoints.length) {
+          // Nested SDK clients resolve endpoint policy from the ambient AWS profile,
+          // independently of the profile selected for credentials.
+          const ignoreEndpoints = await loadConfig(
+            {
+              environmentVariableSelector: () =>
+                booleanSelector(
+                  environment,
+                  'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+                  SelectorType.ENV,
+                ),
+              configFileSelector: (data) =>
+                booleanSelector(data, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
+              default: false,
+            },
+            {
+              profile: environment.AWS_PROFILE,
+              filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
+              configFilepath: environment.AWS_CONFIG_FILE,
+            },
+          )();
+          if (ignoreEndpoints) {
+            for (const name of helperEndpoints) {
+              used.delete(name);
+            }
+          }
+          // A service-specific URL wins over the common URL for that helper.
+          if (ignoreEndpoints || helperEndpoints.every((name) => environment[name])) {
+            used.delete('AWS_ENDPOINT_URL');
+          }
+        }
         for (const name of Object.keys(environment)) {
           if (!used.has(name)) {
             delete environment[name];
