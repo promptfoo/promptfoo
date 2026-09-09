@@ -26,7 +26,7 @@ Use Node.js 22.22.0 or later. In your eval project, install Promptfoo and the SD
 npm install --save-dev promptfoo @openai/codex-sdk@^0.153.2
 ```
 
-The SDK includes the Codex CLI. Install it explicitly if your Promptfoo installation omits optional dependencies.
+The SDK includes the Codex CLI. Promptfoo lists it as an optional dependency, but this provider requires it.
 
 <Link id="setup" />
 <Link id="option-1-use-your-chatgpt-login" />
