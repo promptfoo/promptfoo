@@ -692,55 +692,53 @@ export function prepareRequestBody(
   return body;
 }
 
+// List price of a single image, or undefined when the model, size, and quality combination
+// has no published per-image rate.
+function getPerImageCost(model: string, size: string, quality?: string): number | undefined {
+  if (model === 'dall-e-2') {
+    return DALLE2_COSTS[size as DallE2Size] ?? DALLE2_COSTS['1024x1024'];
+  }
+  if (model === 'dall-e-3') {
+    return DALLE3_COSTS[`${quality || 'standard'}_${size}`] ?? DALLE3_COSTS['standard_1024x1024'];
+  }
+
+  // GPT Image tables are keyed by `${quality}_${size}` and only price the three standard sizes.
+  const tieredQuality =
+    quality === 'low' || quality === 'medium' || quality === 'high' ? quality : undefined;
+  const costKey = `${tieredQuality ?? 'low'}_${size}`;
+
+  if (isGptImage2(model)) {
+    // GPT Image 2 also accepts custom sizes and auto quality, which have no per-image rate.
+    return tieredQuality === undefined ? undefined : GPT_IMAGE2_COSTS[costKey];
+  }
+  if (isGptImage1(model)) {
+    return GPT_IMAGE1_COSTS[costKey] ?? GPT_IMAGE1_COSTS['low_1024x1024'];
+  }
+  if (isGptImage1Mini(model)) {
+    return GPT_IMAGE1_MINI_COSTS[costKey] ?? GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
+  }
+  if (isGptImage15(model)) {
+    return GPT_IMAGE1_5_COSTS[costKey] ?? GPT_IMAGE1_5_COSTS['low_1024x1024'];
+  }
+
+  // GPT Image 2.5 is billed from token usage, and an unrecognized model has no rate at all.
+  // Report no cost instead of guessing one.
+  logger.debug('[OpenAI Image] No per-image rate for model, reporting no cost', {
+    model,
+    size,
+    quality,
+  });
+  return undefined;
+}
+
 export function calculateImageCost(
   model: string,
   size: string,
   quality?: string,
   n: number = 1,
 ): number | undefined {
-  const imageQuality = quality || 'standard';
-  const gptImageQuality =
-    quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
-
-  // GPT Image 2.5 shares token rates with GPT Image 2, but not per-image token usage.
-  if (isGptImage25(model)) {
-    return undefined;
-  }
-
-  if (model === 'dall-e-3') {
-    const costKey = `${imageQuality}_${size}`;
-    const costPerImage = DALLE3_COSTS[costKey] || DALLE3_COSTS['standard_1024x1024'];
-    return costPerImage * n;
-  } else if (model === 'dall-e-2') {
-    const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage2(model)) {
-    if (quality !== 'medium' && quality !== 'high' && quality !== 'low') {
-      return undefined;
-    }
-
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE2_COSTS[costKey];
-    if (costPerImage === undefined) {
-      return undefined;
-    }
-
-    return costPerImage * n;
-  } else if (isGptImage1(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage1Mini(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_MINI_COSTS[costKey] || GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage15(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_5_COSTS[costKey] || GPT_IMAGE1_5_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  }
-
-  return 0.04 * n;
+  const costPerImage = getPerImageCost(model, size, quality);
+  return costPerImage === undefined ? undefined : costPerImage * n;
 }
 
 function getImageTokenUsage(data: any, cached: boolean): TokenUsage | undefined {
