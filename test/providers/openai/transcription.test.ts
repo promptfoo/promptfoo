@@ -177,8 +177,8 @@ describe('OpenAiTranscriptionProvider', () => {
       const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
         config: {
           apiKey: 'test-key',
-          languages: ['en', 'fr'],
-          keywords: ['AC-42'],
+          languages: [' en ', 'fr', 'eng', 'zh-cn'],
+          keywords: [' AC-42 '],
           prompt: 'A support call.',
         },
       });
@@ -187,7 +187,7 @@ describe('OpenAiTranscriptionProvider', () => {
       const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as MockFormData;
 
       expect(form.get('model')).toBe('gpt-transcribe');
-      expect(form.getAll('languages[]')).toEqual(['en', 'fr']);
+      expect(form.getAll('languages[]')).toEqual(['en', 'fr', 'eng', 'zh-cn']);
       expect(form.getAll('keywords[]')).toEqual(['AC-42']);
       expect(form.get('prompt')).toBe('A support call.');
       expect(form.has('language')).toBe(false);
@@ -247,6 +247,9 @@ describe('OpenAiTranscriptionProvider', () => {
       { language: 'en', languages: ['en'] },
       { languages: 'en' },
       { languages: [null] },
+      { languages: ['en\nfr'] },
+      { languages: ['<en>'] },
+      { languages: ['english'] },
       { keywords: 'AC-42' },
       { keywords: ['first\nsecond'] },
       { keywords: ['first\rsecond'] },

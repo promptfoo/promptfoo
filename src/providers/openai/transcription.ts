@@ -145,9 +145,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       if (
         config.languages !== undefined &&
         (!Array.isArray(config.languages) ||
-          config.languages.some((language) => typeof language !== 'string' || !language.trim()))
+          config.languages.some(
+            (language) =>
+              typeof language !== 'string' || !/^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(language.trim()),
+          ))
       ) {
-        return { error: 'languages must be an array of non-empty language codes.' };
+        return { error: 'languages must be an array of language codes such as en, eng, or zh-cn.' };
       }
       if (
         config.keywords !== undefined &&
@@ -190,10 +193,10 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         formData.append('language', config.language);
       }
       for (const language of config.languages || []) {
-        formData.append('languages[]', language);
+        formData.append('languages[]', language.trim());
       }
       for (const keyword of config.keywords || []) {
-        formData.append('keywords[]', keyword);
+        formData.append('keywords[]', keyword.trim());
       }
       if (config.prompt && !this.modelName.includes('diarize')) {
         formData.append('prompt', config.prompt);

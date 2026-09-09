@@ -46,7 +46,7 @@ Review the exported results for transcription text, assertion scores, detected l
 - `keywords`: Literal terms for GPT Transcribe; each must be a non-empty line without `<` or `>`
 - `language`: A single language hint for older models, such as `en`
 - `prompt`: Provide context to improve transcription accuracy
-- `temperature`: Control randomness for older transcription models (0-1)
+- `temperature`: Control sampling randomness (0-1)
 - `timestamp_granularities`: Get word or segment-level timestamps with Whisper
 - `chunking_strategy`: Split long diarized audio (`auto` or `server_vad`)
 - `known_speaker_names` and `known_speaker_references`: Pair up to four speaker names with 2-10 second audio data URLs
