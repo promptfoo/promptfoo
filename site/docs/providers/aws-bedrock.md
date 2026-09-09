@@ -741,6 +741,15 @@ Audio input must be base64-encoded. You can use either the exact Bedrock model I
 
 Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
 
+:::warning
+
+AWS schedules Nova Reel 1.0 and 1.1 to reach end of life on **September 30, 2026**.
+These configurations support existing Reel workloads during the remaining legacy period;
+new customers cannot enable legacy models. Check the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+
+:::
+
 :::note Prerequisites
 
 Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
@@ -858,7 +867,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 **Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) support bare model IDs on IAM-authenticated Bedrock Runtime. Use `bedrock:<model-id>` or `bedrock:completion:<model-id>` for InvokeModel, and `bedrock:converse:<model-id>` for Converse. Only the explicit `bedrock:messages:<model-id>` form uses Bedrock's Anthropic-compatible Messages endpoint and requires a Bedrock API key. Cross-region inference profiles are also available with the `us.`, `eu.`, `jp.`, `au.`, or `global.` prefix. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. Promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
 
@@ -1286,27 +1295,42 @@ as shown above.
 
 :::
 
+For GPT-5.6 on Runtime, select the API explicitly and keep the inference profile ID:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_tokens: 4096
+```
+
+This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
+InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
+HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
+Mantle selectors documented here.
+
 ### xAI Grok Models
 
 Grok reaches Bedrock two different ways, depending on the model.
 
-**Grok 4.6** (`xai.grok-4.6`) is served **natively** by `InvokeModel`/`Converse`, but only through
-an inference profile — AWS reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]` for it, so the
-bare id has no on-demand throughput. Use `us.xai.grok-4.6` or `global.xai.grok-4.6`, which
-authenticate with **ordinary AWS credentials** (no Bedrock API key required):
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
+`us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
+[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
+credentials** (no Bedrock API key required):
 
 ```yaml
 providers:
-  - id: bedrock:us.xai.grok-4.6
+  - id: bedrock:converse:us.xai.grok-4.6
     config:
       region: us-west-2 # also available in us-east-1 and us-east-2
       max_tokens: 4096
-      reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
 ```
 
 The bare `bedrock:xai.grok-4.6` id also works and routes to the Mantle Responses API described
-below, which requires `AWS_BEARER_TOKEN_BEDROCK`. Prefer the inference-profile form unless you
-specifically want the Responses API surface.
+below, which requires `AWS_BEARER_TOKEN_BEDROCK`. Prefer the explicit Converse profile when
+using the AWS credential chain.
 
 :::note
 
@@ -1315,12 +1339,12 @@ For Grok 4.6 Runtime inference profiles, promptfoo estimates standard costs usin
 `us.` profiles cost $2.20 input / $6.60 output / $0.55 cached input per million tokens;
 `global.` profiles cost $2 / $6 / $0.50. Other service tiers and cache writes have no estimate.
 These rates do not establish whether an API route or region is available. Mantle paths do not
-currently estimate Grok 4.6 costs.
+currently estimate Grok 4.6 costs; an eval displaying `$0` does not mean the request is free.
 
 :::
 
 **Grok 4.3** (`xai.grok-4.3`) is Mantle-only — it has no inference profile, so a prefixed id like
-`us.xai.grok-4.3` is rejected. It runs on the same Bedrock **Mantle** engine as the OpenAI
+`us.xai.grok-4.3` is rejected. It runs on the same Bedrock **Mantle** endpoint as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
 `Converse`. It is offered in **`us-east-1`**, **`us-east-2`**, and **`us-west-2`** (check the
@@ -1381,6 +1405,7 @@ providers:
   `bedrock:openai.gpt-5.6-sol` selects **Responses**. Use bare model IDs on Mantle, without
   `us.` or `global.` prefixes. Sol supports Mantle in `us-east-1` and `us-east-2`; choose a
   supported Region for each tier from its AWS model card.
+- The bare `bedrock:xai.grok-4.3` form also selects **Responses** and surfaces reasoning tokens.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.
