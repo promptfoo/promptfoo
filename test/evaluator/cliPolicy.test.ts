@@ -110,4 +110,18 @@ describe('CLI progress policy', () => {
     expect(reporter.update).toHaveBeenCalledWith(1);
     expect(reporter.finish).toHaveBeenCalledOnce();
   });
+
+  it('cleans up the CLI reporter when finalization fails', async () => {
+    const evalRecord = new Eval({});
+    vi.spyOn(evalRecord, 'setDurationMs').mockImplementation(() => {
+      throw new Error('finalization failed');
+    });
+
+    await expect(evaluate(suite(), evalRecord, { eventSource: 'cli' })).rejects.toThrow(
+      'finalization failed',
+    );
+    expect(vi.mocked(CIProgressReporter).mock.results[0].value.error).toHaveBeenCalledWith(
+      'Evaluation failed: Error: finalization failed',
+    );
+  });
 });

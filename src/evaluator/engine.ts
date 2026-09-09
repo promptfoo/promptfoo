@@ -4555,15 +4555,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     testSuite = beforeAllOut.suite;
 
-    if (
-      !(await maybeAddGeneratedPrompts(
-        testSuite,
-        options,
-        this.runtime.selectPrompt?.bind(this.runtime),
-      ))
-    ) {
-      return this.store.evaluation;
-    }
+    await maybeAddGeneratedPrompts(
+      testSuite,
+      options,
+      this.runtime.selectPrompt?.bind(this.runtime),
+    );
 
     const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
 
@@ -4637,6 +4633,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       !(progressBarManager && ciProgressReporter),
       'Evaluator runtime must supply at most one progress reporter',
     );
+    const cleanupAndRethrow = (error: unknown): never => {
+      cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
+      throw error;
+    };
     ciProgressReporter?.start();
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
@@ -4705,7 +4705,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     // Now start the progress bar after info messages
     if (progressBarManager) {
-      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0).catch(cleanupAndRethrow);
       progressBarManager.installLogInterceptor();
     }
 
@@ -4741,7 +4741,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
-    });
+    }).catch(cleanupAndRethrow);
 
     await this.finalizeEvaluation({
       assertionTypes,
@@ -4761,7 +4761,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       usesConversationVar,
       varNames,
       vars,
-    });
+    }).catch(cleanupAndRethrow);
     return this.store.evaluation;
   }
 
