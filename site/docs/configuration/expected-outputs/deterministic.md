@@ -611,7 +611,7 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text, and finds calls nested inside a wrapper object such as `{"result": {"tool_calls": [...]}}`. JSON embedded in a text response only counts when it matches one of these tool-call shapes, so unrelated data such as `[{"name": "Alice"}]` is ignored.
+This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text, and finds calls nested inside a wrapper object such as `{"result": {"tool_calls": [...]}}`. JSON embedded in a text response only counts when it matches one of these tool-call shapes, so unrelated data such as `[{"name": "Alice"}]` is ignored, as is a tool _definition_ such as `{"tools": [{"type": "function", "function": {"name": "get_weather"}}]}`.
 
 For example, this OpenAI Responses item matches `value: [get_weather]`:
 

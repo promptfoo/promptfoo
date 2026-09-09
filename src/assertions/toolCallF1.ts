@@ -7,9 +7,10 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * Fragments inside an opener that never closes are returned too, so a stray brace in
  * prose cannot hide a tool call that follows it.
  *
- * `respectStrings` skips delimiters inside JSON strings, which is right for real JSON
- * but mis-tokenizes prose containing an odd number of quotes; the caller retries
- * without it when the first pass finds nothing.
+ * A quote only opens a JSON string once a delimiter is open, so prose quotes cannot
+ * swallow the JSON that follows them. `respectStrings: false` drops string tracking
+ * altogether, which the caller runs as a second pass for prose that opens a delimiter
+ * inside quotes.
  */
 function jsonFragments(text: string, respectStrings: boolean): string[] {
   // Each open delimiter collects the spans that completed directly inside it. They are
@@ -29,7 +30,7 @@ function jsonFragments(text: string, respectStrings: boolean): string[] {
       } else if (char === '"') {
         inString = false;
       }
-    } else if (char === '"' && respectStrings) {
+    } else if (char === '"' && respectStrings && open.length > 0) {
       inString = true;
     } else if (char === '{' || char === '[') {
       open.push({ start: i, nested: [] });
@@ -53,26 +54,30 @@ function jsonFragments(text: string, respectStrings: boolean): string[] {
  * The name of a single tool call, for shapes that identify themselves as one:
  * - Anthropic content block: { type: 'tool_use', name: '...' }
  * - OpenAI Responses item: { type: 'function_call', name: '...' }
- * - OpenAI tool call: { function: { name: '...' } }
  * - Google/Vertex: { functionCall: { name: '...' } }
+ *
+ * `{ function: { name } }` is missing on purpose: it is also the shape of an OpenAI tool
+ * *definition* (`{ type: 'function', function: { name, parameters } }`), so it only counts
+ * inside a list already known to hold calls.
  */
 function toolCallName(obj: Record<string, unknown>): string | undefined {
   if ((obj.type === 'tool_use' || obj.type === 'function_call') && typeof obj.name === 'string') {
     return obj.name;
   }
-  for (const key of ['function', 'functionCall'] as const) {
-    const call = obj[key];
-    if (call && typeof call === 'object') {
-      const { name } = call as Record<string, unknown>;
-      if (typeof name === 'string') {
-        return name;
-      }
+  const call = obj.functionCall;
+  if (call && typeof call === 'object') {
+    const { name } = call as Record<string, unknown>;
+    if (typeof name === 'string') {
+      return name;
     }
   }
   return undefined;
 }
 
-/** Adds names from a list whose entries are known to be tool calls, where a bare `{ name }` counts. */
+/**
+ * Adds names from a list whose entries are known to be tool calls, where
+ * `{ function: { name } }` and a bare `{ name }` count too.
+ */
 function addCallListNames(list: unknown, names: Set<string>): void {
   if (!Array.isArray(list)) {
     return;
@@ -80,7 +85,10 @@ function addCallListNames(list: unknown, names: Set<string>): void {
   for (const item of list) {
     if (item && typeof item === 'object') {
       const call = item as Record<string, unknown>;
-      const name = toolCallName(call) ?? call.name;
+      const fn = call.function;
+      const fnName =
+        fn && typeof fn === 'object' ? (fn as Record<string, unknown>).name : undefined;
+      const name = toolCallName(call) ?? fnName ?? call.name;
       if (typeof name === 'string') {
         names.add(name);
       }
@@ -88,15 +96,21 @@ function addCallListNames(list: unknown, names: Set<string>): void {
   }
 }
 
+/** Wrappers nest a few levels; the cap keeps adversarial nesting off the call stack. */
+const MAX_WRAPPER_DEPTH = 100;
+
 /**
  * Walks a parsed value and collects names from recognised tool-call shapes only.
  * Wrappers are traversed, so `{ result: { tool_calls: [...] } }` is found, but an
  * arbitrary `{ name: '...' }` object is never mistaken for a tool call.
  */
-function collectToolNames(value: unknown, names: Set<string>): void {
+function collectToolNames(value: unknown, names: Set<string>, depth = 0): void {
+  if (depth > MAX_WRAPPER_DEPTH) {
+    return;
+  }
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectToolNames(item, names);
+      collectToolNames(item, names, depth + 1);
     }
     return;
   }
@@ -116,7 +130,17 @@ function collectToolNames(value: unknown, names: Set<string>): void {
   addCallListNames((obj.toolCall as Record<string, unknown> | undefined)?.functionCalls, names);
 
   for (const nested of Object.values(obj)) {
-    collectToolNames(nested, names);
+    collectToolNames(nested, names, depth + 1);
+  }
+}
+
+/** Parses one balanced fragment and harvests its calls; false when it is not JSON. */
+function addFragmentNames(fragment: string, names: Set<string>): boolean {
+  try {
+    collectToolNames(JSON.parse(fragment), names);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -133,16 +157,17 @@ function extractToolNames(output: unknown): Set<string> {
     } catch {
       // Not valid JSON as a whole; harvest embedded tool-call JSON instead.
     }
+    // Both passes always run and their names are merged: an earlier call must not stop
+    // the quote-insensitive pass from recovering a later one.
     for (const respectStrings of [true, false]) {
       for (const fragment of jsonFragments(output, respectStrings)) {
-        try {
-          collectToolNames(JSON.parse(fragment), names);
-        } catch {
-          // A balanced fragment may still be invalid JSON.
+        if (!addFragmentNames(fragment, names)) {
+          // Prose can bracket a call, e.g. `[see: {"type":"tool_use",...}]`. Unwrapping one
+          // level recovers it; retrying every level would make the scan quadratic again.
+          for (const inner of jsonFragments(fragment.slice(1, -1), respectStrings)) {
+            addFragmentNames(inner, names);
+          }
         }
-      }
-      if (names.size > 0) {
-        break;
       }
     }
     return names;

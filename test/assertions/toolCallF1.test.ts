@@ -428,6 +428,31 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(1);
     });
 
+    it.each([
+      ['quote', 'He said "hello.'],
+      ['quoted brace', 'A "{" appears, then'],
+    ])('finds a later tool call when an unbalanced %s follows an earlier one', (_name, prose) => {
+      const output = `{"type":"tool_use","name":"get_weather"}\n${prose}\n{"type":"tool_use","name":"get_time"}`;
+
+      const result = handleToolCallF1(createParams(output, ['get_weather', 'get_time']));
+
+      expect(result.reason).toContain('Called: [get_time, get_weather]');
+      expect(result.score).toBe(1);
+    });
+
+    it('finds a tool call whose arguments contain a brace, after an unbalanced quote', () => {
+      const output =
+        'He said "hello.\n{"type":"tool_use","name":"get_weather","input":{"query":"{foo"}}';
+
+      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
+    });
+
+    it('finds a tool call wrapped in prose brackets', () => {
+      const output = 'Details [tool follows: {"type":"tool_use","name":"get_weather"}]';
+
+      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
+    });
+
     it('scans brace-heavy output in linear time', () => {
       const start = Date.now();
       handleToolCallF1(createParams('{'.repeat(60_000), ['get_weather']));
@@ -445,6 +470,31 @@ describe('handleToolCallF1', () => {
     ])('finds %s inside an outer object', (_name, output) => {
       expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
       expect(handleToolCallF1(createParams(JSON.stringify(output), ['get_weather'])).score).toBe(1);
+    });
+
+    it('does not treat a tool definition as a call', () => {
+      const output = {
+        tools: [
+          { type: 'function', function: { name: 'get_weather', parameters: { type: 'object' } } },
+        ],
+      };
+
+      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(0);
+      expect(handleToolCallF1(createParams(JSON.stringify(output), ['get_weather'])).score).toBe(0);
+    });
+
+    it('grades deeply nested output instead of overflowing the stack', () => {
+      const output: Record<string, unknown> = {};
+      let leaf = output;
+      for (let i = 0; i < 20_000; i++) {
+        leaf.nested = {};
+        leaf = leaf.nested as Record<string, unknown>;
+      }
+      leaf.tool_calls = [{ function: { name: 'get_weather' } }];
+      // JSON.stringify would overflow on this too, so build the params around it.
+      const params = { ...createParams({}, ['get_weather']), output };
+
+      expect(() => handleToolCallF1(params)).not.toThrow();
     });
   });
 
