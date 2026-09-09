@@ -4,14 +4,10 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import {
-  DefaultGitHubGradingJsonProvider,
-  DefaultGitHubGradingProvider,
-  DefaultGitHubSuggestionsProvider,
-} from './github/defaults';
-import { getGoogleAiStudioProviders } from './google/ai.studio';
+import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
+import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -28,6 +24,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
 
 import type { EnvOverrides } from '../types/env';
@@ -46,11 +43,46 @@ const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
+async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
+  if (defaultEmbeddingProvider) {
+    return defaultEmbeddingProvider;
+  }
+
+  const embeddingDeploymentName =
+    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME;
+  if (embeddingDeploymentName) {
+    return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
+  }
+
+  // A chat deployment is not an embedding deployment. Prefer configured embedding
+  // API credentials before probing ADC, without changing Azure's chat selection.
+  if (
+    env?.GEMINI_API_KEY ||
+    getEnvString('GEMINI_API_KEY') ||
+    env?.GOOGLE_API_KEY ||
+    getEnvString('GOOGLE_API_KEY') ||
+    env?.PALM_API_KEY ||
+    getEnvString('PALM_API_KEY')
+  ) {
+    return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
+  }
+  if (env?.MISTRAL_API_KEY || getEnvString('MISTRAL_API_KEY')) {
+    return new MistralEmbeddingApiProvider({ env });
+  }
+  if (env?.VOYAGE_API_KEY || getEnvString('VOYAGE_API_KEY')) {
+    return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
+  }
+  if (await hasGoogleDefaultCredentials()) {
+    return getGoogleVertexEmbeddingProvider(env);
+  }
+  return OpenAiEmbeddingProvider;
+}
+
 interface DefaultProviderPreferences {
   preferAnthropic: boolean;
   preferAzure: boolean;
   useCodexDefaults: boolean;
-  useGitHubDefaults: boolean;
   useGoogleAiStudioDefaults: boolean;
   useGoogleVertexDefaults: boolean;
   useMistralDefaults: boolean;
@@ -64,7 +96,6 @@ async function getDefaultProviderPreferences(
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
   );
   const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
-  const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
   const hasGoogleAiStudioCredentials = Boolean(
     getEnvString('GEMINI_API_KEY') ||
       env?.GEMINI_API_KEY ||
@@ -111,12 +142,6 @@ async function getDefaultProviderPreferences(
     preferAnthropic,
     preferAzure,
     useCodexDefaults: hasCodexCredentials,
-    useGitHubDefaults:
-      useNonGoogleFallbackDefaults &&
-      !hasMistralCredentials &&
-      !hasXAICredentials &&
-      !hasCodexCredentials &&
-      hasGitHubCredentials,
     useGoogleAiStudioDefaults:
       !hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials,
     useGoogleVertexDefaults,
@@ -142,7 +167,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     preferAnthropic,
     preferAzure,
     useCodexDefaults,
-    useGitHubDefaults,
     useGoogleAiStudioDefaults,
     useGoogleVertexDefaults,
     useMistralDefaults,
@@ -159,18 +183,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
 
-    const embeddingDeploymentName =
-      getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
-      env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
-      deploymentName;
-
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
-    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, {
-      env,
-    });
 
     providers = {
-      embeddingProvider: azureEmbeddingProvider,
+      embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
       moderationProvider: OpenAiModerationProvider,
@@ -229,16 +245,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       embeddingProvider: OpenAiEmbeddingProvider,
       moderationProvider: OpenAiModerationProvider,
       ...getCodexDefaultProviders(env),
-    };
-  } else if (useGitHubDefaults) {
-    logger.debug('Using GitHub Models default providers');
-    providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
-      gradingJsonProvider: DefaultGitHubGradingJsonProvider,
-      gradingProvider: DefaultGitHubGradingProvider,
-      moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
-      suggestionsProvider: DefaultGitHubSuggestionsProvider,
-      synthesizeProvider: DefaultGitHubGradingJsonProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');

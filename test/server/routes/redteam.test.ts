@@ -31,7 +31,6 @@ const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
-const debugSpy = vi.spyOn(logger, 'debug');
 
 describe('Redteam Routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -972,13 +971,16 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/:taskId', () => {
+    let debugSpy: ReturnType<typeof vi.spyOn>;
+
     beforeEach(() => {
       vi.resetAllMocks();
-      debugSpy.mockClear();
+      debugSpy = vi.spyOn(logger, 'debug');
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
 
     afterEach(() => {
+      debugSpy.mockRestore();
       vi.resetAllMocks();
     });
 

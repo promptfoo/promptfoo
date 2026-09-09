@@ -488,14 +488,17 @@ describe('evalCommand', () => {
     });
   });
 
-  it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
-    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
-    cmd.exitOverride();
+  it.each(['invalid', '=value', ' =value', ' = ', 'key =value', 'key\t=value'])(
+    'should reject malformed --tag value %s',
+    (tagValue) => {
+      const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+      cmd.exitOverride();
 
-    expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
-      '--tag must be specified in key=value format.',
-    );
-  });
+      expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    },
+  );
 
   it('should load cloud eval config when config is a single UUID', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
@@ -554,7 +557,23 @@ describe('evalCommand', () => {
     // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
     const watchBase = path.dirname(defaultConfigPath);
 
+    // doEval() -> runEvaluation() calls loadDefaultConfig(), which probes the default
+    // config filenames through the same `maybeReadConfig` mock these tests assert on and
+    // memoizes the answer in a module-level cache. Whether that probe runs at all -- and
+    // whether it "finds" the mocked config and rewrites cmdObj.config with it -- then
+    // depends on which sibling test warmed the cache first. Pin it to "no default config
+    // found" so every test here drives the same path and only the watch-path recovery
+    // branch under test can reach `maybeReadConfig`.
+    let loadDefaultConfigSpy: ReturnType<typeof vi.spyOn>;
+
+    afterEach(() => {
+      loadDefaultConfigSpy.mockRestore();
+    });
+
     beforeEach(() => {
+      loadDefaultConfigSpy = vi
+        .spyOn(defaultConfigModule, 'loadDefaultConfig')
+        .mockResolvedValue({ defaultConfig: {}, defaultConfigPath: undefined });
       // Sibling tests queue `mockReturnValueOnce` values on this shared mock and
       // restore only its default in `finally`, which leaves the queue intact if the
       // test bails early. A leftover "missing API keys" value fails the run before it
@@ -795,6 +814,9 @@ describe('evalCommand', () => {
         });
       });
 
+    /** Every doEval this block starts, so afterEach can guarantee none outlives its test. */
+    let started: Promise<unknown>[] = [];
+
     const startWatch = (evaluateOptions: Record<string, unknown>) => {
       const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -811,12 +833,14 @@ describe('evalCommand', () => {
       vi.mocked(evaluate)
         .mockReset()
         .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval);
-      return doEval(
+      const run = doEval(
         { watch: true, write: false },
         config,
         defaultConfigPath,
         evaluateOptions as never,
       );
+      started.push(run);
+      return run;
     };
 
     /**
@@ -856,10 +880,21 @@ describe('evalCommand', () => {
 
     beforeEach(() => {
       before = process.listeners('SIGINT');
+      started = [];
     });
 
-    afterEach(() => {
-      // Only remove what a test leaked; vitest installs its own SIGINT handler.
+    afterEach(async () => {
+      // Signal rather than just unregister. Watch mode only returns on a signal, so
+      // removing the listener would strand doEval forever -- and a stranded run keeps
+      // executing, landing its mock calls inside whichever test comes next. A failing
+      // test never reaches its own signal, so this has to happen here.
+      for (const listener of installedSince(before)) {
+        listener('SIGINT');
+      }
+      await Promise.allSettled(started);
+      // Anything still registered after that is not going to settle; drop it so it
+      // cannot fire during another test. vitest installs its own handler, so only
+      // remove what this block added.
       for (const listener of installedSince(before)) {
         process.removeListener('SIGINT', listener);
       }
