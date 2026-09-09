@@ -122,7 +122,7 @@ Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models,
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
-Bare `openai:chat` and `openai:responses` currently select `gpt-4.1-2025-04-14`. They do not select OpenAI's latest model. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
+Bare `openai:chat` and `openai:responses` currently select `gpt-4.1-2025-04-14`. Specify a model ID, such as `openai:responses:gpt-5.6-luna`, to choose a newer model explicitly. Keeping the existing defaults avoids changing the model for configurations that omit it. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
 `openai:embedding` and `openai:embeddings` default to `text-embedding-3-large`; both prefixes accept an explicit model. `openai:speech:` is an alias for `openai:tts:`.
 
@@ -242,13 +242,14 @@ providers:
 
 Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
 
-| Option           | Use                                                                                                        |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apiKeyEnvar`    | Read a key from the named environment variable. A missing variable does not fall back to `OPENAI_API_KEY`. |
-| `apiKey`         | Set a key directly; takes precedence over environment variables. Prefer a secret-backed value.             |
-| `apiKeyRequired` | Set to `false` only for endpoints that do not require an API key.                                          |
-| `headers`        | Add request headers, such as `OpenAI-Project`.                                                             |
-| `organization`   | Set the OpenAI organization ID.                                                                            |
+| Option             | Use                                                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKeyEnvar`      | Read a key from the named environment variable. A missing variable does not fall back to `OPENAI_API_KEY`.                                                                          |
+| `apiKey`           | Set a key directly; takes precedence over environment variables. Prefer a secret-backed value.                                                                                      |
+| `apiKeyRequired`   | Set to `false` only for endpoints that do not require an API key.                                                                                                                   |
+| `useDefaultApiKey` | Set to `false` to disable fallback to `OPENAI_API_KEY`. Explicit `apiKey` and `apiKeyEnvar` still work. Pair with `apiKeyRequired: false` for an unauthenticated compatible server. |
+| `headers`          | Add request headers, such as `OpenAI-Project`.                                                                                                                                      |
+| `organization`     | Set the OpenAI organization ID.                                                                                                                                                     |
 
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 
@@ -598,6 +599,28 @@ providers:
 
 This example limits searches to OpenAI's developer documentation. Tool options are forwarded to OpenAI, including `search_context_size`, `filters`, `user_location`, `external_web_access`, and `return_token_budget`. See the [web search guide](https://developers.openai.com/api/docs/guides/tools-web-search) for supported values and model restrictions.
 
+<details>
+<summary>Location, live access, and search budgets</summary>
+
+For location-sensitive searches, add an approximate location to the tool:
+
+```yaml
+tools:
+  - type: web_search
+    search_context_size: medium
+    user_location:
+      type: approximate
+      country: US
+      city: San Francisco
+      region: California
+      timezone: America/Los_Angeles
+    external_web_access: true
+```
+
+`search_context_size` accepts `low`, `medium`, or `high`. Set `external_web_access: false` to use cached or indexed results without fetching live pages. For longer research with GPT-5+ reasoning models, `return_token_budget: unlimited` removes the standard search-result token cap; `default` keeps it. Removing the cap can increase latency and cost. The budget option applies to `web_search`, not `web_search_preview`.
+
+</details>
+
 Inspect citations in the provider response's `metadata.annotations` and search items in `raw.output`. Use `--no-cache` for fresh searches. Web search can incur tool charges in addition to token usage; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 The [`search-rubric` assertion](/docs/configuration/expected-outputs/model-graded/search-rubric) uses a search-enabled grading model to verify an output against current information. Configuring the target's search tools and configuring a search-based grader are separate choices.
@@ -612,7 +635,28 @@ Choose the integration based on what you want to test:
 | Connect Promptfoo to a local or remote MCP server for model tool calls | Explicit `openai:chat:<model>` with [`config.mcp`](/docs/integrations/mcp) |
 | Evaluate an MCP server's tools directly                                | The [MCP provider](/docs/providers/mcp), without an OpenAI model           |
 
-The Chat provider implements Promptfoo's `config.mcp` integration. For Responses, use OpenAI's hosted MCP tool configuration below.
+With `config.mcp`, Promptfoo connects to the server and executes the model's tool calls. This works with servers on your machine or private network. With a Responses `type: mcp` tool, OpenAI connects to the server, so it must be reachable from OpenAI.
+
+<details>
+<summary>Connect Promptfoo to an MCP server</summary>
+
+Use an explicit Chat provider, even for models whose bare IDs default to Responses:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-5.6-luna
+    config:
+      mcp:
+        enabled: true
+        server:
+          url: http://localhost:8000/mcp
+```
+
+Start your MCP server at the configured URL before running the eval. To launch a local server process instead, use `server.command` and `server.args`. See the [MCP integration guide](/docs/integrations/mcp) for authentication and multiple servers.
+
+The Chat provider returns executed tool results as eval output. For a full agent loop that sends results back to the model, use the [Agents SDK provider](/docs/providers/openai-agents) or a [custom provider](/docs/providers/custom-api/).
+
+</details>
 
 <Link id="basic-mcp-configuration" />
 <Link id="mcp-tool-configuration-options" />

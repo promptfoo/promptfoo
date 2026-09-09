@@ -12,6 +12,7 @@ const localOptions = {
   apiKey: true,
   apiKeyEnvar: true,
   apiKeyRequired: true,
+  useDefaultApiKey: true,
   apiHost: true,
   apiBaseUrl: true,
   organization: true,
