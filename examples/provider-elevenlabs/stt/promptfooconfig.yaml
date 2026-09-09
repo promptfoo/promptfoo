@@ -1,9 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
 
-# Resolve audio paths from this example directory, regardless of the working directory
 prompts:
-  - file://audio-path.mjs
+  - '{{audioFile}}'
 
 providers:
   # Basic transcription
@@ -33,6 +32,9 @@ providers:
 
 # Default test configuration
 defaultTest:
+  # Resolve vars.audioFile from this example directory before rendering the prompt
+  options:
+    transformVars: file://audio-path.mjs
   # All tests will require transcription to complete
   assert:
     - type: not-contains

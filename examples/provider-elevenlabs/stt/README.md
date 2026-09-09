@@ -11,7 +11,7 @@ export ELEVENLABS_API_KEY=your_api_key_here
 npx promptfoo@latest eval
 ```
 
-The bundled `audio-path.mjs` prompt function resolves relative `audioFile` paths from this example directory, so the config also works when invoked from the repository root. Absolute audio paths remain unchanged.
+The bundled `audio-path.mjs` variable transform resolves relative `vars.audioFile` paths from this example directory before prompt rendering, so the config also works when invoked from the repository root. Absolute paths remain unchanged. Config-level `audioFile` paths remain relative to the working directory unless absolute.
 
 ## Features
 
@@ -150,11 +150,15 @@ providers:
 
 ### Method 2: Prompt-level
 
-Use the bundled prompt function to resolve audio paths relative to this example directory:
+Use the bundled variable transform so the prompt and vars fallback receive the same resolved audio path. Missing or empty `vars.audioFile` values leave config-level audio input available:
 
 ```yaml
 prompts:
-  - file://audio-path.mjs
+  - '{{audioFile}}'
+
+defaultTest:
+  options:
+    transformVars: file://audio-path.mjs
 
 tests:
   - vars:
