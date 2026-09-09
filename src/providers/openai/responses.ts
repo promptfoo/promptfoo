@@ -859,8 +859,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
     const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
     // An explicit request model supplies its own capabilities instead of inheriting deployment hints.
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const hasAzureCustomDeploymentHost =
-      typeof config.passthrough?.model !== 'string' &&
+      typeof passthroughModel !== 'string' &&
       [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
         this.isAzureOpenAiEndpoint(endpoint),
       );
