@@ -5,6 +5,7 @@ import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
   isAbortError,
+  type SystemError,
 } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -554,7 +555,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const signal = callApiOptions?.abortSignal;
       if (
         signal?.aborted &&
-        (err === signal.reason || (err instanceof Error && err.cause === signal.reason))
+        (err === signal.reason ||
+          (err instanceof Error && (err as SystemError).cause === signal.reason))
       ) {
         throwIfAborted(signal);
       }

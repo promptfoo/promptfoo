@@ -1,6 +1,5 @@
 import { EventEmitter } from 'events';
 
-import { isAbortError } from '../util/fetch/errors';
 import {
   AdaptiveConcurrency,
   type ConcurrencyChangeResult,
@@ -231,7 +230,10 @@ export class ProviderRateLimitState extends EventEmitter {
         this.slotQueue.release();
 
         // Cancellation is final, even when its message resembles a retryable error.
-        if (isAbortError(error)) {
+        if (
+          error instanceof Error &&
+          (error.name === 'AbortError' || error.name === 'AbortException')
+        ) {
           this.failedRequests++;
           throw error;
         }
