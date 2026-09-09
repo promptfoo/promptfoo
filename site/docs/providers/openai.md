@@ -918,7 +918,7 @@ defaultTest:
       provider: openai:chat:gpt-audio-1.5
 ```
 
-Promptfoo sends the generated audio to this grader and requests a text grade. A grader that cannot listen to audio grades the transcript instead and logs a warning; without a transcript the assertion errors. Audio must be inline base64 WAV or MP3, up to 20 MiB. Keep the Realtime provider's default `output_audio_format: pcm16`; Promptfoo converts it to WAV for both single requests and persistent conversations. G.711 output requires conversion before audio grading. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
+Promptfoo sends the generated audio to this grader and requests a text grade. A grader that cannot listen to audio grades the text output instead and logs a warning; when the output is the audio itself with no transcript, the assertion errors. Audio must be inline base64 WAV or MP3, up to 20 MiB. Keep the Realtime provider's default `output_audio_format: pcm16`; Promptfoo converts it to WAV for both single requests and persistent conversations. G.711 output requires conversion before audio grading. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
 
 ### Session settings {#realtime-specific-configuration-options}
 

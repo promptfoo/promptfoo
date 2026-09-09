@@ -196,8 +196,25 @@ describe('llm-rubric audio grading', () => {
         'Grade Hello. for The speaker sounds calm.',
       );
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('grading the transcript instead'),
+        expect.stringContaining('grading the text output instead'),
         expect.anything(),
+      );
+    },
+  );
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'grades the text output of a transcript-less target ($modelName)',
+    async (provider) => {
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+      // Text-to-speech targets attach audio with no transcript and a separate
+      // text output; that text is real evidence, so grade it rather than error.
+      expect(await grade(provider, { data: audio.data, format: 'wav' })).toMatchObject({
+        pass: true,
+      });
+      expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+        'Grade Hello. for The speaker sounds calm.',
       );
     },
   );

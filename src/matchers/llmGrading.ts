@@ -21,6 +21,7 @@ import {
   shouldUseRemoteGrading,
 } from './providers';
 import {
+  ATTACHED_AUDIO_OUTPUT_PLACEHOLDER,
   LlmRubricProviderError,
   loadRubricPrompt,
   materializeImageOutputsForGrading,
@@ -175,7 +176,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
     .replace(/^data:audio\/[^;,]+;base64,/i, '')
     .replace(/\s/g, '');
   return outputData === audio.data.replace(/\s/g, '')
-    ? audio.transcript || '[Audio output]'
+    ? audio.transcript || ATTACHED_AUDIO_OUTPUT_PLACEHOLDER
     : llmOutput;
 }
 
@@ -218,7 +219,7 @@ export async function matchesLlmRubric(
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     if (audio?.data) {
-      requireAudioGradingEvidence(audio, 'Remote grading');
+      requireAudioGradingEvidence(gradingOutput, 'Remote grading');
     }
     try {
       return {

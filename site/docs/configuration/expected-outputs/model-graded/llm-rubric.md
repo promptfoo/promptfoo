@@ -80,7 +80,7 @@ Promptfoo requests the grade as text, so the grader spends its completion budget
 
 The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading.
 
-A grader that cannot listen to audio grades the transcript instead and logs a warning. If the output has no transcript either, the assertion errors rather than grading a placeholder.
+A grader that cannot listen to audio grades the text output instead and logs a warning. If the output is the audio itself and there is no transcript, the assertion errors rather than grading a placeholder.
 
 An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
