@@ -118,6 +118,11 @@ export interface CallApiOptionsParams {
    * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
+  /**
+   * @internal Notify the scheduler of a completed successful HTTP response
+   * before provider post-processing, which may still be cancelled.
+   */
+  onResponseHeaders?: (headers: Record<string, string>) => void;
 }
 
 export interface ApiProvider extends MinimalApiProvider {

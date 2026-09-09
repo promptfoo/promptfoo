@@ -782,7 +782,7 @@ describe('fetchWithCache', () => {
         if (signal === controller.signal) {
           resolveSignaledStarted();
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return Promise.resolve(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
@@ -828,10 +828,10 @@ describe('fetchWithCache', () => {
         if (signal === controller.signal) {
           resolveSignaledStarted();
           if (signal.aborted) {
-            return Promise.reject(new Error('Aborted'));
+            return Promise.reject(signal.reason);
           }
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return unsignaledFetch;

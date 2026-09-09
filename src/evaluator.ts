@@ -132,7 +132,7 @@ import type {
   VarValue,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { CallApiContextParams } from './types/providers';
+import type { CallApiContextParams, CallApiOptionsParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -1082,9 +1082,9 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
-
-  const callApi = () => {
+  const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    const callApiOptions =
+      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
     onProviderInvoked();
     const invoke = () =>
       traceContext?.traceparent

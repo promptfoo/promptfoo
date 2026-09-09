@@ -288,6 +288,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
     await vi.advanceTimersByTimeAsync(120000);
     expect(callApi).toHaveBeenCalledExactlyOnceWith('prompt', undefined, {
       abortSignal: controller.signal,
+      onResponseHeaders: expect.any(Function),
     });
     expect(vi.getTimerCount()).toBe(0);
   });

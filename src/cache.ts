@@ -312,7 +312,10 @@ type PreparedFetchResponse = {
   cacheable: boolean;
 };
 
-const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const inflightFetchResponses = new Map<
+  string,
+  { response: Promise<PreparedFetchResponse>; publication: Promise<void> }
+>();
 const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const IGNORED_FETCH_CACHE_HEADERS = new Set(['traceparent', 'tracestate']);
@@ -923,29 +926,42 @@ export async function fetchWithCache<T = unknown>(
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
-    inflightResponse = (async () => {
-      const preparedResponse = await prepareFetchResponse(
-        url,
-        transportOptions,
-        timeout,
-        maxRetries,
-        isIdempotent,
-        format,
-      );
-      if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
-      }
-      return preparedResponse.response;
-    })().finally(() => {
-      inflightFetchResponses.delete(inflightCacheKey);
-    });
+    const response = prepareFetchResponse(
+      url,
+      transportOptions,
+      timeout,
+      maxRetries,
+      isIdempotent,
+      format,
+    );
+    const publication = response
+      .then(async (preparedResponse) => {
+        if (preparedResponse.cacheable) {
+          await cache.set(cacheKey, preparedResponse.response);
+        }
+      })
+      .finally(() => {
+        inflightFetchResponses.delete(inflightCacheKey);
+      });
+    // Publication may reject after a caller stops waiting or the transport fails.
+    void publication.catch(() => undefined);
+    inflightResponse = { response, publication };
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  // Keep cache publication alive for other callers when this caller stops waiting.
-  const response = await waitForPromiseWithAbort(inflightResponse, signal);
-  throwIfAborted(signal);
+  // Transport and body reading already own the signal. Racing their propagation
+  // against abort here would discard an already-completed HTTP diagnostic.
+  const { response } = await inflightResponse.response;
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  if (result.status >= 200 && result.status < 300) {
+    // Keep publication alive for other callers while this caller can stop waiting.
+    await waitForPromiseWithAbort(inflightResponse.publication, signal);
+    throwIfAborted(signal);
+  } else {
+    // Non-2xx responses are never published. Finish inflight cleanup before a
+    // subsequent caller can join this completed diagnostic, without racing abort.
+    await inflightResponse.publication;
+  }
   return coalesced ? { ...result, coalesced: true } : result;
 }
 

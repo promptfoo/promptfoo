@@ -539,6 +539,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
         };
       }
+      if (responseHeaders) {
+        callApiOptions?.onResponseHeaders?.(responseHeaders);
+      }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
       const signal = callApiOptions?.abortSignal;

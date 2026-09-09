@@ -123,7 +123,7 @@ export class ProviderRateLimitState extends EventEmitter {
    */
   async executeWithRetry<T>(
     requestId: string,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: (headers: Record<string, string>) => void) => Promise<T>,
     options: {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
@@ -162,6 +162,13 @@ export class ProviderRateLimitState extends EventEmitter {
         // A result can release its slot before retry backoff. Only this owner may
         // release it, including aborts between the grant and callFn invocation.
         let ownsSlot = true;
+        let observedHeaders: Record<string, string> | undefined;
+        const onResponseHeaders = (headers: Record<string, string>) => {
+          if (ownsSlot) {
+            observedHeaders = headers;
+            this.updateFromHeaders(headers, false);
+          }
+        };
         const releaseSlot = () => {
           if (ownsSlot) {
             ownsSlot = false;
@@ -175,19 +182,24 @@ export class ProviderRateLimitState extends EventEmitter {
 
         try {
           throwIfAborted(options.abortSignal);
-          const result = await callFn();
+          const result = await callFn(onResponseHeaders);
           const hasErrorResponse =
             result !== null &&
             typeof result === 'object' &&
             'error' in result &&
             typeof result.error === 'string' &&
             result.error.length > 0;
+          const hasRefusalResponse =
+            result !== null &&
+            typeof result === 'object' &&
+            'isRefusal' in result &&
+            result.isRefusal === true;
           const headers = options.getHeaders?.(result);
           isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
           // Learn quota before releasing capacity to another queued caller.
-          if (headers) {
+          if (headers && (headers !== observedHeaders || isRateLimited)) {
             this.updateFromHeaders(headers, isRateLimited);
           }
           if (isRateLimited) {
@@ -195,7 +207,7 @@ export class ProviderRateLimitState extends EventEmitter {
           }
           // A completed response still consumes quota when its caller cancels.
           // Learn it before discarding the result and releasing the slot.
-          if (!hasErrorResponse) {
+          if (!hasErrorResponse && !hasRefusalResponse) {
             throwIfAborted(options.abortSignal);
           }
           this.latencies.push(Date.now() - startTime);
@@ -208,7 +220,7 @@ export class ProviderRateLimitState extends EventEmitter {
             return result;
           }
 
-          if (!isRateLimited) {
+          if (!isRateLimited || (options.abortSignal?.aborted && hasRefusalResponse)) {
             this.handleSuccess();
             this.completedRequests++;
             return result;
