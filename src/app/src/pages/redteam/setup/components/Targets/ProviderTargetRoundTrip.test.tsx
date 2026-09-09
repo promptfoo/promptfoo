@@ -180,6 +180,32 @@ describe('generated target configuration round trips', () => {
     },
   );
 
+  it.each([
+    { label: 'Llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+    { label: 'vLLM', apiBaseUrl: 'http://localhost:8000/v1' },
+    { label: 'Text Generation WebUI', apiBaseUrl: 'http://localhost:5000/v1' },
+  ])(
+    'retains a local endpoint when replacement $label JSON omits it',
+    async ({ label, apiBaseUrl }) => {
+      const user = userEvent.setup();
+      renderWithProviders(<TargetEditor />);
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), localId);
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+        JSON.stringify({ apiKeyEnvar: 'LOCAL_MODEL_KEY', max_tokens: 100 }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Format' }));
+      const target = useRedTeamConfig.getState().config.target;
+      expect(target).toMatchObject({
+        id: localId,
+        config: { apiBaseUrl, apiKeyEnvar: 'LOCAL_MODEL_KEY', max_tokens: 100 },
+      });
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    },
+  );
+
   it('preserves an explicit local credential fallback opt-in after replacing and formatting JSON', async () => {
     const user = userEvent.setup();
     renderWithProviders(<TargetEditor />);

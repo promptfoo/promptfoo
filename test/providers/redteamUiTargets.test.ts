@@ -26,6 +26,7 @@ vi.mock('@fal-ai/client', () => ({
 type Target = { id: string; config: Record<string, unknown> };
 let initialConfigs: Record<string, Target>;
 let persistedTargets: Record<string, Target>;
+let destinationTargets: Record<string, Target>;
 
 beforeAll(() => {
   // The app owns this browser-only module in a separate TypeScript project. Read its
@@ -71,6 +72,7 @@ beforeAll(() => {
     globalThis.window = { localStorage: globalThis.localStorage };
     const { useStore } = await import(${JSON.stringify(storeUrl.href)});
     const persistedTargets = {};
+    const destinationTargets = {};
     for (const type of ['llamafile', 'vllm', 'text-generation-webui']) {
       for (const [auth, config] of Object.entries({
         none: {},
@@ -91,9 +93,30 @@ beforeAll(() => {
         persistedTargets[type + ':' + auth] = useStore.getState().config.providers[0];
       }
     }
-    console.log(JSON.stringify({ initialConfigs, persistedTargets }));
+    for (const type of ['llamafile', 'vllm', 'text-generation-webui']) {
+      for (const [endpoint, config] of Object.entries({
+        omitted: {},
+        empty: { apiBaseUrl: '' },
+        whitespace: { apiBaseUrl: '  ' },
+        null: { apiBaseUrl: null },
+        custom: { apiBaseUrl: 'https://local-deployment.example.test/custom/v1' },
+        host: { apiHost: 'local-host.example.test' },
+      })) {
+        const id = 'openai:chat:tenant/private-served-model:Q4_K_M';
+        const target = { id, config: withLocalProviderType(id, {
+          ...config, apiKeyEnvar: 'LOCAL_MODEL_KEY', max_tokens: 100,
+        }, type) };
+        useStore.getState().setConfig({ providers: [target] });
+        const saved = localStorage.getItem('promptfoo');
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', saved);
+        await useStore.persist.rehydrate();
+        destinationTargets[type + ':' + endpoint] = useStore.getState().config.providers[0];
+      }
+    }
+    console.log(JSON.stringify({ initialConfigs, persistedTargets, destinationTargets }));
   `;
-  ({ initialConfigs, persistedTargets } = JSON.parse(
+  ({ initialConfigs, persistedTargets, destinationTargets } = JSON.parse(
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
       cwd: fileURLToPath(new URL('../../', import.meta.url)),
       encoding: 'utf8',
@@ -288,6 +311,47 @@ describe('redteam UI initial target runtime contracts', () => {
         model: 'tenant/private-served-model:Q4_K_M',
         stop: ['<end>'],
       });
+    },
+  );
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      ['omitted', 'empty', 'whitespace', 'null', 'custom', 'host'].map((endpoint) => ({
+        type,
+        endpoint,
+      })),
+    ),
+  )(
+    'keeps the $type request destination local or explicit after JSON replacement ($endpoint)',
+    async ({ type, endpoint }) => {
+      const restoreEndpointEnv = mockProcessEnv({
+        OPENAI_API_HOST: 'ambient-openai.example.test',
+        OPENAI_API_BASE_URL: 'https://ambient-base.example.test/v1',
+        OPENAI_BASE_URL: 'https://ambient-alias.example.test/v1',
+      });
+      try {
+        const target = destinationTargets[`${type}:${endpoint}`];
+        const provider = await loadApiProvider(target.id, { options: target });
+        expect((await provider.callApi('Keep this prompt on the selected server')).output).toBe(
+          'Hello from the fixture',
+        );
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        const expectedBase =
+          endpoint === 'custom'
+            ? 'https://local-deployment.example.test/custom/v1'
+            : endpoint === 'host'
+              ? 'https://local-host.example.test/v1'
+              : initialConfigs[type].config.apiBaseUrl;
+        expect(url).toBe(`${expectedBase}/chat/completions`);
+        expect(request!.headers).toMatchObject({ Authorization: 'Bearer selected-local-key' });
+        expect(JSON.parse(request!.body as string)).toMatchObject({
+          model: 'tenant/private-served-model:Q4_K_M',
+          max_tokens: 100,
+          messages: [{ role: 'user', content: 'Keep this prompt on the selected server' }],
+        });
+      } finally {
+        restoreEndpointEnv();
+      }
     },
   );
 

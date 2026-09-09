@@ -1,3 +1,5 @@
+import { getProviderInitialConfig } from './providerInitialConfig';
+
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
 export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiProviderType {
@@ -21,7 +23,17 @@ export function withLocalProviderType(
   // The runtime ID identifies the protocol; retain the local editor choice in
   // the config, as we already do for WebSocket targets. It is not a model option.
   return providerId?.startsWith('openai:chat:') && isLocalOpenAiProviderType(providerType)
-    ? { apiKeyRequired: false, useDefaultApiKey: false, ...config, type: providerType }
+    ? {
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+        ...config,
+        type: providerType,
+        // A complete JSON replacement must not fall back to OpenAI's ambient endpoint.
+        apiBaseUrl:
+          typeof config.apiBaseUrl === 'string' && config.apiBaseUrl.trim()
+            ? config.apiBaseUrl
+            : getProviderInitialConfig(providerType)?.config.apiBaseUrl,
+      }
     : config;
 }
 
