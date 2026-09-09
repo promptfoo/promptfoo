@@ -371,6 +371,34 @@ describe('AzureResponsesProvider', () => {
       });
       expect(body.text.verbosity).toBeUndefined();
     });
+
+    it('translates chat-format content parts into Responses parts', async () => {
+      // Azure was left out when the chat-format translation landed, so multimodal prompts were
+      // forwarded raw and rejected by the API.
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const body = await provider.getAzureResponsesBody(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What color is this?' },
+              { type: 'image_url', image_url: { url: 'https://x/y.png', detail: 'low' } },
+            ],
+          },
+        ]),
+      );
+
+      expect(body.input).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'What color is this?' },
+            { type: 'input_image', image_url: 'https://x/y.png', detail: 'low' },
+          ],
+        },
+      ]);
+    });
   });
 
   describe('callApi', () => {
@@ -483,6 +511,33 @@ describe('AzureResponsesProvider', () => {
       // gpt-4.1 is priced in AZURE_MODELS, and tokens now flow through, so cost must be > 0.
       expect(result.cost).toBeGreaterThan(0);
       expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
+    });
+
+    it('prices an arbitrarily named deployment from its configured modelName', async () => {
+      // Cost was looked up from the request body's `model` (always the deployment name), so a
+      // deployment not named after a priced model reported no cost at all.
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: { input_tokens: 1_000, output_tokens: 500 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('my-deployment', {
+        config: { modelName: 'gpt-5.6' },
+      });
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_000 * 5 + 500 * 30) / 1e6, 12);
     });
 
     it('applies the cached-input rate from Responses usage details', async () => {
