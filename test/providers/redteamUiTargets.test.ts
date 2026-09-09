@@ -101,6 +101,14 @@ beforeAll(() => {
         null: { apiBaseUrl: null },
         custom: { apiBaseUrl: 'https://local-deployment.example.test/custom/v1' },
         host: { apiHost: 'local-host.example.test' },
+        hostPriority: {
+          apiHost: 'local-host.example.test/tenant',
+          apiBaseUrl: 'https://api.openai.com/v1',
+        },
+        nativeHostPriority: {
+          apiHost: 'api.openai.com',
+          apiBaseUrl: 'https://local-deployment.example.test/custom/v1',
+        },
       })) {
         const id = 'openai:chat:tenant/private-served-model:Q4_K_M';
         const target = { id, config: withLocalProviderType(id, {
@@ -335,7 +343,16 @@ describe('redteam UI initial target runtime contracts', () => {
 
   it.each(
     ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
-      ['omitted', 'empty', 'whitespace', 'null', 'custom', 'host'].map((endpoint) => ({
+      [
+        'omitted',
+        'empty',
+        'whitespace',
+        'null',
+        'custom',
+        'host',
+        'hostPriority',
+        'nativeHostPriority',
+      ].map((endpoint) => ({
         type,
         endpoint,
       })),
@@ -355,12 +372,13 @@ describe('redteam UI initial target runtime contracts', () => {
           'Hello from the fixture',
         );
         const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
-        const expectedBase =
-          endpoint === 'custom'
-            ? 'https://local-deployment.example.test/custom/v1'
-            : endpoint === 'host'
-              ? 'https://local-host.example.test/v1'
-              : initialConfigs[type].config.apiBaseUrl;
+        const configuredBases: Record<string, string> = {
+          custom: 'https://local-deployment.example.test/custom/v1',
+          host: 'https://local-host.example.test/v1',
+          hostPriority: 'https://local-host.example.test/tenant/v1',
+          nativeHostPriority: 'https://api.openai.com/v1',
+        };
+        const expectedBase = configuredBases[endpoint] ?? initialConfigs[type].config.apiBaseUrl;
         expect(url).toBe(`${expectedBase}/chat/completions`);
         expect(request!.headers).toMatchObject({ Authorization: 'Bearer selected-local-key' });
         expect(JSON.parse(request!.body as string)).toMatchObject({

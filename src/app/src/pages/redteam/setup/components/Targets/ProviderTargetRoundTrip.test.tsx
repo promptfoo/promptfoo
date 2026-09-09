@@ -281,13 +281,28 @@ describe('generated target configuration round trips', () => {
     expect(useRedTeamConfig.getState().config.target.config).toMatchObject(explicitAuthConfig);
   });
 
-  it.each(localTargets)(
-    'keeps an untyped compatible import editable and preserves it when selecting $label',
-    async ({ label, type }) => {
+  it.each(
+    localTargets.flatMap((target) =>
+      [
+        { endpoint: 'apiBaseUrl', config: localConfig },
+        {
+          endpoint: 'apiHost',
+          config: {
+            apiHost: 'private.example.test/tenant',
+            apiKeyEnvar: 'LOCAL_MODEL_KEY',
+            stop: ['<end>'],
+            max_tokens: 321,
+          },
+        },
+      ].map((endpoint) => ({ ...target, ...endpoint })),
+    ),
+  )(
+    'keeps an untyped $endpoint import editable and preserves it when selecting $label',
+    async ({ label, type, config }) => {
       const user = userEvent.setup();
       const imported = {
         ...useRedTeamConfig.getState().config,
-        target: { id: localId, label: 'Existing deployment', config: localConfig },
+        target: { id: localId, label: 'Existing deployment', config },
       };
       act(() => useRedTeamConfig.getState().setFullConfig(imported));
       renderWithProviders(<TargetEditor />);

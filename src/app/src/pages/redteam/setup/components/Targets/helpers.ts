@@ -7,7 +7,7 @@ export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiPro
 }
 
 export function hasCustomOpenAiBaseUrl(config?: Record<string, unknown>): boolean {
-  const baseUrl = config?.apiBaseUrl;
+  const baseUrl = config?.apiHost ? `https://${config.apiHost}/v1` : config?.apiBaseUrl;
   return (
     typeof baseUrl === 'string' &&
     baseUrl.trim().length > 0 &&

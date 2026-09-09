@@ -35,6 +35,30 @@ describe('getProviderType', () => {
   );
 
   it.each([
+    { config: { apiHost: 'private.example.test/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com' }, expected: 'openai' },
+    {
+      config: { apiHost: 'private.example.test', apiBaseUrl: 'https://api.openai.com/v1' },
+      expected: 'custom',
+    },
+    {
+      config: { apiHost: 'api.openai.com', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'openai',
+    },
+    { config: { apiHost: 'api.openai.com/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com/v1' }, expected: 'custom' },
+    {
+      config: { apiHost: '', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'custom',
+    },
+  ])(
+    'classifies the effective endpoint with apiHost precedence: $config',
+    ({ config, expected }) => {
+      expect(getProviderType('openai:chat:tenant/model.json-v2', config)).toBe(expected);
+    },
+  );
+
+  it.each([
     ['togetherai:organization/model:revision', 'together'],
     ['togetherai', 'together'],
     ['together:organization/model', 'together'],

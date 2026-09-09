@@ -163,6 +163,43 @@ describe('eval provider configuration round trips', () => {
     },
   );
 
+  it.each([undefined, 'https://api.openai.com/v1'])(
+    'preserves an imported apiHost through local selection and ID editing (apiBaseUrl: %s)',
+    async (apiBaseUrl) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const imported = {
+        id: 'openai:chat:tenant/original-model',
+        config: {
+          apiHost: 'private.example.test/tenant',
+          ...(apiBaseUrl ? { apiBaseUrl } : {}),
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          max_tokens: 321,
+        },
+      };
+      renderWithProviders(
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} initialProvider={imported} />,
+      );
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(imported.id);
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+      await user.click(screen.getByText('vLLM', { selector: 'p' }).closest('[role="button"]')!);
+      const id = 'openai:chat:tenant/model.json-v2';
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id,
+          config: expect.objectContaining({
+            ...imported.config,
+            type: 'vllm',
+            apiKeyRequired: false,
+            useDefaultApiKey: false,
+          }),
+        }),
+      );
+    },
+  );
+
   it('edits an imported Bedrock agent shorthand with no config object', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
