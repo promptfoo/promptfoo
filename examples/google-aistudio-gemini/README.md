@@ -20,7 +20,8 @@ The example tests across multiple Gemini and Gemma models:
 
 - **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
 - **Gemma 4 26B A4B IT** - Smaller open Gemma 4 model for lower-latency reasoning and coding evals
-- **Gemini 3.7 Flash** - Latest Flash model for coding, multimodal reasoning, and agentic workflows
+- **Gemini 3.8 Flash** - Latest Flash model for coding and agentic workflows
+- **Gemini 3.7 Flash** - Previous-generation Flash model for coding, multimodal reasoning, and agentic workflows
 - **Gemini 3.6 Flash** - Previous-generation Flash model for coding and multi-step tasks
 - **Gemini 3.5 Flash** - Frontier Flash model with high-effort thinking
 - **Gemini 3.5 Flash-Lite** - Low-latency model for high-volume agentic tasks
@@ -32,8 +33,8 @@ The example tests across multiple Gemini and Gemma models:
 - **Gemini 2.5 Flash-Lite** - Cost-efficient and fast 2.5 model, optimized for high-volume, latency-sensitive tasks
 - **gemini-embedding-001** - Embedding model used for similarity-based assertions
 
-Gemini 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
-deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.7 Flash does not
+Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
+deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.8 Flash and 3.7 Flash do not
 support `MINIMAL` thinking.
 
 ## System Instructions from File

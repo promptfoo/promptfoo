@@ -18,6 +18,8 @@ export COMETAPI_KEY=your_api_key_here
 
 You can obtain an API key from the [CometAPI console](https://api.cometapi.com/console/token).
 
+You can also supply `config.apiKey` or select a credential variable with `config.apiKeyEnvar`. CometAPI does not fall back to `OPENAI_API_KEY` by default; set `apiKeyEnvar: OPENAI_API_KEY` to use that variable explicitly.
+
 ## Configuration
 
 The provider uses the following syntax:
@@ -29,12 +31,14 @@ providers:
 
 Where `<type>` can be:
 
-- `chat` - For chat completions (text, vision, multimodal)
-- `completion` - For text completions
-- `embedding` - For text embeddings
-- `image` - For image generation (DALL-E, Flux models)
+- `chat` - `/v1/chat/completions`, with text or image input supported by the selected model
+- `completion` - `/v1/completions`
+- `embedding` - `/v1/embeddings`
+- `image` - `/v1/images/generations`, returning a completed Images API response
 
 You can also use `cometapi:<model>` which defaults to chat mode.
+
+Choose a model that supports the selected endpoint. CometAPI also offers other protocols: its [GPT-6 Astra tool-calling guidance](https://apidoc.cometapi.com/api/text/chat) requires Responses, and its [FLUX.2 Pro quickstart](https://apidoc.cometapi.com/quickstarts/image/flux-api) requires task submission and polling. The `cometapi:` modes above do not implement those flows. A [custom provider](/docs/providers/custom-api/) can use their required endpoints and handle polling.
 
 ### Examples
 
@@ -44,7 +48,7 @@ You can also use `cometapi:<model>` which defaults to chat mode.
 providers:
   - cometapi:chat:gpt-5-mini
   - cometapi:chat:claude-3-5-sonnet-20241022
-  - cometapi:chat:your-favorite-model
+  - cometapi:chat:your-chat-model
   # Or use default chat mode
   - cometapi:gpt-5-mini
 ```
@@ -55,7 +59,7 @@ providers:
 providers:
   - cometapi:image:dall-e-3
   - cometapi:image:flux-schnell
-  - cometapi:image:any-image-model
+  - cometapi:image:your-image-model
 ```
 
 **Text Completion Models:**
@@ -63,7 +67,7 @@ providers:
 ```yaml
 providers:
   - cometapi:completion:deepseek-chat
-  - cometapi:completion:any-completion-model
+  - cometapi:completion:your-completion-model
 ```
 
 **Embedding Models:**
@@ -71,10 +75,10 @@ providers:
 ```yaml
 providers:
   - cometapi:embedding:text-embedding-3-small
-  - cometapi:embedding:any-embedding-model
+  - cometapi:embedding:your-embedding-model
 ```
 
-All standard OpenAI parameters are supported:
+Each mode accepts its corresponding OpenAI-compatible configuration options. Parameter support, image sizes, tool calling, and output formats depend on the selected CometAPI model. Confirm those details in its API reference before using or replacing an example ID:
 
 ```yaml
 providers:
@@ -121,7 +125,8 @@ npx promptfoo@latest eval --prompts "Describe what's in this image: {{image_url}
 
 **Image Generation with Custom Parameters:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: cometapi:image:dall-e-3
     config:
@@ -167,13 +172,15 @@ curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 
 Or browse models on the [CometAPI pricing page](https://api.cometapi.com/pricing).
 
-**Using Any Model:** Simply specify the model name with the appropriate type prefix:
+**Selecting a model:** Use the exact CometAPI model ID with the matching type prefix. A catalog entry alone does not establish support for every endpoint or feature:
 
-- `cometapi:chat:any-model-name` for text/chat models
-- `cometapi:image:any-image-model` for image generation
-- `cometapi:embedding:any-embedding-model` for embeddings
-- `cometapi:completion:any-completion-model` for text completions
-- `cometapi:any-model-name` (defaults to chat mode)
+- `cometapi:chat:<model>` for Chat Completions models
+- `cometapi:image:<model>` for synchronous Images API models
+- `cometapi:embedding:<model>` for Embeddings API models
+- `cometapi:completion:<model>` for legacy Completions API models
+- `cometapi:<model>` (defaults to chat mode)
+
+For example, the [GPT Image quickstart](https://apidoc.cometapi.com/quickstarts/image/gpt-image-api) returns `b64_json`, while FLUX.2 Pro returns a task ID from a different endpoint. Changing an image model name does not make those response formats interchangeable. Native vendor retirement dates also do not establish whether a CometAPI alias is available; check CometAPI's documentation for that exact ID.
 
 ## Environment Variables
 

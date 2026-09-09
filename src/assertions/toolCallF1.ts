@@ -2,11 +2,46 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function findJsonEnd(text: string, start: number): number {
+  const closing: string[] = [text[start] === '{' ? '}' : ']'];
+  let inString = false;
+  let escaped = false;
+
+  for (let end = start + 1; end < text.length; end++) {
+    const char = text[end];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{' || char === '[') {
+      closing.push(char === '{' ? '}' : ']');
+    } else if (char === '}' || char === ']') {
+      if (closing.pop() !== char) {
+        return -1;
+      }
+      if (closing.length === 0) {
+        return end;
+      }
+    }
+  }
+  return -1;
+}
+
 /**
  * Extracts tool names from various output formats.
  *
  * Supports:
  * - OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
+ * - OpenAI Responses format: { type: 'function_call', name: '...' }
  * - OpenAI direct array: [{ function: { name: "..." } }]
  * - Simple format: [{ name: "..." }]
  * - Anthropic format: { type: 'tool_use', name: '...' } or arrays of content blocks
@@ -32,23 +67,26 @@ function extractToolNames(output: unknown): Set<string> {
       }
       return names;
     } catch {
-      // Not valid JSON as a whole, continue to try line-by-line parsing
+      // Not valid JSON as a whole; look for embedded JSON values.
     }
 
-    // Handle Anthropic-style output: text and JSON objects separated by newlines
-    // Example: "Let me check the weather.\n\n{"type":"tool_use","name":"get_weather",...}"
-    const lines = output.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    // Mixed text and JSON may include pretty-printed blocks and nested values.
+    // Balance delimiters outside strings before parsing each complete candidate.
+    for (let start = 0; start < output.length; start++) {
+      const opening = output[start];
+      if (opening !== '{' && opening !== '[') {
+        continue;
+      }
+
+      const end = findJsonEnd(output, start);
+      if (end >= 0) {
         try {
-          const parsed = JSON.parse(trimmed);
-          const parsedNames = extractToolNames(parsed);
-          for (const name of parsedNames) {
+          for (const name of extractToolNames(JSON.parse(output.slice(start, end + 1)))) {
             names.add(name);
           }
+          start = end;
         } catch {
-          // Not valid JSON, ignore this line
+          // A balanced fragment may still be invalid JSON.
         }
       }
     }
@@ -84,6 +122,12 @@ function extractToolNames(output: unknown): Set<string> {
 
   // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
   if (obj.type === 'tool_use' && typeof obj.name === 'string') {
+    names.add(obj.name);
+    return names;
+  }
+
+  // OpenAI Responses API single item: { type: 'function_call', name: '...' }
+  if (obj.type === 'function_call' && typeof obj.name === 'string') {
     names.add(obj.name);
     return names;
   }
@@ -189,9 +233,15 @@ export const handleToolCallF1 = ({
   let expectedTools: string[];
 
   if (Array.isArray(renderedValue)) {
-    expectedTools = renderedValue.map(String);
+    expectedTools = renderedValue
+      .map(String)
+      .map((name) => name.trim())
+      .filter(Boolean);
   } else if (typeof renderedValue === 'string') {
-    expectedTools = renderedValue.split(',').map((s) => s.trim());
+    expectedTools = renderedValue
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
   } else {
     invariant(
       false,

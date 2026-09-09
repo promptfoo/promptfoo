@@ -254,6 +254,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it.each([
+    ['gemini-3.8-flash', 0.002625],
     ['gemini-3.7-flash', 0.002625],
     ['gemini-3.6-flash', 0.002625],
     ['gemini-3.5-flash-lite', 0.00155],
@@ -3675,6 +3676,20 @@ describe('VertexChatProvider.callClaudeApi', () => {
       await provider.callClaudeApi('Hello');
 
       // Default would be 2048 but budget_tokens is 5000, so it must be bumped
+      expect(getRequestData().max_tokens).toBe(6024);
+    });
+
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 5000,
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
       expect(getRequestData().max_tokens).toBe(6024);
     });
 

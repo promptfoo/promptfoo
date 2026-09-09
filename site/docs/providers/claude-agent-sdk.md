@@ -375,6 +375,8 @@ providers:
           # Process-based server
           - command: node
             args: ['mcp-server.js']
+            env: # Optional: environment variables for the stdio server process
+              MCP_SERVER_TOKEN: '{{ env.MCP_SERVER_TOKEN }}'
             name: local-server
 
       strict_mcp_config: true # Only use configured servers (true by default)
@@ -1239,8 +1241,9 @@ providers:
             name: my-server
 ```
 
-Authenticated MCP configurations, custom headers, URLs containing credentials, signed/query URLs,
-and stdio servers with arguments remain uncached even when `cache_mcp` is true. Stdio arguments can
+Authenticated MCP configurations, custom headers, per-server `env` maps, URLs containing
+credentials, signed/query URLs, and stdio servers with arguments remain uncached even when
+`cache_mcp` is true. Stdio arguments can
 contain positional credentials such as database URLs, so Promptfoo does not put them into persistent
 cache keys.
 
