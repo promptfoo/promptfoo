@@ -724,11 +724,10 @@ function buildAudioGradingPart(
   if (audio.format !== 'wav' && audio.format !== 'mp3') {
     throw new Error('Audio grading requires WAV or MP3 output. Configure the target audio format.');
   }
-  // Bound the encoded input before normalizing it to avoid allocating oversized payloads.
-  if (audio.data && audio.data.length > Math.ceil(GRADING_AUDIO_MAX_BYTES / 3) * 4) {
+  const data = audio.data?.replace(/\s/g, '') || '';
+  if (data.length > Math.ceil(GRADING_AUDIO_MAX_BYTES / 3) * 4) {
     throw new Error('Audio output exceeds the 20 MiB grading size limit.');
   }
-  const data = audio.data?.replace(/\s/g, '') || '';
   if (!isValidBase64Payload(data) || getBase64DecodedBytes(data) <= 0) {
     throw new Error('Audio grading requires non-empty, valid base64 audio data.');
   }

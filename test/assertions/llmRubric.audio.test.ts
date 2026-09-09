@@ -106,6 +106,43 @@ describe('llm-rubric audio grading', () => {
     });
   });
 
+  it.each([undefined, 'Hello.'])(
+    'removes duplicated audio from grading text with transcript %s',
+    async (transcript) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
+      const targetAudio = { ...audio, transcript };
+      const result = await grade(provider, targetAudio, {
+        output: audio.data,
+        outputString: audio.data,
+        providerResponse: { output: audio.data, isBase64: true, audio: targetAudio },
+      });
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(body.messages[1].content[0]).toEqual({
+        type: 'text',
+        text: `Grade ${transcript || '[Audio output]'} for The speaker sounds calm.`,
+      });
+      expect(body.messages[1].content).toContainEqual({
+        type: 'input_audio',
+        input_audio: { data: audio.data, format: 'wav' },
+      });
+      expect(result.metadata?.renderedGradingPrompt).not.toContain(audio.data);
+    },
+  );
+
+  it('accepts line-wrapped base64 at the decoded audio size limit', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
+    const data = Buffer.alloc(20 * 1024 * 1024).toString('base64');
+    const call = vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: '{"pass":true,"score":1}',
+    });
+    const result = await grade(provider, { ...audio, data: data.replace(/.{76}/g, '$&\r\n') });
+    expect(result.pass).toBe(true);
+    const parts = JSON.parse(call.mock.calls[0][0])[1].content;
+    expect(
+      parts.find((part: { type: string }) => part.type === 'input_audio').input_audio.data,
+    ).toBe(data);
+  });
+
   it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
     'keeps transcript grading for a text grader ($modelName)',
     async (provider) => {
