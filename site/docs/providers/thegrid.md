@@ -21,7 +21,7 @@ providers:
     label: The Grid text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{env.THEGRID_API_KEY}}'
+      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
       max_tokens: 1024
 
 tests:
@@ -32,9 +32,11 @@ tests:
         value: Paris
 ```
 
-:::warning Set `THEGRID_API_KEY` before running
+:::warning Keep the `default(..., true)` sentinel on `apiKey`
 
-If the key resolves to nothing and `OPENAI_API_KEY` is set, `OpenAiGenericProvider.getApiKey()` falls back to `OPENAI_API_KEY`, which would send your OpenAI credential to `api.thegrid.ai`. Confirm the variable is populated rather than relying on the eval to fail loudly.
+`OpenAiGenericProvider.getApiKey()` resolves `config.apiKey || apiKeyEnvar || OPENAI_API_KEY`. A plain `'{{env.THEGRID_API_KEY}}'` renders to an empty string when the variable is unset or blank, which is falsy, so the provider falls through and sends your OpenAI credential to `api.thegrid.ai`.
+
+The second argument to `default` makes it substitute on any falsy value, not just an undefined one. A missing or blank key then reaches The Grid as `THEGRID_API_KEY_NOT_SET` and comes back as a 401 naming the variable, rather than silently authenticating as you against OpenAI.
 
 :::
 
@@ -83,7 +85,7 @@ defaultTest:
       id: openai:chat:text-prime
       config:
         apiBaseUrl: https://api.thegrid.ai/v1
-        apiKey: '{{env.THEGRID_API_KEY}}'
+        apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
         temperature: 0
         max_tokens: 4096
         showThinking: false
@@ -93,17 +95,17 @@ defaultTest:
 
 Promptfoo cannot report cost for Grid instruments. `calculateOpenAIUsageCost` looks up built-in rates by model name and returns `undefined` when there are none, before `inputCost` and `outputCost` overrides are consulted, so those options have no effect for these ids.
 
-The Grid is market-priced and its `/v1/models` currently returns `"pricing": null`, so there is no static rate to add. Use The Grid's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
+The Grid is market-priced, so a per-token rate moves and `/v1/models` can serve `"pricing": null` when the rate cache is cold. A static table would be wrong either way. Use The Grid's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
 
 ## Troubleshooting
 
-| Symptom                                      | Fix                                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Promptfoo calls OpenAI instead of The Grid   | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
-| Requests authenticate as your OpenAI account | `THEGRID_API_KEY` is unset and the provider fell back to `OPENAI_API_KEY`.                                               |
-| Empty or truncated output                    | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
-| Judge returns `Could not extract JSON`       | Set `showThinking: false` on the judge provider.                                                                         |
-| Cost shows as unknown                        | Expected; see Cost reporting above.                                                                                      |
+| Symptom                                    | Fix                                                                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Promptfoo calls OpenAI instead of The Grid | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
+| `401` mentioning `THEGRID_API_KEY_NOT_SET` | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
+| Empty or truncated output                  | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
+| Judge returns `Could not extract JSON`     | Set `showThinking: false` on the judge provider.                                                                         |
+| Cost shows as unknown                      | Expected; see Cost reporting above.                                                                                      |
 
 ## See also
 
