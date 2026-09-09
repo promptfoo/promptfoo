@@ -547,6 +547,27 @@ describe('calculateAzureCost', () => {
     },
   );
 
+  // Foundry bills Claude at Anthropic's standard rates. Sonnet 5 is $2/$10 per MTok —
+  // the launch pricing that became permanent on 2026-08-10 — not the $3/$15 it was
+  // originally registered with. Pinned exactly so the two rates cannot drift apart again.
+  it('calculates cost for Claude Sonnet 5 at the $2/$10 standard rate', () => {
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1_000_000, 1_000_000)).toBeCloseTo(12, 6);
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 2 + 500 * 10) / 1e6,
+      12,
+    );
+  });
+
+  // Cached tokens are a subset of the prompt, billed at the cache-read rate instead of the
+  // input rate. Azure's Sonnet 5 cache-read rate is $0.2/MTok, which is 10% of the input
+  // rate only if that rate is $2 — so this fails if the two tables drift apart again.
+  it('uses a cached-input rate consistent with the Sonnet 5 input rate', () => {
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500, 500)).toBeCloseTo(
+      (500 * 2 + 500 * 0.2 + 500 * 10) / 1e6,
+      12,
+    );
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();

@@ -7,8 +7,10 @@ import type {
   AnthropicToolConfig,
   ClaudeEffort,
   WebFetchToolConfig,
+  WebFetchToolConfig20260318,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
+  WebSearchToolConfig20260318,
 } from './types';
 
 // Model definitions with cost information
@@ -907,7 +909,7 @@ const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
     { name: 'web_fetch', fields: WEB_FETCH_FIELDS, betaFeature: 'web-fetch-2025-09-10' },
   ],
   ['web_fetch_20260209', { name: 'web_fetch', fields: WEB_FETCH_FIELDS }],
-  // The 20260309 version is the only one that supports use_cache.
+  // use_cache arrived in 20260309; response_inclusion in 20260318.
   [
     'web_fetch_20260309',
     {
@@ -915,9 +917,30 @@ const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
       fields: [...WEB_FETCH_FIELDS, 'use_cache' satisfies keyof WebFetchToolConfigV2],
     },
   ],
+  [
+    'web_fetch_20260318',
+    {
+      name: 'web_fetch',
+      fields: [
+        ...WEB_FETCH_FIELDS,
+        'use_cache' satisfies keyof WebFetchToolConfig20260318,
+        'response_inclusion' satisfies keyof WebFetchToolConfig20260318,
+      ],
+    },
+  ],
   // Web search needs no beta header in the current SDK.
   ['web_search_20250305', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
   ['web_search_20260209', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
+  [
+    'web_search_20260318',
+    {
+      name: 'web_search',
+      fields: [
+        ...WEB_SEARCH_FIELDS,
+        'response_inclusion' satisfies keyof WebSearchToolConfig20260318,
+      ],
+    },
+  ],
 ]);
 
 /**
