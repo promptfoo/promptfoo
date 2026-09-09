@@ -35,23 +35,34 @@ const localOptions = {
   Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
 const localOptionNames = new Set(Object.keys(localOptions));
 
-// The OpenAI provider resolves these itself: it loads `file://` references, renders
-// Nunjucks vars and normalizes tool shapes. `passthrough` is spread into the body last,
-// so a raw copy of one of them would clobber the resolved value.
-const resolvedOptionNames = new Set<string>([
+// The chat provider resolves these itself: it loads `file://` references, renders Nunjucks
+// vars, merges in MCP tools and normalizes tool shapes. `passthrough` is spread into the
+// body last, so a raw copy of one of them would clobber the resolved value. It emits each
+// of these whenever it is configured, so dropping the raw copy cannot lose a parameter.
+// `reasoning_effort` is deliberately absent: the chat provider only emits it for models it
+// recognizes as reasoning models, which no TogetherAI model name but `gpt-oss` matches, so
+// passthrough has to keep carrying it. The completion and embedding providers resolve
+// nothing and only spread `passthrough`, so the filter applies to chat alone.
+const chatResolvedOptionNames = new Set<string>([
   'functions',
-  'reasoning_effort',
   'response_format',
   'tool_choice',
   'tools',
 ] satisfies (keyof OpenAiCompletionOptions)[]);
 
-const providersByType = {
-  chat: OpenAiChatCompletionProvider,
-  completion: OpenAiCompletionProvider,
-  embedding: OpenAiEmbeddingProvider,
-  embeddings: OpenAiEmbeddingProvider,
-};
+// A Map, not an object literal, so a route segment naming an Object prototype member
+// (`constructor`, `toString`) does not resolve to that member.
+const providersByType = new Map<
+  string,
+  | typeof OpenAiChatCompletionProvider
+  | typeof OpenAiCompletionProvider
+  | typeof OpenAiEmbeddingProvider
+>([
+  ['chat', OpenAiChatCompletionProvider],
+  ['completion', OpenAiCompletionProvider],
+  ['embedding', OpenAiEmbeddingProvider],
+  ['embeddings', OpenAiEmbeddingProvider],
+]);
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -69,10 +80,16 @@ export function createTogetherAiProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
 
+  // Without an explicit type the whole remainder is the model name and we default to chat.
+  const routed = providersByType.get(splits[1]);
+  const Provider = routed ?? OpenAiChatCompletionProvider;
+  const modelName = splits.slice(routed ? 2 : 1).join(':');
+
   const config = options.config?.config || {};
+  const isChat = Provider === OpenAiChatCompletionProvider;
   const modelParameters = Object.fromEntries(
     Object.entries(config).filter(
-      ([key]) => !localOptionNames.has(key) && !resolvedOptionNames.has(key),
+      ([key]) => !localOptionNames.has(key) && !(isChat && chatResolvedOptionNames.has(key)),
     ),
   );
   const togetherAiConfig = {
@@ -87,9 +104,5 @@ export function createTogetherAiProvider(
     },
   };
 
-  // If no specific type is provided, the whole remainder is the model name and we
-  // default to chat.
-  const Provider = providersByType[splits[1] as keyof typeof providersByType];
-  const modelName = splits.slice(Provider ? 2 : 1).join(':');
-  return new (Provider ?? OpenAiChatCompletionProvider)(modelName, togetherAiConfig);
+  return new Provider(modelName, togetherAiConfig);
 }
