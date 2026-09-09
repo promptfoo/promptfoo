@@ -387,9 +387,17 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   // Unlike OpenAI's o-series, Muse Spark accepts temperature (0-2), so keep
   // promptfoo's deterministic default instead of suppressing the parameter.
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 
@@ -443,7 +451,11 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     if (!response || response.error) {
       return response;
     }
-    return applyMetaCost(response, this.modelName, this.config, context);
+    const modelName = this.getBillingModelName({
+      ...this.config,
+      ...context?.prompt?.config,
+    });
+    return applyMetaCost(response, modelName, this.config, context);
   }
 }
 
@@ -549,7 +561,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     }
     const usage = data?.usage;
     const cost = calculateMetaCost(
-      this.modelName,
+      this.getBillingModelName(config),
       config as MetaConfig,
       usage?.input_tokens,
       usage?.output_tokens,
