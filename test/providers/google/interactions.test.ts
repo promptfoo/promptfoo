@@ -404,6 +404,82 @@ describe('GoogleInteractionsProvider', () => {
     expect(body.generation_config?.tool_choice).not.toBe('none');
   });
 
+  it.each(
+    [
+      { name: 'generationConfig', config: { generationConfig: { tool_choice: 'none' } } },
+      {
+        name: 'passthrough.generationConfig',
+        config: { passthrough: { generationConfig: { toolChoice: 'none' } } },
+      },
+      {
+        name: 'passthrough.generation_config',
+        config: { passthrough: { generation_config: { tool_choice: 'none' } } },
+      },
+    ].flatMap((source) =>
+      [
+        { name: 'tool_choice', config: { tool_choice: 'auto' } },
+        { name: 'toolConfig', config: { toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } },
+        {
+          name: 'tool_config',
+          config: { tool_config: { function_calling_config: { mode: 'auto' } } },
+        },
+      ].map((policy) => ({ source, policy })),
+    ),
+  )(
+    're-enables native Interactions $source.name tools with prompt $policy.name',
+    async ({ source, policy }) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { status: 'completed', steps: [] },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          ...source.config,
+          passthrough: {
+            ...source.config.passthrough,
+            tools: [{ type: 'google_search' }],
+          },
+        } as any,
+      });
+
+      await provider.callApi('Search if needed.', {
+        prompt: { config: policy.config },
+      } as any);
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      const body = JSON.parse(request.body as string);
+      expect(body.tools).toEqual([{ type: 'google_search' }]);
+      expect(body.generation_config.tool_choice).toBe('auto');
+    },
+  );
+
+  it('preserves prompt native Interactions tool choice above provider policies', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        tool_choice: 'auto',
+        passthrough: {
+          tools: [{ type: 'google_search' }],
+          generation_config: { tool_choice: 'none' },
+        },
+      },
+    });
+
+    await provider.callApi('Search if needed.', {
+      prompt: { config: { passthrough: { generation_config: { tool_choice: { mode: 'auto' } } } } },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config.tool_choice).toEqual({
+      mode: 'auto',
+    });
+  });
+
   it('removes disabled inherited tools before Omni unsupported-tool validation', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {

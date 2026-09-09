@@ -270,7 +270,7 @@ Promptfoo uses returned token usage and its model pricing catalog to estimate co
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
-Cost estimates follow the published rates for the selected model, service tier, and region. GPT-5.6 costs remain unset when cache-write usage is missing. GPT-5.5 Pro Batch and Flex costs above 272,000 input tokens also remain unset because OpenAI has not published those rates. Fine-tuned models use their base model's published inference rates; Promptfoo does not infer Flex or Fast discounts for them.
+Cost estimates follow the published rates for the selected model, service tier, and region. GPT-5.6 costs remain unset when cache-write usage is missing. GPT-5.5 Pro Batch and Flex costs above 272,000 input tokens also remain unset because OpenAI has not published those rates. Fine-tuned models use their published fine-tuned inference rates; Promptfoo does not infer Flex or Fast discounts for them.
 
 ### Generating multiple responses
 

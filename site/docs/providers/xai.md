@@ -116,7 +116,7 @@ Promptfoo recognizes older `grok-2`, `grok-beta`, and vision IDs for existing co
 
 The provider uses [OpenAI-compatible configuration options](/docs/providers/openai) plus Grok-specific options, subject to the model restrictions below. Example usage:
 
-When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates and applies the documented 2x premium when the response confirms `service_tier: priority`. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks.
+When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates and applies the documented 2x premium when the response confirms `service_tier: priority`. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks and are used as final rates without an additional priority multiplier.
 
 ```yaml
 providers:
@@ -612,7 +612,7 @@ xAI supports the following Grok Imagine video IDs:
 | ----------------------------------- | -------------------------------------------------------- | ----------------- |
 | `grok-imagine-video-1.5`            | Text, image, and reference images or preset voices       | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
-| `grok-imagine-video-1.5-2026-05-30` | Dated Grok Imagine Video 1.5 snapshot                    | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-2026-05-30` | Dated alias for Grok Imagine Video 1.5                   | 480p, 720p, 1080p |
 | `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
 
 [Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) supports

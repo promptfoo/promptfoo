@@ -291,8 +291,9 @@ If you omit `config.model`, the Codex CLI may choose an internal default model a
 GPT-6 Astra, GPT-5.6, GPT-5.5, and GPT-5.4 model IDs are recognized for routing and usage tracking. GPT-5.5
 receives a standard API cost estimate. Current Codex SDK releases report cache-write tokens, so
 Promptfoo can estimate GPT-5.6 costs without omitting the 1.25x cache-write rate. When
-`codex_path_override` selects a custom binary, Promptfoo leaves GPT-5.6 cost undefined because the
-SDK cannot distinguish a real zero from an older binary that omitted cache-write usage. Batch and
+`codex_path_override` selects a custom binary, Promptfoo estimates GPT-5.6 cost only when it reports
+positive, finite cache-write usage. Otherwise, cost stays undefined because the SDK cannot distinguish
+a real zero from an older binary that omitted cache-write usage. Batch and
 Flex discounts, and Fast mode multipliers (including the legacy `priority` alias), are not
 automatically inferred from Codex runtime settings.
 

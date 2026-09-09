@@ -1227,6 +1227,42 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('preserves template syntax introduced by inline response schema variables in the request', async () => {
+      const actualTemplates = await vi.importActual<typeof templates>(
+        '../../../src/util/templates',
+      );
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(actualTemplates.getNunjucksEngine);
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          responseSchema: '{"type":"string","enum":["{{label}}"]}',
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text: '"{{name}}"' }] } }] },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: { label: '{{name}}' },
+      });
+
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.generationConfig.response_schema).toEqual({
+        type: 'string',
+        enum: ['{{name}}'],
+      });
+    });
+
     const providerSchemaBasePath = path.resolve('provider', 'base');
     const promptSchemaBasePath = path.resolve('prompt', 'base');
 

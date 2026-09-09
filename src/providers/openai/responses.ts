@@ -858,9 +858,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
     const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
     const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
-    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
-      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
-    );
+    // An explicit request model supplies its own capabilities instead of inheriting deployment hints.
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const hasAzureCustomDeploymentHost =
+      typeof passthroughModel !== 'string' &&
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
+        this.isAzureOpenAiEndpoint(endpoint),
+      );
     const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&

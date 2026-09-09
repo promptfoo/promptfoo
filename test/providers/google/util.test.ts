@@ -32,6 +32,7 @@ import {
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
   normalizeTools,
+  parseConfigResponseSchema,
   parseConfigSystemInstruction,
   parseStringObject,
   removeDeprecatedGeminiGenerationParams,
@@ -259,6 +260,70 @@ describe('util', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledWith(instructionPath, 'utf8');
       expect(result).toEqual({ parts: [{ text: 'Instruction from the rendered path.' }] });
+    });
+  });
+
+  describe('config template rendering', () => {
+    const vars = { label: '{{name}}' };
+    const expectedSchema = { type: 'string', enum: ['{{name}}'] };
+
+    it.each([
+      { source: 'object', schema: { type: 'string', enum: ['{{label}}'] } },
+      { source: 'JSON', schema: '{"type":"string","enum":["{{label}}"]}' },
+    ])('renders inline $source response schema variables once', ({ schema }) => {
+      expect(parseConfigResponseSchema(schema, vars)).toEqual(expectedSchema);
+    });
+
+    it('does not render template syntax introduced by a whole inline JSON variable', () => {
+      expect(
+        parseConfigResponseSchema('{{schema}}', {
+          schema: JSON.stringify(expectedSchema),
+          name: 'must stay literal',
+        }),
+      ).toEqual(expectedSchema);
+    });
+
+    it.each([
+      { extension: 'json', contents: '{"type":"string","enum":["{{label}}"]}' },
+      { extension: 'yaml', contents: 'type: string\nenum:\n  - "{{label}}"' },
+      { extension: 'txt', contents: '{"type":"string","enum":["{{label}}"]}' },
+    ])(
+      'renders external $extension schema contents after resolving the path',
+      ({ extension, contents }) => {
+        const basePath = path.resolve('/provider', 'base');
+        const schemaFile = `schema.${extension}`;
+        vi.mocked(fs.readFileSync).mockReturnValueOnce(contents);
+
+        expect(
+          parseConfigResponseSchema('file://{{schemaFile}}', { ...vars, schemaFile }, basePath),
+        ).toEqual(expectedSchema);
+        expect(fs.readFileSync).toHaveBeenCalledWith(path.join(basePath, schemaFile), 'utf8');
+      },
+    );
+
+    it('loads a response schema when the complete file reference comes from a variable', () => {
+      const schemaPath = `file://${path.resolve('/provider', 'schema.json')}`;
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('{"type":"string","enum":["{{label}}"]}');
+
+      expect(parseConfigResponseSchema('{{schemaPath}}', { ...vars, schemaPath })).toEqual(
+        expectedSchema,
+      );
+    });
+
+    it('preserves nested template text in inline system instructions', () => {
+      expect(
+        parseConfigSystemInstruction('Keep {{label}}.', {
+          label: '{{name}}',
+          name: '{{token}}',
+          token: 'end',
+        }),
+      ).toEqual({ parts: [{ text: 'Keep {{token}}.' }] });
+    });
+
+    it('rejects invalid inline response schema JSON', () => {
+      expect(() => parseConfigResponseSchema('{invalid}', vars)).toThrow(
+        'Invalid JSON in responseSchema',
+      );
     });
   });
 

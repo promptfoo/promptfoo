@@ -1323,6 +1323,35 @@ describe('xAI Chat Provider', () => {
       ).toBe(2.5);
     });
 
+    it.each([
+      [{}, (200 * 4 + 800 * 0.6 + 500 * 12) / 1e6],
+      [{ cost: 0.001 }, 1.5],
+      [{ inputCost: 0.001 }, 1 + (500 * 12) / 1e6],
+      [{ outputCost: 0.001 }, (200 * 4 + 800 * 0.6) / 1e6 + 0.5],
+      [{ cacheReadCost: 0.001 }, (200 * 4 + 500 * 12) / 1e6 + 0.8],
+      [{ cost: 0.002, inputCost: 0.001, outputCost: 0.003, cacheReadCost: 0.0005 }, 2.1],
+      [{ cost: 0 }, 0],
+      [{ inputCost: 0 }, (500 * 12) / 1e6],
+      [{ outputCost: 0 }, (200 * 4 + 800 * 0.6) / 1e6],
+      [{ cacheReadCost: 0 }, (200 * 4 + 500 * 12) / 1e6],
+    ] as const)(
+      'applies priority pricing only to catalog rates with overrides %j',
+      (config, expected) => {
+        expect(
+          calculateXAICost('grok-4.5', config, 1_000, 500, 0, 800, { serviceTier: 'priority' }),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
+    it('preserves explicit output pricing with priority long-context input and cache rates', () => {
+      expect(
+        calculateXAICost('grok-4.5', { outputCost: 0.001 }, 200_000, 1_000, 500, 100_000, {
+          serviceTier: 'priority',
+          reasoningBilledSeparately: true,
+        }),
+      ).toBeCloseTo((100_000 * 8 + 100_000 * 1.2) / 1e6 + 1.5, 12);
+    });
+
     it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
@@ -1818,35 +1847,41 @@ describe('xAI Chat Provider', () => {
       expect(result.cost).toBe(0.0123456789);
     });
 
-    it('honors explicit custom cost overrides instead of reported ticks', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'custom-priced response' } }],
-          usage: {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: 15,
-            cost_in_usd_ticks: 123_456_789,
+    it.each(['default', 'priority'] as const)(
+      'honors explicit custom cost overrides instead of reported ticks for %s processing',
+      async (serviceTier) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'custom-priced response' } }],
+            service_tier: serviceTier,
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+              prompt_tokens_details: { cached_tokens: 8 },
+              cost_in_usd_ticks: 123_456_789,
+            },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      const provider = createXAIProvider('xai:grok-4.5', {
-        config: {
+        const provider = createXAIProvider('xai:grok-4.5', {
           config: {
-            apiKey: 'test-key',
-            cost: 0.001,
+            config: {
+              apiKey: 'test-key',
+              cost: 0.001,
+              service_tier: 'priority',
+            },
           },
-        },
-      });
+        });
 
-      const result = await provider.callApi('test prompt');
+        const result = await provider.callApi('test prompt');
 
-      expect(result.cost).toBe(0.015);
-    });
+        expect(result.cost).toBe(0.015);
+      },
+    );
 
     it('uses current grok-4.5 fallback pricing when billed ticks are absent', async () => {
       // Real grok-4.5 response shape captured 2026-07-09, without billed ticks.
