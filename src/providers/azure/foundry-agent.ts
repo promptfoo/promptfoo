@@ -4,6 +4,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
@@ -108,9 +109,12 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (status !== 429) {
     return null;
   }
-  // Prefer body-level code; fall back to top-level / `type` aliases.
+  // Prefer body-level code; fall back to top-level / `type` aliases. The type
+  // is forwarded separately so a billing-specific code the allowlist does not
+  // know still classifies as quota via `type: "insufficient_quota"`.
   const code = extractRateLimitErrorCode(err.error) ?? extractRateLimitErrorCode(err);
-  return new HttpRateLimitError({ status: 429, code });
+  const type = extractRateLimitErrorType(err.error) ?? extractRateLimitErrorType(err);
+  return new HttpRateLimitError({ status: 429, code, type });
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {

@@ -1027,6 +1027,23 @@ describe('AzureFoundryAgentProvider', () => {
         expect(result.error).toContain('Retries will not help');
       });
 
+      it('classifies SDK 429 with an unknown billing code and insufficient_quota type as quota', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(
+          Object.assign(new Error('sdk error'), {
+            status: 429,
+            error: { code: 'new_billing_code', type: 'insufficient_quota' },
+          }),
+        );
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Quota exceeded');
+        expect(result.error).toContain('new_billing_code');
+        expect(result.error).toContain('Retries will not help');
+      });
+
       it('classifies SDK 429 with rate_limit_exceeded body code as rate_limit', async () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'rate_limit_exceeded'));
