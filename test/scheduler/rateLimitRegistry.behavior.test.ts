@@ -153,3 +153,136 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     }
   });
 });
+
+describe('RateLimitRegistry integration - cancellation', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each(
+    ['AbortError', 'AbortException'].flatMap((name) =>
+      ['request timeout', 'network disconnected', '429 rate limit exceeded'].flatMap((message) =>
+        [false, true].map((disabled) => ({ name, message, disabled })),
+      ),
+    ),
+  )(
+    'ends $name "$message" without retrying (disabled=$disabled)',
+    async ({ name, message, disabled }) => {
+      vi.useFakeTimers();
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(disabled));
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const provider = createProvider();
+      const reason = Object.assign(new Error(message), { name });
+      const callFn = vi.fn().mockRejectedValue(reason);
+      const retrying = vi.fn();
+      const isRateLimited = vi.fn().mockReturnValue(true);
+      const getRetryAfter = vi.fn().mockReturnValue(60000);
+      registry.on('request:retrying', retrying);
+      let caught: unknown;
+
+      try {
+        const pending = registry
+          .execute(provider, callFn, { isRateLimited, getRetryAfter })
+          .catch((error) => {
+            caught = error;
+          });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(caught).toBe(reason);
+        await pending;
+        expect(callFn).toHaveBeenCalledOnce();
+        expect(retrying).not.toHaveBeenCalled();
+        expect(isRateLimited).not.toHaveBeenCalled();
+        expect(getRetryAfter).not.toHaveBeenCalled();
+        if (!disabled) {
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            activeRequests: 0,
+            failedRequests: 1,
+            retriedRequests: 0,
+            rateLimitHits: 0,
+          });
+        }
+
+        // The aborted call must release its slot without blocking the next call.
+        const result = { output: 'after cancellation' };
+        let completed: unknown;
+        const next = registry
+          .execute(provider, async () => result)
+          .then((value) => {
+            completed = value;
+          });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(completed).toBe(result);
+        await next;
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
+  it.each(['request timeout', 'network temporarily unavailable'])(
+    'still retries an ordinary %s and returns the next success',
+    async (message) => {
+      vi.useFakeTimers();
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const error = new Error(message);
+      const result = { output: 'recovered' };
+      const callFn = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(result);
+      const retrying = vi.fn();
+      registry.on('request:retrying', retrying);
+
+      try {
+        const pending = registry.execute(createProvider(), callFn);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(callFn).toHaveBeenCalledOnce();
+        expect(retrying).toHaveBeenCalledOnce();
+        const { delayMs } = retrying.mock.calls[0][0];
+        expect(delayMs).toBeGreaterThanOrEqual(2000);
+        await vi.advanceTimersByTimeAsync(delayMs);
+        await expect(pending).resolves.toBe(result);
+        expect(callFn).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
+  it('preserves an ordinary timeout error after the configured retry is exhausted', async () => {
+    vi.useFakeTimers();
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const reason = new Error('request timeout');
+    const callFn = vi.fn().mockRejectedValue(reason);
+    const retrying = vi.fn();
+    registry.on('request:retrying', retrying);
+    let caught: unknown;
+
+    try {
+      const pending = registry.execute(createProvider(1), callFn).catch((error) => {
+        caught = error;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(caught).toBeUndefined();
+      expect(retrying).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(retrying.mock.calls[0][0].delayMs);
+      await pending;
+      expect(caught).toBe(reason);
+      expect(callFn).toHaveBeenCalledTimes(2);
+      expect(retrying).toHaveBeenCalledOnce();
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('preserves a permanent error without retrying', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const reason = new Error('invalid fixture request');
+    const callFn = vi.fn().mockRejectedValue(reason);
+    try {
+      await expect(registry.execute(createProvider(), callFn)).rejects.toBe(reason);
+      expect(callFn).toHaveBeenCalledOnce();
+    } finally {
+      registry.dispose();
+    }
+  });
+});

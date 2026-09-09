@@ -6,6 +6,7 @@ import logger from '../../../src/logger';
 import { loadApiProvider } from '../../../src/providers';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { RateLimitRegistry, wrapProviderWithRateLimiting } from '../../../src/scheduler';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 import type { MockInstance } from 'vitest';
 
@@ -444,6 +445,39 @@ describe('OpenAI-compatible chat cancellation', () => {
     });
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it.each(['openai:chat:gpt-4o', 'xai:grok-4'])(
+    'preserves a custom timeout abort through the default registry for %s',
+    async (id) => {
+      vi.useFakeTimers();
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const target = await loadApiProvider(id, {
+        options: { config: { apiKey: 'fixture-key' } },
+      });
+      const callApi = vi.spyOn(target, 'callApi');
+      const wrapped = wrapProviderWithRateLimiting(target, registry);
+      const controller = new AbortController();
+      const reason = Object.assign(new Error('request timeout'), { name: 'AbortError' });
+      controller.abort(reason);
+      let caught: unknown;
+
+      try {
+        const pending = wrapped
+          .callApi('fixture', undefined, { abortSignal: controller.signal })
+          .catch((error) => {
+            caught = error;
+          });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(caught).toBe(reason);
+        await pending;
+        expect(callApi).toHaveBeenCalledOnce();
+        expect(fetch).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
 
   it('retains successful inherited xAI responses', async () => {
     fetch.mockResolvedValueOnce(response());

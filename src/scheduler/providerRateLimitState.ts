@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 
+import { isAbortError } from '../util/fetch/errors';
 import {
   AdaptiveConcurrency,
   type ConcurrencyChangeResult,
@@ -228,6 +229,12 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Release slot
         this.slotQueue.release();
+
+        // Cancellation is final, even when its message resembles a retryable error.
+        if (isAbortError(error)) {
+          this.failedRequests++;
+          throw error;
+        }
 
         // Check if rate limited (from error, not result)
         const isRateLimited =
