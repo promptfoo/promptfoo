@@ -240,6 +240,29 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
   );
 }
 
+// Defaults discovery belongs to the provider, independently of short-lived HTTP clients.
+const DEFAULTS_ENV_VARS = [
+  'AWS_DEFAULTS_MODE',
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'HOME',
+  'USERPROFILE',
+  'HOMEPATH',
+  'HOMEDRIVE',
+  'AWS_EXECUTION_ENV',
+  'AWS_REGION',
+  'AWS_DEFAULT_REGION',
+  'AWS_EC2_METADATA_DISABLED',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
+] as const;
+
+interface RuntimeDefaultsState {
+  inputs: (string | undefined)[];
+  provider?: ReturnType<typeof import('@smithy/core/config').resolveDefaultsModeConfig>;
+}
+
 interface RuntimeRetryState {
   maxAttempts: number;
   provider?: SageMakerRuntimeClient['config']['retryStrategy'];
@@ -248,6 +271,7 @@ interface RuntimeRetryState {
 interface RuntimeInitialization {
   scope: CredentialScope;
   retry: RuntimeRetryState;
+  defaults: RuntimeDefaultsState;
   promise: Promise<SageMakerRuntimeClient>;
 }
 
@@ -266,6 +290,7 @@ abstract class SageMakerGenericProvider {
   private readonly runtimeClockOffsets = new Map<string, number>();
   private readonly runtimeInitializations: RuntimeInitialization[] = [];
   private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
+  private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
   private retainedCredentials?: {
     scope: CredentialScope;
     provider: RuntimeConfigAwsCredentialIdentityProvider;
@@ -361,13 +386,13 @@ abstract class SageMakerGenericProvider {
       CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
     );
     const selectedProfile = profile || environment.AWS_PROFILE;
-    if (selectedProfile) {
+    if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { parseKnownFiles } = await import('@smithy/core/config');
       const profiles = await parseKnownFiles({
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
         configFilepath: environment.AWS_CONFIG_FILE,
       });
-      const inputs = profileCredentialInputs(profiles, selectedProfile);
+      const inputs = profileCredentialInputs(profiles, selectedProfile || 'default');
       if (inputs) {
         const used = new Set([
           ...inputs,
@@ -378,6 +403,8 @@ abstract class SageMakerGenericProvider {
           'HOMEPATH',
           'HOMEDRIVE',
           ...(profile ? [] : ['AWS_PROFILE']),
+          // An implicit default profile must yield when environment credentials become available.
+          ...(selectedProfile ? [] : ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']),
         ]);
         for (const name of Object.keys(environment)) {
           if (!used.has(name)) {
@@ -409,13 +436,24 @@ abstract class SageMakerGenericProvider {
       this.runtimeRetryStates.set(runtimeRegion, retry);
     }
     const retryState = retry;
+    const defaultsInputs = DEFAULTS_ENV_VARS.map((name) => process.env[name]);
+    let defaults = this.runtimeDefaultsStates.get(runtimeRegion);
+    if (!defaults || defaults.inputs.some((value, index) => value !== defaultsInputs[index])) {
+      defaults = { inputs: defaultsInputs };
+      this.runtimeDefaultsStates.set(runtimeRegion, defaults);
+    }
+    const defaultsState = defaults;
     let entry = this.runtimeInitializations.find(
-      (candidate) => candidate.retry === retryState && sameCredentialScope(candidate.scope, scope),
+      (candidate) =>
+        candidate.retry === retryState &&
+        candidate.defaults === defaultsState &&
+        sameCredentialScope(candidate.scope, scope),
     );
     if (!entry) {
       const initialization: RuntimeInitialization = {
         scope,
         retry: retryState,
+        defaults: defaultsState,
         promise: (async () => {
           const importError = (cause: unknown): never => {
             this.assertRuntimeGeneration(generation);
@@ -463,7 +501,8 @@ abstract class SageMakerGenericProvider {
               chain({ ...options, callerClientConfig });
             credentials = isolated;
           }
-          const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
+          defaultsState.provider ??= resolveDefaultsModeConfig({ region: runtimeRegion });
+          const defaultsMode = await defaultsState.provider();
           const retryStrategy = await retryState.provider?.();
           this.assertRuntimeGeneration(generation);
           const client = new SageMakerRuntimeClient({

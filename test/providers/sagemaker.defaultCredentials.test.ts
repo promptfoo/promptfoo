@@ -265,6 +265,50 @@ sso_role_name = TestRole
     expect(await clients[2].config.maxAttempts()).toBe(1);
   });
 
+  it('keeps pending clients bound to the defaults inputs selected for each row', async () => {
+    await configure('', null);
+    vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+    const provider = createProvider({
+      accessKeyId: 'EXPLICIT',
+      secretAccessKey: 'explicit-secret',
+    });
+    const firstStarted = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const resolveCredentials = provider.getCredentials.bind(provider);
+    vi.spyOn(provider, 'getCredentials').mockImplementationOnce(async (...args) => {
+      firstStarted.resolve();
+      await releaseFirst.promise;
+      return resolveCredentials(...args);
+    });
+    const clients: SageMakerRuntimeClient[] = [];
+    const initialize = provider.getSageMakerRuntimeInstance.bind(provider);
+    vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockImplementation(async (...args) => {
+      const client: SageMakerRuntimeClient = await initialize(...args);
+      clients.push(client);
+      return client;
+    });
+    const first = provider.callApi('pending standard');
+    await firstStarted.promise;
+    try {
+      vi.stubEnv('AWS_DEFAULTS_MODE', 'mobile');
+      expect(await provider.callApi('mobile')).toMatchObject({ output: 'offline response' });
+    } finally {
+      vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+      releaseFirst.resolve();
+      expect(await first).toMatchObject({ output: 'offline response' });
+    }
+    expect(sageCalls).toHaveLength(2);
+    expect(
+      await Promise.all(
+        clients.map(({ config: { defaultsMode } }) =>
+          typeof defaultsMode === 'function' ? defaultsMode() : defaultsMode,
+        ),
+      ),
+    ).toEqual(['mobile', 'standard']);
+    expect(sageCalls[0].handler).not.toBe(sageCalls[1].handler);
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+  });
+
   it('resets retry state when retry settings change during overlapping rows', async () => {
     await configure('', null);
     vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
@@ -395,6 +439,22 @@ sso_role_name = TestRole
     vi.setSystemTime(startTime.getTime() + 120_000);
     vi.stubEnv(name, value);
     await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls).toHaveLength(1);
+  });
+
+  it('retains implicit default SSO credentials after unrelated STS rotation and activates environment keys', async () => {
+    await configure(ssoProfile('default'), null);
+    const provider = createProvider();
+    await expectSignedRow(provider, 'SSO_1');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv('AWS_ENDPOINT_URL_STS', 'http://127.0.0.1:1/unused');
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls).toHaveLength(1);
+    expect(stsCalls).toHaveLength(0);
+
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'ACTIVATED_ENV');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'activated-env-secret');
+    await expectSignedRow(provider, 'ACTIVATED_ENV');
     expect(ssoCalls).toHaveLength(1);
   });
 
