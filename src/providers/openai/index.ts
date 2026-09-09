@@ -127,7 +127,11 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, ['OPENAI_API_KEY']);
+    return resolveProviderApiKey(
+      this.config,
+      this.env,
+      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
+    );
   }
 
   requiresApiKey(): boolean {
