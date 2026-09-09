@@ -303,7 +303,9 @@ export function reportDependencyOwnership(
     fileAnnotations: string[];
   }> = [];
   const annotationErrors: string[] = [];
-  for (const manifest of Object.keys(ledger.manifestOwners)) {
+  for (const manifest of [
+    ...new Set([...Object.keys(ledger.manifestOwners), ...Object.keys(ledger.aliases)]),
+  ]) {
     if (!packages.has(manifest)) {
       annotationErrors.push(`Unknown manifest owner: ${manifest}`);
     }
@@ -323,6 +325,12 @@ export function reportDependencyOwnership(
     for (const evidence of annotation.evidence) {
       if (!fs.existsSync(path.join(repoRoot, evidence))) {
         annotationErrors.push(`Missing annotation evidence: ${evidence}`);
+      } else if (
+        pkg &&
+        annotation.disposition === 'computed-loader' &&
+        manifestFor(evidence, manifests) !== annotation.manifest
+      ) {
+        annotationErrors.push(`Cross-manifest annotation evidence: ${evidence}`);
       }
     }
     if (annotationErrors.length === errorCount) {
@@ -533,6 +541,12 @@ export function reportDependencyOwnership(
       const pkg = packages.get(manifest)!;
       if (
         manifest !== 'package.json' ||
+        validAnnotations.some(
+          (entry) =>
+            entry.manifest === manifest &&
+            entry.dependency === dependency &&
+            entry.disposition === 'build',
+        ) ||
         ['dependencies', 'optionalDependencies', 'peerDependencies'].some((section) =>
           Object.hasOwn(pkg[section as Section] ?? {}, dependency),
         )

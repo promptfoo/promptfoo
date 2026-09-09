@@ -420,11 +420,20 @@ describe('dependency ownership report', () => {
       'src/index.ts',
       "import type { A } from 'types'; import 'runtime'; import 'optional'; import 'peer'; import 'missing';",
     );
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'runtime',
+          disposition: 'build',
+          reason: 'Bundled during build.',
+          evidence: ['src/index.ts'],
+        },
+      ],
+    });
     const report = reportDependencyOwnership(root, config);
-    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual([
-      'missing',
-      'runtime',
-    ]);
+    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual(['missing']);
     expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['missing']);
   });
 
@@ -498,6 +507,7 @@ describe('dependency ownership report', () => {
   it('reports stale annotations, missing evidence, and unassigned workspace ownership', () => {
     json('architecture/dependency-ownership.json', {
       manifestOwners: { 'ghost/package.json': 'ghost' },
+      aliases: { 'alias/package.json': ['@alias'] },
       annotations: [
         {
           manifest: 'package.json',
@@ -511,10 +521,34 @@ describe('dependency ownership report', () => {
     const report = reportDependencyOwnership(root, config);
     expect(report.annotationErrors).toEqual([
       'Unknown manifest owner: ghost/package.json',
+      'Unknown manifest owner: alias/package.json',
       'Annotation has no declaration: package.json: removed',
       'Missing annotation evidence: missing.ts',
     ]);
     expect(report.unassignedManifests).toEqual(report.coverage.manifests);
+  });
+
+  it('rejects computed evidence owned by another workspace', () => {
+    json('package.json', { dependencies: { shared: '1' }, workspaces: ['src/app'] });
+    json('src/app/package.json', { name: 'app' });
+    write('src/app/src/index.ts', 'import(candidate);');
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root', 'src/app/package.json': 'app' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'shared',
+          disposition: 'computed-loader',
+          reason: 'Wrong workspace.',
+          evidence: ['src/app/src/index.ts'],
+        },
+      ],
+    });
+    const report = reportDependencyOwnership(root, config);
+    expect(report.annotationErrors).toEqual([
+      'Cross-manifest annotation evidence: src/app/src/index.ts',
+    ]);
+    expect(report.computedImports[0].fileAnnotations).toEqual([]);
   });
 
   it('reports stale computed-loader annotations without manufacturing usage or crashing', () => {
