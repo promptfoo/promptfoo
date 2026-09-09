@@ -431,50 +431,6 @@ describe('NovaSonic Provider', () => {
       });
     });
 
-    it('should handle function calls correctly', async () => {
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-
-      const toolProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
-        config: {
-          toolConfig: {
-            tools: [
-              {
-                name: 'get_weather',
-                description: 'Get weather information',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                  },
-                  required: ['location'],
-                },
-              },
-            ],
-          },
-        },
-      });
-
-      vi.spyOn(toolProvider, 'callApi').mockResolvedValue({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
-      });
-
-      const result = await toolProvider.callApi("What's the weather in New York?");
-
-      expect(result).toEqual({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
-      });
-    });
-
     it('sends an explicit tool error with matching stream event identifiers', async () => {
       vi.useFakeTimers();
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
