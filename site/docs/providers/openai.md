@@ -242,13 +242,14 @@ providers:
 
 Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
 
-| Option           | Use                                                                                                        |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apiKeyEnvar`    | Read a key from the named environment variable. A missing variable does not fall back to `OPENAI_API_KEY`. |
-| `apiKey`         | Set a key directly; takes precedence over environment variables. Prefer a secret-backed value.             |
-| `apiKeyRequired` | Set to `false` only for endpoints that do not require an API key.                                          |
-| `headers`        | Add request headers, such as `OpenAI-Project`.                                                             |
-| `organization`   | Set the OpenAI organization ID.                                                                            |
+| Option             | Use                                                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKeyEnvar`      | Read a key from the named environment variable. A missing variable does not fall back to `OPENAI_API_KEY`.                                                                          |
+| `apiKey`           | Set a key directly; takes precedence over environment variables. Prefer a secret-backed value.                                                                                      |
+| `apiKeyRequired`   | Set to `false` only for endpoints that do not require an API key.                                                                                                                   |
+| `useDefaultApiKey` | Set to `false` to disable fallback to `OPENAI_API_KEY`. Explicit `apiKey` and `apiKeyEnvar` still work. Pair with `apiKeyRequired: false` for an unauthenticated compatible server. |
+| `headers`          | Add request headers, such as `OpenAI-Project`.                                                                                                                                      |
+| `organization`     | Set the OpenAI organization ID.                                                                                                                                                     |
 
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 

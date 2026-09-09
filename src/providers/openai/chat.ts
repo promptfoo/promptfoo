@@ -356,6 +356,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
   }
 
+  /**
+   * Extract provider-specific fields while the raw OpenAI-compatible response is still available.
+   */
+  protected getProviderResponseMetadata(_data: unknown): Record<string, unknown> {
+    return {};
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -544,6 +551,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
+      const providerMetadata = this.getProviderResponseMetadata(data);
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
@@ -559,6 +567,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -582,6 +591,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             flagged: true,
           },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -763,6 +773,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             cost,
             guardrails: { flagged: contentFiltered },
             metadata: {
+              ...providerMetadata,
               http: {
                 status,
                 statusText,
@@ -801,6 +812,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           cost,
           guardrails: { flagged: contentFiltered },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -823,6 +835,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         cost,
         guardrails: { flagged: contentFiltered },
         metadata: {
+          ...providerMetadata,
           http: {
             status,
             statusText,

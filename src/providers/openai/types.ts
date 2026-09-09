@@ -30,6 +30,8 @@ export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
   apiKeyRequired?: boolean;
+  /** Allow OPENAI_API_KEY when no credential variable is selected. */
+  useDefaultApiKey?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
