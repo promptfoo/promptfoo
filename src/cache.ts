@@ -824,6 +824,7 @@ async function prepareFetchResponse(
  * @param format Response format: 'json' or 'text' (default: 'json')
  * @param bustOrOptions Bypass cache or provide cache options for this request
  * @param maxRetries Maximum number of retries on transient errors
+ * @param onResponsePrepared Observe each caller's fresh, fully read response before waiting for cache publication
  *
  * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
  *
@@ -854,6 +855,7 @@ export async function fetchWithCache<T = unknown>(
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
+  onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
 ): Promise<FetchWithCacheResult<T>> {
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
@@ -887,8 +889,9 @@ export async function fetchWithCache<T = unknown>(
       maxRetries,
       isIdempotent,
     );
+    let result: FetchWithCacheResult<T>;
     try {
-      return {
+      result = {
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
         status: resp.status,
@@ -906,6 +909,8 @@ export async function fetchWithCache<T = unknown>(
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
     }
+    onResponsePrepared?.(result);
+    return result;
   }
 
   const cache = getCacheInstance();
@@ -952,7 +957,18 @@ export async function fetchWithCache<T = unknown>(
   // Transport and body reading already own the signal. Racing their propagation
   // against abort here would discard an already-completed HTTP diagnostic.
   const { response } = await inflightResponse.response;
-  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  const result: FetchWithCacheResult<T> = deserializeFetchResponse<T>(
+    response,
+    false,
+    cache,
+    cacheKey,
+  );
+  if (coalesced) {
+    result.coalesced = true;
+  }
+  // Each consumer owns its observation, including callers sharing the transport.
+  // Stored cache hits never represent a fresh completion or a new quota window.
+  onResponsePrepared?.(result);
   if (result.status >= 200 && result.status < 300) {
     // Keep publication alive for other callers while this caller can stop waiting.
     await waitForPromiseWithAbort(inflightResponse.publication, signal);
@@ -962,7 +978,7 @@ export async function fetchWithCache<T = unknown>(
     // subsequent caller can join this completed diagnostic, without racing abort.
     await inflightResponse.publication;
   }
-  return coalesced ? { ...result, coalesced: true } : result;
+  return result;
 }
 
 /**
