@@ -709,11 +709,33 @@ function appendMediaToChatPrompt(
   ]);
 }
 
+/**
+ * A grader that can neither hear the clip nor read a transcript would grade a
+ * placeholder and return a confident, meaningless verdict. Fall back to the
+ * transcript loudly, or fail.
+ */
+export function requireAudioGradingEvidence(
+  audio: NonNullable<ProviderResponse['audio']>,
+  grader: string,
+): void {
+  if (!audio.transcript) {
+    throw new Error(
+      `${grader} cannot listen to audio output and the output has no transcript. Grade with an audio-capable provider such as openai:chat:gpt-audio.`,
+    );
+  }
+  logger.warn('[Grading] Grader cannot listen to audio; grading the transcript instead', {
+    grader,
+  });
+}
+
 function buildAudioGradingPart(
   audio: NonNullable<ProviderResponse['audio']>,
   provider: ApiProvider,
 ): MultimodalPromptPart | undefined {
-  if (provider.getAudioInputFormat?.() !== 'openai') {
+  if (!provider.supportsAudioInput?.()) {
+    if (audio.data) {
+      requireAudioGradingEvidence(audio, `Grading provider ${provider.id()}`);
+    }
     return undefined;
   }
   if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
@@ -886,6 +908,8 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    // Native-audio graders speak their answer by default; grading needs text back.
+    audioAttached ? { modalities: ['text'] } : undefined,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

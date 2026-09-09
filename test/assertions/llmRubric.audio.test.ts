@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 
@@ -174,6 +175,49 @@ describe('llm-rubric audio grading', () => {
         'Grade Hello. for The speaker sounds calm.',
       );
       expect(result.metadata).not.toHaveProperty('renderedGradingPromptAudio');
+    },
+  );
+
+  it('requests a text-only grade so the audio grader does not answer in speech', async () => {
+    await grade(new OpenAiChatCompletionProvider('gpt-audio-1.5'));
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+    expect(body.modalities).toEqual(['text']);
+  });
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'warns when a text grader drops the audio ($modelName)',
+    async (provider) => {
+      const warn = vi.spyOn(logger, 'warn');
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+      expect(await grade(provider)).toMatchObject({ pass: true });
+      expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+        'Grade Hello. for The speaker sounds calm.',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('grading the transcript instead'),
+        expect.anything(),
+      );
+    },
+  );
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'fails instead of grading an audio placeholder ($modelName)',
+    async (provider) => {
+      const call = vi.spyOn(provider, 'callApi');
+      await expect(
+        grade(provider, { ...audio, transcript: undefined }, {
+          output: audio.data,
+          outputString: audio.data,
+          providerResponse: {
+            output: audio.data,
+            isBase64: true,
+            audio: { ...audio, transcript: undefined },
+          },
+        } as Partial<AssertionParams>),
+      ).rejects.toThrow('cannot listen to audio output and the output has no transcript');
+      expect(call).not.toHaveBeenCalled();
     },
   );
 

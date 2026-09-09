@@ -127,8 +127,8 @@ export interface ApiProvider extends MinimalApiProvider {
   config?: any;
   delay?: number;
   getSessionId?: () => string;
-  /** Native audio input content format accepted by this provider and its configured model. */
-  getAudioInputFormat?: () => 'openai' | undefined;
+  /** Whether this provider and its configured model accept native audio input. */
+  supportsAudioInput?: () => boolean;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;

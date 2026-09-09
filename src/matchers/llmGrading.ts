@@ -25,6 +25,7 @@ import {
   loadRubricPrompt,
   materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
+  requireAudioGradingEvidence,
   runJsonGradingPrompt,
 } from './rubric';
 import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
@@ -216,6 +217,9 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
+    if (audio?.data) {
+      requireAudioGradingEvidence(audio, 'Remote grading');
+    }
     try {
       return {
         ...(await doRemoteGrading({
