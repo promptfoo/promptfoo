@@ -51,7 +51,7 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: (headers: Record<string, string>) => void) => Promise<T>,
     options?: {
       abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;

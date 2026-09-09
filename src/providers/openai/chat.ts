@@ -539,7 +539,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
         };
       }
-      if (responseHeaders) {
+      if (!cached && responseHeaders) {
         callApiOptions?.onResponseHeaders?.(responseHeaders);
       }
       throwIfAborted(callApiOptions?.abortSignal);

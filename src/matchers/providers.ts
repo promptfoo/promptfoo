@@ -51,7 +51,10 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  invoke: (
+    context: CallApiContextParams | undefined,
+    onResponseHeaders?: (headers: Record<string, string>) => void,
+  ) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -60,13 +63,18 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> =>
-    tracingContext
+  const callProvider = (
+    onResponseHeaders?: (headers: Record<string, string>) => void,
+  ): Promise<T> => {
+    const invokeProvider = (context: CallApiContextParams | undefined) =>
+      onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+    return tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
+          invokeProvider,
         ) as Promise<T>)
-      : invoke(callContext);
+      : invokeProvider(callContext);
+  };
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
@@ -107,14 +115,18 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const callApiOptions = getGradingProviderCallOptions();
+  const contextOptions = getGradingProviderCallOptions();
   return callGradingProvider(
     provider,
     label,
-    (tracedContext) =>
-      callApiOptions
+    (tracedContext, onResponseHeaders) => {
+      const callApiOptions = onResponseHeaders
+        ? { ...contextOptions, onResponseHeaders }
+        : contextOptions;
+      return callApiOptions
         ? provider.callApi(prompt, tracedContext, callApiOptions)
-        : provider.callApi(prompt, tracedContext),
+        : provider.callApi(prompt, tracedContext);
+    },
     { callContext: callApiContext },
   );
 }
