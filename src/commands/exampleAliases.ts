@@ -187,6 +187,15 @@ export const EXAMPLE_REPLACEMENTS: Record<string, string> = {
   'dbrx-benchmark': 'dbrx-benchmark was removed because DBRX is no longer available.',
 };
 
+// These examples must not be downloaded even when an older release still contains them.
+export function getUnsupportedExampleReason(exampleName: string): string | undefined {
+  const root = exampleName.split('/')[0];
+  if (root === 'github-models' || root === 'provider-github-models') {
+    return 'GitHub Models has been retired, so this example is no longer supported.';
+  }
+  return undefined;
+}
+
 // Examples that were intentionally removed from current examples/
 // but can still be downloaded from a legacy git ref for backwards compatibility.
 export const REMOVED_EXAMPLES: Record<
