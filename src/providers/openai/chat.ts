@@ -110,6 +110,14 @@ function getChatSearchSurcharge(modelName: string): number {
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  getAudioInputFormat(): 'openai' | undefined {
+    const model =
+      (this.config.passthrough as { model?: unknown } | undefined)?.model ?? this.modelName;
+    return typeof model === 'string' && /^gpt-(?:audio|4o(?:-mini)?-audio)(?:-|$)/.test(model)
+      ? 'openai'
+      : undefined;
+  }
+
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
@@ -835,7 +843,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             expiresAt: message.audio.expires_at,
             data: message.audio.data,
             transcript: message.audio.transcript,
-            format: message.audio.format || 'wav',
+            format: message.audio.format || body.audio?.format || 'wav',
           },
           tokenUsage: getTokenUsage(data, cached),
           cached,
