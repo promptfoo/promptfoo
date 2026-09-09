@@ -221,14 +221,45 @@ export function extractJsonObjects(str: string): object[] {
       let openBraces = 1;
       let closeBraces = 0;
       let j = i + 1;
+      let inString = false;
+      let escaped = false;
+      // A `"` only opens a quoted scalar at a key/value boundary (also right
+      // after `[`, so a string that's the first array element is tracked); a
+      // YAML plain scalar can contain a bare `"` mid-value (e.g. `mentions
+      // "admin`) that must not be mistaken for the start of a string, or the
+      // real closing `}` gets swallowed as string content and never counted.
+      let atValueStart = true;
 
       // Track braces as we go to detect potential JSON objects
       while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
-        if (str[j] === '{') {
-          openBraces++;
-        }
-        if (str[j] === '}') {
-          closeBraces++;
+        const ch = str[j];
+        // Ignore braces inside string literals so a `}` in a value doesn't
+        // prematurely balance the object (e.g. `{"a": "}"}`).
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (ch === '\\') {
+            escaped = true;
+          } else if (ch === '"') {
+            inString = false;
+            atValueStart = false;
+          }
+        } else if (ch === '"' && atValueStart) {
+          inString = true;
+        } else if (ch === '{' || ch === '[') {
+          if (ch === '{') {
+            openBraces++;
+          }
+          atValueStart = true;
+        } else if (ch === '}' || ch === ']') {
+          if (ch === '}') {
+            closeBraces++;
+          }
+          atValueStart = false;
+        } else if (ch === ':' || ch === ',') {
+          atValueStart = true;
+        } else if (!/\s/.test(ch)) {
+          atValueStart = false;
         }
         j++;
 
