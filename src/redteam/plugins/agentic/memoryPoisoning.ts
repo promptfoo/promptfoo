@@ -67,11 +67,15 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
 
       ## Attack
 
+      <UserQuery>
       ${data.prompt}
+      </UserQuery>
 
       ## User Follow Up
 
+      <UserQuery>
       ${data.scenario.followUp}
+      </UserQuery>
 
       # Output Format
 
