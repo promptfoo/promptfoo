@@ -185,6 +185,57 @@ describe('eval provider configuration round trips', () => {
     );
   });
 
+  it.each([
+    { model: 'tenant/model.json-v2', type: undefined },
+    { model: 'tenant/model.pytorch-v2', type: undefined },
+    { model: 'tenant/model.js', type: 'vllm' },
+    { model: 'tenant/model.py:Q4_K_M', type: 'llamafile' },
+  ])(
+    'preserves the opaque served model $model when editing a custom endpoint',
+    async ({ model, type }) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const config = {
+        ...(type ? { type } : {}),
+        apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+        apiKeyEnvar: 'PRIVATE_MODEL_KEY',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+        stop: ['<end>'],
+      };
+      const view = renderWithProviders(
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{ id: 'openai:chat:tenant/original-model', config }}
+        />,
+      );
+
+      const id = `openai:chat:${model}`;
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(onSave).toHaveBeenCalledOnce();
+      const [saved] = normalizeProviders(JSON.parse(JSON.stringify([onSave.mock.calls[0][0]])));
+      expect(saved).toMatchObject({ id, config });
+
+      view.unmount();
+      renderWithProviders(
+        <AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} initialProvider={saved} />,
+      );
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(id);
+      expect(
+        JSON.parse(
+          (
+            screen.getByRole('textbox', {
+              name: 'Provider configuration JSON',
+            }) as HTMLTextAreaElement
+          ).value,
+        ),
+      ).toEqual(config);
+    },
+  );
+
   it.each(['llamafile', 'vllm', 'text-generation-webui', 'bedrock-agent'])(
     'keeps a reopened %s target when an empty ID is rejected',
     async (type) => {

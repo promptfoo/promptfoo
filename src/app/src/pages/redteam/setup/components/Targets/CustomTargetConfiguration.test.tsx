@@ -217,6 +217,29 @@ describe('CustomTargetConfiguration', () => {
   });
 
   describe('file:// prefix handling', () => {
+    it.each([
+      ['openai:chat:tenant/model.js', 'openai:chat:tenant/model.js'],
+      ['openai:chat:tenant/model.py:Q4_K_M', 'openai:chat:tenant/model.py:Q4_K_M'],
+      ['openai:chat:tenant/model.json-v2', 'openai:chat:tenant/model.json-v2'],
+      ['https://example.test/provider.js', 'https://example.test/provider.js'],
+      ['provider.js:myFunction', 'file://provider.js:myFunction'],
+      ['C:\\providers\\script.py:call_api', 'file://C:\\providers\\script.py:call_api'],
+    ])('saves %s with its intended provider route', async (value, expectedId) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: '', config: {} }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+        />,
+      );
+      await replaceText(user, screen.getByLabelText(/Target ID/i), value);
+      expect(updateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
+    });
+
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();

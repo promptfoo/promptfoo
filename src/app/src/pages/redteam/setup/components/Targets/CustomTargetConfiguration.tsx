@@ -460,16 +460,10 @@ const CustomTargetConfiguration = ({
     const value = e.target.value;
     setTargetId(value);
 
-    let idToSave = value;
-    if (
-      value &&
-      !value.startsWith('file://') &&
-      !value.startsWith('http://') &&
-      !value.startsWith('https://') &&
-      (value.includes('.py') || value.includes('.js'))
-    ) {
-      idToSave = `file://${value}`;
-    }
+    // A provider ID can contain script extensions in its opaque model name.
+    // Only file paths (optionally with a Windows drive or function) get a prefix.
+    const isScriptPath = /^(?:[a-z]:[\\/])?[^:]*\.(?:py|js)(?::[^/\\]+)?$/i.test(value);
+    const idToSave = isScriptPath ? `file://${value}` : value;
     updateCustomTarget('id', idToSave);
   };
 
