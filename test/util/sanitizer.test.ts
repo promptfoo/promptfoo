@@ -179,26 +179,53 @@ describe('isSecretEnvVarName', () => {
     'MY_SERVICE_SECRET',
     'DB_PASSWD',
     'OPENAI_API_KEY',
-    'AWS_SECRETKEY',
     'SIGNING_PASSPHRASE',
+    'AUTH_TOKEN',
+    // Case is normalized: nothing requires an env var to be uppercase, and a lowercase name
+    // reaches the subprocess exactly the same way.
+    'github_token',
+    'Database_Password',
+    // Leading underscores are legal in env var names and must not be a way around the check.
+    '_GITHUB_TOKEN',
+    // Fused credential compounds: caught by the key-compound suffixes derived from
+    // SECRET_FIELD_NAMES, not by a blanket `KEY` suffix (which would swallow PORTKEY).
+    // A prefix defeats the exact-name match, which is why deriving them matters.
+    'AWS_SECRETKEY',
+    'GCP_PRIVATEKEY',
+    'APP_ENCRYPTIONKEY',
+    'VENDOR_CERTKEY',
+    'SVC_SIGNINGKEY',
+    'DBPWD',
+    'DATABASEDSN',
+    // `AUTH` as the final word carries the credential (MLFLOW_BASIC_AUTH is a documented
+    // promptfoo variable holding basic-auth creds).
+    'MLFLOW_BASIC_AUTH',
+    'NPM_CONFIG__AUTH',
   ])('treats %s as credential-bearing', (name) => {
     expect(isSecretEnvVarName(name)).toBe(true);
   });
 
   it.each([
-    // Plurals: words are matched by suffix, and TOKENS does not end with TOKEN.
+    // Plurals: suffix words are singular, and TOKENS does not end with TOKEN.
     'MAX_TOKENS',
     'RETRY_KEYS',
     'LOG_LEVEL',
     'AWS_REGION',
     'SERVICE_URL',
     'NODE_ENV',
-    // Ordinary config fields keep the exact-name behavior; the env-var rule is
-    // SCREAMING_SNAKE_CASE only, so it can never widen them.
+    // `KEY` matches as a whole word only, so a vendor name ending in it is not a credential.
+    // PORTKEY_API_BASE_URL is a documented endpoint.
+    'PORTKEY_API_BASE_URL',
+    'MONKEY',
+    'TURKEY',
+    // `AUTH` only counts as the final word: these name a method and a scope.
+    'WATSONX_AI_AUTH_TYPE',
+    'OAUTH_SCOPE',
+    // Ordinary config fields keep the exact-name behavior.
     'maxTokens',
     'tokenCount',
     'keyName',
-    'max_tokens',
+    'cacheKey',
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
   });
@@ -214,6 +241,8 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject({
         env: {
           API_KEY: 'sk-value',
+          github_token: 'ghp_lowercase_value',
+          PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
           GITHUB_TOKEN: 'ghp_value',
           MY_SERVICE_SECRET: 'plainvalue123',
           PGPASSWORD: 'hunter2',
@@ -225,6 +254,9 @@ describe('sanitizeObject', () => {
 
       expect(result.env).toEqual({
         API_KEY: '[REDACTED]',
+        github_token: '[REDACTED]',
+        // A vendor name ending in KEY is not a credential.
+        PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
         GITHUB_TOKEN: '[REDACTED]',
         MY_SERVICE_SECRET: '[REDACTED]',
         PGPASSWORD: '[REDACTED]',
