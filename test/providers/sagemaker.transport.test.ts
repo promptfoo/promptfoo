@@ -15,10 +15,14 @@ describe('SageMaker SDK transport configuration', () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.useRealTimers();
+    vi.doUnmock('@smithy/core/client');
+    vi.doUnmock('@aws-sdk/client-sagemaker-runtime');
   });
 
   it.each([
     'legacy',
+    'standard',
+    'mobile',
     'in-region',
     'cross-region',
     'auto-same-region',
@@ -88,4 +92,27 @@ describe('SageMaker SDK transport configuration', () => {
       await rm(configDirectory, { recursive: true });
     }
   });
+
+  it.each(['@smithy/core/client', '@aws-sdk/client-sagemaker-runtime'])(
+    'loads the optional %s package only when creating an owned client',
+    async (dependency) => {
+      const loadPackage = vi.fn(() => {
+        throw new Error(`Cannot find package ${dependency}`);
+      });
+      vi.doMock(dependency, loadPackage);
+      const provider = new SageMakerCompletionProvider('endpoint', {
+        config: { modelType: 'custom', region: 'us-east-1' },
+      });
+      const borrowed = { send: vi.fn(), destroy: vi.fn() };
+      provider.sagemakerRuntime = borrowed;
+      expect(await provider.getSageMakerRuntimeInstance()).toBe(borrowed);
+      expect(loadPackage).not.toHaveBeenCalled();
+      provider.sagemakerRuntime = undefined;
+      await expect(provider.getSageMakerRuntimeInstance()).rejects.toThrow(
+        'The @aws-sdk/client-sagemaker-runtime package is required',
+      );
+      expect(loadPackage).toHaveBeenCalledOnce();
+      expect(borrowed.destroy).not.toHaveBeenCalled();
+    },
+  );
 });
