@@ -132,6 +132,23 @@ describe('evaluator', () => {
 
       expect(summary.stats.cachedRows).toBe(2);
     });
+
+    it('uses persisted rows when imported prompts omit metrics entirely', async () => {
+      const evalRecord = await Eval.create(
+        {},
+        [{ raw: 'imported prompt', label: 'imported prompt' }],
+        { id: 'missing-imported-prompt-metrics' },
+      );
+      await evalRecord.addPrompts([
+        { raw: 'imported prompt', label: 'imported prompt', provider: 'test-provider' },
+      ]);
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      expect(evalRecord.hasLegacyCachedRowsMetrics()).toBe(true);
+      expect(await evalRecord.getCachedResponseRowsCount()).toBe(1);
+    });
   });
 
   describe('addPrompts', () => {

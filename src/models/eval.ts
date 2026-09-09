@@ -107,7 +107,7 @@ function countCachedRows(results: unknown): number {
 
 function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
   return prompts.some(
-    (prompt) => prompt.metrics !== undefined && prompt.metrics.cachedRows === undefined,
+    (prompt) => prompt.metrics === undefined || prompt.metrics.cachedRows === undefined,
   );
 }
 
