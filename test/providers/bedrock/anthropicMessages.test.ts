@@ -115,11 +115,65 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-7')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-5')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-sonnet-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-sonnet-4-6')).toBe(false);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5-1')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('global.anthropic.claude-mythos-5-1')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('us.anthropic.claude-fable-5-1')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5-1')).toBe(false);
+  });
+
+  it('routes explicit Sonnet 5 Messages while preserving its bare IAM provider', async () => {
+    // The disk-cache test resets the module registry. Use one current module graph
+    // for the factory's lazy imports, constructor assertions, and cache controls.
+    const [
+      { disableCache: disableCurrentCache },
+      { BedrockAnthropicMessagesProvider: CurrentMessagesProvider },
+      { AwsBedrockCompletionProvider },
+      { awsProviderFactories },
+    ] = await Promise.all([
+      import('../../../src/cache'),
+      import('../../../src/providers/bedrock/anthropicMessages'),
+      import('../../../src/providers/bedrock/index'),
+      import('../../../src/providers/families/aws'),
+    ]);
+    disableCurrentCache();
+    const model = 'anthropic.claude-sonnet-5';
+    const factory = awsProviderFactories.find((entry) => entry.test(`bedrock:${model}`))!;
+    const provider = await factory.create(
+      `bedrock:messages:${model}`,
+      { config: { region: 'us-east-1', apiKey: 'bedrock-key', thinking: { type: 'adaptive' } } },
+      {} as any,
+    );
+    expect(provider).toBeInstanceOf(CurrentMessagesProvider);
+    const messagesProvider = provider as BedrockAnthropicMessagesProvider;
+    const createSpy = vi.spyOn(messagesProvider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'Sonnet response' }],
+      model,
+      id: 'msg-sonnet-5',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 2, output_tokens: 1 },
+    } as Anthropic.Messages.Message);
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Sonnet response');
+    expect(messagesProvider.getApiBaseUrl()).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    );
+    expect(createSpy.mock.calls[0][0]).toMatchObject({ model, thinking: { type: 'adaptive' } });
+    expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+
+    const bareProvider = await factory.create(
+      `bedrock:${model}`,
+      { config: { region: 'us-east-1' } },
+      {} as any,
+    );
+    expect(bareProvider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
 
   it('builds and validates the regional Anthropic endpoint', () => {

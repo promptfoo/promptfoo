@@ -63,6 +63,7 @@ describe('GoogleInteractionsProvider', () => {
     restoreGoogleEnv = mockProcessEnv({
       VERTEX_API_KEY: undefined,
       GOOGLE_API_KEY: undefined,
+      GOOGLE_API_BASE_URL: undefined,
       GOOGLE_GENERATIVE_AI_API_KEY: undefined,
       GEMINI_API_KEY: undefined,
       PALM_API_KEY: undefined,
@@ -2283,6 +2284,103 @@ describe('GoogleInteractionsProvider', () => {
       );
     },
   );
+
+  it.each(
+    [
+      { name: 'uniform rate', pricing: { cost: 0.01 }, expectedCost: 0.35 },
+      {
+        name: 'input and output rates',
+        pricing: { inputCost: 0.02, outputCost: 0.03 },
+        expectedCost: 0.95,
+      },
+      {
+        name: 'modality-specific rates',
+        pricing: {
+          cost: 0.01,
+          audioInputCost: 0.02,
+          imageInputCost: 0.03,
+          audioOutputCost: 0.04,
+          videoOutputCost: 0.05,
+        },
+        expectedCost: 1.19,
+      },
+      { name: 'zero rate', pricing: { cost: 0 }, expectedCost: 0 },
+      { name: 'no explicit rates', pricing: {}, expectedCost: undefined },
+      { name: 'only one explicit rate', pricing: { inputCost: 0.02 }, expectedCost: undefined },
+    ].flatMap((testCase) => ['provider', 'prompt'].map((scope) => ({ ...testCase, scope }))),
+  )('prices a custom Omni alias with $scope $name', async ({ pricing, expectedCost, scope }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        usage: {
+          total_input_tokens: 10,
+          total_output_tokens: 20,
+          total_reasoning_tokens: 5,
+          total_tokens: 35,
+          input_tokens_by_modality: [
+            { modality: 'audio', tokens: 2 },
+            { modality: 'image', tokens: 3 },
+          ],
+          output_tokens_by_modality: [
+            { modality: 'audio', tokens: 4 },
+            { modality: 'video', tokens: 16 },
+          ],
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://gateway.example.test/v1beta',
+        passthrough: { model: 'video-deployment' },
+        ...(scope === 'provider' ? pricing : {}),
+      },
+    });
+
+    const result = await provider.callApi(
+      'A city at dusk',
+      scope === 'prompt' ? ({ prompt: { config: pricing } } as any) : undefined,
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: 'video-deployment',
+      response_format: { type: 'video' },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.video?.model).toBe('video-deployment');
+    if (expectedCost === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(expectedCost, 12);
+    }
+  });
+
+  it('does not bill cached custom Omni alias responses with explicit pricing', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        usage: { total_input_tokens: 10, total_output_tokens: 20 },
+      },
+      cached: true,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { model: 'video-deployment' },
+        cost: 0.01,
+      },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+  });
 
   it('uses a Robotics passthrough model for tools, text output, and billing', async () => {
     mockFetchWithCache.mockResolvedValue({

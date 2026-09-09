@@ -43,7 +43,7 @@ For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https
 providers:
   - id: openrouter:openai/gpt-5.6-sol
     config:
-      max_tokens: 1000
+      max_completion_tokens: 1000
 
   - id: openrouter:anthropic/claude-opus-4.7
     config:

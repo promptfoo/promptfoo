@@ -12,6 +12,7 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isSecretField, looksLikeSecret } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -119,6 +120,8 @@ export interface XaiVideoOptions {
   region?: string;
   /** Custom headers */
   headers?: Record<string, string>;
+  /** Nonsecret account namespace required for persistent video cache reuse. Never use an API key. */
+  cacheNamespace?: string;
   /** Video duration in seconds (1-15, default: 8) */
   duration?: number;
   /** Aspect ratio (default: 16:9) */
@@ -265,11 +268,7 @@ function buildVideoInputReference(
   });
 }
 
-function canUsePersistentCache(modelName: XaiVideoModel, config: XaiVideoOptions): boolean {
-  if (!isGrokImagineVideo15Model(modelName)) {
-    return true;
-  }
-
+function canUsePersistentCache(config: XaiVideoOptions): boolean {
   const inputUrls = [
     ...(config.image?.url ? [config.image.url] : []),
     ...(config.reference_images?.map(({ url }) => url) ?? []),
@@ -356,6 +355,43 @@ export class XAIVideoProvider implements ApiProvider {
       return `https://${this.config.region}.api.x.ai/v1`;
     }
     return DEFAULT_API_BASE_URL;
+  }
+
+  private getPersistentCacheScope(): Record<string, string> | undefined {
+    const namespace =
+      typeof this.config.cacheNamespace === 'string'
+        ? this.config.cacheNamespace.trim()
+        : undefined;
+    const apiUrl = this.getApiUrl();
+    const apiKey = this.getApiKey();
+    if (
+      !namespace ||
+      looksLikeSecret(namespace) ||
+      namespace === apiKey ||
+      (apiKey && apiUrl.includes(apiKey)) ||
+      !isVideoCacheReferenceUrlSafe(apiUrl)
+    ) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(apiUrl);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.search ||
+        url.hash ||
+        url.pathname.split('/').some((segment) => {
+          const decoded = decodeURIComponent(segment);
+          return isSecretField(decoded) || looksLikeSecret(decoded) || decoded === apiKey;
+        })
+      ) {
+        return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return { 'api-base-url': apiUrl, 'account-namespace': namespace };
   }
 
   /**
@@ -703,7 +739,8 @@ export class XAIVideoProvider implements ApiProvider {
       return { error: generationParameterError };
     }
 
-    const persistentCacheAllowed = canUsePersistentCache(this.modelName, config);
+    const cacheScope = this.getPersistentCacheScope();
+    const persistentCacheAllowed = cacheScope !== undefined && canUsePersistentCache(config);
     const cacheKey = persistentCacheAllowed
       ? generateVideoCacheKey({
           provider: 'xai',
@@ -712,11 +749,14 @@ export class XAIVideoProvider implements ApiProvider {
           size: `${aspectRatio}:${resolution}`,
           seconds: duration,
           inputReference: buildVideoInputReference(this.modelName, config),
+          cacheScope,
         })
       : undefined;
 
     if (!persistentCacheAllowed) {
-      logger.debug(`[${PROVIDER_NAME}] Skipping persistent cache for credential-bearing input URL`);
+      logger.debug(
+        `[${PROVIDER_NAME}] Skipping persistent cache without a safe endpoint and account scope or input URL`,
+      );
     }
 
     // Check cache (skip for edits)

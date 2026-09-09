@@ -1314,7 +1314,7 @@ describe('Provider Registry', () => {
     });
 
     it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'])(
-      'allows custom OpenAI-compatible endpoints to route their own %s model',
+      'keeps an explicit custom endpoint ahead of a native environment host for %s',
       async (customModel) => {
         const providerPath = `openai:chat:${customModel}`;
         const factory = providerMap.find((candidate) => candidate.test(providerPath));
@@ -1324,6 +1324,7 @@ describe('Provider Registry', () => {
           providerPath,
           {
             ...mockProviderOptions,
+            env: { OPENAI_API_HOST: 'api.openai.com' },
             config: {
               ...mockProviderOptions.config,
               apiBaseUrl: 'https://gateway.example/v1',
@@ -1333,6 +1334,13 @@ describe('Provider Registry', () => {
         );
 
         expect((customProvider as { modelName?: string }).modelName).toBe(customModel);
+        expect((customProvider as OpenAiChatCompletionProvider).getApiUrl()).toBe(
+          'https://gateway.example/v1',
+        );
+        expect(
+          (await (customProvider as OpenAiChatCompletionProvider).getOpenAiBody('hello')).body
+            .model,
+        ).toBe(customModel);
       },
     );
 

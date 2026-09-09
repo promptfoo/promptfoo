@@ -166,7 +166,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   service_tier?: XAIServiceTier;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
+  /** Reasoning configuration for Grok 4.6, Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
@@ -357,21 +357,27 @@ export class XAIResponsesProvider implements ApiProvider {
     }
 
     // Filter unsupported parameters for Grok 4-family models
-    if (GROK_4_MODELS.includes(this.modelName)) {
+    const effectiveModel = typeof body.model === 'string' ? body.model : this.modelName;
+    if (GROK_4_MODELS.includes(effectiveModel)) {
       delete body.presence_penalty;
       delete body.frequency_penalty;
       delete body.stop;
     }
 
     const reasoningEffort = body.reasoning?.effort;
+    const supportedReasoningEfforts =
+      effectiveModel === 'grok-4.6'
+        ? ['low', 'medium', 'high', 'xhigh']
+        : ['low', 'medium', 'high'];
     if (
-      GROK_45_MODELS.has(this.modelName) &&
+      GROK_45_MODELS.has(effectiveModel) &&
       reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort)
+      !supportedReasoningEfforts.includes(reasoningEffort)
     ) {
       throw new Error(
-        `xAI model ${this.modelName} does not support reasoning.effort ${JSON.stringify(reasoningEffort)}. ` +
-          'Use "low", "medium", or "high", or omit reasoning.effort to use the default "high".',
+        `xAI model ${effectiveModel} does not support reasoning.effort ${JSON.stringify(reasoningEffort)}. ` +
+          `Use ${supportedReasoningEfforts.map((effort) => JSON.stringify(effort)).join(', ')}, ` +
+          'or omit reasoning.effort to use the default "high".',
       );
     }
 

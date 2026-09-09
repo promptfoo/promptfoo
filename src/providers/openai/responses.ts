@@ -40,6 +40,7 @@ import {
   hasSensitiveOpenAiCacheString,
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
+  OPENAI_BILLING_MODELS,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -858,10 +859,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
     const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
     const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
-    // An explicit request model supplies its own capabilities instead of inheriting deployment hints.
+    // Azure model ids can be opaque deployment names. Preserve explicit capability hints
+    // for those overrides; known OpenAI models supply their own capabilities instead.
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const normalizedModelName = normalizeOpenAiBillingModelName(effectiveModelName);
+    const modelLookupName = normalizedModelName.startsWith('ft:')
+      ? normalizedModelName.split(':')[1]
+      : normalizedModelName;
+    const isKnownModelOverride =
+      typeof passthroughModel === 'string' &&
+      OPENAI_BILLING_MODELS.some(({ id }) => id === modelLookupName);
     const hasAzureCustomDeploymentHost =
-      typeof passthroughModel !== 'string' &&
+      !isKnownModelOverride &&
       [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
         this.isAzureOpenAiEndpoint(endpoint),
       );

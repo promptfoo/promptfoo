@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
+import { loadApiProvider } from '../../src/providers';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 
 vi.mock('../../src/cache', () => ({
@@ -28,6 +29,76 @@ describe('VoyageEmbeddingProvider', () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  it.each([
+    {
+      name: 'explicit provider config',
+      config: {
+        apiKey: 'config-key',
+        apiBaseUrl: 'https://config.example/v1',
+        headers: { 'X-Request-Namespace': 'voyage-fixture' },
+      },
+      providerEnv: {
+        VOYAGE_API_KEY: 'provider-key',
+        VOYAGE_API_BASE_URL: 'https://provider.example/v1',
+      },
+      suiteEnv: { VOYAGE_API_KEY: 'suite-key', VOYAGE_API_BASE_URL: 'https://suite.example/v1' },
+      expectedKey: 'config-key',
+      expectedUrl: 'https://config.example/v1/embeddings',
+    },
+    {
+      name: 'provider environment before suite environment',
+      config: {},
+      providerEnv: {
+        VOYAGE_API_KEY: 'provider-key',
+        VOYAGE_API_BASE_URL: 'https://provider.example/v1',
+      },
+      suiteEnv: { VOYAGE_API_KEY: 'suite-key', VOYAGE_API_BASE_URL: 'https://suite.example/v1' },
+      expectedKey: 'provider-key',
+      expectedUrl: 'https://provider.example/v1/embeddings',
+    },
+    {
+      name: 'suite environment',
+      config: {},
+      providerEnv: {},
+      suiteEnv: { VOYAGE_API_KEY: 'suite-key', VOYAGE_API_BASE_URL: 'https://suite.example/v1' },
+      expectedKey: 'suite-key',
+      expectedUrl: 'https://suite.example/v1/embeddings',
+    },
+  ])(
+    'loads $name into the actual embedding request',
+    async ({ config, providerEnv, suiteEnv, expectedKey, expectedUrl }) => {
+      mockedFetchWithCache.mockResolvedValue({
+        data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = await loadApiProvider('voyage:voyage-4-large', {
+        options: { config, env: providerEnv },
+        env: suiteEnv,
+      });
+
+      expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
+      const result = await provider.callEmbeddingApi!('loaded fixture');
+
+      expect(result.embedding).toEqual([0.1, 0.2]);
+      expect(mockedFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockedFetchWithCache).toHaveBeenCalledWith(
+        expectedUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${expectedKey}`,
+            ...config.headers,
+          },
+          body: JSON.stringify({ input: ['loaded fixture'], model: 'voyage-4-large' }),
+        }),
+        expect.any(Number),
+      );
+    },
+  );
 
   it('returns cached responses with the cached flag preserved', async () => {
     mockedFetchWithCache.mockResolvedValue({

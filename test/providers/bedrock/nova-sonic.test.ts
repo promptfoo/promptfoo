@@ -138,35 +138,6 @@ const _audioResponse = [
   },
 ];
 
-const _functionCallResponse = [
-  {
-    event: {
-      textOutput: {
-        role: 'ASSISTANT',
-        content: 'I will check the weather for you',
-      },
-    },
-  },
-  {
-    event: {
-      toolUse: {
-        toolName: 'get_weather',
-        toolUseId: 'tool-123',
-        parameters: {
-          location: 'New York',
-        },
-      },
-    },
-  },
-  {
-    event: {
-      contentEnd: {
-        stopReason: 'END_TURN',
-      },
-    },
-  },
-];
-
 describe('NovaSonic Provider', () => {
   let mockSend: Mock;
   let bedrockClient: any;
@@ -638,49 +609,74 @@ describe('NovaSonic Provider', () => {
       });
     });
 
-    it('should handle function calls correctly', async () => {
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-
-      const toolProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
-        config: {
-          toolConfig: {
-            tools: [
-              {
-                name: 'get_weather',
-                description: 'Get weather information',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
+    it.each([
+      { model: 'amazon.nova-sonic-v1:0', content: '{"location":"New York"}' },
+      { model: 'amazon.nova-2-sonic-v1:0', content: '{"location":"New York"}' },
+      { model: 'amazon.nova-2-sonic-v1:0', content: 'malformed JSON arguments' },
+    ])(
+      'reports unsupported tool execution for $model and retains $content',
+      async ({ model, content }) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+        vi.useFakeTimers();
+        try {
+          const toolProvider = new NovaSonicProvider(model, {
+            config: {
+              region: 'us-east-1',
+              toolConfig: {
+                tools: [
+                  {
+                    toolSpec: {
+                      name: 'get_weather',
+                      description: 'Get weather information',
+                      inputSchema: {
+                        json: {
+                          type: 'object',
+                          properties: { location: { type: 'string' } },
+                          required: ['location'],
+                        },
+                      },
+                    },
                   },
-                  required: ['location'],
-                },
+                ],
               },
-            ],
-          },
-        },
-      });
+              toolUseOutputConfiguration: { mediaType: 'application/json' },
+            },
+          });
+          const toolCall = { toolName: 'get_weather', toolUseId: 'tool-123', content };
+          mockSend.mockResolvedValue(
+            createMockStreamResponse([
+              { event: { textOutput: { role: 'ASSISTANT', content: 'I will check the weather' } } },
+              { event: { toolUse: toolCall } },
+              { event: { textOutput: { role: 'ASSISTANT', content: 'Unverified forecast' } } },
+              { event: { contentEnd: { stopReason: 'END_TURN' } } },
+            ]),
+          );
+          const sendEventSpy = vi.spyOn(toolProvider as any, 'sendEvent');
 
-      vi.spyOn(toolProvider, 'callApi').mockResolvedValue({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
-      });
+          const responsePromise = toolProvider.callApi('c3BlZWNo');
+          await vi.runAllTimersAsync();
+          const result = await responsePromise;
 
-      const result = await toolProvider.callApi("What's the weather in New York?");
-
-      expect(result).toEqual({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
-      });
-    });
+          expect(result.error).toBe('Tool execution is not supported by the Nova Sonic provider.');
+          expect(result.metadata).toMatchObject({
+            functionCallOccurred: true,
+            toolCalls: [toolCall],
+          });
+          expect(result.output).toBe('I will check the weather\n');
+          const events = sendEventSpy.mock.calls.map(
+            ([, request]) => (request as { event: Record<string, any> }).event,
+          );
+          expect(
+            events.some((event) => event.toolResult || event.contentStart?.type === 'TOOL'),
+          ).toBe(false);
+          expect(events).toContainEqual({ sessionEnd: {} });
+          expect((toolProvider as any).sessions.size).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
   });
 
   describe('Error Handling', () => {

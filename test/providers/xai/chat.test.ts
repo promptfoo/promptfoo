@@ -823,7 +823,7 @@ describe('xAI Chat Provider', () => {
         };
         const provider = createXAIProvider(
           'xai:grok-4.3',
-          configSource === 'provider' ? { config } : {},
+          configSource === 'provider' ? { config: { config } } : {},
         ) as any;
         const result = await provider.getOpenAiBody(
           'test prompt',

@@ -40,13 +40,15 @@ providers:
 
 - `temperature`
 - `max_tokens`
-- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
+- `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Set applicable per-token prices. `inputCost` and `outputCost` take precedence over `cost`; cached input uses `cacheReadCost`, falling back to `inputCost` or `cost`.
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
 - `showThinking` - Control whether returned reasoning content is included in promptfoo's output (default: `true`); this does not select the API's thinking mode
 - `passthrough.thinking` - Select the API mode with `{ type: enabled }` or `{ type: disabled }`
 
 ## Available Models
+
+DeepSeek uses [peak and off-peak pricing](https://api-docs.deepseek.com/quick_start/pricing/). Promptfoo leaves cost unknown unless you configure the applicable rates for the tokens used; it does not infer a request's billing period from the current clock.
 
 :::note
 
@@ -60,16 +62,12 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepS
 - Currently resolves to DeepSeek-V4-Flash-0731; available in public beta
 - Supports thinking and non-thinking modes and the Responses API
 - 1M context window, up to 384K output tokens
-- Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
-- Output: $0.28/1M
 
 ### deepseek-v4-pro
 
 - Higher-capability V4 model with thinking and non-thinking modes
 - Released August 13, 2026; DeepSeek's native [Responses API](https://api-docs.deepseek.com/guides/responses_api/) supports this model. The `deepseek:` provider uses Chat Completions.
 - 1M context window, up to 384K output tokens
-- Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
-- Output: $0.87/1M
 
 ### Legacy aliases
 

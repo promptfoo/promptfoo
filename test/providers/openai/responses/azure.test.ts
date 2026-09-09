@@ -39,9 +39,14 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
       return JSON.parse(reqOptions.body);
     }
 
-    it.each(['provider', 'prompt'] as const)(
-      'uses the %s passthrough model capabilities instead of inherited Azure deployment hints',
-      async (owner) => {
+    it.each([
+      { owner: 'provider', model: 'gpt-4.1' },
+      { owner: 'prompt', model: 'gpt-4.1' },
+      { owner: 'provider', model: 'ft:gpt-4.1-2025-04-14:org:custom:id' },
+      { owner: 'prompt', model: 'ft:gpt-4.1-2025-04-14:org:custom:id' },
+    ] as const)(
+      'uses the $owner passthrough $model capabilities instead of inherited Azure deployment hints',
+      async ({ owner, model }) => {
         const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
           config: {
             apiKey: 'test-key',
@@ -50,7 +55,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
             reasoning: { summary: 'concise' },
             verbosity: 'low',
             temperature: 0.7,
-            ...(owner === 'provider' && { passthrough: { model: 'gpt-4.1' } }),
+            ...(owner === 'provider' && { passthrough: { model } }),
           },
         });
 
@@ -62,19 +67,115 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
                 prompt: {
                   raw: 'Test prompt',
                   label: 'override',
-                  config: { passthrough: { model: 'gpt-4.1' } },
+                  config: { passthrough: { model } },
                 },
               }
             : undefined,
         );
 
-        expect(body.model).toBe('gpt-4.1');
+        expect(body.model).toBe(model);
         expect(body).not.toHaveProperty('reasoning');
         expect(body.text).not.toHaveProperty('verbosity');
         expect(body.temperature).toBe(0.7);
         expect(body.max_output_tokens).toBe(1024);
       },
     );
+
+    it.each([
+      { owner: 'provider', model: AZURE_MODEL },
+      { owner: 'prompt', model: AZURE_MODEL },
+      { owner: 'provider', model: 'deployment-b' },
+      { owner: 'prompt', model: 'deployment-b' },
+    ] as const)(
+      'preserves explicit reasoning hints for the $owner opaque deployment override $model',
+      async ({ owner, model }) => {
+        mockAzureSuccessResponse();
+        const passthrough = { model };
+        const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: AZURE_BASE_URL,
+            reasoning_effort: 'high',
+            reasoning: { summary: 'concise' },
+            verbosity: 'low',
+            ...(owner === 'provider' ? { passthrough } : {}),
+          },
+        });
+        const context =
+          owner === 'prompt'
+            ? {
+                vars: {},
+                prompt: { raw: 'Test prompt', label: 'override', config: { passthrough } },
+              }
+            : undefined;
+
+        const result = await provider.callApi('Test prompt', context);
+        const body = getRequestBody();
+
+        expect(vi.mocked(cache.fetchWithCache).mock.calls[0][0]).toBe(
+          `${AZURE_BASE_URL}/responses`,
+        );
+        expect(body.model).toBe(model);
+        expect(body.reasoning).toEqual({ effort: 'high', summary: 'concise' });
+        expect(body.text).toHaveProperty('verbosity', 'low');
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+        expect(result.output).toBe('Response from Azure custom deployment');
+        expect(result.error).toBeUndefined();
+      },
+    );
+
+    it.each(['provider', 'prompt'] as const)(
+      'retains verbosity-only defaults for an opaque %s model override',
+      async (owner) => {
+        const passthrough = { model: 'deployment-b' };
+        const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: AZURE_BASE_URL,
+            verbosity: 'low',
+            ...(owner === 'provider' ? { passthrough } : {}),
+          },
+        });
+        const context =
+          owner === 'prompt'
+            ? {
+                vars: {},
+                prompt: { raw: 'Test prompt', label: 'override', config: { passthrough } },
+              }
+            : undefined;
+
+        const { body } = await provider.getOpenAiBody('Test prompt', context);
+
+        expect(body.model).toBe('deployment-b');
+        expect(body.text).toHaveProperty('verbosity', 'low');
+        expect(body.max_output_tokens).toBe(1024);
+        expect(body.temperature).toBe(0);
+        expect(body).not.toHaveProperty('reasoning');
+      },
+    );
+
+    it('preserves temperature when an opaque override explicitly disables reasoning', async () => {
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          passthrough: { model: 'deployment-b' },
+          reasoning_effort: 'none',
+          temperature: 0.7,
+          max_output_tokens: 2000,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).toMatchObject({
+        model: 'deployment-b',
+        reasoning: { effort: 'none' },
+        temperature: 0.7,
+        max_output_tokens: 2000,
+      });
+    });
 
     it('retains reasoning capabilities for an explicit reasoning model on Azure', async () => {
       const provider = new OpenAiResponsesProvider(AZURE_MODEL, {

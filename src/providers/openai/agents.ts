@@ -3,6 +3,7 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  handoff,
   protocol,
   Runner,
   startTraceExportLoop,
@@ -135,10 +136,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      const overriddenAgent = applyExecutionOverrides(configuredAgent, {
-        model: this.agentConfig.model || undefined,
-        modelSettings: this.executionModelSettings,
-      });
+      const overriddenAgent = applyExecutionOverrides(
+        configuredAgent,
+        {
+          model: this.agentConfig.model || undefined,
+          modelSettings: this.executionModelSettings,
+        },
+        this.agentConfig.executeTools !== false && this.agentConfig.executeTools !== 'mock',
+      );
       const mockAwareAgent = this.wrapToolsIfNeeded(overriddenAgent);
 
       logger.debug('[AgentsProvider] Agent initialized successfully', {
@@ -554,6 +559,7 @@ function cloneAgentPreservingHooks(
 function applyExecutionOverrides(
   agent: Agent<any, any>,
   overrides: AgentExecutionOverrides,
+  refreshPlainHandoffs = true,
 ): Agent<any, any> {
   if (overrides.model === undefined && overrides.modelSettings === undefined) {
     return agent;
@@ -575,18 +581,23 @@ function applyExecutionOverrides(
     });
     clonedAgents.set(source, cloned);
     cloned.handoffs = source.handoffs.map((candidate) => {
-      if ('clone' in candidate && 'agent' in candidate) {
-        const handoff = candidate as Handoff<any, any>;
-        return handoff.clone({
-          agent: cloneAgent(handoff.agent),
-          // Callbacks can update an already-cloned target or its descendants. Use a fresh
-          // cycle-safe graph after invocation so every transfer sees those updates.
-          onInvokeHandoff: async (context, args) =>
-            applyExecutionOverrides(await handoff.onInvokeHandoff(context, args), overrides),
-        });
+      const explicitHandoff = 'clone' in candidate && 'agent' in candidate;
+      if (!explicitHandoff && !refreshPlainHandoffs) {
+        // Mock mode needs plain Agent entries for recursive tool wrapping, and cannot run
+        // the tool callbacks that update their targets during execution.
+        return cloneAgent(candidate as Agent<any, any>);
       }
 
-      return cloneAgent(candidate as Agent<any, any>);
+      const agentHandoff = explicitHandoff
+        ? (candidate as Handoff<any, any>)
+        : handoff(candidate as Agent<any, any>);
+      return agentHandoff.clone({
+        agent: cloneAgent(agentHandoff.agent),
+        // Tool and handoff callbacks can update an already-cloned target or its descendants.
+        // Use a fresh cycle-safe graph at transfer time so execution sees those updates.
+        onInvokeHandoff: async (context, args) =>
+          applyExecutionOverrides(await agentHandoff.onInvokeHandoff(context, args), overrides),
+      });
     });
 
     return cloned;

@@ -1,7 +1,6 @@
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -73,6 +72,7 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { resolveOpenAiApiUrl } from './openai';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -1105,17 +1105,7 @@ export const providerMap: ProviderFactory[] = [
         !['agents', 'chatkit'].includes(modelType) &&
         (modelType !== 'assistant' || assistantModel)
       ) {
-        const configApiHost = providerOptions.config?.apiHost;
-        const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-        const apiUrl = configApiHost
-          ? `https://${configApiHost}/v1`
-          : providerOptions.config?.apiBaseUrl ||
-            (envApiHost ? `https://${envApiHost}/v1` : undefined) ||
-            providerOptions.env?.OPENAI_API_BASE_URL ||
-            providerOptions.env?.OPENAI_BASE_URL ||
-            getEnvString('OPENAI_API_BASE_URL') ||
-            getEnvString('OPENAI_BASE_URL') ||
-            'https://api.openai.com/v1';
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env);
         assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
@@ -1450,9 +1440,12 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions.config, {
+        ...context.env,
+        ...providerOptions.env,
+      });
     },
   },
   {

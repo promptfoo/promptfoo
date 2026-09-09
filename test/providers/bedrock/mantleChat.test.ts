@@ -122,6 +122,75 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it.each(['none', 'provider', 'prompt'] as const)(
+      'preserves the Grok completion cap and temperature with a %s model override',
+      async (scope) => {
+        restoreEnv = mockProcessEnv({
+          OPENAI_MAX_TOKENS: undefined,
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+          OPENAI_TEMPERATURE: undefined,
+        });
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'Grok output' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 4, completion_tokens: 6, total_tokens: 10 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const passthrough = { model: 'xai.grok-4.3' };
+        const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
+          config: {
+            apiKey: 'bedrock-key',
+            region: 'us-west-2',
+            max_completion_tokens: 2000,
+            temperature: 0.4,
+            ...(scope === 'provider' ? { passthrough } : {}),
+          },
+        });
+        const context =
+          scope === 'prompt'
+            ? { vars: {}, prompt: { raw: 'hello', label: 'test', config: { passthrough } } }
+            : undefined;
+
+        const result = await provider.callApi('hello', context);
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        const body = JSON.parse(request?.body as string);
+
+        expect(url).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1/chat/completions');
+        expect(provider.config.omitDefaults).toBe(true);
+        expect(body).toMatchObject({
+          model: 'xai.grok-4.3',
+          max_completion_tokens: 2000,
+          temperature: 0.4,
+        });
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(result.output).toBe('Grok output');
+        expect(result.error).toBeUndefined();
+      },
+    );
+
+    it('uses an incompatible override model instead of the configured Grok capabilities', async () => {
+      const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://proxy.example/v1',
+          max_completion_tokens: 2000,
+          max_tokens: 1000,
+          reasoning_effort: 'high',
+          temperature: 0.4,
+          passthrough: { model: 'gpt-4.1' },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('hello');
+
+      expect(body).toMatchObject({ model: 'gpt-4.1', max_tokens: 1000, temperature: 0.4 });
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
     it('treats an unresolved {{env.*}} apiKey template as missing', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
       expect(() =>

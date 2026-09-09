@@ -642,15 +642,18 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Default | Description                                              |
-| ------------------ | ------ | ------- | -------------------------------------------------------- |
-| `duration`         | number | 8       | Video length in seconds (1-15)                           |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3        |
-| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p |
-| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation         |
-| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)        |
-| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                         |
-| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                           |
+| Option             | Type   | Default | Description                                                                 |
+| ------------------ | ------ | ------- | --------------------------------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                                              |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                           |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p                    |
+| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation                            |
+| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)                           |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                            |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                              |
+| `cacheNamespace`   | string | -       | Nonsecret account or tenant label that enables persistent video cache reuse |
+
+Set `cacheNamespace` in the provider config to a label unique to the account or tenant, and change it when switching accounts. Cache entries are also scoped to the API endpoint. Never use API keys, tokens, or credential hashes as the namespace. Without a namespace, or with credential-bearing endpoint or input URLs, Promptfoo generates videos without reusing persistent cache entries.
 
 #### Image-to-Video
 

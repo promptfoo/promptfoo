@@ -53,6 +53,7 @@ const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
   'anthropic.claude-opus-4-7',
   'anthropic.claude-opus-4-8',
   'anthropic.claude-opus-5',
+  'anthropic.claude-sonnet-5',
 ];
 const BEDROCK_ANTHROPIC_MESSAGES_ONLY_MODELS = new Set([
   'anthropic.claude-mythos-5',

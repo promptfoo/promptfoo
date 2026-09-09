@@ -187,6 +187,78 @@ describe('GoogleLiveProvider', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
   });
 
+  it('keeps final state retrieval alive after the expected Live socket close', async () => {
+    let releaseState!: (state: { counter: number }) => void;
+    const stateResponse = new Promise<{ counter: number }>((resolve) => {
+      releaseState = resolve;
+    });
+    let signalStateRequest!: () => void;
+    const stateRequested = new Promise<void>((resolve) => {
+      signalStateRequest = resolve;
+    });
+    mockFetchWithProxy.mockImplementation(async () => {
+      signalStateRequest();
+      return { ok: true, json: () => stateResponse } as any;
+    });
+    const mockProcess = {
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+      kill: vi.fn(),
+      killed: false,
+    };
+    vi.mocked((await import('child_process')).spawn).mockReturnValueOnce(mockProcess as any);
+    Object.defineProperty(mockWs, 'readyState', { value: WebSocket.OPEN });
+    mockWs.close.mockImplementation(() => {
+      setImmediate(() => {
+        mockWs.onclose?.({ wasClean: true, code: 1000, reason: '' } as WebSocket.CloseEvent);
+      });
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Completed movement.');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+    const statefulProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        apiKey: 'test-key',
+        timeoutMs: 500,
+        functionToolStatefulApi: {
+          file: 'examples/google-live/counter_api.py',
+          url: 'http://127.0.0.1:8765/',
+        },
+      },
+    });
+    let settled = false;
+    const responsePromise = statefulProvider.callApi('Move the block.').then((response) => {
+      settled = true;
+      return response;
+    });
+
+    await stateRequested;
+    await flushAsyncEvents();
+    try {
+      expect(mockWs.close).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+      expect(mockProcess.kill).not.toHaveBeenCalled();
+    } finally {
+      releaseState({ counter: 7 });
+    }
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({
+      text: 'Completed movement.',
+      statefulApiState: { counter: 7 },
+    });
+    expect(mockFetchWithProxy).toHaveBeenCalledWith('http://127.0.0.1:8765/get_state', undefined);
+    expect(mockProcess.kill).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     {
       owner: 'provider',
@@ -3570,6 +3642,55 @@ describe('GoogleLiveProvider', () => {
     }
   });
 
+  it.each([
+    { keyName: 'GOOGLE_API_KEY', ambientKeys: false },
+    { keyName: 'GEMINI_API_KEY', ambientKeys: false },
+    { keyName: 'GOOGLE_API_KEY', ambientKeys: true },
+    { keyName: 'GEMINI_API_KEY', ambientKeys: true },
+  ])(
+    'uses provider-scoped $keyName with ambient keys=$ambientKeys for Live',
+    async ({ keyName, ambientKeys }) => {
+      const restoreEnv = mockProcessEnv({
+        GOOGLE_API_KEY: ambientKeys ? 'ambient-google-key' : undefined,
+        GEMINI_API_KEY: ambientKeys ? 'ambient-gemini-key' : undefined,
+      });
+      try {
+        vi.mocked(WebSocket).mockImplementation(function () {
+          setImmediate(() => {
+            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+            simulateSetupMessage(mockWs);
+            simulateTextMessage(mockWs, 'Move forward.');
+            simulateCompletionMessage(mockWs);
+          });
+          return mockWs;
+        });
+        const scopedProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+          config: { timeoutMs: 500 },
+          env: { [keyName]: 'provider-key' },
+        });
+
+        const result = await scopedProvider.callApi('Plan the next movement.');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({ text: 'Move forward.' });
+        expect(vi.mocked(WebSocket).mock.calls[0][0]).toBe(
+          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=provider-key',
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it('prefers an explicit Live API key over provider-scoped keys', () => {
+    const scopedProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: { apiKey: 'explicit-key' },
+      env: { GOOGLE_API_KEY: 'provider-google-key', GEMINI_API_KEY: 'provider-gemini-key' },
+    });
+
+    expect(scopedProvider.getApiKey()).toBe('explicit-key');
+  });
+
   it('should throw an error if API key is not set', async () => {
     const providerWithoutKey = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
@@ -3579,20 +3700,14 @@ describe('GoogleLiveProvider', () => {
       },
     });
 
-    const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
-    const originalGeminiApiKey = process.env.GEMINI_API_KEY;
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-
-    await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google authentication is not configured',
-    );
-
-    if (originalGoogleApiKey) {
-      mockProcessEnv({ GOOGLE_API_KEY: originalGoogleApiKey });
-    }
-    if (originalGeminiApiKey) {
-      mockProcessEnv({ GEMINI_API_KEY: originalGeminiApiKey });
+    const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    try {
+      await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
+        'For the Live API, set apiKey in the provider config, GOOGLE_API_KEY, or GEMINI_API_KEY.',
+      );
+      expect(WebSocket).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
     }
   });
 

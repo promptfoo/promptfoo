@@ -523,6 +523,43 @@ function normalizeInteractionSafetySettings(
   }));
 }
 
+function calculateExplicitInteractionCost(
+  config: CompletionOptions,
+  promptTokens: number,
+  completionTokens: number,
+  audioPromptTokens: number,
+  audioCompletionTokens: number,
+  videoCompletionTokens: number,
+  imagePromptTokens: number,
+): number | undefined {
+  const inputCost = config.inputCost ?? config.cost;
+  const outputCost = config.outputCost ?? config.cost;
+  const audioInput = Math.max(0, Math.min(audioPromptTokens, promptTokens));
+  const imageInput = Math.max(0, Math.min(imagePromptTokens, promptTokens - audioInput));
+  const audioOutput = Math.max(0, Math.min(audioCompletionTokens, completionTokens));
+  const videoOutput = Math.max(0, Math.min(videoCompletionTokens, completionTokens - audioOutput));
+  const charges: [number, number | undefined][] = [
+    [promptTokens - audioInput - imageInput, inputCost],
+    [audioInput, config.audioInputCost ?? config.audioCost ?? inputCost],
+    [imageInput, config.imageInputCost ?? inputCost],
+    [completionTokens - audioOutput - videoOutput, outputCost],
+    [audioOutput, config.audioOutputCost ?? config.audioCost ?? outputCost],
+    [videoOutput, config.videoOutputCost ?? outputCost],
+  ];
+  if (
+    !charges.some(([, rate]) => rate !== undefined) ||
+    charges.some(
+      ([tokens, rate]) =>
+        !Number.isFinite(tokens) ||
+        tokens < 0 ||
+        (tokens > 0 && (rate === undefined || !Number.isFinite(rate))),
+    )
+  ) {
+    return undefined;
+  }
+  return charges.reduce((total, [tokens, rate]) => total + tokens * (rate ?? 0), 0);
+}
+
 function getInteractionModalityTokenCount(
   details: Array<{ modality?: string; tokens?: number }> | undefined,
   modalities: string[],
@@ -880,9 +917,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
     // Known model overrides select their own capabilities. Gateway deployment aliases
     // retain the capabilities of the provider's selected model.
-    const capabilityModel = GOOGLE_MODELS.some((model) => model.id === effectiveModel)
-      ? effectiveModel
-      : this.modelName;
+    const hasCatalogModel = GOOGLE_MODELS.some((model) => model.id === effectiveModel);
+    const capabilityModel = hasCatalogModel ? effectiveModel : this.modelName;
     const isVideoModel = [
       'gemini-omni-flash-preview',
       'gemini-omni-1.1-flash',
@@ -1453,23 +1489,35 @@ export class GoogleInteractionsProvider implements ApiProvider {
       numRequests: 1,
       ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
     };
+    // Opaque gateway aliases retain the provider's request capabilities, but their
+    // prices must come from explicit configuration rather than an assumed model mapping.
     const cost = cached
       ? undefined
-      : calculateGoogleCost(
-          effectiveModel,
-          billingConfig,
-          promptTokens,
-          outputTokens + thoughtTokens,
-          config.vertexai,
-          audioInputTokens,
-          audioOutputTokens,
-          videoTokens,
-          imageInputTokens,
-          usage?.total_cached_tokens,
-          cachedAudioTokens,
-          cachedImageTokens,
-          config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
-        );
+      : hasCatalogModel
+        ? calculateGoogleCost(
+            effectiveModel,
+            billingConfig,
+            promptTokens,
+            outputTokens + thoughtTokens,
+            config.vertexai,
+            audioInputTokens,
+            audioOutputTokens,
+            videoTokens,
+            imageInputTokens,
+            usage?.total_cached_tokens,
+            cachedAudioTokens,
+            cachedImageTokens,
+            config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
+          )
+        : calculateExplicitInteractionCost(
+            billingConfig,
+            promptTokens,
+            outputTokens + thoughtTokens,
+            audioInputTokens,
+            audioOutputTokens,
+            videoTokens,
+            imageInputTokens,
+          );
 
     if (!isVideoModel) {
       if (!text) {

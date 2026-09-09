@@ -737,6 +737,8 @@ providers:
 
 Audio input must be base64-encoded. You can use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
 
+`toolConfig` declares tools the model can request. Promptfoo does not execute Nova Sonic tools: when a tool is requested, the provider stops the response, closes the session, and returns an unsupported-execution error without sending a tool result. The requested tool ID, name, and original JSON arguments are retained in `metadata.toolCalls` as `toolUseId`, `toolName`, and `content`.
+
 ### Amazon Nova Reel (Video Generation)
 
 Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.

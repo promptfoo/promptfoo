@@ -297,7 +297,7 @@ describe('XAI Video Provider', () => {
         .mockResolvedValueOnce(downloadResponse as any);
 
       const provider = new XAIVideoProvider(model, {
-        config: { duration: 4, resolution: '1080p' },
+        config: { cacheNamespace: 'test-account', duration: 4, resolution: '1080p' },
       });
 
       const result = await provider.callApi(mockPrompt);
@@ -435,7 +435,9 @@ describe('XAI Video Provider', () => {
     it('returns cached result when available', async () => {
       vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
 
-      const provider = new XAIVideoProvider('grok-imagine-video');
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { cacheNamespace: 'test-account' },
+      });
       const result = await provider.callApi(mockPrompt);
 
       expect(result.cached).toBe(true);
@@ -701,6 +703,7 @@ describe('XAI Video Provider', () => {
 
       const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
         config: {
+          cacheNamespace: 'test-account',
           reference_images: referenceImages,
           duration: 10,
           resolution: '720p',
@@ -844,6 +847,7 @@ describe('XAI Video Provider', () => {
       const image = { url: 'https://example.com/frame.jpg' };
       const provider = new XAIVideoProvider(model, {
         config: {
+          cacheNamespace: 'test-account',
           image,
           reference_audios: [{ voice_id: ' Eve ' }, { voice_id: 'LEO' }],
           duration: 15,
@@ -901,7 +905,12 @@ describe('XAI Video Provider', () => {
         for (const config of configurations) {
           for (const prompt of ['', mockPrompt]) {
             const provider = new XAIVideoProvider(model, {
-              config: { ...config, duration: 15, resolution: '720p' },
+              config: {
+                ...config,
+                cacheNamespace: 'test-account',
+                duration: 15,
+                resolution: '720p',
+              },
             });
             const result = await provider.callApi(prompt);
             expect(result.error).toBeUndefined();
@@ -1196,6 +1205,134 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Cache key generation', () => {
+    it.each(['grok-imagine-video', 'grok-imagine-video-1.5'])(
+      'isolates %s cache entries by endpoint and explicit account namespace',
+      async (model) => {
+        const actualVideoUtils = await vi.importActual<typeof videoUtils>(
+          '../../../src/providers/video/utils',
+        );
+        vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
+          actualVideoUtils.generateVideoCacheKey,
+        );
+        const cache = new Map<string, string>();
+        vi.mocked(videoUtils.checkVideoCache).mockImplementation(
+          async (key) => cache.get(key) ?? null,
+        );
+        vi.mocked(videoUtils.storeCacheMapping).mockImplementation(async (key, value) => {
+          cache.set(key, value);
+        });
+        vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
+          if (String(url).endsWith('/videos/generations')) {
+            return { ok: true, json: async () => ({ request_id: mockRequestId }) } as Response;
+          }
+          if (String(url).endsWith(`/videos/${mockRequestId}`)) {
+            return {
+              ok: true,
+              json: async () => ({ video: { url: mockVideoUrl, duration: 8 } }),
+            } as Response;
+          }
+          if (url === mockVideoUrl) {
+            return { ok: true, arrayBuffer: async () => new ArrayBuffer(1000) } as Response;
+          }
+          throw new Error(`Unexpected URL: ${url}`);
+        });
+        const configurations = [
+          {
+            apiBaseUrl: 'https://one.example.com/v1',
+            cacheNamespace: 'account-a',
+            apiKey: 'key-account-a',
+          },
+          {
+            apiBaseUrl: 'https://two.example.com/v1',
+            cacheNamespace: 'account-a',
+            apiKey: 'key-account-a',
+          },
+          {
+            apiBaseUrl: 'https://two.example.com/v1',
+            cacheNamespace: 'account-b',
+            apiKey: 'key-account-b',
+          },
+          {
+            apiBaseUrl: 'https://one.example.com/v1',
+            cacheNamespace: 'account-a',
+            apiKey: 'rotated-key-account-a',
+          },
+        ];
+        const results = [];
+        for (const config of configurations) {
+          const result = await new XAIVideoProvider(model, { config }).callApi(mockPrompt);
+          expect(result.error).toBeUndefined();
+          results.push(result);
+        }
+        expect(results.map(({ cached }) => cached)).toEqual([false, false, false, true]);
+        expect(cache.size).toBe(3);
+        expect(
+          vi
+            .mocked(fetch.fetchWithProxy)
+            .mock.calls.filter(([url]) => String(url).endsWith('/videos/generations')),
+        ).toHaveLength(3);
+        const scopes = vi
+          .mocked(videoUtils.generateVideoCacheKey)
+          .mock.calls.map(([params]) => params.cacheScope);
+        expect(scopes).toEqual(
+          configurations.map(({ apiBaseUrl, cacheNamespace }) => ({
+            'api-base-url': apiBaseUrl,
+            'account-namespace': cacheNamespace,
+          })),
+        );
+        expect(JSON.stringify(scopes)).not.toContain('key-account');
+        expect(results[3].cost).toBe(0);
+      },
+    );
+
+    it.each([
+      { apiKey: 'account-a-key' },
+      { apiKey: 'account-b-key' },
+      { headers: { Authorization: 'Bearer custom-key' } },
+      { cacheNamespace: '' },
+      { cacheNamespace: 'test-xai-api-key' },
+      { cacheNamespace: 'account-a', apiBaseUrl: 'https://user:password@example.com/v1' },
+      { cacheNamespace: 'account-a', apiBaseUrl: 'https://example.com/v1?api_key=opaque-key' },
+      { cacheNamespace: 'account-a', apiBaseUrl: 'https://example.com/v1#access_token=opaque-key' },
+      { cacheNamespace: 'account-a', apiBaseUrl: 'https://example.com/token/opaque-key/v1' },
+      {
+        cacheNamespace: 'account-a',
+        apiBaseUrl: 'https://example.com/token-credential-123456789/v1',
+      },
+    ])(
+      'bypasses persistent caching when account or endpoint identity is unsafe: %j',
+      async (config) => {
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(fetch.fetchWithProxy)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ request_id: mockRequestId }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ video: { url: mockVideoUrl, duration: 8 } }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () => new ArrayBuffer(1000),
+          } as Response);
+        const result = await new XAIVideoProvider('grok-imagine-video-1.5', { config }).callApi(
+          mockPrompt,
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(result.cost).toBeCloseTo(1.12);
+        expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+        expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+        expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+        expect(videoUtils.storeVideoContent).toHaveBeenCalledWith(
+          expect.any(Buffer),
+          expect.not.objectContaining({ contentHash: expect.anything() }),
+          'xAI Video',
+        );
+      },
+    );
+
     it('generates cache key with correct parameters', async () => {
       // Mock responses for successful generation
       const createResponse = {
@@ -1220,7 +1357,12 @@ describe('XAI Video Provider', () => {
         .mockResolvedValueOnce(downloadResponse as any);
 
       const provider = new XAIVideoProvider('grok-imagine-video', {
-        config: { duration: 5, aspect_ratio: '9:16', resolution: '480p' },
+        config: {
+          cacheNamespace: 'test-account',
+          duration: 5,
+          aspect_ratio: '9:16',
+          resolution: '480p',
+        },
       });
       await provider.callApi(mockPrompt);
 
@@ -1231,18 +1373,23 @@ describe('XAI Video Provider', () => {
         size: '9:16:480p',
         seconds: 5,
         inputReference: null,
+        cacheScope: { 'api-base-url': 'https://api.x.ai/v1', 'account-namespace': 'test-account' },
       });
     });
 
     it.each(['grok-imagine-video', ...video15Models])(
-      'preserves the image-only cache key for %s',
+      'preserves the image-only cache reference for %s',
       async (model) => {
         const imageUrl = 'https://example.com/image.jpg';
 
         vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
 
         const provider = new XAIVideoProvider(model, {
-          config: { image: { url: imageUrl }, reference_audios: [] },
+          config: {
+            cacheNamespace: 'test-account',
+            image: { url: imageUrl },
+            reference_audios: [],
+          },
         });
         await provider.callApi(mockPrompt);
 
@@ -1292,7 +1439,7 @@ describe('XAI Video Provider', () => {
 
         for (const url of [firstSignedUrl, rotatedSignedUrl, differentResourceUrl]) {
           const result = await new XAIVideoProvider('grok-imagine-video-1.5', {
-            config: { image: { url }, reference_audios },
+            config: { cacheNamespace: 'test-account', image: { url }, reference_audios },
           }).callApi(mockPrompt);
           expect(result.error).toBeUndefined();
         }
@@ -1344,7 +1491,7 @@ describe('XAI Video Provider', () => {
 
       for (const url of [firstUrl, secondUrl]) {
         await new XAIVideoProvider('grok-imagine-video-1.5', {
-          config: { image: { url } },
+          config: { cacheNamespace: 'test-account', image: { url } },
         }).callApi(mockPrompt);
       }
 
@@ -1358,7 +1505,10 @@ describe('XAI Video Provider', () => {
       expect(submittedImageUrls).toEqual([firstUrl, secondUrl]);
     });
 
-    it('reuses the legacy persistent key for Grok Imagine Video reference images', async () => {
+    it('preserves the legacy reference-image identity within an account cache scope', async () => {
+      const actualVideoUtils = await vi.importActual<typeof videoUtils>(
+        '../../../src/providers/video/utils',
+      );
       const referenceImages = [
         { url: 'https://example.com/first.jpg' },
         { url: 'https://example.com/second.jpg' },
@@ -1366,18 +1516,32 @@ describe('XAI Video Provider', () => {
       const legacyInputReference = `reference_images:${referenceImages
         .map(({ url }) => url)
         .join('|')}`;
-      vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(({ inputReference }) =>
-        inputReference === legacyInputReference ? 'legacy-cache-key' : 'new-cache-key',
+      const parameters = {
+        provider: 'xai',
+        prompt: mockPrompt,
+        model: 'grok-imagine-video',
+        size: '16:9:720p',
+        seconds: 8,
+        inputReference: legacyInputReference,
+      };
+      const oldUnscopedKey = actualVideoUtils.generateVideoCacheKey(parameters);
+      const scopedKey = actualVideoUtils.generateVideoCacheKey({
+        ...parameters,
+        cacheScope: { 'api-base-url': 'https://api.x.ai/v1', 'account-namespace': 'test-account' },
+      });
+      vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
+        actualVideoUtils.generateVideoCacheKey,
       );
       vi.mocked(videoUtils.checkVideoCache).mockImplementation(async (cacheKey) =>
-        cacheKey === 'legacy-cache-key' ? mockStorageKey : null,
+        cacheKey === scopedKey ? mockStorageKey : null,
       );
 
       const result = await new XAIVideoProvider('grok-imagine-video', {
-        config: { reference_images: referenceImages },
+        config: { cacheNamespace: 'test-account', reference_images: referenceImages },
       }).callApi(mockPrompt);
 
-      expect(videoUtils.checkVideoCache).toHaveBeenCalledWith('legacy-cache-key', 'xAI Video');
+      expect(scopedKey).not.toBe(oldUnscopedKey);
+      expect(videoUtils.checkVideoCache).toHaveBeenCalledWith(scopedKey, 'xAI Video');
       expect(result.cached).toBe(true);
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
@@ -1418,6 +1582,7 @@ describe('XAI Video Provider', () => {
         for (const url of [firstSignedUrl, rotatedSignedUrl]) {
           const result = await new XAIVideoProvider('grok-imagine-video-1.5', {
             config: {
+              cacheNamespace: 'test-account',
               duration: 12,
               reference_images: [{ url }],
               ...(mixedInputs
@@ -1475,7 +1640,7 @@ describe('XAI Video Provider', () => {
 
       for (const url of [firstCredentialUrl, rotatedCredentialUrl]) {
         await new XAIVideoProvider('grok-imagine-video-1.5', {
-          config: { duration: 12, reference_images: [{ url }] },
+          config: { cacheNamespace: 'test-account', duration: 12, reference_images: [{ url }] },
         }).callApi(mockPrompt);
       }
 
@@ -1504,7 +1669,7 @@ describe('XAI Video Provider', () => {
 
       for (const url of [firstResourceUrl, secondResourceUrl]) {
         await new XAIVideoProvider('grok-imagine-video-1.5', {
-          config: { duration: 12, reference_images: [{ url }] },
+          config: { cacheNamespace: 'test-account', duration: 12, reference_images: [{ url }] },
         }).callApi(mockPrompt);
       }
 
@@ -1530,10 +1695,10 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
 
       await new XAIVideoProvider('grok-imagine-video', {
-        config: { image: { url: sharedUrl } },
+        config: { cacheNamespace: 'test-account', image: { url: sharedUrl } },
       }).callApi(mockPrompt);
       await new XAIVideoProvider('grok-imagine-video', {
-        config: { reference_images: [{ url: sharedUrl }] },
+        config: { cacheNamespace: 'test-account', reference_images: [{ url: sharedUrl }] },
       }).callApi(mockPrompt);
 
       expect(videoUtils.generateVideoCacheKey).toHaveBeenNthCalledWith(
@@ -1590,7 +1755,7 @@ describe('XAI Video Provider', () => {
       const imageUrl = 'https://example.com/frame.jpg?b=2&a=1';
       const canonicalImageUrl = 'https://example.com/frame.jpg?a=1&b=2';
       const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
-        config: { image: { url: imageUrl } },
+        config: { cacheNamespace: 'test-account', image: { url: imageUrl } },
       });
       const referenceImage = { url: 'https://example.com/reference.jpg?b=2&a=1' };
       const otherReferenceImage = { url: 'https://example.com/other-reference.jpg' };
@@ -1697,9 +1862,9 @@ describe('XAI Video Provider', () => {
         { image: { url: imageUrl }, reference_images: [{ url: imageUrl }, { url: imageUrl }] },
       ];
       for (const config of configurations) {
-        const result = await new XAIVideoProvider('grok-imagine-video-1.5', { config }).callApi(
-          mockPrompt,
-        );
+        const result = await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { ...config, cacheNamespace: 'test-account' },
+        }).callApi(mockPrompt);
         expect(result.error).toBeUndefined();
         expect(result.cached).toBe(true);
       }
@@ -1713,7 +1878,10 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
 
       await new XAIVideoProvider('grok-imagine-video-1.5', {
-        config: { reference_audios: [{ voice_id: 'Eve' }, { voice_id: ' leo ' }] },
+        config: {
+          cacheNamespace: 'test-account',
+          reference_audios: [{ voice_id: 'Eve' }, { voice_id: ' leo ' }],
+        },
       }).callApi('Use both preset voices.');
 
       expect(videoUtils.generateVideoCacheKey).toHaveBeenCalledWith(
@@ -1732,10 +1900,14 @@ describe('XAI Video Provider', () => {
       const baseUrl = 'https://img.example/p.jpg';
 
       await new XAIVideoProvider('grok-imagine-video-1.5', {
-        config: { reference_images: [{ url: `${baseUrl};reference_audios:eve` }] },
+        config: {
+          cacheNamespace: 'test-account',
+          reference_images: [{ url: `${baseUrl};reference_audios:eve` }],
+        },
       }).callApi(mockPrompt);
       await new XAIVideoProvider('grok-imagine-video-1.5', {
         config: {
+          cacheNamespace: 'test-account',
           reference_images: [{ url: baseUrl }],
           reference_audios: [{ voice_id: 'eve' }],
         },

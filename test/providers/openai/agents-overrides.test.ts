@@ -428,8 +428,8 @@ describe('OpenAiAgentsProvider execution overrides', () => {
         `transfer_tool_${iteration}`,
       ]);
       expect(requests[1].handoffs.map((candidate) => candidate.toolName)).toEqual([
-        'transfer_to_resolution_agent',
-        'transfer_to_support_agent',
+        'transfer_to_Resolution_Agent',
+        'transfer_to_Support_Agent',
       ]);
       expect(requests[2].systemInstructions).toBe(
         `Resolution instructions for transfer ${iteration}.`,
@@ -447,6 +447,145 @@ describe('OpenAiAgentsProvider execution overrides', () => {
     expect(target.model).toBe('target-model');
     expect(target.modelSettings).toEqual({ temperature: 0.8 });
   });
+
+  it.each([
+    ['model', { model: 'override-model' }],
+    ['model settings', { modelSettings: { temperature: 0.2 } }],
+    ['model and model settings', { model: 'override-model', modelSettings: { temperature: 0.2 } }],
+  ])('refreshes tool-updated plain Agent handoffs with %s overrides', async (_name, overrides) => {
+    const model = new ToolCallingModel();
+    const getModel = vi.fn(() => model);
+    setDefaultModelProvider({ getModel });
+    const resolutionAgent = new Agent({
+      name: 'Resolution Agent',
+      instructions: 'Original resolution instructions.',
+      model: 'resolution-model',
+      modelSettings: { temperature: 0.8 },
+    });
+    const target = new Agent({
+      name: 'Target',
+      instructions: 'Original target instructions.',
+      model: 'target-model',
+      modelSettings: { temperature: 0.8 },
+      handoffs: [new Agent({ name: 'Stale Destination' }), resolutionAgent],
+    });
+    const selectedTool = tool({
+      name: 'selected_account_tool',
+      description: 'Tool for the selected account.',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: async () => 'Selected account.',
+    });
+    const configureTarget = vi.fn(async () => {
+      target.instructions = 'Use the selected account.';
+      target.tools = [selectedTool];
+      target.handoffs = [resolutionAgent, supportAgent];
+      target.model = 'selected-account-model';
+      target.modelSettings = { temperature: 0.6, topP: 0.4 };
+      resolutionAgent.instructions = 'Resolve the selected account.';
+      return 'Configured the target.';
+    });
+    const supportAgent = new Agent({
+      name: 'Support Agent',
+      model: 'initial-model',
+      modelSettings: { temperature: 0.8 },
+      tools: [
+        tool({
+          name: 'delegate',
+          description: 'Configure the handoff target.',
+          parameters: {
+            type: 'object',
+            properties: { input: { type: 'string' } },
+            required: ['input'],
+            additionalProperties: false,
+          },
+          execute: configureTarget,
+        }),
+      ],
+      handoffs: [target],
+    });
+    target.handoffs.push(supportAgent);
+    const provider = new OpenAiAgentsProvider('support-workflow', {
+      config: { agent: supportAgent, ...overrides },
+    });
+
+    await expect(provider.callApi('Configure and transfer this request.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    expect(configureTarget).toHaveBeenCalledTimes(1);
+    expect(model.requests).toHaveLength(4);
+    expect(model.requests[2].systemInstructions).toBe('Use the selected account.');
+    expect(model.requests[2].tools.map((candidate) => candidate.name)).toEqual([
+      'selected_account_tool',
+    ]);
+    expect(model.requests[2].handoffs.map((candidate) => candidate.toolName)).toEqual([
+      'transfer_to_Resolution_Agent',
+      'transfer_to_Support_Agent',
+    ]);
+    expect(model.requests[3].systemInstructions).toBe('Resolve the selected account.');
+    expect(getModel.mock.calls).toEqual(
+      'model' in overrides
+        ? Array(4).fill(['override-model'])
+        : [['initial-model'], ['initial-model'], ['selected-account-model'], ['resolution-model']],
+    );
+    expect(model.requests.map((request) => request.modelSettings)).toEqual(
+      'modelSettings' in overrides
+        ? Array(4).fill({ temperature: 0.2 })
+        : [
+            { temperature: 0.8 },
+            { temperature: 0.8 },
+            { temperature: 0.6, topP: 0.4 },
+            { temperature: 0.8 },
+          ],
+    );
+    expect(target.model).toBe('selected-account-model');
+    expect(target.modelSettings).toEqual({ temperature: 0.6, topP: 0.4 });
+  });
+
+  it.each([false, 'mock'] as const)(
+    'preserves plain handoff tool mocks with model overrides when executeTools is %s',
+    async (executeTools) => {
+      const model = new ToolCallingModel();
+      const getModel = vi.fn(() => model);
+      setDefaultModelProvider({ getModel });
+      const execute = vi.fn(async () => 'Real tool result.');
+      const target = new Agent({
+        name: 'Target',
+        model: 'target-model',
+        modelSettings: { temperature: 0.8 },
+        tools: [
+          tool({
+            name: 'delegate',
+            description: 'A tool that must stay mocked.',
+            parameters: {
+              type: 'object',
+              properties: { input: { type: 'string' } },
+              required: ['input'],
+              additionalProperties: false,
+            },
+            execute,
+          }),
+        ],
+      });
+      const provider = new OpenAiAgentsProvider('support-workflow', {
+        config: {
+          agent: new Agent({ name: 'Root', handoffs: [target] }),
+          model: 'override-model',
+          modelSettings: { temperature: 0.2 },
+          executeTools,
+        },
+      });
+
+      await expect(provider.callApi('Transfer and mock the tool.')).resolves.toMatchObject({
+        output: 'Escalated successfully.',
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(model.requests).toHaveLength(3);
+      expect(getModel.mock.calls).toEqual(Array(3).fill(['override-model']));
+      expect(model.requests.map((request) => request.modelSettings)).toEqual(
+        Array(3).fill({ temperature: 0.2 }),
+      );
+    },
+  );
 
   it.each([
     ['model', { model: 'override-model' }],

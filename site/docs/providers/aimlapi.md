@@ -67,7 +67,7 @@ providers:
 
 ### Configuration Options
 
-All standard OpenAI parameters are supported:
+Supported configuration options include:
 
 | Parameter               | Description                                             |
 | ----------------------- | ------------------------------------------------------- |
@@ -79,7 +79,8 @@ All standard OpenAI parameters are supported:
 | `frequency_penalty`     | Penalizes frequent tokens                               |
 | `presence_penalty`      | Penalizes new tokens based on presence                  |
 | `stop`                  | Sequences where the API will stop generating            |
-| `stream`                | Enable streaming responses                              |
+
+The chat provider waits for a complete JSON response; streaming is not supported.
 
 For [DeepSeek R1](https://docs.aimlapi.com/api-references/text-models-llm/deepseek/deepseek-r1) and [Gemini 2.5 Flash](https://docs.aimlapi.com/api-references/text-models-llm/google/gemini-2.5-flash), use `max_tokens` even though these models support reasoning.
 
@@ -153,7 +154,6 @@ providers:
     label: 'Gemini 2.5 Flash'
     config:
       temperature: 0.5
-      stream: true
 
 prompts:
   - 'Implement the following task and return only Python code: {{task}}'

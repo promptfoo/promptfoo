@@ -40,8 +40,9 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 
 - Proper message formatting
 - Tool/function calling (model-dependent)
-- Streaming (model-dependent)
 - Token counting (when returned by the provider)
+
+The `huggingface:chat:` provider waits for a complete JSON response; streaming is not supported.
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 

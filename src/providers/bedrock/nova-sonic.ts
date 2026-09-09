@@ -115,6 +115,8 @@ const DEFAULT_CONFIG = {
 };
 
 const NOVA_2_SONIC_REGIONS = ['us-east-1', 'us-west-2', 'eu-north-1', 'ap-northeast-1'] as const;
+const TOOL_EXECUTION_UNSUPPORTED_ERROR =
+  'Tool execution is not supported by the Nova Sonic provider.';
 
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
@@ -336,7 +338,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     let userTranscript = '';
     let audioContent = '';
     let hasAudioContent = false;
-    let functionCallOccurred = false;
+    const toolCalls: { toolUseId: string; toolName: string; content: string }[] = [];
 
     logger.debug('prompt: ' + prompt.slice(0, 1000));
     // Set up event handlers
@@ -362,48 +364,12 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       audioContent += data.content;
     });
 
-    session.responseHandlers.set('toolUse', async (data) => {
+    session.responseHandlers.set('toolUse', (data) => {
       logger.debug('toolUse');
-      functionCallOccurred = true;
-      // const result = await this.handleToolUse(data.toolName, data);
-      const result = 'Tool result';
-      const toolResultId = crypto.randomUUID();
-
-      await this.sendEvent(sessionId, {
-        event: {
-          contentStart: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-            interactive: false,
-            type: 'TOOL',
-            role: 'TOOL',
-            toolResultInputConfiguration: {
-              toolUseId: data.toolUseId,
-              type: 'TEXT',
-              textInputConfiguration: {
-                mediaType: 'text/plain',
-              },
-            },
-          },
-        },
-      });
-      await this.sendEvent(sessionId, {
-        event: {
-          toolResult: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-            content: JSON.stringify(result),
-          },
-        },
-      });
-
-      await this.sendEvent(sessionId, {
-        event: {
-          contentEnd: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-          },
-        },
+      toolCalls.push({
+        toolUseId: data.toolUseId,
+        toolName: data.toolName,
+        content: data.content,
       });
     });
 
@@ -540,6 +506,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             if (handler) {
               await handler(data.event[eventType]);
             }
+            // Tool execution is unsupported. Surface the requested operation and
+            // close the session without supplying invented tool data.
+            if (toolCalls.length > 0) {
+              break;
+            }
           }
         }
       }
@@ -563,6 +534,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
           : {};
 
       return {
+        ...(toolCalls.length > 0 ? { error: TOOL_EXECUTION_UNSUPPORTED_ERROR } : {}),
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
         // TODO: Add proper token usage tracking
@@ -570,7 +542,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         cached: false,
         metadata: {
           ...audioOutput,
-          functionCallOccurred,
+          functionCallOccurred: toolCalls.length > 0,
+          ...(toolCalls.length > 0 ? { toolCalls } : {}),
         },
       };
     } catch (error) {
@@ -583,6 +556,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         error: categorized.message,
         metadata: {
           errorType: categorized.type,
+          ...(toolCalls.length > 0 ? { functionCallOccurred: true, toolCalls } : {}),
         },
       };
     } finally {
