@@ -6,8 +6,12 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * Outermost balanced `{...}` / `[...]` fragments of a string, found in a single pass.
  * Fragments inside an opener that never closes are returned too, so a stray brace in
  * prose cannot hide a tool call that follows it.
+ *
+ * `respectStrings` skips delimiters inside JSON strings, which is right for real JSON
+ * but mis-tokenizes prose containing an odd number of quotes; the caller retries
+ * without it when the first pass finds nothing.
  */
-function jsonFragments(text: string): string[] {
+function jsonFragments(text: string, respectStrings: boolean): string[] {
   // Each open delimiter collects the spans that completed directly inside it. They are
   // dropped when it closes, because the enclosing fragment already covers them.
   const open: { start: number; nested: [number, number][] }[] = [];
@@ -25,7 +29,7 @@ function jsonFragments(text: string): string[] {
       } else if (char === '"') {
         inString = false;
       }
-    } else if (char === '"') {
+    } else if (char === '"' && respectStrings) {
       inString = true;
     } else if (char === '{' || char === '[') {
       open.push({ start: i, nested: [] });
@@ -129,11 +133,16 @@ function extractToolNames(output: unknown): Set<string> {
     } catch {
       // Not valid JSON as a whole; harvest embedded tool-call JSON instead.
     }
-    for (const fragment of jsonFragments(output)) {
-      try {
-        collectToolNames(JSON.parse(fragment), names);
-      } catch {
-        // A balanced fragment may still be invalid JSON.
+    for (const respectStrings of [true, false]) {
+      for (const fragment of jsonFragments(output, respectStrings)) {
+        try {
+          collectToolNames(JSON.parse(fragment), names);
+        } catch {
+          // A balanced fragment may still be invalid JSON.
+        }
+      }
+      if (names.size > 0) {
+        break;
       }
     }
     return names;
@@ -142,14 +151,7 @@ function extractToolNames(output: unknown): Set<string> {
   collectToolNames(output, names);
 
   // Simple format: the whole output is a list of calls, e.g. [{ name: '...' }].
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      const name = (item as Record<string, unknown> | null | undefined)?.name;
-      if (typeof name === 'string') {
-        names.add(name);
-      }
-    }
-  }
+  addCallListNames(output, names);
 
   return names;
 }

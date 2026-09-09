@@ -415,8 +415,13 @@ describe('handleToolCallF1', () => {
       expect(result.pass).toBe(true);
     });
 
-    it('finds a tool call that follows an unbalanced brace', () => {
-      const output = 'Use {braces here\n{"type":"tool_use","name":"get_weather"}';
+    it.each([
+      ['brace', 'Use {braces here'],
+      ['quote', 'He said "hello.'],
+      ['escaped quote', 'Model wrote \\"x\\" and'],
+      ['quoted brace', 'A "{" appears, then'],
+    ])('finds a tool call that follows an unbalanced %s', (_name, prose) => {
+      const output = `${prose}\n{"type":"tool_use","name":"get_weather"}`;
 
       const result = handleToolCallF1(createParams(output, ['get_weather']));
 
