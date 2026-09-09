@@ -100,10 +100,19 @@ describe('parseModelAuditArgs', () => {
     expect(result).toEqual(['scan', 'model.pkl']);
   });
 
-  it('should reject invalid format and timeout options', () => {
+  it('should reject an invalid format option', () => {
     expect(() =>
       parseModelAuditArgs(['model.pkl'], {
         format: 'xml',
+        timeout: 300,
+      }),
+    ).toThrow();
+  });
+
+  it('should reject an invalid timeout option', () => {
+    expect(() =>
+      parseModelAuditArgs(['model.pkl'], {
+        format: 'json',
         timeout: -1,
       }),
     ).toThrow();

@@ -7,6 +7,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -1690,41 +1691,25 @@ describe('Provider Registry', () => {
     });
 
     it('should resolve relative paths correctly for file-based providers', async () => {
-      // We'll test the path resolution by looking at the provider IDs, which contain the path
-
-      // Test Golang provider
-      const golangFactory = providerMap.find((f) => f.test('golang:script.go'));
-      expect(golangFactory).toBeDefined();
-
-      // These variables would be used in actual implementation tests
-      // Adding underscore prefix to mark as intentionally unused
-      const _customContext = {
-        basePath: '/custom/path',
-      };
-
-      // For relative paths, they should be joined with basePath
-      const _relativePath = 'script.go';
-      const _expectedRelativePath = path.join('/custom/path', _relativePath);
-
-      // For absolute paths, they should remain unchanged
-      const _absolutePath = path.resolve('/absolute/path/script.go');
-
-      // Test Python provider with file:// URL
       const pythonFactory = providerMap.find((f) => f.test('file://script.py'));
       expect(pythonFactory).toBeDefined();
+      const customContext = { ...mockContext, basePath: '/custom/path' };
 
-      // Test exec provider
-      const execFactory = providerMap.find((f) => f.test('exec:script.sh'));
-      expect(execFactory).toBeDefined();
+      // Local script paths remain relative; the config loader has already resolved its base path.
+      await pythonFactory!.create('file://script.py', mockProviderOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith('script.py', mockProviderOptions);
 
-      // Instead of testing the exact path resolution logic (which involves mocking),
-      // we'll verify that the registry factories exist and are configured correctly.
-      // The actual path resolution logic is now identical in all three providers,
-      // so testing one provider's implementation would effectively test all of them.
+      // Cloud configs resolve script paths from the process working directory.
+      const cloudOptions = { ...mockProviderOptions, config: { isCloudConfig: true } };
+      await pythonFactory!.create('file://script.py', cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(
+        path.join(process.cwd(), 'script.py'),
+        cloudOptions,
+      );
 
-      // For actual end-to-end tests of the path resolution, integration tests would be more
-      // appropriate than these unit tests, especially if we need to mock or spy on
-      // the provider constructors.
+      const absolutePath = path.resolve('/absolute/path/script.py');
+      await pythonFactory!.create(`file://${absolutePath}`, cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
     });
 
     it('should preserve absolute paths in file-based providers', async () => {

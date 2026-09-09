@@ -437,6 +437,28 @@ describe('OpenAiTranscriptionProvider', () => {
       });
     });
 
+    it('averages each segment quality metric over only segments with that metric', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockTranscriptionResponse,
+        data: {
+          ...mockTranscriptionResponse.data,
+          segments: [
+            { avg_logprob: -0.4 },
+            { compression_ratio: 1.2, no_speech_prob: 0 },
+            { avg_logprob: -0.2, no_speech_prob: 0.3 },
+          ],
+        },
+      });
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+      expect(result.metadata?.avgLogprob).toBeCloseTo(-0.3);
+      expect(result.metadata?.avgCompressionRatio).toBe(1.2);
+      expect(result.metadata?.avgNoSpeechProb).toBeCloseTo(0.15);
+    });
+
     it('should strip case-insensitive Content-Type overrides from transcription uploads', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: {
