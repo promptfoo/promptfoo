@@ -188,15 +188,22 @@ abstract class SageMakerGenericProvider {
         initialization = (async () => {
           try {
             const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
+            const { loadConfigsForDefaultMode } = await import('@smithy/core/client');
+            const { resolveDefaultsModeConfig } = await import('@smithy/core/config');
             this.assertRuntimeGeneration(generation);
             const credentials = await this.getCredentials();
+            const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
             this.assertRuntimeGeneration(generation);
             const client = new SageMakerRuntimeClient({
               region: runtimeRegion,
+              defaultsMode,
               maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
               retryMode: 'adaptive',
-              // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
-              requestHandler: { httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }) },
+              requestHandler: {
+                ...loadConfigsForDefaultMode(defaultsMode),
+                // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
+                httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }),
+              },
               ...(credentials ? { credentials } : {}),
             });
             this.runtimeClients.set(runtimeRegion, client);
