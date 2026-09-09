@@ -72,25 +72,28 @@ OpenClaw exposes five provider types, each targeting a different gateway API sur
 Uses the OpenAI-compatible chat completions endpoint. This is the default when no keyword is specified.
 Requires `gateway.http.endpoints.chatCompletions.enabled=true`.
 
-- `openclaw` - Uses the configured default agent
+- `openclaw` - Uses the gateway's default HTTP route (see compatibility below)
 - `openclaw:main` - Explicitly targets the main agent
 - `openclaw:<agent-id>` - Targets a specific agent by ID
 
-Promptfoo sends OpenClaw's slash-style model ids to the gateway while keeping the
+Promptfoo sends OpenClaw's model ids to the gateway while keeping the
 `openclaw:<agent-id>` promptfoo syntax:
 
-- bare `openclaw` uses the stable upstream alias `openclaw/default`
+- bare `openclaw` sends `openclaw` without an agent header
 - `openclaw:main` uses `openclaw/main`
 - `openclaw:<agent-id>` uses `openclaw/<agent-id>`
 
-That distinction matters when an OpenClaw installation changes its configured default agent away
-from `main`.
+Current gateways resolve bare `openclaw` to the configured default agent. Older HTTP gateways such
+as v2026.3.8 fall back to `main`; use an explicit agent selector to target another agent on those versions.
 
-Only an omitted agent selector means configured default. For example, `openclaw:default` explicitly
+Only an omitted agent selector leaves routing to the gateway. For example, `openclaw:default` explicitly
 targets an agent whose ID is `default`; the same rule applies to Responses, Embeddings, and WS Agent
 provider forms.
 
 :::note[Compatibility]
+Plain `openclaw` avoids selecting a literal agent named `default` on older HTTP gateways. The HTTP
+fallback described above does not change WS agent selection.
+
 Older Promptfoo versions routed bare OpenClaw provider forms to `main` and reported provider IDs
 ending in `:main`. Use an explicit `:main` suffix to retain that routing. Bare forms now appear with
 bare provider IDs in results, so update any filters or reporting keyed to the old IDs.
@@ -113,7 +116,7 @@ default and requires enabling in gateway config:
 }
 ```
 
-- `openclaw:responses` - Configured default agent via Responses API
+- `openclaw:responses` - Gateway's default HTTP route via Responses API (same compatibility as Chat)
 - `openclaw:responses:main` - Explicit agent ID
 - `openclaw:responses:<agent-id>` - Custom agent
 
