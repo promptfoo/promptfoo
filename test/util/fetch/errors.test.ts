@@ -370,6 +370,45 @@ describe('HttpRateLimitError: quota classification via type', () => {
     expect(err.kind).toBe('rate_limit');
     expect(err.code).toBe('rate_limit_exceeded');
   });
+
+  it('downgrades a hard-quota type to rate_limit on a near-term reset timestamp', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'insufficient_quota',
+      resetAt: Date.now() + 6_000,
+    });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.code).toBe('rate_limit_exceeded');
+  });
+
+  it('keeps quota when the reset timestamp is far away', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+      resetAt: Date.now() + 2 * 60 * 60 * 1000,
+    });
+    expect(err.kind).toBe('quota');
+  });
+
+  it('never downgrades a definitive billing code, even with a short Retry-After', () => {
+    for (const code of [
+      'credit_balance_exhausted',
+      'billing_hard_limit_reached',
+      'billing_not_active',
+      'access_terminated',
+    ]) {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code,
+        type: 'insufficient_quota',
+        retryAfterMs: 1000,
+        resetAt: Date.now() + 1000,
+      });
+      expect(err.kind, code).toBe('quota');
+      expect(err.retryAfterMs, code).toBe(1000);
+    }
+  });
 });
 
 describe('HttpRateLimitError', () => {
@@ -560,11 +599,20 @@ describe('HttpRateLimitError: small Retry-After downgrades quota to rate_limit',
     expect(err.kind).toBe('quota');
   });
 
-  it('downgrades all hard-quota codes when Retry-After is small', () => {
-    for (const code of ['quota_exceeded', 'billing_hard_limit_reached', 'insufficient_quota']) {
+  it('downgrades the ambiguous hard-quota codes when Retry-After is small', () => {
+    for (const code of ['quota_exceeded', 'insufficient_quota']) {
       const err = new HttpRateLimitError({ status: 429, code, retryAfterMs: 5000 });
-      expect(err.kind).toBe('rate_limit');
+      expect(err.kind, code).toBe('rate_limit');
     }
+  });
+
+  it('does not downgrade a definitive billing code when Retry-After is small', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'billing_hard_limit_reached',
+      retryAfterMs: 5000,
+    });
+    expect(err.kind).toBe('quota');
   });
 });
 

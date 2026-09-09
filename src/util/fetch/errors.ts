@@ -18,9 +18,11 @@ export interface SystemError extends Error {
  *
  * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
  * exhaustion AND per-minute deployment quota saturation. The
- * {@link HttpRateLimitError} constructor downgrades a quota code to
- * `rate_limit` when a small `Retry-After` is also present — a billing server
- * has no reason to hint at recovery time.
+ * {@link HttpRateLimitError} constructor downgrades such an ambiguous quota
+ * code to `rate_limit` when the server also hints at a near-term recovery
+ * (`Retry-After` / reset header) — a billing server has no reason to hint at
+ * recovery time. The codes in {@link DEFINITIVE_BILLING_ERROR_CODES} name a
+ * billing state explicitly and are never downgraded.
  */
 export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
@@ -32,10 +34,25 @@ export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Subset of {@link HARD_QUOTA_ERROR_CODES} that unambiguously describes the
+ * account's billing state (no credits, hard limit reached, billing inactive,
+ * access terminated). Unlike `insufficient_quota` / `quota_exceeded`, these
+ * are not reused for per-window throttling, so a `Retry-After` next to them
+ * (some gateways attach one to every 429) must not turn them retryable.
+ */
+export const DEFINITIVE_BILLING_ERROR_CODES: ReadonlySet<string> = new Set([
+  'credit_balance_exhausted',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+]);
+
+/**
  * Upper bound for the "server hinted a recovery time, so this isn't billing"
- * heuristic. A server that says "retry in &lt;= 1 hour" is signalling a
- * per-window throttle, not a billing exhaustion. Above 1h we treat a
- * Retry-After as ambiguous and let the body code decide.
+ * heuristic. A server that says "retry in &lt;= 1 hour" (via `Retry-After`
+ * or a reset timestamp) is signalling a per-window throttle, not a billing
+ * exhaustion. Above 1h we treat the hint as ambiguous and let the body code
+ * decide.
  */
 const RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS = 60 * 60 * 1000;
 
@@ -137,15 +154,17 @@ export class HttpRateLimitError extends Error {
     // A hard-quota body code (or a hard-quota `type` next to an unrecognized
     // code) normally implies `kind: 'quota'`. But Azure OpenAI is known to
     // return `insufficient_quota` for per-minute deployment saturation too; in
-    // that case the server hints at recovery via `Retry-After`. Trust that
-    // hint: if the wait is short, this is recoverable rate_limit, not billing
-    // exhaustion.
+    // that case the server hints at recovery via `Retry-After` or a reset
+    // timestamp. Trust that hint: if the wait is short, this is recoverable
+    // rate_limit, not billing exhaustion. Codes that name a billing state
+    // outright (`credit_balance_exhausted`, ...) are never downgraded — some
+    // gateways attach a Retry-After to every 429.
     let kind: RateLimitKind =
       isHardQuotaCode(init.code) || isHardQuotaCode(init.type) ? 'quota' : 'rate_limit';
     if (
       kind === 'quota' &&
-      retryAfterMs !== undefined &&
-      retryAfterMs <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS
+      !isDefinitiveBillingCode(init.code) &&
+      hasNearTermRecoveryHint(retryAfterMs, resetAt)
     ) {
       kind = 'rate_limit';
     }
@@ -170,6 +189,26 @@ export class HttpRateLimitError extends Error {
 
 export function isHardQuotaCode(code: string | undefined): boolean {
   return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
+}
+
+export function isDefinitiveBillingCode(code: string | undefined): boolean {
+  return code !== undefined && DEFINITIVE_BILLING_ERROR_CODES.has(code);
+}
+
+/**
+ * Whether the server advertised a recovery within
+ * {@link RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS}: an explicit `Retry-After`,
+ * or a reset timestamp whose remaining wait (from now) is within the bound.
+ * A reset timestamp in the past counts as "recovers now".
+ */
+function hasNearTermRecoveryHint(retryAfterMs?: number, resetAt?: number): boolean {
+  if (retryAfterMs !== undefined) {
+    return retryAfterMs <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS;
+  }
+  if (resetAt !== undefined) {
+    return resetAt - Date.now() <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS;
+  }
+  return false;
 }
 
 /**
