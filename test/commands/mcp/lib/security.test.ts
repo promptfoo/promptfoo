@@ -118,6 +118,44 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('azure:gpt-4o')).not.toThrow();
     });
 
+    it.each([
+      'anthropic:messages:claude-sonnet-4-6',
+      'openai:chat:gpt-4.1-mini',
+      'openai:chat:team/served-model:revision-1',
+      'huggingface:chat:organization/model-name',
+      'openrouter:organization/model-name',
+    ])('accepts model modes and namespaces: %s', (providerId) => {
+      expect(() => validateProviderId(providerId)).not.toThrow();
+    });
+
+    it.each([
+      'openai:chat:',
+      'openai::model',
+      'openai:chat:team//model',
+      'openai:chat:../model',
+      'openai:chat:team/./model',
+      'openai:chat:~/model',
+      'openai:chat:team/model name',
+      'file:../provider.js',
+      'file:///tmp/provider.js',
+      'exec:bin/script',
+      'python:dir/script.py:call_api',
+      'golang:dir/script.go',
+      'ruby:dir/script.rb',
+      'package:module:Provider',
+      'http:host/path',
+      'unknown:dir/provider.mjs',
+      'unknown:dir/provider.CTS',
+    ])('does not widen malformed or non-model formats: %s', (providerId) => {
+      expect(() => validateProviderId(providerId)).toThrow(ConfigurationError);
+    });
+
+    it('preserves previously accepted single-colon formats', () => {
+      expect(() => validateProviderId('exec:script')).not.toThrow();
+      expect(() => validateProviderId('python:script.py')).not.toThrow();
+      expect(() => validateProviderId('unknown:provider.js')).not.toThrow();
+    });
+
     it('should accept file path providers', () => {
       expect(() => validateProviderId('providers/custom.js')).not.toThrow();
       expect(() => validateProviderId('my-provider.ts')).not.toThrow();
