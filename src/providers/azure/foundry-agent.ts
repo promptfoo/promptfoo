@@ -126,6 +126,25 @@ function sdkErrorHeaders(err: {
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
+/**
+ * Provider response for a structured rate-limit error. The HTTP status and
+ * headers travel in `metadata.http` so the scheduler can honour the
+ * advertised Retry-After instead of its default backoff.
+ */
+function rateLimitResponse(error: HttpRateLimitError, details?: string): ProviderResponse {
+  return {
+    error: formatRateLimitErrorMessage(error, details),
+    metadata: {
+      rateLimitKind: error.kind,
+      http: {
+        status: error.status,
+        statusText: error.statusText,
+        headers: error.headers ?? {},
+      },
+    },
+  };
+}
+
 function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
@@ -768,10 +787,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (error instanceof HttpRateLimitError) {
-      return {
-        error: formatRateLimitErrorMessage(error),
-        metadata: { rateLimitKind: error.kind },
-      };
+      return rateLimitResponse(error);
     }
 
     // The OpenAI SDK throws APIError-shaped objects with `status` and a body
@@ -781,10 +797,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     // context (deployment name, token counts) is preserved.
     const sdkRateLimit = rateLimitFromSdkError(error);
     if (sdkRateLimit) {
-      return {
-        error: formatRateLimitErrorMessage(sdkRateLimit, errorMessage),
-        metadata: { rateLimitKind: sdkRateLimit.kind },
-      };
+      return rateLimitResponse(sdkRateLimit, errorMessage);
     }
 
     if (isContentFilterError(errorMessage)) {

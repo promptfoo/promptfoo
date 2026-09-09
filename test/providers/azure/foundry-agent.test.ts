@@ -1061,6 +1061,25 @@ describe('AzureFoundryAgentProvider', () => {
         expect(result.error).not.toContain('Retries will not help');
       });
 
+      it('forwards the SDK status and Retry-After headers in metadata.http for the scheduler', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(
+          Object.assign(new Error('sdk error'), {
+            status: 429,
+            headers: { 'Retry-After': '90' },
+            error: { code: 'rate_limit_exceeded' },
+          }),
+        );
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.metadata).toMatchObject({
+          rateLimitKind: 'rate_limit',
+          http: { status: 429, headers: { 'retry-after': '90' } },
+        });
+      });
+
       it('reads Retry-After from a Headers instance on the SDK response', async () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(
