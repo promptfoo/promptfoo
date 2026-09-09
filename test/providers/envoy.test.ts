@@ -65,6 +65,17 @@ describe('Envoy gateway URLs', () => {
     expect(JSON.parse(request?.body as string)).toMatchObject({ model: 'route:stable' });
   });
 
+  it('inserts /v1 before gateway URL search and hash', async () => {
+    mockProcessEnv({ ENVOY_API_BASE_URL: 'https://gateway.example?token=x#route' });
+    const provider = createEnvoyProvider('envoy:route:stable');
+
+    await provider.callApi('Hello');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      'https://gateway.example/v1/chat/completions?token=x#route',
+    );
+  });
+
   it.each([
     ['https://configured.example', 'https://configured.example/chat/completions'],
     ['https://configured.example/v1/', 'https://configured.example/v1/chat/completions'],

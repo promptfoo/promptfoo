@@ -60,6 +60,7 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withConfig<T>(config: Partial<UnifiedConfig>, fn: () => Promise<T>): Promise<T>;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -68,13 +69,26 @@ interface CliState {
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const configContext = new AsyncLocalStorage<{ config: Partial<UnifiedConfig> }>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
+let globalConfig: Partial<UnifiedConfig> | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get config() {
+    return configContext.getStore()?.config ?? globalConfig;
+  },
+  set config(value: Partial<UnifiedConfig> | undefined) {
+    const store = configContext.getStore();
+    if (store && value) {
+      store.config = value;
+      return;
+    }
+    globalConfig = value;
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -92,6 +106,9 @@ const state: CliState = {
   },
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  withConfig<T>(config: Partial<UnifiedConfig>, fn: () => Promise<T>): Promise<T> {
+    return configContext.run({ config }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

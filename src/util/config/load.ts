@@ -522,6 +522,7 @@ async function prepareCombinedConfig(
   configPaths: string[],
 ): Promise<{ config: UnifiedConfig; loadTests: () => Promise<void> }> {
   const configs: UnifiedConfig[] = [];
+  const resolvedConfigPaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -537,6 +538,7 @@ async function prepareCombinedConfig(
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
+      resolvedConfigPaths.push(globPath);
     }
   }
 
@@ -568,7 +570,7 @@ async function prepareCombinedConfig(
   const loadTests = async () => {
     for (let i = 0; i < configs.length; i++) {
       const config = configs[i];
-      const configPath = configPaths[i];
+      const configPath = resolvedConfigPaths[i];
       if (typeof config.tests === 'string') {
         const newTests = await readTests(config.tests, path.dirname(configPath));
         tests.push(...newTests);
@@ -767,7 +769,7 @@ async function prepareCombinedConfig(
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const { config, loadTests } = await prepareCombinedConfig(configPaths);
-  await loadTests();
+  await cliState.withConfig(config, loadTests);
   return config;
 }
 
@@ -921,12 +923,10 @@ export async function resolveConfigs(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
-  // Select the current suite before loading providers so watch reloads cannot
-  // inherit environment overrides removed from the previous configuration.
-  cliState.config = config;
-  await loadFileTests?.();
+  const withSuiteConfig = <T>(fn: () => Promise<T>) => cliState.withConfig(config, fn);
+  await withSuiteConfig(async () => loadFileTests?.());
   config.defaultTest = processedDefaultTest
-    ? await readTest(processedDefaultTest, basePath, true)
+    ? await withSuiteConfig(() => readTest(processedDefaultTest, basePath, true))
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -972,13 +972,14 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
-    env: config.env,
-    basePath,
-  });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
+  const parsedProviders = await withSuiteConfig(() =>
+    loadApiProviders(filteredProviderConfigs, {
+      env: config.env,
+      basePath,
+    }),
+  );
+  const parsedTests: TestCase[] = await withSuiteConfig(() =>
+    readTests(config.tests || [], cmdObj.tests ? undefined : basePath),
   );
 
   // Parse testCases for each scenario
@@ -1002,9 +1003,8 @@ export async function resolveConfigs(
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
+        const parsedScenarioTests: TestCase[] = await withSuiteConfig(() =>
+          readTests(scenario.tests, cmdObj.tests ? undefined : basePath),
         );
         scenario.tests = parsedScenarioTests;
       }
@@ -1117,6 +1117,7 @@ export async function resolveConfigs(
     };
   }
 
+  cliState.config = config;
   return {
     config,
     testSuite,

@@ -7,7 +7,7 @@ import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { isApiProvider } from '../../../src/types/providers';
 import { clearConfigCache } from '../../../src/util/config/default';
-import { readConfig, resolveConfigs } from '../../../src/util/config/load';
+import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
 import { mockProcessEnv } from '../utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -120,7 +120,7 @@ describe('Envoy config reload', () => {
         'Envoy provider requires a gateway URL',
       );
       expect(fetchWithCache).not.toHaveBeenCalled();
-      expect(cliState.config?.env?.ENVOY_API_BASE_URL).toBeUndefined();
+      expect(cliState.config?.env?.ENVOY_API_BASE_URL).toBe('https://suite.example/');
       return;
     }
 
@@ -214,7 +214,7 @@ describe('Envoy config reload', () => {
             'Envoy provider requires a gateway URL',
           );
           expect(fetchWithCache).not.toHaveBeenCalled();
-          expect(cliState.config?.env?.ENVOY_API_BASE_URL).toBeUndefined();
+          expect(cliState.config?.env?.ENVOY_API_BASE_URL).toBe('https://suite.example/');
           continue;
         }
 
@@ -239,6 +239,43 @@ describe('Envoy config reload', () => {
       }
     },
   );
+
+  it('loads combined external test providers with the combined suite environment', async () => {
+    const configDirectory = path.join(tempDir, 'nested');
+    const testsDirectory = path.join(configDirectory, 'cases');
+    fs.mkdirSync(configDirectory);
+    fs.mkdirSync(testsDirectory);
+    fs.writeFileSync(
+      path.join(testsDirectory, 'tests.yaml'),
+      '- provider: envoy:external\n  assert:\n    - type: equals\n      value: Hello\n',
+    );
+    const configPath = path.join(configDirectory, 'promptfooconfig.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['Hello'],
+        providers: ['echo'],
+        env: { ENVOY_API_BASE_URL: 'https://combined.example/' },
+        tests: 'cases/tests.yaml',
+      }),
+    );
+
+    const config = await combineConfigs([path.join(tempDir, '*', 'promptfooconfig.json')]);
+    const test = Array.isArray(config.tests) ? config.tests[0] : undefined;
+    if (
+      !test ||
+      typeof test === 'string' ||
+      !('provider' in test) ||
+      !isApiProvider(test.provider)
+    ) {
+      throw new Error('Expected an instantiated external test provider');
+    }
+
+    await test.provider.callApi('Hello');
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      'https://combined.example/v1/chat/completions',
+    );
+  });
 
   it('reloads the gateway used to construct the defaultTest provider', async () => {
     const firstPath = path.join(tempDir, 'first-default-test.json');
