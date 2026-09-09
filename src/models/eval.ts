@@ -854,8 +854,12 @@ export default class Eval {
     if (this.useOldResults()) {
       return this.getStats().cachedRows ?? 0;
     }
-    if (this._resultsLoaded) {
+    if (!this.persisted || this._resultsLoaded) {
       return countCachedRows(this.results);
+    }
+    const db = await getDb();
+    if (typeof db.select !== 'function') {
+      return 0;
     }
     return getCachedResponseRowsCountFromDb(this.id);
   }

@@ -1035,7 +1035,9 @@ export async function doEval(
     }
     const evalStats = evalRecord.getStats();
     const generationTokenUsage = evalStats.tokenUsage.generation;
-    const cachedRows = evalStats.cachedRows ?? 0;
+    const cachedRows = evalRecord.prompts.some((prompt) => prompt.metrics?.cachedRows === undefined)
+      ? await evalRecord.getCachedResponseRowsCount()
+      : (evalStats.cachedRows ?? 0);
     if (generationTokenUsage) {
       tokenUsage.generation = generationTokenUsage;
     }

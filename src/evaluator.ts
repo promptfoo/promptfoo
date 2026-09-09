@@ -2261,6 +2261,7 @@ function createDefaultPromptMetrics(): PromptMetrics {
     testPassCount: 0,
     testFailCount: 0,
     testErrorCount: 0,
+    cachedRows: 0,
     assertPassCount: 0,
     assertFailCount: 0,
     totalLatencyMs: 0,
