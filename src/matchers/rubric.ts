@@ -30,6 +30,7 @@ import type {
 const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 const DATA_URI_METADATA_MAX_CHARS = 256;
 const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
@@ -160,6 +161,7 @@ export async function renderLlmRubricPrompt(
 
 type MultimodalPromptPart =
   | { type: 'text'; text: string }
+  | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'input_text'; text: string }
   | { type: 'input_image'; image_url: string }
@@ -391,9 +393,9 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   };
 }
 
-function appendImagesToContent(
+function appendMediaToContent(
   content: unknown,
-  imageParts: MultimodalPromptPart[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
@@ -403,18 +405,18 @@ function appendImagesToContent(
         : format === 'google'
           ? content.map(toGoogleContentPart)
           : content;
-    return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
+    return [...normalizedContent, ...mediaParts] as MultimodalPromptPart[];
   }
 
   if (typeof content === 'string') {
-    return [buildTextPart(content, format), ...imageParts];
+    return [buildTextPart(content, format), ...mediaParts];
   }
 
   if (content === undefined || content === null) {
-    return imageParts;
+    return mediaParts;
   }
 
-  return [buildTextPart(stringifyContentPart(content), format), ...imageParts];
+  return [buildTextPart(stringifyContentPart(content), format), ...mediaParts];
 }
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
@@ -657,16 +659,11 @@ function stringifyContentPart(part: unknown): string {
   return JSON.stringify(part) ?? String(part);
 }
 
-function appendImagesToChatPrompt(
+function appendMediaToChatPrompt(
   renderedPrompt: string,
-  images: { dataUri: string; base64Data: string; mimeType: string }[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  const imageParts: MultimodalPromptPart[] = [
-    buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, format),
-    ...buildImageParts(images, format),
-  ];
-
   let parsed: ChatMessageLike[] | undefined;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
@@ -698,10 +695,10 @@ function appendImagesToChatPrompt(
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendImagesToContent(userMessage.content, imageParts, format),
+        content: appendMediaToContent(userMessage.content, mediaParts, format),
       };
     } else {
-      messages.push({ role: 'user', content: imageParts });
+      messages.push({ role: 'user', content: mediaParts });
     }
 
     return JSON.stringify(messages);
@@ -710,30 +707,69 @@ function appendImagesToChatPrompt(
   return JSON.stringify([
     {
       role: 'user',
-      content: [buildTextPart(renderedPrompt, format), ...imageParts],
+      content: [buildTextPart(renderedPrompt, format), ...mediaParts],
     },
   ]);
+}
+
+function buildAudioGradingPart(
+  audio: NonNullable<ProviderResponse['audio']>,
+  provider: ApiProvider,
+): MultimodalPromptPart | undefined {
+  if (provider.getAudioInputFormat?.() !== 'openai') {
+    return undefined;
+  }
+  if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
+    throw new Error(
+      'Audio grading requires inline base64 audio; blob references are not supported.',
+    );
+  }
+  if (audio.format !== 'wav' && audio.format !== 'mp3') {
+    throw new Error('Audio grading requires WAV or MP3 output. Configure the target audio format.');
+  }
+  const data = audio.data?.replace(/\s/g, '') || '';
+  if (data.length > Math.ceil(GRADING_AUDIO_MAX_BYTES / 3) * 4) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  if (!isValidBase64Payload(data) || getBase64DecodedBytes(data) <= 0) {
+    throw new Error('Audio grading requires non-empty, valid base64 audio data.');
+  }
+  if (getBase64DecodedBytes(data) > GRADING_AUDIO_MAX_BYTES) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  return { type: 'input_audio', input_audio: { data, format: audio.format } };
 }
 
 async function buildGradingProviderPrompt(
   renderedPrompt: string,
   images?: ImageOutput[],
   provider?: ApiProvider,
-): Promise<{ prompt: string; imageCount: number }> {
-  if (!images?.length) {
-    return { prompt: renderedPrompt, imageCount: 0 };
-  }
-
+  audio?: ProviderResponse['audio'],
+): Promise<{ prompt: string; imageCount: number; audioAttached: boolean }> {
   const { imageData } = materializeImageOutputsForGrading(images);
-
-  if (imageData.length === 0) {
-    return { prompt: renderedPrompt, imageCount: 0 };
+  const audioPart = audio && provider ? buildAudioGradingPart(audio, provider) : undefined;
+  const promptFormat = audioPart || !provider ? 'openai' : getMultimodalPromptFormat(provider);
+  const mediaParts: MultimodalPromptPart[] = imageData.length
+    ? [
+        buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, promptFormat),
+        ...buildImageParts(imageData, promptFormat),
+      ]
+    : [];
+  if (audioPart) {
+    mediaParts.push(
+      buildTextPart(
+        'The evaluated output includes the attached audio. Listen to it as primary evidence for the rubric. Use the transcript only as supporting context; do not infer vocal delivery or sound quality from the transcript alone.',
+        promptFormat,
+      ),
+      audioPart,
+    );
   }
-
-  const promptFormat = provider ? getMultimodalPromptFormat(provider) : 'openai';
   return {
-    prompt: appendImagesToChatPrompt(renderedPrompt, imageData, promptFormat),
+    prompt: mediaParts.length
+      ? appendMediaToChatPrompt(renderedPrompt, mediaParts, promptFormat)
+      : renderedPrompt,
     imageCount: imageData.length,
+    audioAttached: Boolean(audioPart),
   };
 }
 
@@ -817,6 +853,7 @@ export async function runJsonGradingPrompt({
   throwOnError,
   vars,
   images,
+  audio,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -827,6 +864,7 @@ export async function runJsonGradingPrompt({
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
+  audio?: ProviderResponse['audio'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
@@ -840,11 +878,11 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
-    renderedPrompt,
-    images,
-    finalProvider,
-  );
+  const {
+    prompt: providerPrompt,
+    imageCount,
+    audioAttached,
+  } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
@@ -904,6 +942,7 @@ export async function runJsonGradingPrompt({
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
+      ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };

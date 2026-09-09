@@ -592,7 +592,7 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 2 / 1e6,
     },
   },
-  ...['gpt-4o-mini-realtime-preview-2024-12-17', 'gpt-realtime-mini-2025-10-06'].map((model) => ({
+  ...['gpt-realtime-mini-2025-10-06'].map((model) => ({
     id: model,
     type: 'chat',
     cost: {
@@ -602,6 +602,10 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       audioOutput: 20 / 1e6,
     },
   })),
+];
+
+/** @deprecated Historical billing metadata only; these native models retired July 23, 2026. */
+export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -695,6 +699,19 @@ export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
+  // This dated snapshot is still listed on its Realtime model card. The retirement
+  // notice names the undated alias; removing routing metadata must not send this
+  // snapshot to Chat Completions. Availability remains subject to OpenAI's lifecycle.
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
   // GA gpt-realtime models
   ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
     id: model,
@@ -803,6 +820,7 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_MODELS,
   ...OPENAI_CODEX_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
@@ -810,6 +828,10 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
+  {
+    id: 'gpt-transcribe',
+    cost: { perMinute: 0.0045 },
+  },
   {
     id: 'gpt-4o-transcribe',
     cost: {
