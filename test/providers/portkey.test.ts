@@ -266,6 +266,16 @@ describe('PortkeyChatCompletionProvider', () => {
       ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
       ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
       ['legacy virtual key', 'claude', { portkeyVirtualKey: 'bedrock-prod' }],
+      ['bare model name', 'claude-sonnet-4-6', {}],
+      ['slug-shaped model name', 'anthropic-slug/claude-sonnet-4-6', {}],
+      [
+        'virtual key alongside an openai passthrough',
+        'gpt-4o',
+        {
+          portkeyProvider: 'openai',
+          portkeyVirtualKey: 'openai-prod',
+        },
+      ],
     ])(
       'should not leak OPENAI_API_KEY when Portkey holds the credential (%s)',
       (_, model, config) => {
@@ -276,6 +286,41 @@ describe('PortkeyChatCompletionProvider', () => {
         expect(provider.getApiKey()).toBeUndefined();
       },
     );
+
+    it('should not inherit OPENAI_API_KEY for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyApiKey: 'pk-config-key', portkeyProvider: 'anthropic' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should forward an explicit apiKey for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyProvider: 'anthropic', apiKey: 'sk-ant-explicit' },
+      });
+      expect(provider.getApiKey()).toBe('sk-ant-explicit');
+    });
+
+    it('should prefer the per-provider env override for the openai passthrough bearer', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-process-env');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+        env: { OPENAI_API_KEY: 'sk-override' },
+      });
+      expect(provider.getApiKey()).toBe('sk-override');
+    });
+
+    it('should not put an inherited OPENAI_API_KEY on the wire for a bare model name', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyApiKey: 'pk-config-key' },
+      });
+      const headers = provider.getOpenAiRequestHeaders();
+      expect(headers).toMatchObject({ 'x-portkey-api-key': 'pk-config-key' });
+      expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('authorization');
+    });
   });
 
   describe('header collisions', () => {

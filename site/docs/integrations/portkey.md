@@ -50,12 +50,12 @@ providers:
 
 A Portkey request can carry two credentials, and they are sent in different places:
 
-| Credential                  | Sent as                 | Set with                                        |
-| --------------------------- | ----------------------- | ----------------------------------------------- |
-| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config |
-| The upstream provider's key | `Authorization: Bearer` | `OPENAI_API_KEY`, or `apiKey` in config         |
+| Credential                  | Sent as                 | Set with                                                               |
+| --------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config                        |
+| The upstream provider's key | `Authorization: Bearer` | `apiKey` in config, or `OPENAI_API_KEY` when `portkeyProvider: openai` |
 
-When Portkey holds the provider credential — a model catalog provider slug or a virtual key — the Portkey key is all you need, and promptfoo does not forward a provider key. A provider key is only sent for direct passthrough, such as `portkeyProvider: openai` with no slug.
+A provider key is only sent for direct passthrough, meaning a `portkeyProvider` that is not a model catalog slug. Everywhere else — a slug (in `portkeyProvider` or in the model name), a virtual key, or a bare model name — Portkey holds the provider credential, so the Portkey key is all you need and promptfoo forwards nothing. `OPENAI_API_KEY` is inherited only when the config routes to OpenAI; passthrough to any other provider needs an explicit `apiKey`.
 
 To send additional headers, use `config.headers`:
 
