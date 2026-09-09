@@ -118,7 +118,9 @@ describe('evaluator', () => {
       const evalRecord = await Eval.create({}, prompts, { id: 'mixed-legacy-cached-stats' });
       const promptWithCachedMetric = createCompletedPrompt('prompt one');
       promptWithCachedMetric.metrics!.cachedRows = 1;
-      await evalRecord.addPrompts([promptWithCachedMetric, createCompletedPrompt('prompt two')]);
+      const legacyPrompt = createCompletedPrompt('prompt two');
+      await evalRecord.addPrompts([promptWithCachedMetric, legacyPrompt]);
+      legacyPrompt.metrics!.cachedRows = 1;
       await evalRecord.addResult(
         createEvaluateResult({ promptIdx: 0, testIdx: 0, response: { cached: true } }),
       );

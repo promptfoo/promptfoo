@@ -105,6 +105,12 @@ function countCachedRows(results: unknown): number {
   }, 0);
 }
 
+function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
+  return prompts.some(
+    (prompt) => prompt.metrics !== undefined && prompt.metrics.cachedRows === undefined,
+  );
+}
+
 /** Result from queries extracting variable keys with eval IDs */
 export interface VarKeyWithEvalIdResult {
   key: string;
@@ -336,6 +342,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  private legacyCachedRowsMetrics = false;
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
@@ -652,6 +659,7 @@ export default class Eval {
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
+    this.legacyCachedRowsMetrics = hasLegacyCachedRowsMetrics(this.prompts);
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
@@ -862,6 +870,11 @@ export default class Eval {
       return 0;
     }
     return getCachedResponseRowsCountFromDb(this.id);
+  }
+
+  /** Whether this eval contains prompt metrics written before cachedRows existed. */
+  hasLegacyCachedRowsMetrics(): boolean {
+    return this.legacyCachedRowsMetrics || hasLegacyCachedRowsMetrics(this.prompts);
   }
 
   /**
@@ -1379,6 +1392,7 @@ export default class Eval {
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
+    this.legacyCachedRowsMetrics ||= hasLegacyCachedRowsMetrics(prompts);
     this.prompts = prompts;
     if (this.persisted) {
       const db = await getDb();
@@ -1473,11 +1487,7 @@ export default class Eval {
       this.config.metadata?.generationAccounting?.tokenUsage,
     );
 
-    if (
-      this._resultsLoaded &&
-      this.results.length > 0 &&
-      this.prompts.some((prompt) => prompt.metrics?.cachedRows === undefined)
-    ) {
+    if (this._resultsLoaded && this.results.length > 0 && this.hasLegacyCachedRowsMetrics()) {
       stats.cachedRows = countCachedRows(this.results);
     }
 
