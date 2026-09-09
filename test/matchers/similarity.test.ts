@@ -216,6 +216,15 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  it('should fail inverted similarity at the exact threshold', async () => {
+    await expect(
+      matchesSimilarity('Expected output', 'Sample output', 1, true),
+    ).resolves.toMatchObject({
+      pass: false,
+      reason: 'Similarity 1.00 is greater than or equal to threshold 1',
+    });
+  });
+
   it('should use the overridden similarity grading config', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -401,6 +410,15 @@ describe('matchesSimilarity', () => {
       ).resolves.toMatchObject({
         pass: true,
         reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
+      });
+    });
+
+    it('should fail inverted euclidean distance at the exact threshold', async () => {
+      await expect(
+        matchesSimilarity('Expected output', 'Sample output', 0, true, undefined, 'euclidean'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'Distance 0.00 is less than or equal to threshold 0',
       });
     });
 
