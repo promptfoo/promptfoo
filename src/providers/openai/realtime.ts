@@ -951,8 +951,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Store the audio data for later use
                 try {
                   const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
+                  if (audioBuffer.length > 0) {
+                    audioContent.push(audioBuffer);
+                    hasAudioContent = true;
+                  }
                   logger.debug(
                     `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
                   );
@@ -1663,8 +1665,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Store the audio data for later use
                 try {
                   const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
+                  if (audioBuffer.length > 0) {
+                    audioContent.push(audioBuffer);
+                    hasAudioContent = true;
+                  }
                   logger.debug(
                     `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
                   );
@@ -1815,18 +1819,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               ws.close();
 
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
+              // Usage may report audio tokens even when no audio delta arrived.
               if (
                 usage?.output_token_details?.audio_tokens &&
                 usage.output_token_details.audio_tokens > 0
               ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
                 logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
+                  `Audio tokens reported in usage: ${usage.output_token_details.audio_tokens}`,
                 );
               }
 
@@ -1871,7 +1870,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   usage,
                   usageEvents,
                   // Include audio data in metadata if available
-                  ...(hasAudioContent && {
+                  ...(finalAudioData !== null && {
                     audio: {
                       data: finalAudioData,
                       format: audioFormat,
