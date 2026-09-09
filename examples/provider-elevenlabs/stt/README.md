@@ -11,7 +11,7 @@ export ELEVENLABS_API_KEY=your_api_key_here
 npx promptfoo@latest eval
 ```
 
-Run from the copied `provider-elevenlabs/stt` directory. The bundled config resolves its `audio/...` paths relative to that directory.
+The bundled `audio-path.mjs` prompt function resolves relative `audioFile` paths from this example directory, so the config also works when invoked from the repository root. Absolute audio paths remain unchanged.
 
 ## Features
 
@@ -150,11 +150,11 @@ providers:
 
 ### Method 2: Prompt-level
 
-Render the audio path as a prompt so the config loader does not read it as a text prompt file:
+Use the bundled prompt function to resolve audio paths relative to this example directory:
 
 ```yaml
 prompts:
-  - '{{audioFile}}'
+  - file://audio-path.mjs
 
 tests:
   - vars:
