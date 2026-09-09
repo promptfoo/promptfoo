@@ -399,9 +399,9 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
-    it('prices a mixed-case passthrough.model without lower-casing it', async () => {
-      // AZURE_MODELS is keyed on the vendor's own ids, so lower-casing `DeepSeek-R1`
-      // loses the cost-table entry entirely.
+    it('prices a deployment by its passthrough.model, not its deployment name', async () => {
+      // `prod-chat` is not in AZURE_MODELS, so the cost lookup has to key on the model the
+      // deployment actually serves. Casing is handled in calculateAzureCost (see util.test.ts).
       provider = new AzureChatCompletionProvider('prod-chat', {
         config: {
           apiHost: 'test.azure.com',

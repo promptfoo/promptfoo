@@ -589,6 +589,24 @@ describe('calculateAzureCost', () => {
     const cost = calculateAzureCost('gpt-4', {}, undefined, 50);
     expect(cost).toBeUndefined();
   });
+
+  it('matches model ids case-insensitively', () => {
+    // Users write the id they see in Foundry, not the table's casing, and a deployment name
+    // is arbitrary text — matching on case silently reports `cost: undefined` instead.
+    expect(calculateAzureCost('deepseek-r1', {}, 1_000, 500)).toBeCloseTo(
+      (1_000 * 0.55 + 500 * 2.19) / 1e6,
+      12,
+    );
+    // Cache-read rates are keyed on the canonical id, so they must follow the matched entry.
+    expect(calculateAzureCost('GPT-4O', {}, 1_000, 500, 1_000)).toBeCloseTo(
+      calculateAzureCost('gpt-4o', {}, 1_000, 500, 1_000)!,
+      12,
+    );
+    expect(calculateAzureCost('gpt-4o', {}, 1_000, 500, 1_000)).toBeCloseTo(
+      (1_000 * 1.25 + 500 * 10) / 1e6,
+      12,
+    );
+  });
 });
 
 describe('AZURE_MODELS cost coverage', () => {
