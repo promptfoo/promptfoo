@@ -524,6 +524,27 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should classify a hard-quota SDK error type next to an unknown code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('Request was refused by the billing service.'), {
+            status: 429,
+            code: 'new_billing_code',
+            type: 'insufficient_quota',
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('new_billing_code');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
       it('should classify credit_balance_exhausted from the SDK error code as non-retryable', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(

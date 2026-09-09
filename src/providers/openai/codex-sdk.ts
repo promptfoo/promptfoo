@@ -22,6 +22,7 @@ import {
   formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
+  isHardQuotaCode,
 } from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
@@ -562,6 +563,11 @@ function buildCodexRateLimitResponse(
         : undefined;
   const rawCode =
     typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  // The SDK error's broad class (e.g. `type: "insufficient_quota"` next to a
+  // provider-specific billing code) carries the quota classification when the
+  // code itself is not recognized, exactly as on the fetch and Foundry paths.
+  const rawType =
+    typeof errorRecord?.type === 'string' ? errorRecord.type.toLowerCase() : undefined;
   const code =
     rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
       ? rawCode
@@ -570,6 +576,7 @@ function buildCodexRateLimitResponse(
   if (
     status !== 429 &&
     code === undefined &&
+    !isHardQuotaCode(rawType) &&
     !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
   ) {
     return undefined;
@@ -579,7 +586,10 @@ function buildCodexRateLimitResponse(
   const rateLimitError = new HttpRateLimitError({
     status: status ?? 429,
     retryAfterMs,
-    code,
+    // Keep the provider's own code for reporting when it is not one we
+    // recognize; `type` decides the quota classification in that case.
+    code: code ?? rawCode,
+    type: rawType,
   });
   const schedulerRetryAfterMs =
     rateLimitError.kind === 'rate_limit'
