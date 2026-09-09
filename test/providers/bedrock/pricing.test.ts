@@ -140,6 +140,47 @@ describe('calculateBedrockCost', () => {
     ).toBeUndefined();
   });
 
+  it('bills the Nova 2 Lite global profile at its own cheaper meter', () => {
+    // AWS publishes $0.30/$2.50 for `global.amazon.nova-2-lite`, against $0.33/$2.75 regionally.
+    expect(
+      calculateBedrockCost('global.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
+    expect(
+      calculateBedrockCost('us.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(0.33, 2.75), 6);
+  });
+
+  describe('OpenAI GPT-5.6 frontier models on Converse', () => {
+    // Bedrock rates include the 10% regional-processing uplift over the first-party rates.
+    it.each([
+      { id: 'us.openai.gpt-5.6-sol', input: 4.4, output: 22 },
+      { id: 'us.openai.gpt-5.6-terra', input: 2.2, output: 13.2 },
+      { id: 'us.openai.gpt-5.6-luna', input: 0.22, output: 1.32 },
+    ])('prices $id', ({ id, input, output }) => {
+      expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1')).toBeCloseTo(
+        costAtRates(input, output),
+        6,
+      );
+    });
+
+    it('applies the 272k long-context tier', () => {
+      expect(calculateBedrockCost('us.openai.gpt-5.6-sol', 272_000, 1_000)).toBeCloseTo(
+        (272_000 / 1e6) * 4.4 + (1_000 / 1e6) * 22,
+        6,
+      );
+      expect(calculateBedrockCost('us.openai.gpt-5.6-sol', 272_001, 1_000)).toBeCloseTo(
+        (272_001 / 1e6) * 8.8 + (1_000 / 1e6) * 33,
+        6,
+      );
+    });
+
+    it('stays fail-closed on InvokeModel, which does not serve these models', () => {
+      expect(
+        calculateBedrockInvokeModelCost('us.openai.gpt-5.6-sol', 1e6, 1e6, 0, 0, 'us-east-1'),
+      ).toBeUndefined();
+    });
+  });
+
   it('matches Command R+ before the broader Command R key', () => {
     expect(calculateBedrockCost('cohere.command-r-plus-v1:0', 1e6, 1e6)).toBeCloseTo(18, 6);
   });
@@ -164,9 +205,17 @@ describe('calculateBedrockCost', () => {
       );
     });
 
-    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+    it('bills exactly 200k input tokens at the standard rate', () => {
+      // The tier is `> threshold`, matching the shared long-context rule in providers/shared.ts.
       expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
-        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        (200_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+    });
+
+    it('switches to $6/$22.50 above 200k input tokens', () => {
+      expect(calculateBedrockCost(ID, 200_001, 1_000)).toBeCloseTo(
+        (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
         6,
       );
     });
