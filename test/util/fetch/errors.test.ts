@@ -309,6 +309,16 @@ describe('extractRateLimitErrorType', () => {
     expect(extractRateLimitErrorType({ code: 'x', type: 'quota_exceeded' })).toBe('quota_exceeded');
   });
 
+  it('falls back to the root type when the nested error has none (SDK wrapper shape)', () => {
+    expect(
+      extractRateLimitErrorType({
+        status: 429,
+        type: 'insufficient_quota',
+        error: { code: 'new_billing_code' },
+      }),
+    ).toBe('insufficient_quota');
+  });
+
   it('returns undefined when no type is present', () => {
     expect(extractRateLimitErrorType({ error: { code: 'insufficient_quota' } })).toBeUndefined();
     expect(extractRateLimitErrorType({ error: { type: '' } })).toBeUndefined();

@@ -18,7 +18,11 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+} from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -480,14 +484,13 @@ function getMinimalProcessEnv(): Record<string, string> {
   return env;
 }
 
-const CODEX_RATE_LIMIT_CODES = [
+// The transient throttle code plus the shared hard-quota set, so a billing code
+// added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
+// on the SDK path too instead of falling back to the 60s retry cycle.
+const CODEX_RATE_LIMIT_CODES: readonly string[] = [
   'rate_limit_exceeded',
-  'insufficient_quota',
-  'billing_hard_limit_reached',
-  'billing_not_active',
-  'access_terminated',
-  'quota_exceeded',
-] as const;
+  ...HARD_QUOTA_ERROR_CODES,
+];
 
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
@@ -506,6 +509,10 @@ function extractCodexRateLimitCode(message: string): string | undefined {
   const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
   if (explicitCode) {
     return explicitCode;
+  }
+
+  if (/\bno credits remaining\b/i.test(message)) {
+    return 'credit_balance_exhausted';
   }
 
   if (

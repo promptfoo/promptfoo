@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -100,11 +101,41 @@ interface FoundryResponseCreateOptions {
  * sometimes set top-level `code` to a transport-level value (e.g.
  * `'ETIMEDOUT'`) that would shadow the more reliable body code.
  */
+/**
+ * Normalize the headers an SDK error carries (a plain record or a `Headers`
+ * instance, on the error itself or on its `response`) to lowercase keys.
+ */
+function sdkErrorHeaders(err: {
+  headers?: unknown;
+  response?: { headers?: unknown };
+}): Record<string, string> | undefined {
+  const raw = err.headers ?? err.response?.headers;
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const entries =
+    typeof (raw as Headers).entries === 'function' && typeof (raw as Headers).get === 'function'
+      ? Array.from((raw as Headers).entries())
+      : Object.entries(raw as Record<string, unknown>);
+  const headers: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    if (typeof value === 'string') {
+      headers[key.toLowerCase()] = value;
+    }
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
 function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const err = error as { status?: unknown; response?: { status?: unknown }; error?: unknown };
+  const err = error as {
+    status?: unknown;
+    headers?: unknown;
+    response?: { status?: unknown; headers?: unknown };
+    error?: unknown;
+  };
   const status = typeof err.status === 'number' ? err.status : err.response?.status;
   if (status !== 429) {
     return null;
@@ -114,7 +145,18 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   // know still classifies as quota via `type: "insufficient_quota"`.
   const code = extractRateLimitErrorCode(err.error) ?? extractRateLimitErrorCode(err);
   const type = extractRateLimitErrorType(err.error) ?? extractRateLimitErrorType(err);
-  return new HttpRateLimitError({ status: 429, code, type });
+  // Retry-After decides whether a hard-quota code is really a short per-window
+  // throttle (see HttpRateLimitError), so the SDK's headers must reach it.
+  const headers = sdkErrorHeaders(err);
+  const parsed = headers ? parseRateLimitHeaders(headers) : undefined;
+  return new HttpRateLimitError({
+    status: 429,
+    code,
+    type,
+    retryAfterMs: parsed?.retryAfterMs,
+    resetAt: parsed?.resetAt,
+    headers,
+  });
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {

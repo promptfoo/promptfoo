@@ -263,11 +263,15 @@ export function extractRateLimitErrorType(body: unknown): string | undefined {
     return undefined;
   }
   const root = body as Record<string, unknown>;
-  const err =
+  const nested =
     typeof root.error === 'object' && root.error !== null
-      ? (root.error as Record<string, unknown>)
-      : root;
-  return typeof err.type === 'string' && err.type.length > 0 ? err.type : undefined;
+      ? (root.error as Record<string, unknown>).type
+      : undefined;
+  if (typeof nested === 'string' && nested.length > 0) {
+    return nested;
+  }
+  // SDK wrappers can carry the class at the top level next to a nested `error`.
+  return typeof root.type === 'string' && root.type.length > 0 ? root.type : undefined;
 }
 
 /**
