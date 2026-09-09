@@ -439,12 +439,12 @@ For more advanced test cases, we recommend using a testing framework like [Jest 
 If you have a set of common assertions that you want to apply to multiple test cases, you can create assertion templates and reuse them across your configuration.
 
 ```yaml
-// highlight-start
+# highlight-start
 assertionTemplates:
   containsMentalHealth:
     type: javascript
     value: output.toLowerCase().includes('mental health')
-// highlight-end
+# highlight-end
 
 prompts:
   - file://prompt1.txt
@@ -456,13 +456,13 @@ tests:
   - vars:
       input: Tell me about the benefits of exercise.
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
   - vars:
       input: How can I improve my well-being?
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.

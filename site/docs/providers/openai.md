@@ -893,6 +893,8 @@ providers:
 
 For audio output, set `modalities: [text, audio]` and a top-level `voice`, such as `marin`. Promptfoo sends the current Realtime API schema; if the requested modalities include audio, it selects audio output with a transcript.
 
+The legacy `gpt-4o-mini-realtime-preview-2024-12-17` selector still routes to Realtime. Check [OpenAI's lifecycle notices](https://developers.openai.com/api/docs/deprecations) and its [model card](https://developers.openai.com/api/docs/models/gpt-4o-mini-realtime-preview) before using this preview model.
+
 The result includes audio for playback and a transcript for text assertions. To grade tone, pacing, or pronunciation, select an audio-capable Chat Completions grader:
 
 ```yaml
