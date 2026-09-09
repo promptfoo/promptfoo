@@ -693,6 +693,15 @@ Note: Nova Sonic has advanced multimodal capabilities including audio input/outp
 
 Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
 
+:::warning
+
+AWS schedules Nova Reel 1.0 and 1.1 to reach end of life on **September 30, 2026**.
+These configurations support existing Reel workloads during the remaining legacy period;
+new customers cannot enable legacy models. Check the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+
+:::
+
 :::note Prerequisites
 
 Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
@@ -810,7 +819,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 **Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
 
@@ -1067,9 +1076,10 @@ APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatic
 - **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
-The frontier models are served only through Bedrock's **OpenAI-compatible Responses API**
-on the regional mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) —
-not the native `InvokeModel` or `Converse` APIs. Promptfoo routes the bare
+Promptfoo uses Bedrock's **OpenAI-compatible Responses API** on the regional Mantle
+endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bare frontier IDs.
+GPT-5.6 also supports [Runtime Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
+Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
 model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
 configured; GPT-5.6 region availability is checked before a request is made.
@@ -1196,38 +1206,54 @@ as shown above.
 
 :::
 
+For GPT-5.6 on Runtime, select the API explicitly and keep the inference profile ID:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_tokens: 4096
+```
+
+This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
+InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
+HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
+Mantle selectors documented here.
+
 ### xAI Grok Models
 
 Grok reaches Bedrock two different ways, depending on the model.
 
-**Grok 4.6** (`xai.grok-4.6`) is served **natively** by `InvokeModel`/`Converse`, but only through
-an inference profile — AWS reports `inferenceTypesSupported: ["INFERENCE_PROFILE"]` for it, so the
-bare id has no on-demand throughput. Use `us.xai.grok-4.6` or `global.xai.grok-4.6`, which
-authenticate with **ordinary AWS credentials** (no Bedrock API key required):
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
+`us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
+[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
+credentials** (no Bedrock API key required):
 
 ```yaml
 providers:
-  - id: bedrock:us.xai.grok-4.6
+  - id: bedrock:converse:us.xai.grok-4.6
     config:
       region: us-west-2 # also available in us-east-1 and us-east-2
       max_tokens: 4096
-      reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
 ```
 
 The bare `bedrock:xai.grok-4.6` id also works and routes to the Mantle Responses API described
-below, which requires `AWS_BEARER_TOKEN_BEDROCK`. Prefer the inference-profile form unless you
-specifically want the Responses API surface.
+below, which requires `AWS_BEARER_TOKEN_BEDROCK`. Prefer the explicit Converse profile when
+using the AWS credential chain.
 
 :::note
 
-Cost is not reported for either Grok path — promptfoo has no Bedrock pricing table entry for
-Grok, so the provider leaves `cost` undefined and evals show `$0`. See the
-[Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for current rates.
+Promptfoo does not currently estimate Grok 4.6 costs on the Mantle paths. The
+[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+publishes separate regional/geographic and global rates; an eval displaying `$0` does not
+mean the request is free.
 
 :::
 
 **Grok 4.3** (`xai.grok-4.3`) is Mantle-only — it has no inference profile, so a prefixed id like
-`us.xai.grok-4.3` is rejected. It runs on the same Bedrock **Mantle** engine as the OpenAI
+`us.xai.grok-4.3` is rejected. It runs on the same Bedrock **Mantle** endpoint as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
 `Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional
@@ -1259,13 +1285,12 @@ providers:
 
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
-The Bedrock **Mantle** engine also exposes an OpenAI-compatible **Chat Completions** API. Most
+The Bedrock **Mantle** endpoint also exposes an OpenAI-compatible **Chat Completions** API. Most
 mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; xAI and
-Gemma 4 chat models use the `/openai/v1/chat/completions` variant. Use the
-**`bedrock:mantle:<id>`** prefix to talk to it. This is the only way to reach mantle-served chat models that the native
-`InvokeModel`/`Converse` APIs don't serve — so they don't appear in
-`aws bedrock list-foundation-models` — for example `zai.glm-4.6`, `deepseek.v3.1`,
-`google.gemma-4-*`, and the mantle-namespaced Qwen `*-instruct` IDs.
+Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
+**`bedrock:mantle:<id>`** prefix to select this API. Mantle has its own catalog and model
+namespace, including Qwen `*-instruct` IDs; a Runtime model ID or inference profile is not
+interchangeable with a Mantle ID.
 
 Like the other mantle paths, it authenticates with an **Amazon Bedrock API key**
 (`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`):
@@ -1286,8 +1311,7 @@ providers:
   the default is `us-east-1`.
 - Use the bare `bedrock:openai.gpt-5.6-sol` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
   frontier and Grok models: those go through the **Responses API** and surface reasoning
-  tokens. `bedrock:mantle:` is the **Chat Completions** path for mantle chat models such as
-  `zai.glm-4.6`, `deepseek.v3.1`, `google.gemma-4-*`, and supported xAI chat ids.
+  tokens. `bedrock:mantle:` selects **Chat Completions** for supported Mantle models.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.

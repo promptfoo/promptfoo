@@ -92,6 +92,7 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
+  private initializedRuntime?: { client: any; region: string };
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -166,20 +167,30 @@ abstract class SageMakerGenericProvider {
   /**
    * Initialize and return the SageMaker runtime client
    */
-  async getSageMakerRuntimeInstance() {
-    if (!this.sagemakerRuntime) {
+  async getSageMakerRuntimeInstance(region?: string) {
+    if (
+      !this.sagemakerRuntime ||
+      (region !== undefined &&
+        this.initializedRuntime !== undefined &&
+        this.sagemakerRuntime === this.initializedRuntime.client &&
+        region !== this.initializedRuntime.region)
+    ) {
       try {
         const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
         const credentials = await this.getCredentials();
 
-        this.sagemakerRuntime = new SageMakerRuntimeClient({
-          region: this.getRegion(),
+        const runtimeRegion = region ?? this.getRegion();
+        const runtime = new SageMakerRuntimeClient({
+          region: runtimeRegion,
           maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
         });
 
-        logger.debug(`SageMaker client initialized for region ${this.getRegion()}`);
+        this.sagemakerRuntime = runtime;
+        this.initializedRuntime = { client: runtime, region: runtimeRegion };
+        logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
+        return runtime;
       } catch {
         throw new Error(
           'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
@@ -562,7 +573,10 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   /**
    * Parse the response from SageMaker endpoint
    */
-  async parseResponse(responseBody: string): Promise<any> {
+  async parseResponse(
+    responseBody: string,
+    responsePath: string | null = this.config.responseFormat?.path ?? null,
+  ): Promise<any> {
     let responseJson;
 
     logger.debug(`Parsing response for model type: ${this.modelType}`);
@@ -575,15 +589,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // If response format specifies a path, extract it using expression evaluation
-    if (this.config.responseFormat?.path) {
+    if (responsePath) {
       try {
-        const pathExpression = this.config.responseFormat.path;
-        const extracted = await this.extractFromPath(responseJson, pathExpression);
+        const extracted = await this.extractFromPath(responseJson, responsePath);
         return extracted;
       } catch (error) {
-        logger.warn(
-          `Failed to extract from path: ${this.config.responseFormat.path}, Error: ${error}`,
-        );
+        logger.warn(`Failed to extract from path: ${responsePath}, Error: ${error}`);
         logger.debug(
           `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
         );
@@ -640,40 +651,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   }
 
   /**
-   * Generate a consistent cache key for SageMaker requests
-   * Uses crypto.createHash to generate a shorter, more efficient key
-   */
-  private getCacheKey(prompt: string): string {
-    // Create a deterministic representation of the request parameters
-    const configForKey = {
-      endpoint: this.getEndpointName(),
-      modelType: this.modelType,
-      contentType: this.getContentType(),
-      acceptType: this.getAcceptType(),
-      maxTokens: this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024,
-      temperature:
-        typeof this.config.temperature === 'number'
-          ? this.config.temperature
-          : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7),
-      topP:
-        typeof this.config.topP === 'number'
-          ? this.config.topP
-          : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0),
-      stopSequences: this.config.stopSequences || [],
-      responsePath: this.config.responseFormat?.path,
-      region: this.getRegion(),
-    };
-
-    const configStr = JSON.stringify(configForKey);
-
-    // Generate shorter, more efficient hashed keys
-    const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
-
-    return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
-  }
-
-  /**
    * Invoke SageMaker endpoint for text generation with caching, delay support, and transformations
    */
   async callApi(
@@ -706,16 +683,33 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       );
     }
 
-    // Check if we should use cache - use the transformed prompt for cache key
+    // Keep request and parsing settings together across cache and network awaits.
+    const payload = this.formatPayload(transformedPrompt);
+    const request = {
+      payload,
+      endpoint: this.getEndpointName(),
+      modelType: this.modelType,
+      contentType: this.getContentType(),
+      acceptType: this.getAcceptType(),
+      responsePath: this.config.responseFormat?.path ?? null,
+      region: this.getRegion(),
+    };
+    let cacheKey: string | undefined;
+    const getCacheKey = () => {
+      if (cacheKey === undefined) {
+        const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+        cacheKey = `sagemaker:v3:${request.endpoint}:${hash}`;
+      }
+      return cacheKey;
+    };
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
+      const cachedResult = await cache.get<string>(getCacheKey());
       if (cachedResult) {
-        logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
+        logger.debug(`Using cached SageMaker response for ${request.endpoint}`);
 
         try {
           // Parse the cached result
@@ -743,16 +737,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Apply delay if specified and not using cached response
     if (delayMs && delayMs > 0) {
       logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${this.getEndpointName()}`,
+        `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
       );
       await sleep(delayMs);
     }
 
     // Not in cache or cache disabled, make the actual API call
-    const runtime = await this.getSageMakerRuntimeInstance();
-    const payload = this.formatPayload(transformedPrompt);
+    const runtime = await this.getSageMakerRuntimeInstance(request.region);
 
-    logger.debug(`Calling SageMaker endpoint ${this.getEndpointName()}`);
+    logger.debug(`Calling SageMaker endpoint ${request.endpoint}`);
     logger.debug(
       `With payload: ${payload.length > 1000 ? payload.substring(0, 1000) + '...' : payload}`,
     );
@@ -761,9 +754,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
 
       const command = new InvokeEndpointCommand({
-        EndpointName: this.getEndpointName(),
-        ContentType: this.getContentType(),
-        Accept: this.getAcceptType(),
+        EndpointName: request.endpoint,
+        ContentType: request.contentType,
+        Accept: request.acceptType,
         Body: payload,
       });
 
@@ -784,7 +777,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         `SageMaker response (truncated): ${responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody}`,
       );
 
-      const output = await this.parseResponse(responseBody);
+      const output = await this.parseResponse(responseBody, request.responsePath);
 
       // Handle known errors:
       if (typeof output === 'object' && output !== null && 'code' in output) {
@@ -815,7 +808,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         },
         metadata: {
           latencyMs: _latency,
-          modelType: this.config.modelType || 'custom',
+          modelType: request.modelType,
           transformed: isTransformed,
           originalPrompt: isTransformed ? prompt : undefined,
         },
@@ -823,14 +816,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       // Save result to cache if successful and caching enabled
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cacheKey = this.getCacheKey(transformedPrompt);
         const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
 
         try {
-          await cache.set(cacheKey, resultToCache);
+          await cache.set(getCacheKey(), resultToCache);
           logger.debug(
-            `Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`,
+            `Stored SageMaker response in cache with key: ${getCacheKey().substring(0, 100)}...`,
           );
         } catch (_) {
           logger.warn(`Failed to store SageMaker response in cache: ${_}`);

@@ -18,6 +18,8 @@ export COMETAPI_KEY=your_api_key_here
 
 You can obtain an API key from the [CometAPI console](https://api.cometapi.com/console/token).
 
+You can also supply `config.apiKey` or select a credential variable with `config.apiKeyEnvar`. CometAPI does not fall back to `OPENAI_API_KEY` by default; set `apiKeyEnvar: OPENAI_API_KEY` to use that variable explicitly.
+
 ## Configuration
 
 The provider uses the following syntax:

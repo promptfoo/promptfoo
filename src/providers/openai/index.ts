@@ -1,7 +1,7 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderApiKey } from '../credentials';
 import { isGpt6AstraModel } from './gpt6';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -127,14 +127,10 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
+    return resolveProviderApiKey(
+      this.config,
+      this.env,
+      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
     );
   }
 
