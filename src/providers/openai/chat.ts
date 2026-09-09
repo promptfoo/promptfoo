@@ -1,7 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+} from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -52,6 +56,20 @@ export type OpenAiChatCompletionCostData = Pick<
   OpenAI.Chat.Completions.ChatCompletion,
   'service_tier' | 'usage'
 >;
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) {
+    return;
+  }
+  if (isAbortError(signal.reason)) {
+    throw signal.reason;
+  }
+  const error = new Error(
+    signal.reason instanceof Error ? signal.reason.message : 'Request was aborted',
+  );
+  error.name = 'AbortError';
+  throw error;
+}
 
 function getChatSearchCitations(
   annotations: unknown,
@@ -368,9 +386,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
+    throwIfAborted(callApiOptions?.abortSignal);
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -415,6 +435,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    throwIfAborted(callApiOptions?.abortSignal);
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -468,12 +489,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
         },
         getRequestTimeoutMs(),
         'json',
         this.shouldBustCache(context),
         this.config.maxRetries,
       ));
+      throwIfAborted(callApiOptions?.abortSignal);
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
@@ -515,6 +538,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
+      const signal = callApiOptions?.abortSignal;
+      if (
+        signal?.aborted &&
+        (err === signal.reason || (err instanceof Error && err.cause === signal.reason))
+      ) {
+        throwIfAborted(signal);
+      }
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
       // Preserve the structured rate-limit signal so the scheduler honors
