@@ -120,6 +120,27 @@ export function throwConfigurationError(message: string): never {
 }
 
 /**
+ * Resolve the model an Azure deployment actually serves.
+ *
+ * Azure separates the connection (the deployment name that goes in the URL) from the
+ * model behind it, so capability heuristics and cost lookups must not read the
+ * deployment name directly: an explicit `passthrough.model` — what is sent on the wire —
+ * wins, then `modelName`, and only then the deployment name.
+ *
+ * Case is preserved: the cost tables are keyed on the vendor's own ids (`DeepSeek-R1`,
+ * `Phi-4`, `Meta-Llama-3-8B-Instruct`), so lower-casing here silently loses their price.
+ */
+export function resolveAzureModelName(
+  config: { modelName?: string; passthrough?: object } | undefined,
+  deploymentName: string,
+): string {
+  const passthroughModel = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof passthroughModel === 'string'
+    ? passthroughModel
+    : (config?.modelName ?? deploymentName);
+}
+
+/**
  * Calculate Azure cost based on model name and token usage
  */
 export function calculateAzureCost(

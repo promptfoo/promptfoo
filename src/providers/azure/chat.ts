@@ -26,13 +26,14 @@ import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { calculateAzureCost, resolveAzureModelName } from './util';
 
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { McpToolCallEntry } from '../mcp/types';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
@@ -77,7 +78,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and accept reasoning_effort parameter.
    */
-  protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
+  protected isReasoningModel(
+    modelName = resolveAzureModelName(this.config, this.deploymentName),
+  ): boolean {
     // Check explicit config flags first
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
@@ -126,13 +129,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * accepted; `presence_penalty`, `stop`, and `reasoning_effort: none` are rejected. The direct
    * xAI provider strips the same three parameters for its GROK_4_MODELS list.
    *
-   * Matched on the deployment name, like the other Azure model heuristics. Grok 3 and
-   * grok-code-fast accept these parameters, so only Grok 4 and newer are matched — the
-   * two-or-more-digit alternative keeps a future `grok-10` on the restricted path rather
-   * than silently regressing it to the failing default.
+   * Matched on the resolved model, like the other Azure model heuristics, so a deployment
+   * named `prod-chat` that serves Grok is still recognized. Grok 3 and grok-code-fast accept
+   * these parameters, so only Grok 4 and newer are matched — the two-or-more-digit
+   * alternative keeps a future `grok-10` on the restricted path rather than silently
+   * regressing it to the failing default.
    */
-  protected isGrok4OrNewerModel(): boolean {
-    return /grok-(?:[4-9]|\d{2,})/.test(this.deploymentName.toLowerCase());
+  protected isGrok4OrNewerModel(
+    modelName = resolveAzureModelName(this.config, this.deploymentName),
+  ): boolean {
+    return /grok-(?:[4-9]|\d{2,})/.test(modelName.toLowerCase());
   }
 
   /**
@@ -145,7 +151,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   protected isSamplingParamsDeprecatedClaudeModel(config = this.config): boolean {
     return (
       Boolean(config.isClaudeOpus47OrLater) ||
-      isSamplingParamsDeprecatedClaudeModel(config.modelName ?? this.deploymentName, {
+      isSamplingParamsDeprecatedClaudeModel(resolveAzureModelName(config, this.deploymentName), {
         allowGenerationFallback: false,
       })
     );
@@ -197,16 +203,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       : {};
 
-    // Check if this is configured as a reasoning model
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName = (
-      typeof passthroughModel === 'string'
-        ? passthroughModel
-        : (config.modelName ?? this.deploymentName)
-    ).toLowerCase();
-    const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    // The model the deployment serves, which is what every capability heuristic below
+    // (and the cost lookup in callApiInternal) keys on — not the deployment name.
+    const modelName = resolveAzureModelName(config, this.deploymentName);
+    const isReasoningModel = this.isReasoningModel(modelName);
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
-    const grokSamplingRestricted = this.isGrok4OrNewerModel();
+    const grokSamplingRestricted = this.isGrok4OrNewerModel(modelName);
 
     // Get max tokens based on model type
     const maxTokensDefault = config.omitDefaults
@@ -297,7 +299,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     if (
-      isForcedToolChoiceUnsupportedClaudeModel(config.modelName ?? this.deploymentName) &&
+      isForcedToolChoiceUnsupportedClaudeModel(modelName) &&
       body.tool_choice &&
       body.tool_choice !== 'auto' &&
       body.tool_choice !== 'none'
@@ -308,15 +310,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.tool_choice;
     }
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');
+    applyGpt6AstraRequestRules(body, modelName.toLowerCase(), 'chat');
 
-    return {
-      body,
-      config:
-        typeof passthroughModel === 'string'
-          ? { ...config, modelName: capabilityModelName }
-          : config,
-    };
+    return { body, config: { ...config, modelName } };
   }
 
   async callApi(
@@ -475,6 +471,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let output = '';
     let logProbs: any;
     let finishReason: string;
+    // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
+    // check tool routing and arguments without wrapping the provider.
+    const mcpToolCalls: McpToolCallEntry[] = [];
 
     try {
       if (data.error) {
@@ -544,6 +543,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
+              undefined,
+              { toolCalls: mcpToolCalls },
             );
           } else {
             // No callbacks configured, return raw tool/function calls
@@ -593,7 +594,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         logProbs,
         finishReason,
         cost: calculateAzureCost(
-          config.modelName ?? this.deploymentName,
+          config.modelName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
@@ -610,6 +611,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           flaggedInput,
           flaggedOutput,
         },
+        ...(mcpToolCalls.length > 0 && { metadata: { toolCalls: mcpToolCalls } }),
       };
     } catch (err) {
       return {

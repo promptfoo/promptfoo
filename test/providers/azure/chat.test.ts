@@ -399,6 +399,36 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
+    it('prices a mixed-case passthrough.model without lower-casing it', async () => {
+      // AZURE_MODELS is keyed on the vendor's own ids, so lower-casing `DeepSeek-R1`
+      // loses the cost-table entry entirely.
+      provider = new AzureChatCompletionProvider('prod-chat', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          passthrough: { model: 'DeepSeek-R1' },
+        },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo((1_000 * 0.55 + 500 * 2.19) / 1e6, 12);
+      const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(request.model).toBe('DeepSeek-R1');
+    });
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',

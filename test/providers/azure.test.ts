@@ -753,6 +753,23 @@ describe('Azure Provider Tests', () => {
         }
       });
 
+      it.each([
+        { label: 'modelName', config: { modelName: 'grok-4.6' } },
+        { label: 'passthrough.model', config: { passthrough: { model: 'grok-4.6' } } },
+      ])('strips them for a deployment aliased by $label', async ({ config }) => {
+        // The deployment name says nothing about the model, so the guard has to read the
+        // resolved model or the request 400s.
+        const provider = new AzureChatCompletionProvider('prod-chat', {
+          config: { apiHost: 'test.openai.azure.com', stop: ['x'], ...config },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hello');
+
+        expect(body.presence_penalty).toBeUndefined();
+        expect(body.frequency_penalty).toBeUndefined();
+        expect(body.stop).toBeUndefined();
+      });
+
       it('leaves non-Grok deployments alone', async () => {
         const provider = new AzureChatCompletionProvider('gpt-4o-prod', {
           config: { apiHost: 'test.openai.azure.com', stop: ['x'] },
