@@ -352,6 +352,7 @@ describe('Provider Registry', () => {
       // off Chat Completions. Availability verified against GET /v1/models/<id>.
       it.each([
         'computer-use-preview',
+        'computer-use-preview-2025-03-11',
         'gpt-5-codex',
         'gpt-5.1-codex',
         'gpt-5.1-codex-max',

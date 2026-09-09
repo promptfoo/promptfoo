@@ -533,17 +533,6 @@ describe('calculateOpenAICost', () => {
     }
   });
 
-  it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(false);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05')).toBe(false);
-    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(true);
-    expect(
-      OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05'),
-    ).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(false);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
-  });
-
   // Availability re-verified against GET /v1/models/<id> on 2026-09-09.
   it.each([
     'computer-use-preview',
@@ -558,6 +547,10 @@ describe('calculateOpenAICost', () => {
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
     'o1-pro',
     'o1-pro-2025-03-19',
     'o3-pro',
