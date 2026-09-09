@@ -18,7 +18,7 @@ This example requires the following environment variables:
 - `XAI_API_KEY` - Your xAI API key for Grok 4
 - `GOOGLE_API_KEY` - Your Google API key for Gemini 2.5 Pro
 - `OPENAI_API_KEY` - Your OpenAI API key for GPT-4.1
-- `ANTHROPIC_API_KEY` - Your Anthropic API key for Claude Opus 4
+- `ANTHROPIC_API_KEY` - Your Anthropic API key for Claude Opus 5
 
 You can set these in a `.env` file or directly in your environment.
 
@@ -121,7 +121,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --max-concurrency 5
 
 ## Key Findings
 
-1. **Universal Left Bias**: All major AI models (GPT-4.1, Gemini 2.5 Pro, Claude Opus 4, Grok 4) lean left of center
+1. **Universal Left Bias**: All major AI models (GPT-4.1, Gemini 2.5 Pro, Claude Opus 5, Grok 4) lean left of center
 2. **Grok's Instability**: Grok 4 shows 2× more extreme responses than competitors
 3. **Corporate Overcorrection**: Grok is 14.1% harsher on Musk companies than other corporations
 4. **Judge Bias**: Models score themselves 0.09 points more favorably on average

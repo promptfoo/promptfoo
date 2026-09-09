@@ -1,6 +1,6 @@
 # claude-thinking (Claude Thinking)
 
-This example demonstrates Claude's "thinking" capability, which allows you to see the model's step-by-step reasoning process before it provides a final answer. The example compares thinking outputs from Claude Sonnet 4 (Anthropic API) and Claude Haiku 4.5 (AWS Bedrock).
+This example demonstrates Claude's "thinking" capability, which allows you to see the model's step-by-step reasoning process before it provides a final answer. It compares adaptive thinking on Claude Opus 5 and Claude Sonnet 5 (Anthropic API) against budget-based thinking on Claude Haiku 4.5 (AWS Bedrock).
 
 You can run this example with:
 
@@ -57,8 +57,10 @@ The thinking feature is enabled by setting special parameters in the provider co
 ```yaml
 thinking:
   type: 'enabled'
-  budget_tokens: 4096 # Controls how many tokens are allocated for thinking
-max_tokens: 8192 # Must be greater than budget_tokens
+  type: adaptive # Claude decides how much to think
+  display: summarized # Default is 'omitted', which returns empty thinking text
+effort: high # Depth control on Claude 4.7+ — replaces budget_tokens
+max_tokens: 8192 # Thinking shares this budget with the answer
 ```
 
 When enabled, Claude's response will include a "Thinking:" section that shows its reasoning process before the final answer:
@@ -74,6 +76,6 @@ Final answer: We need exactly 2 weighings to find the heavier ball.
 
 ## Additional Resources
 
-- [Claude Thinking Documentation](https://docs.anthropic.com/claude/docs/extended-thinking)
+- [Claude Thinking Documentation](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking)
 - [AWS Bedrock Claude Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-claude.html)
 - [Promptfoo Documentation on Claude Providers](https://promptfoo.dev/docs/providers/anthropic)

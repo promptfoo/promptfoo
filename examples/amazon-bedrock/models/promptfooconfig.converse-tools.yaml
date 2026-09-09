@@ -6,12 +6,11 @@ prompts:
 
 providers:
   # Claude with tools (native format) - via inference profile
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Tools)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (Tools)
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       # Native Converse API tool format
       tools:
         - toolSpec:
@@ -33,12 +32,11 @@ providers:
       toolChoice: auto
 
   # Claude with OpenAI-compatible tool format
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (OpenAI Format)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (OpenAI Format)
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       # OpenAI-compatible format
       tools:
         - type: function
@@ -60,12 +58,11 @@ providers:
       toolChoice: auto
 
   # Claude with Anthropic tool format
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Anthropic Format)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (Anthropic Format)
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       # Anthropic-compatible format
       tools:
         - name: get_weather

@@ -5,8 +5,8 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  - id: anthropic:messages:claude-sonnet-5
+    label: Claude Sonnet 5
   - id: openai:chat:gpt-5.4
     label: GPT-5.4
 
@@ -14,8 +14,12 @@ defaultTest:
   assert:
     - type: cost
       threshold: 0.0025
+    # Current-generation models reason before answering, so they are slower than
+    # the models this example was originally written against. Measured over 15
+    # runs each: Sonnet 5 1.0-3.2s, GPT-5.4 0.7-2.4s. 5s leaves headroom without
+    # making the assertion meaningless.
     - type: latency
-      threshold: 2000
+      threshold: 5000
     - type: javascript
       value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
 

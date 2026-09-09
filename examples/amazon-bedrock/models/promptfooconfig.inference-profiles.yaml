@@ -84,11 +84,10 @@ providers:
       reasoning_effort: 'medium' # Control reasoning depth
 
   # Comparison with direct model IDs (no inference profile)
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
+  - id: bedrock:us.anthropic.claude-sonnet-5
     label: 'Claude Direct (No Profile)'
     config:
       region: 'us-east-1'
-      temperature: 0.7
       max_tokens: 1024
 
 tests:

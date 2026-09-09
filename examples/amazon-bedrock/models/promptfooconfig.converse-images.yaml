@@ -7,12 +7,11 @@ prompts:
 
 providers:
   # Claude with vision (via inference profile)
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Vision)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (Vision)
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0.5
 
   # Pixtral Large with vision (124B multimodal)
   - id: bedrock:converse:us.mistral.pixtral-large-2502-v1:0

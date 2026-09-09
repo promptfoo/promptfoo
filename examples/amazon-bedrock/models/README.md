@@ -38,7 +38,7 @@ cd amazon-bedrock/models
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude Opus 5, Claude Opus 4.8, Claude Opus 4.7 (via inference-profile ARN), Claude Opus 4.6, Claude Opus 4.1, Claude Sonnet 5 with adaptive thinking, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-5.6 Sol, Terra, and Luna with reasoning, explicit prompt caching, and streaming
 - [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
@@ -63,7 +63,7 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ### Key Features
 
-- **Extended Thinking**: Enable Claude's reasoning capabilities with configurable token budgets
+- **Extended Thinking**: Enable Claude's reasoning capabilities. Claude 4.7+ and the Claude 5 family use adaptive thinking with an `effort` depth control; Sonnet 4.6 and the 4.5 generation still take a manual `budget_tokens` budget
 - **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
 - **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
 
@@ -71,14 +71,17 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with Thinking
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with Thinking
     config:
       region: us-west-2
       maxTokens: 20000
       thinking:
-        type: enabled
-        budget_tokens: 16000
+        type: adaptive
+      # Converse has no typed `effort` option; it is passed through as a raw field.
+      additionalModelRequestFields:
+        output_config:
+          effort: high
       showThinking: true
 ```
 
@@ -96,12 +99,11 @@ The Converse MCP example (`promptfooconfig.converse-mcp.yaml`) demonstrates how 
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with MCP
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with MCP
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       mcp:
         enabled: true
         servers:
@@ -143,7 +145,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6
+  - id: bedrock:kb:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID

@@ -58,7 +58,7 @@ Anthropic uses `output_format` at the provider level:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       output_format:
         type: json_schema
@@ -92,5 +92,5 @@ providers:
 ## Learn More
 
 - [OpenAI Structured Outputs Documentation](https://platform.openai.com/docs/guides/structured-outputs)
-- [Anthropic Structured Outputs Documentation](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs)
+- [Anthropic Structured Outputs Documentation](https://docs.claude.com/en/docs/build-with-claude/structured-outputs)
 - [promptfoo Structured Outputs Guide](https://promptfoo.dev/docs/)

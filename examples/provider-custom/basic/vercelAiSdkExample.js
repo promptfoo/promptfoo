@@ -54,8 +54,8 @@ class CustomProvider {
       mode: 'tool',
     });
 
-    const inputCost = 0.00025 / 1000; //config.cost ?? model.cost.input;
-    const outputCost = 0.00125 / 1000; // config.cost ?? model.cost.output;
+    const inputCost = 1 / 1_000_000; // Claude Haiku 4.5 rate: $1 / 1M input tokens
+    const outputCost = 5 / 1_000_000; // Claude Haiku 4.5 rate: $5 / 1M output tokens
     const totalCost =
       inputCost * usage.promptTokens + outputCost * usage.completionTokens || undefined;
 

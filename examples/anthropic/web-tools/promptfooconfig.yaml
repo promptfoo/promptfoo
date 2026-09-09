@@ -6,19 +6,20 @@ prompts:
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      temperature: 0
+      # Sonnet 5 rejects temperature/top_p/top_k at the model level.
       max_tokens: 2500
       tools:
-        - type: web_search_20250305
+        # Current server-tool versions (dynamic filtering, no beta header required).
+        - type: web_search_20260209
           name: web_search
           max_uses: 2
-        - type: web_fetch_20250910
+        - type: web_fetch_20260209
           name: web_fetch
           max_uses: 3
           allowed_domains:
-            - docs.anthropic.com
+            - platform.claude.com
             - github.com
             - openai.com
             - arxiv.org
@@ -29,7 +30,7 @@ providers:
 tests:
   # Basic web fetch test
   - vars:
-      task: 'Please fetch and summarize the content from this URL: https://docs.anthropic.com/en/docs/build-with-claude/tool-use'
+      task: 'Please fetch and summarize the content from this URL: https://platform.claude.com/docs/en/docs/build-with-claude/tool-use'
     assert:
       - type: contains-any
         value: ['tool', 'function', 'API', 'capabilities']
@@ -46,25 +47,26 @@ tests:
       - type: llm-rubric
         value: 'Describes the TypeScript SDK and its purpose'
 
-  # Research workflow test
+  # Research workflow test. Kept deliberately bounded — an open-ended "comprehensive
+  # analysis" prompt can chain enough search+fetch rounds to exceed the Anthropic SDK's
+  # default 10-minute request timeout.
   - vars:
       task: |
-        Research "Claude 4 AI model capabilities" and provide a comprehensive analysis.
+        Research "Claude Opus 5 model capabilities" and write a short report.
 
         Process:
-        1. Search for recent information about the topic
-        2. Fetch detailed content from the most authoritative sources  
-        3. Synthesize findings into a structured report
+        1. Run at most one search for recent information about the topic
+        2. Fetch content from at most one authoritative source
+        3. Synthesize the findings
 
-        Your report should include:
+        Keep the report under 300 words and include:
         - Overview of the topic
         - Key capabilities or features
-        - Recent developments
         - Sources used
     assert:
       - type: contains-any
-        value: ['Claude 4', 'claude-4', 'capabilities', 'model']
-        reason: 'Should discuss Claude 4 specifically'
+        value: ['Claude', 'Opus', 'capabilities', 'model']
+        reason: 'Should discuss the Claude model family specifically'
       - type: llm-rubric
         value: 'Provides a comprehensive research-based analysis with multiple information sources'
       - type: contains-any

@@ -5,24 +5,27 @@ prompts:
   - 'Solve this step by step: {{problem}}'
 
 providers:
-  # Claude with Extended Thinking via Converse API
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Converse + Thinking)
+  # Claude with adaptive thinking via Converse API. Claude 4.7+ and the Claude 5 family
+  # reject the manual `budget_tokens` budget — `effort` is the depth control instead.
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (Converse + Thinking)
     config:
       region: us-west-2
       maxTokens: 20000
       thinking:
-        type: enabled
-        budget_tokens: 16000
+        type: adaptive
+      # Converse has no typed `effort` option; it is passed through as a raw field.
+      additionalModelRequestFields:
+        output_config:
+          effort: high
       showThinking: true
 
-  # Claude Opus without thinking for comparison
-  - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
-    label: Claude Opus 4.6 (Converse)
+  # Claude Opus for comparison. Opus 5 also rejects temperature/top_p/top_k.
+  - id: bedrock:converse:us.anthropic.claude-opus-5
+    label: Claude Opus 5 (Converse)
     config:
       region: us-east-1
       maxTokens: 4096
-      temperature: 0.7
 
   # Nova via Converse API
   - id: bedrock:converse:amazon.nova-pro-v1:0

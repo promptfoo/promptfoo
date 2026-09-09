@@ -22,7 +22,7 @@ npm install
 ```yaml
 providers:
   - openai:gpt-4o # OpenAI
-  - anthropic:messages:claude-sonnet-4-6 # Anthropic
+  - anthropic:messages:claude-sonnet-5 # Anthropic
   - ollama:chat:llama3.3 # Ollama
   - replicate:meta/llama-2-70b-chat # Replicate
 ```

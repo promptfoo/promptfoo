@@ -20,11 +20,10 @@ providers:
       loggingConfig:
         enabled: true
 
-  # Claude Sonnet 4.5 for comparison
-  - id: truefoundry:anthropic-main/claude-sonnet-4.5
-    label: 'Claude Sonnet 4.5 via TrueFoundry'
+  # Claude Sonnet 5 for comparison
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    label: 'Claude Sonnet 5 via TrueFoundry'
     config:
-      temperature: 0.7
       max_tokens: 500
       metadata:
         user_id: 'example-user'

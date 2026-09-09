@@ -11,7 +11,7 @@ providers:
   - openai:chat:gpt-5.5
   - openai:chat:gpt-5.4-mini
   # Or setup models from other providers
-  # - anthropic:messages:claude-sonnet-4-6
+  # - anthropic:messages:claude-sonnet-5
   # - google:gemini-3.1-pro-preview
 
 tests:

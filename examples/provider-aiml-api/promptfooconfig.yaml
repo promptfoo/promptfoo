@@ -4,7 +4,7 @@ description: Compare AI models with AI/ML API
 providers:
   - aimlapi:chat:deepseek-r1
   - aimlapi:chat:gpt-4.1-mini
-  - aimlapi:chat:claude-4-sonnet
+  - aimlapi:chat:claude-sonnet-5
 
 prompts:
   - 'Tell me a joke about {{topic}}'

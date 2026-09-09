@@ -18,7 +18,7 @@ providers:
 
   # Uncomment to use real providers
   # - openai:gpt-4o-mini
-  # - anthropic:claude-haiku-4-5-20251001
+  # - anthropic:claude-haiku-4-5
 
 tests:
   - vars:

@@ -36,7 +36,7 @@ You can set these in a `.env` file or directly in your environment.
 Each provider implements tool use with different syntax:
 
 - [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
-- [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use)
+- [Anthropic Tool Use Guide](https://docs.claude.com/en/docs/tool-use)
 - [AWS Bedrock Claude Tool Use](https://docs.aws.amazon.com/bedrock/latest/userguide/tool-use.html)
 - [Groq Function Calling](https://console.groq.com/docs/tools)
 

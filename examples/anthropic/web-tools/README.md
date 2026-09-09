@@ -28,19 +28,18 @@ prompts:
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      temperature: 0
       max_tokens: 2500
       tools:
-        - type: web_search_20250305 # Search the web
+        - type: web_search_20260209 # Search the web
           name: web_search
           max_uses: 2
-        - type: web_fetch_20250910 # Fetch specific URLs
+        - type: web_fetch_20260209 # Fetch specific URLs
           name: web_fetch
           max_uses: 3
           allowed_domains: # Restrict to trusted domains
-            - docs.anthropic.com
+            - platform.claude.com
             - github.com
             - openai.com
             - arxiv.org
@@ -64,6 +63,10 @@ cd examples/anthropic/web-tools
 promptfoo eval
 ```
 
+Every test makes real web requests, so expect the run to take several minutes. The
+Anthropic SDK times a request out after 10 minutes by default — if a research turn
+chains enough search and fetch rounds to hit that, lower `max_uses` or narrow the task.
+
 ## What It Tests
 
 1. **Direct URL Fetch**: Retrieve and summarize specific documentation pages
@@ -83,7 +86,7 @@ Perfect for:
 
 ## Security Notes
 
-- Only allows fetching from trusted domains (docs.anthropic.com, github.com, openai.com, arxiv.org)
+- Only allows fetching from trusted domains (platform.claude.com, github.com, openai.com, arxiv.org)
 - Content limited to 12,000 tokens to prevent excessive usage
 - Citations enabled for source transparency
 - Usage limits prevent API abuse (2 searches, 3 fetches per evaluation)
