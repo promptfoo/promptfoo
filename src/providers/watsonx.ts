@@ -5,7 +5,6 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { isAbortError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -769,9 +768,6 @@ export class WatsonXProvider implements ApiProvider {
       return providerResponse;
     } catch (err) {
       throwIfAborted(signal);
-      if (isAbortError(err)) {
-        throw err;
-      }
       logger.error(`Watsonx: API call error: ${String(err)}`);
 
       return {
@@ -865,9 +861,6 @@ export class WatsonXChatProvider extends WatsonXProvider {
       return providerResponse;
     } catch (err) {
       throwIfAborted(signal);
-      if (isAbortError(err)) {
-        throw err;
-      }
       logger.error(`Watsonx Chat: API call error: ${String(err)}`);
 
       return {

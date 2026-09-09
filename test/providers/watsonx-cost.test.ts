@@ -8,6 +8,7 @@ import {
   WatsonXChatProvider,
   WatsonXProvider,
 } from '../../src/providers/watsonx';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 vi.mock('@ibm-cloud/watsonx-ai', () => ({ WatsonXAI: { newInstance: vi.fn() } }));
 vi.mock('../../src/envars', async (importOriginal) => ({
@@ -83,10 +84,11 @@ function deferred<T>() {
 }
 
 async function expectCallerAbort(observed: Promise<unknown>) {
-  const stillPending = new Promise<undefined>((resolve) => setTimeout(resolve, 1));
-  const outcome = Promise.race([observed, stillPending]);
-  await vi.advanceTimersByTimeAsync(1);
-  const error = await outcome;
+  const onSettled = vi.fn();
+  void observed.then(onSettled);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(onSettled).toHaveBeenCalledTimes(1);
+  const error = onSettled.mock.calls[0][0];
   expect(error).toBeInstanceOf(Error);
   expect(error).toMatchObject({ name: 'AbortError', message: expect.stringMatching(/abort/i) });
   expect(error).not.toHaveProperty('message', expect.stringMatching(/timeout|network/i));
@@ -602,6 +604,40 @@ describe.each([false, true])('WatsonX caller cancellation (chat=%s)', (chat) => 
     vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
     vi.mocked(isCacheEnabled).mockReturnValue(true);
   });
+
+  it.each([false, true])(
+    'returns SDK AbortErrors as ordinary failures when the caller did not cancel (signal=%s)',
+    async (withSignal) => {
+      const regionalClient = client();
+      const generation = chat ? regionalClient.textChat : regionalClient.generateText;
+      const sdkError = Object.assign(new Error('SDK request timed out'), { name: 'AbortError' });
+      generation.mockRejectedValueOnce(sdkError);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const signal = withSignal ? new AbortController().signal : undefined;
+      const cache = getCache();
+
+      await expect(
+        provider(chat).callApi(
+          'SDK failure',
+          undefined,
+          signal ? { abortSignal: signal } : undefined,
+        ),
+      ).resolves.toEqual({
+        error: 'API call error: AbortError: SDK request timed out',
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      expect(generation).toHaveBeenCalledTimes(1);
+      expect(generation.mock.calls[0][0].signal).toBe(signal);
+      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+      if (signal) {
+        expect(signal.aborted).toBe(false);
+        expect(getEventListeners(signal, 'abort')).toEqual([]);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('rejects pre-aborted calls before initializing the SDK or reading the response cache', async () => {
     const regionalClient = client();
