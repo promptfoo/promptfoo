@@ -84,6 +84,14 @@ const SageMakerConfigSchema = z.strictObject({
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
+type CredentialScope = Pick<
+  SageMakerConfig,
+  'profile' | 'accessKeyId' | 'secretAccessKey' | 'sessionToken'
+> & {
+  region: string;
+  environment: Record<string, string | undefined>;
+};
+
 interface SageMakerOptions extends ProviderOptions {
   config?: SageMakerConfig;
 }
@@ -97,12 +105,8 @@ abstract class SageMakerGenericProvider {
   private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
   private readonly runtimeClients = new Map<string, SageMakerRuntimeClient>();
   private readonly runtimeInitializations = new Map<string, Promise<SageMakerRuntimeClient>>();
-  private profileCredentials?: {
-    region: string;
-    profile: string;
-    accessKeyId?: string;
-    secretAccessKey?: string;
-    sessionToken?: string;
+  private retainedCredentials?: {
+    scope: CredentialScope;
     provider: SageMakerRuntimeClient['config']['credentials'];
   };
   private runtimeGeneration = 0;
@@ -152,8 +156,8 @@ abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials(): Promise<any> {
-    const { accessKeyId, secretAccessKey, sessionToken, profile } = this.config;
+  async getCredentials(config: SageMakerConfig = this.config): Promise<any> {
+    const { accessKeyId, secretAccessKey, sessionToken, profile } = config;
     if (accessKeyId && secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
@@ -194,27 +198,58 @@ abstract class SageMakerGenericProvider {
     if (!runtime) {
       let initialization = this.runtimeInitializations.get(runtimeRegion);
       if (!initialization) {
+        const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
+        const scope: CredentialScope = {
+          region: runtimeRegion,
+          profile,
+          accessKeyId,
+          secretAccessKey,
+          sessionToken,
+          // Keep credential source inputs private and in memory; the SDK owns their resolution.
+          environment: Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) =>
+                name.startsWith('AWS_') ||
+                ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH'].includes(name),
+            ),
+          ),
+        };
         initialization = (async () => {
           try {
             const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
             const { loadConfigsForDefaultMode } = await import('@smithy/core/client');
             const { resolveDefaultsModeConfig } = await import('@smithy/core/config');
             this.assertRuntimeGeneration(generation);
-            const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
-            const usesProfile = profile && !(accessKeyId && secretAccessKey);
-            const cachedCredentials = this.profileCredentials;
+            const cached = this.retainedCredentials?.scope;
             if (
-              !usesProfile ||
-              cachedCredentials?.region !== runtimeRegion ||
-              cachedCredentials.profile !== profile ||
-              cachedCredentials.accessKeyId !== accessKeyId ||
-              cachedCredentials.secretAccessKey !== secretAccessKey ||
-              cachedCredentials.sessionToken !== sessionToken
+              !cached ||
+              cached.region !== scope.region ||
+              cached.profile !== scope.profile ||
+              cached.accessKeyId !== scope.accessKeyId ||
+              cached.secretAccessKey !== scope.secretAccessKey ||
+              cached.sessionToken !== scope.sessionToken ||
+              Object.keys(cached.environment).length !== Object.keys(scope.environment).length ||
+              Object.entries(scope.environment).some(
+                ([name, value]) => cached.environment[name] !== value,
+              )
             ) {
-              this.profileCredentials = undefined;
+              this.retainedCredentials = undefined;
             }
-            const retainedCredentials = this.profileCredentials?.provider;
-            const credentials = retainedCredentials ?? (await this.getCredentials());
+            const retainedCredentials = this.retainedCredentials?.provider;
+            let credentials = retainedCredentials ?? (await this.getCredentials(scope));
+            if (!credentials) {
+              const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+              const chain = defaultProvider({
+                profile: scope.environment.AWS_PROFILE,
+                filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE,
+                configFilepath: scope.environment.AWS_CONFIG_FILE,
+              });
+              // STS may retain its caller's handler. Supply only the region so credential
+              // clients own their transport and remain usable after SageMaker cleanup.
+              const callerClientConfig = { region: async () => runtimeRegion };
+              const isolated: typeof chain = (options) => chain({ ...options, callerClientConfig });
+              credentials = isolated;
+            }
             const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
             this.assertRuntimeGeneration(generation);
             const client = new SageMakerRuntimeClient({
@@ -229,16 +264,13 @@ abstract class SageMakerGenericProvider {
               },
               ...(credentials ? { credentials } : {}),
             });
-            if (usesProfile) {
-              // Keep the SDK's refreshable SSO credentials when idle transport clients are destroyed.
-              // The default chain can bind an STS client to this transport, so it is not retained here.
-              this.profileCredentials = {
-                region: runtimeRegion,
-                profile,
-                accessKeyId,
-                secretAccessKey,
-                sessionToken,
-                provider: retainedCredentials ?? client.config.credentials,
+            if (!(scope.accessKeyId && scope.secretAccessKey)) {
+              // Preserve the SDK memoizer, including the default chain's background refresh.
+              this.retainedCredentials = {
+                scope,
+                provider: scope.profile
+                  ? (retainedCredentials ?? client.config.credentials)
+                  : credentials,
               };
             }
             this.runtimeClients.set(runtimeRegion, client);

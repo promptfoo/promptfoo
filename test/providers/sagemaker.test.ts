@@ -369,7 +369,8 @@ describe('SageMakerCompletionProvider', () => {
         });
         expect(mockSend).toHaveBeenCalledTimes(3);
         expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(3);
-        expect(credentials).toHaveBeenCalledTimes(3);
+        // A new transport in the same region retains its credential provider.
+        expect(credentials).toHaveBeenCalledTimes(2);
       },
     );
 
