@@ -6,6 +6,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -92,7 +93,11 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: any; region: string };
+  private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
+  private readonly runtimeClients = new Map<string, SageMakerRuntimeClient>();
+  private readonly runtimeInitializations = new Map<string, Promise<SageMakerRuntimeClient>>();
+  private runtimeGeneration = 0;
+  private readonly activeRequests = new Set<AbortController>();
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -167,37 +172,110 @@ abstract class SageMakerGenericProvider {
   /**
    * Initialize and return the SageMaker runtime client
    */
-  async getSageMakerRuntimeInstance(region?: string) {
-    if (
-      !this.sagemakerRuntime ||
-      (region !== undefined &&
-        this.initializedRuntime !== undefined &&
-        this.sagemakerRuntime === this.initializedRuntime.client &&
-        region !== this.initializedRuntime.region)
-    ) {
+  async getSageMakerRuntimeInstance(region?: string, generation = this.runtimeGeneration) {
+    this.assertRuntimeGeneration(generation);
+    // A caller-supplied client is borrowed, not part of the provider's region pool.
+    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.initializedRuntime?.client) {
+      return this.sagemakerRuntime;
+    }
+
+    const runtimeRegion = region ?? this.initializedRuntime?.region ?? this.getRegion();
+    let runtime = this.runtimeClients.get(runtimeRegion);
+    if (!runtime) {
+      let initialization = this.runtimeInitializations.get(runtimeRegion);
+      if (!initialization) {
+        initialization = (async () => {
+          try {
+            const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
+            this.assertRuntimeGeneration(generation);
+            const credentials = await this.getCredentials();
+            this.assertRuntimeGeneration(generation);
+            const client = new SageMakerRuntimeClient({
+              region: runtimeRegion,
+              maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+              retryMode: 'adaptive',
+              ...(credentials ? { credentials } : {}),
+            });
+            this.runtimeClients.set(runtimeRegion, client);
+            logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
+            return client;
+          } catch {
+            this.assertRuntimeGeneration(generation);
+            throw new Error(
+              'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+            );
+          }
+        })();
+        this.runtimeInitializations.set(runtimeRegion, initialization);
+      }
       try {
-        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
-        const credentials = await this.getCredentials();
-
-        const runtimeRegion = region ?? this.getRegion();
-        const runtime = new SageMakerRuntimeClient({
-          region: runtimeRegion,
-          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
-          retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
-        });
-
-        this.sagemakerRuntime = runtime;
-        this.initializedRuntime = { client: runtime, region: runtimeRegion };
-        logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
-        return runtime;
-      } catch {
-        throw new Error(
-          'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-        );
+        runtime = await initialization;
+      } finally {
+        if (this.runtimeInitializations.get(runtimeRegion) === initialization) {
+          this.runtimeInitializations.delete(runtimeRegion);
+        }
       }
     }
-    return this.sagemakerRuntime;
+    this.assertRuntimeGeneration(generation);
+    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.initializedRuntime?.client) {
+      this.sagemakerRuntime = runtime;
+      this.initializedRuntime = { client: runtime, region: runtimeRegion };
+    }
+    return runtime;
+  }
+
+  protected async withRequest<T>(
+    run: (generation: number, signal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, controller.signal])
+      : controller.signal;
+    signal.throwIfAborted();
+    this.activeRequests.add(controller);
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([run(this.runtimeGeneration, signal), aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+      this.activeRequests.delete(controller);
+      // Share region clients only while requests overlap; no global evaluation owns them.
+      if (this.activeRequests.size === 0) {
+        this.cleanup();
+      }
+    }
+  }
+
+  protected assertRuntimeGeneration(generation: number): void {
+    if (generation !== this.runtimeGeneration) {
+      throw new Error('SageMaker provider was shut down during the request');
+    }
+  }
+
+  cleanup(): void {
+    this.runtimeGeneration++;
+    for (const controller of this.activeRequests) {
+      controller.abort(new Error('SageMaker provider was shut down during the request'));
+    }
+    const clients = [...this.runtimeClients.values()];
+    this.runtimeClients.clear();
+    this.runtimeInitializations.clear();
+    if (clients.includes(this.sagemakerRuntime)) {
+      this.sagemakerRuntime = undefined;
+    }
+    this.initializedRuntime = undefined;
+    for (const client of clients) {
+      try {
+        client.destroy();
+      } catch (error) {
+        logger.warn('Error destroying SageMaker runtime client', { error });
+      }
+    }
   }
 
   /**
@@ -656,7 +734,19 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    return this.withRequest(
+      (generation, signal) => this.callApiWithRuntime(prompt, context, generation, signal),
+      options?.abortSignal,
+    );
+  }
+
+  private async callApiWithRuntime(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    generation: number,
+    abortSignal: AbortSignal,
   ): Promise<ProviderResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -743,7 +833,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Not in cache or cache disabled, make the actual API call
-    const runtime = await this.getSageMakerRuntimeInstance(request.region);
+    abortSignal.throwIfAborted();
+    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
 
     logger.debug(`Calling SageMaker endpoint ${request.endpoint}`);
     logger.debug(
@@ -761,7 +852,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      this.assertRuntimeGeneration(generation);
+      abortSignal.throwIfAborted();
+      const response = await runtime.send(command, { abortSignal });
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -882,6 +975,19 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.withRequest(
+      (generation, signal) => this.callEmbeddingWithRuntime(text, context, generation, signal),
+      options?.abortSignal,
+    );
+  }
+
+  private async callEmbeddingWithRuntime(
+    text: string,
+    context: CallApiContextParams | undefined,
+    generation: number,
+    abortSignal: AbortSignal,
   ): Promise<ProviderEmbeddingResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -947,7 +1053,8 @@ export class SageMakerEmbeddingProvider
     }
 
     // Not in cache or cache disabled, make the actual API call
-    const runtime = await this.getSageMakerRuntimeInstance();
+    abortSignal.throwIfAborted();
+    const runtime = await this.getSageMakerRuntimeInstance(undefined, generation);
 
     let payload;
     const modelType = this.config.modelType || 'custom';
@@ -993,7 +1100,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      this.assertRuntimeGeneration(generation);
+      abortSignal.throwIfAborted();
+      const response = await runtime.send(command, { abortSignal });
       const endTime = Date.now();
       const _latency = endTime - startTime;
 

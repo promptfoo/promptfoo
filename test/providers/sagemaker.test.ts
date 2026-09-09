@@ -27,7 +27,7 @@ vi.mock('../../src/cache', () => ({
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
   SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region }) {
-    return { send: (command: unknown) => mockSend(command, region) };
+    return { send: (command: unknown) => mockSend(command, region), destroy: vi.fn() };
   }),
   InvokeEndpointCommand: vi.fn().mockImplementation(function (params) {
     return params;
@@ -368,8 +368,8 @@ describe('SageMakerCompletionProvider', () => {
           cached: true,
         });
         expect(mockSend).toHaveBeenCalledTimes(3);
-        expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(2);
-        expect(credentials).toHaveBeenCalledTimes(2);
+        expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(3);
+        expect(credentials).toHaveBeenCalledTimes(3);
       },
     );
 
