@@ -1,6 +1,7 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,6 +10,7 @@ import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
+import { generateOrderedYaml } from './utils/yamlHelpers';
 
 // Define these variables outside the test
 const mockNavigate = vi.fn();
@@ -445,34 +447,43 @@ redteam:
     });
 
     it.each([
-      ['vertex:gemini-3.6-flash', 'global'],
-      ['vertex:gemini-3.5-flash-lite', 'global'],
+      ['vertex:gemini-3.6-flash', undefined],
+      ['vertex:gemini-3.5-flash-lite', undefined],
       [{ id: 'vertex:gemini-3.6-flash', config: { region: 'eu' } }, 'eu'],
-    ] as const)('preserves the Vertex region when importing %j', async (target, region) => {
-      const user = userEvent.setup();
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-      await user.click(screen.getByRole('button', { name: /Load Config/i }));
-      const file = new File(
-        [
-          JSON.stringify({
-            targets: [target],
-            prompts: ['{{prompt}}'],
-            redteam: { purpose: 'Test' },
-          }),
-        ],
-        'config.yaml',
-        { type: 'text/yaml' },
-      );
-      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+    ] as const)(
+      'preserves omitted or explicit Vertex regions when importing %j',
+      async (target, region) => {
+        const user = userEvent.setup();
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByRole('button', { name: /Load Config/i }));
+        const file = new File(
+          [
+            JSON.stringify({
+              targets: [target],
+              prompts: ['{{prompt}}'],
+              redteam: { purpose: 'Test' },
+            }),
+          ],
+          'config.yaml',
+          { type: 'text/yaml' },
+        );
+        await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
 
-      await waitFor(() => {
-        expect(useRedTeamConfig.getState().config.target.config?.region).toBe(region);
-      });
-    });
+        await waitFor(() => {
+          const { config } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(typeof target === 'string' ? target : target.id);
+          expect(config.target.config?.region).toBe(region);
+          const exported = loadYaml(generateOrderedYaml(config)) as {
+            targets: { config?: { region?: string } }[];
+          };
+          expect(exported.targets[0].config?.region).toBe(region);
+        });
+      },
+    );
 
     it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'])(
       'should preserve existing Vertex target ID %s when loading a YAML config',

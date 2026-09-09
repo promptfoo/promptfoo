@@ -1596,6 +1596,7 @@ describe('evaluatorHelpers', () => {
         video1: 'file://path/to/video.mp4',
         video2: 'file://path/to/video.webm',
         video3: 'file://path/to/video.mkv',
+        video4: 'file://path/to/video.ogg',
         text: 'This is not a file',
       };
 
@@ -1617,6 +1618,11 @@ describe('evaluatorHelpers', () => {
           type: 'video',
           format: 'mkv',
         },
+        video4: {
+          path: 'file://path/to/video.ogg',
+          type: 'video',
+          format: 'ogg',
+        },
       });
     });
 
@@ -1624,7 +1630,6 @@ describe('evaluatorHelpers', () => {
       const vars = {
         audio1: 'file://path/to/audio.mp3',
         audio2: 'file://path/to/audio.wav',
-        audio3: 'file://path/to/audio.ogg',
         text: 'This is not a file',
       };
 
@@ -1640,11 +1645,6 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/audio.wav',
           type: 'audio',
           format: 'wav',
-        },
-        audio3: {
-          path: 'file://path/to/audio.ogg',
-          type: 'audio',
-          format: 'ogg',
         },
       });
     });
