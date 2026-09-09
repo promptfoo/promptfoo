@@ -8,7 +8,7 @@ import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import { ElevenLabsSTTProvider } from '../../../src/providers/elevenlabs/stt';
 import { ElevenLabsTTSProvider } from '../../../src/providers/elevenlabs/tts';
 
-import type { ElevenLabsSTTConfig } from '../../../src/providers/elevenlabs/stt/types';
+import type { ElevenLabsSTTConfig, STTResponse } from '../../../src/providers/elevenlabs/stt/types';
 
 const transcriptionExample = load(
   readFileSync('examples/provider-elevenlabs/stt/promptfooconfig.yaml', 'utf8'),
@@ -83,6 +83,59 @@ describe('ElevenLabs documented request contracts', () => {
       }
     },
   );
+
+  it.each<{ name: string; transcription: STTResponse }>([
+    {
+      name: 'Scribe v2 words',
+      transcription: {
+        text: 'Hello (laughter)',
+        language_code: 'eng',
+        language_probability: 0.98,
+        words: [
+          {
+            text: 'Hello',
+            type: 'word',
+            start: 0,
+            end: 0.5,
+            speaker_id: 'speaker_0',
+            logprob: -0.1,
+          },
+          { text: ' ', type: 'spacing' },
+          { text: '(laughter)', type: 'audio_event', start: null, end: null, speaker_id: null },
+        ],
+      },
+    },
+    {
+      name: 'legacy compatible endpoint fields',
+      transcription: {
+        text: 'Hello',
+        language: 'en',
+        confidence: 0.95,
+        duration_ms: 500,
+        diarization: [
+          { speaker_id: 'speaker_0', text: 'Hello', start_time_ms: 0, end_time_ms: 500 },
+        ],
+      },
+    },
+  ])('preserves $name in transcription metadata', async ({ transcription }) => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('fixture audio'));
+    vi.mocked(ElevenLabsClient.prototype.upload).mockResolvedValue(transcription);
+    const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+      config: { apiKey: 'fixture-key', diarization: true },
+    });
+
+    const response = await provider.callApi('/fixture.wav');
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe(transcription.text);
+    expect(response.metadata?.transcription).toEqual(transcription);
+    expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledWith(
+      '/speech-to-text',
+      expect.any(Buffer),
+      'fixture.wav',
+      { model_id: 'scribe_v2', diarize: true },
+    );
+  });
 
   it.each([1, 2])(
     'does not replay TTS request version %i and separates latency settings',
