@@ -18,7 +18,7 @@ import {
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockInvokeModelCost } from './pricing';
-import { novaOutputFromMessage, novaParseMessages } from './util';
+import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -2652,17 +2652,15 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
+  // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
+  // regions on 2026-09-04. Listed here so they fail with a clear message instead of
+  // falling through to the family catch-alls below and failing at request time. Matched
+  // without the inference profile prefix so every geo spelling is rejected too.
   if (
     [
       'anthropic.claude-3-opus-20240229-v1:0',
-      'us.anthropic.claude-3-opus-20240229-v1:0',
       'anthropic.claude-opus-4-20250514-v1:0',
-      'us.anthropic.claude-opus-4-20250514-v1:0',
-      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
-      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
-      // falling through to the `anthropic.claude` catch-all and failing at request time.
       'anthropic.claude-3-5-haiku-20241022-v1:0',
-      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
       'anthropic.claude-instant-v1',
       'anthropic.claude-v1',
       'anthropic.claude-v2',
@@ -2671,7 +2669,7 @@ export function getHandlerForModel(
       'cohere.command-light-text-v14',
       'meta.llama2-13b-chat-v1',
       'meta.llama2-70b-chat-v1',
-    ].includes(modelName)
+    ].includes(modelName.replace(INFERENCE_PROFILE_PREFIX, ''))
   ) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
