@@ -1,3 +1,4 @@
+import { Agent as HttpAgent } from 'node:http';
 import crypto from 'crypto';
 
 import { z } from 'zod';
@@ -194,6 +195,8 @@ abstract class SageMakerGenericProvider {
               region: runtimeRegion,
               maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
               retryMode: 'adaptive',
+              // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
+              requestHandler: { httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }) },
               ...(credentials ? { credentials } : {}),
             });
             this.runtimeClients.set(runtimeRegion, client);
