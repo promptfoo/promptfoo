@@ -156,14 +156,15 @@ export class HttpRateLimitError extends Error {
     // return `insufficient_quota` for per-minute deployment saturation too; in
     // that case the server hints at recovery via `Retry-After` or a reset
     // timestamp. Trust that hint: if the wait is short, this is recoverable
-    // rate_limit, not billing exhaustion. Codes that name a billing state
-    // outright (`credit_balance_exhausted`, ...) are never downgraded — some
-    // gateways attach a Retry-After to every 429.
+    // rate_limit, not billing exhaustion. A billing state named outright
+    // (`credit_balance_exhausted`, ...) in either `code` or `type` is never
+    // downgraded — some gateways attach a Retry-After to every 429.
     let kind: RateLimitKind =
       isHardQuotaCode(init.code) || isHardQuotaCode(init.type) ? 'quota' : 'rate_limit';
     if (
       kind === 'quota' &&
       !isDefinitiveBillingCode(init.code) &&
+      !isDefinitiveBillingCode(init.type) &&
       hasNearTermRecoveryHint(retryAfterMs, resetAt)
     ) {
       kind = 'rate_limit';

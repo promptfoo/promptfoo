@@ -606,6 +606,18 @@ describe('HttpRateLimitError: small Retry-After downgrades quota to rate_limit',
     }
   });
 
+  it('does not downgrade a definitive billing value received in type', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'some_new_billing_code',
+      type: 'credit_balance_exhausted',
+      retryAfterMs: 1000,
+      resetAt: Date.now() + 1000,
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('some_new_billing_code');
+  });
+
   it('does not downgrade a definitive billing code when Retry-After is small', () => {
     const err = new HttpRateLimitError({
       status: 429,
