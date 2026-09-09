@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { parseRateLimitHeaders } from '../../scheduler/headerParser';
+import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -148,13 +148,13 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   // Retry-After decides whether a hard-quota code is really a short per-window
   // throttle (see HttpRateLimitError), so the SDK's headers must reach it.
   const headers = sdkErrorHeaders(err);
-  const parsed = headers ? parseRateLimitHeaders(headers) : undefined;
+  const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
   return new HttpRateLimitError({
     status: 429,
     code,
     type,
-    retryAfterMs: parsed?.retryAfterMs,
-    resetAt: parsed?.resetAt,
+    retryAfterMs: timing?.retryAfterMs,
+    resetAt: timing?.resetAt,
     headers,
   });
 }

@@ -532,6 +532,19 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Retry-After / reset timing from a rate-limit response's headers, for callers
+ * that build an {@link HttpRateLimitError} from an SDK error rather than a
+ * `Response`. Keeps the header parsing in one place.
+ */
+export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
+  retryAfterMs?: number;
+  resetAt?: number;
+} {
+  const parsed = parseRateLimitHeaders(headers);
+  return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
 function buildHttpRateLimitError(
   response: Response,
   body: unknown,
