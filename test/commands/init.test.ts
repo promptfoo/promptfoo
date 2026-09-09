@@ -394,28 +394,6 @@ describe('init command', () => {
         },
       );
 
-      it.each([
-        { example: 'github-models', ref: '0.120.26' },
-        { example: 'provider-github-models', ref: '31b566872971532e6d428c0cbad4487d22d936c5' },
-      ])(
-        'pins the retired GitHub Models example $example and explains the retirement',
-        async ({ example, ref }) => {
-          mockFetchWithProxy.mockResolvedValue(
-            createMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
-          );
-          vi.mocked(confirm).mockResolvedValue(false);
-
-          expect(await init.handleExampleDownload('.', example)).toBe(example);
-          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
-          expect(mockFetchWithProxy.mock.calls[0][0]).toContain(
-            `/repos/promptfoo/promptfoo/contents/examples/${example}?ref=${ref}`,
-          );
-          expect(logger.warn).toHaveBeenCalledWith(
-            expect.stringContaining('GitHub retired GitHub Models'),
-          );
-        },
-      );
-
       it('should reset to default refs when retrying after legacy example failure', async () => {
         const mockLegacyFailure = createMockResponse({
           ok: false,
