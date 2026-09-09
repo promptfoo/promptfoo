@@ -21,14 +21,22 @@ let nextAbortSignalId = 0;
 
 /**
  * The error a cancelled provider call should reject with: the signal's own abort reason
- * when it already carries one, otherwise an `AbortError` callers can recognize.
+ * when it already carries one, otherwise an `AbortError` callers can recognize. Any other
+ * reason (a `TimeoutError`, a plain error, a string) is kept as the error's `cause` so the
+ * original context survives the rename.
  */
 export function getAbortError(signal: AbortSignal): Error {
   const reason = signal.reason;
   if (reason instanceof Error && reason.name === 'AbortError') {
     return reason;
   }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string' && reason
+        ? reason
+        : 'Request was aborted';
+  const error = new Error(message, { cause: reason });
   error.name = 'AbortError';
   return error;
 }

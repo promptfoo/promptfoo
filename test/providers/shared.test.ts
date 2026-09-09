@@ -3,6 +3,7 @@ import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
   clampCachedTokens,
+  getAbortError,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -40,6 +41,49 @@ describe('Shared Provider Functions', () => {
 
       expect(getRequestTimeoutMs()).toBe(12_345);
       expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    });
+  });
+
+  describe('getAbortError', () => {
+    it('returns the abort reason unchanged when it is already an AbortError', () => {
+      const controller = new AbortController();
+      const reason = new Error('cancelled by user');
+      reason.name = 'AbortError';
+      controller.abort(reason);
+
+      expect(getAbortError(controller.signal)).toBe(reason);
+    });
+
+    it('keeps a non-AbortError reason as the cause', () => {
+      const controller = new AbortController();
+      const reason = new Error('eval timed out');
+      controller.abort(reason);
+
+      const error = getAbortError(controller.signal);
+      expect(error.name).toBe('AbortError');
+      expect(error.message).toBe('eval timed out');
+      expect(error.cause).toBe(reason);
+    });
+
+    it('keeps a string abort reason as the message and the cause', () => {
+      const controller = new AbortController();
+      controller.abort('user pressed ctrl+c');
+
+      const error = getAbortError(controller.signal);
+      expect(error.name).toBe('AbortError');
+      expect(error.message).toBe('user pressed ctrl+c');
+      expect(error.cause).toBe('user pressed ctrl+c');
+    });
+
+    it('falls back to a generic message for a reason that is neither an error nor a string', () => {
+      const controller = new AbortController();
+      const reason = { code: 'CANCELLED' };
+      controller.abort(reason);
+
+      const error = getAbortError(controller.signal);
+      expect(error.name).toBe('AbortError');
+      expect(error.message).toBe('Request was aborted');
+      expect(error.cause).toBe(reason);
     });
   });
 
