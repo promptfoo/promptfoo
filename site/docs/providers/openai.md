@@ -908,7 +908,20 @@ For audio output, set `modalities: [text, audio]` and a top-level `voice`, such 
 
 The legacy `gpt-4o-mini-realtime-preview-2024-12-17` selector still routes to Realtime. Check [OpenAI's lifecycle notices](https://developers.openai.com/api/docs/deprecations) and its [model card](https://developers.openai.com/api/docs/models/gpt-4o-mini-realtime-preview) before using this preview model.
 
-The result includes audio for playback and a transcript for text assertions. The built-in `llm-rubric` assertion grades the transcript; it does not automatically send the generated audio to the grader. Grading voice quality or other acoustic properties requires a custom grading integration.
+The result includes audio for playback and a transcript for text assertions. To grade tone, pacing, or pronunciation, select an audio-capable Chat Completions grader:
+
+```yaml
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: The speaker sounds calm and speaks at a steady pace.
+      provider:
+        id: openai:chat:gpt-audio-1.5
+        config:
+          modalities: [text]
+```
+
+Promptfoo sends the generated audio to this grader and requests a text grade. Text-only graders continue to evaluate the transcript. Audio must be inline base64 WAV or MP3, up to 20 MiB. Keep the Realtime provider's default `output_audio_format: pcm16`; Promptfoo converts it to WAV for both single requests and persistent conversations. G.711 output requires conversion before audio grading. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
 
 ### Session settings {#realtime-specific-configuration-options}
 
