@@ -205,6 +205,12 @@ jobs:
         with:
           ruby-version: '4.0.1'
 
+      - name: Use Go for installed wrapper acceptance
+        if: matrix.node == '24.x'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: src/golang/go.mod
+
       - name: Build
         run: npm run build
 
