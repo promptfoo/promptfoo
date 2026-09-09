@@ -3,7 +3,7 @@ import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { splitLocalOptions } from './openai/util';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';

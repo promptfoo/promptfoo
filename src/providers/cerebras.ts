@@ -1,5 +1,5 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { splitLocalOptions } from './openai/util';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
