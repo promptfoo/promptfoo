@@ -800,7 +800,7 @@ describe('fetchWithCache', () => {
 
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
       if (unsignaledResult.status === 'fulfilled') {
@@ -814,6 +814,10 @@ describe('fetchWithCache', () => {
 
     it('should not let aborted signaled callers join unsignaled in-flight responses', async () => {
       const controller = new AbortController();
+      let resolveSignaledStarted: () => void = () => {};
+      const signaledStarted = new Promise<void>((resolve) => {
+        resolveSignaledStarted = resolve;
+      });
       let resolveUnsignaledFetch: (value: Response) => void = () => {};
       const unsignaledFetch = new Promise<Response>((resolve) => {
         resolveUnsignaledFetch = resolve;
@@ -822,6 +826,7 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
         const signal = requestOptions?.signal;
         if (signal === controller.signal) {
+          resolveSignaledStarted();
           if (signal.aborted) {
             return Promise.reject(new Error('Aborted'));
           }
@@ -835,7 +840,7 @@ describe('fetchWithCache', () => {
       const unsignaledPromise = fetchWithCache(url, {}, 1000);
       const signaledPromise = fetchWithCache(url, { signal: controller.signal }, 1000);
 
-      await Promise.resolve();
+      await signaledStarted;
       controller.abort();
       resolveUnsignaledFetch(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
       const [unsignaledResult, signaledResult] = await Promise.allSettled([
@@ -852,7 +857,7 @@ describe('fetchWithCache', () => {
       }
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });

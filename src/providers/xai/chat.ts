@@ -2,7 +2,7 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
-import { clampCachedTokens } from '../shared';
+import { clampCachedTokens, isCallerAbortError, throwIfAborted } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -822,8 +822,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
-      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'AbortException')) {
-        throw err;
+      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+        throwIfAborted(callApiOptions?.abortSignal);
       }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -77,8 +78,74 @@ describe('OpenAI-compatible chat cancellation', () => {
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     controller.abort();
-    initialization.resolve();
     await rejected;
+    expect(fetch).not.toHaveBeenCalled();
+    initialization.resolve();
+    await target.cleanup();
+  });
+
+  it('releases its scheduler slot while shared MCP connection remains pending for another caller', async () => {
+    const connection = createDeferred<void>();
+    const connecting = createDeferred<void>();
+    const connect = vi.spyOn(Client.prototype, 'connect').mockImplementation(() => {
+      connecting.resolve();
+      return connection.promise;
+    });
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [] });
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: { enabled: true, servers: [{ url: 'https://mcp.fixture.test' }] },
+      },
+    });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const wrapped = wrapProviderWithRateLimiting(target, registry);
+    const controller = new AbortController();
+    const first = wrapped.callApi('cancelled', undefined, { abortSignal: controller.signal });
+    const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    await connecting.promise;
+    const survivorSettled = vi.fn();
+    const survivor = target.callApi('survivor').then((value) => {
+      survivorSettled();
+      return value;
+    });
+
+    try {
+      controller.abort();
+      await rejected;
+      expect(Object.values(registry.getMetrics())).toEqual([
+        expect.objectContaining({ activeRequests: 0 }),
+      ]);
+      expect(survivorSettled).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+
+      fetch.mockResolvedValueOnce(response());
+      connection.resolve();
+      await expect(survivor).resolves.toMatchObject({ output: 'fixture output' });
+      expect(connect).toHaveBeenCalledOnce();
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      connection.resolve();
+      await survivor;
+      await target.cleanup();
+      registry.dispose();
+    }
+  });
+
+  it('observes shared setup failure after cancelling a pending initialization wait', async () => {
+    const initialization = createDeferred<void>();
+    vi.spyOn(MCPClient.prototype, 'initialize').mockReturnValue(initialization.promise);
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+    });
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    const failure = new Error('late initialization failure');
+    initialization.reject(failure);
+    await expect(target.callApi('fixture')).rejects.toBe(failure);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -349,6 +416,18 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it.each(['AbortError', 'AbortException'])(
+    'normalizes a mocked noncaller %s as an ordinary provider error',
+    async (name) => {
+      const error = Object.assign(new Error('fixture independent failure'), { name });
+      vi.spyOn(cache, 'fetchWithCache').mockRejectedValueOnce(error);
+      await expect(provider().callApi('fixture')).resolves.toMatchObject({
+        error: `API call error: ${name}: fixture independent failure`,
+        metadata: { http: { status: 0, statusText: 'Error' } },
+      });
+    },
+  );
+
   it('does not relabel an unrelated error merely because the caller cancelled', async () => {
     const controller = new AbortController();
     vi.spyOn(cache, 'fetchWithCache').mockImplementationOnce(async () => {
@@ -446,6 +525,23 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each(['AbortError', 'AbortException'])(
+    'preserves xAI ordinary handling for a mocked noncaller %s',
+    async (name) => {
+      const target = (await loadApiProvider('xai:grok-4', {
+        options: { config: { apiKey: 'fixture-key', maxRetries: 0 } },
+      })) as OpenAiChatCompletionProvider;
+      vi.spyOn(target, 'getOpenAiBody').mockRejectedValueOnce(
+        Object.assign(new Error('fixture preparation failure'), { name }),
+      );
+      await expect(target.callApi('fixture')).resolves.toEqual({
+        error:
+          'x.ai API error: fixture preparation failure\n\nIf this persists, verify your API key at https://x.ai/',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['openai:chat:gpt-4o', 'xai:grok-4'])(
     'preserves a custom timeout abort through the default registry for %s',
     async (id) => {
@@ -470,7 +566,7 @@ describe('OpenAI-compatible chat cancellation', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(caught).toBe(reason);
         await pending;
-        expect(callApi).toHaveBeenCalledOnce();
+        expect(callApi).not.toHaveBeenCalled();
         expect(fetch).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
       } finally {

@@ -8,7 +8,7 @@ import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
-import { getRequestTimeoutMs } from './providers/shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
@@ -844,6 +844,8 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  throwIfAborted(signal);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -894,7 +896,11 @@ export async function fetchWithCache<T = unknown>(
 
   const cache = getCacheInstance();
 
-  const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+  const cachedResponse = await waitForPromiseWithAbort(
+    cache.get<SerializedFetchResponse>(cacheKey),
+    signal,
+  );
+  throwIfAborted(signal);
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -925,7 +931,9 @@ export async function fetchWithCache<T = unknown>(
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
+  // Keep cache publication alive for other callers when this caller stops waiting.
+  const response = await waitForPromiseWithAbort(inflightResponse, signal);
+  throwIfAborted(signal);
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

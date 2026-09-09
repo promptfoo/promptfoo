@@ -5,6 +5,7 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import { isCallerAbortError, throwIfAborted } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -55,6 +56,7 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
+  abortSignal,
 }: {
   functionName: string;
   args: string;
@@ -64,9 +66,12 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
+  /** Checked before invocation and after settlement; does not stop running callback code. */
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
+    throwIfAborted(abortSignal);
     let callback = cache[functionName];
 
     if (!callback) {
@@ -82,15 +87,18 @@ export async function executeProviderFunctionCallback({
         cache[functionName] = callback;
       }
     }
+    throwIfAborted(abortSignal);
 
     if (!callback) {
       throw new Error(`No callback found for function '${functionName}'`);
     }
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-      callback(args),
-    );
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+      throwIfAborted(abortSignal);
+      return callback(args);
+    });
+    throwIfAborted(abortSignal);
 
     if (result === undefined || result === null) {
       return '';
@@ -105,6 +113,9 @@ export async function executeProviderFunctionCallback({
     }
     return String(result);
   } catch (error: any) {
+    if (isCallerAbortError(error, abortSignal)) {
+      throwIfAborted(abortSignal);
+    }
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
     );

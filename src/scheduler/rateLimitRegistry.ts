@@ -4,6 +4,7 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
+import { throwIfAborted } from './cancellation';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
@@ -46,6 +47,7 @@ export class RateLimitRegistry extends EventEmitter {
     provider: ApiProvider,
     callFn: () => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -57,6 +59,7 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
+      throwIfAborted(options?.abortSignal);
       return withFetchRetryContext(providerMaxRetries, callFn);
     }
 
@@ -74,6 +77,7 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
+        abortSignal: options?.abortSignal,
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,

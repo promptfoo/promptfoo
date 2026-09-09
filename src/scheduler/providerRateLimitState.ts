@@ -5,14 +5,11 @@ import {
   type ConcurrencyChangeResult,
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
+import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
-/**
- * Sentinel error for rate limit exhaustion.
- * Used to short-circuit the catch block and prevent double-release/double-count.
- */
 class RateLimitExhaustedError extends Error {
   constructor(message: string) {
     super(message);
@@ -137,137 +134,119 @@ export class ProviderRateLimitState extends EventEmitter {
        * reset them.
        */
       maxRetriesOverride?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<T> {
     this.totalRequests++;
     let attempt = 0;
-    let lastError: Error | undefined;
     const retryPolicy =
       options.maxRetriesOverride === undefined
         ? this.retryPolicy
         : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
 
-    while (true) {
-      // Acquire slot (may wait for rate limit window via queue)
-      // Queue timeout failures are counted as failed requests
-      try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`);
-      } catch (acquireError) {
-        // Queue timeout or other acquire failures
-        this.failedRequests++;
-        this.emit('queue:timeout', {
-          rateLimitKey: this.rateLimitKey,
-          requestId,
-          error: String(acquireError),
-        });
-        throw acquireError;
-      }
-
-      const startTime = Date.now();
-
-      try {
-        const result = await callFn();
-        const latencyMs = Date.now() - startTime;
-        this.latencies.push(latencyMs);
-
-        // Extract headers and check for rate limit
-        const headers = options.getHeaders?.(result);
-        const isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
-        const retryAfterMs = options.getRetryAfter?.(result, undefined);
-
-        // Update state from headers BEFORE releasing slot
-        if (headers) {
-          this.updateFromHeaders(headers, isRateLimited);
+    try {
+      while (true) {
+        try {
+          await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
+        } catch (acquireError) {
+          if (!options.abortSignal?.aborted) {
+            this.emit('queue:timeout', {
+              rateLimitKey: this.rateLimitKey,
+              requestId,
+              error: String(acquireError),
+            });
+          }
+          throw acquireError;
         }
 
-        // Release slot
-        this.slotQueue.release();
+        // A result can release its slot before retry backoff. Only this owner may
+        // release it, including aborts between the grant and callFn invocation.
+        let ownsSlot = true;
+        const releaseSlot = () => {
+          if (ownsSlot) {
+            ownsSlot = false;
+            this.slotQueue.release();
+          }
+        };
+        const startTime = Date.now();
+        let retryError: Error | undefined;
+        let isRateLimited: boolean;
+        let retryAfterMs: number | undefined;
 
-        if (isRateLimited) {
+        try {
+          throwIfAborted(options.abortSignal);
+          const result = await callFn();
+          throwIfAborted(options.abortSignal);
+          this.latencies.push(Date.now() - startTime);
+
+          const headers = options.getHeaders?.(result);
+          isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
+          retryAfterMs = options.getRetryAfter?.(result, undefined);
+
+          // Learn quota before releasing capacity to another queued caller.
+          if (headers) {
+            this.updateFromHeaders(headers, isRateLimited);
+          }
+          releaseSlot();
+
+          if (!isRateLimited) {
+            this.handleSuccess();
+            this.completedRequests++;
+            return result;
+          }
           this.handleRateLimit(retryAfterMs);
+        } catch (error) {
+          if (ownsSlot) {
+            this.latencies.push(Date.now() - startTime);
+          }
+          releaseSlot();
 
-          // Check if we should retry
-          if (shouldRetry(attempt, undefined, true, retryPolicy)) {
-            attempt++;
-            this.retriedRequests++;
-            const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
-
-            this.emit('request:retrying', {
-              rateLimitKey: this.rateLimitKey,
-              attempt,
-              delayMs: delay,
-              reason: 'ratelimit',
-            });
-
-            await this.sleep(delay);
-            continue;
+          // Cancellation is final, even for a custom reason or a message that
+          // resembles a retryable error. Preserve unrelated provider errors.
+          if (
+            options.abortSignal?.aborted ||
+            (error instanceof Error &&
+              (error.name === 'AbortError' || error.name === 'AbortException'))
+          ) {
+            throw error;
           }
 
-          // Rate limited and no more retries - count as FAILED, throw sentinel error
-          // Using sentinel error to prevent catch block from double-releasing/double-counting
-          this.failedRequests++;
-          throw new RateLimitExhaustedError(
-            `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+          retryError = error as Error;
+          isRateLimited =
+            options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError);
+          retryAfterMs = options.getRetryAfter?.(undefined, retryError);
+          if (isRateLimited) {
+            this.handleRateLimit(retryAfterMs);
+          }
+        } finally {
+          releaseSlot();
+        }
+
+        if (!shouldRetry(attempt, retryError, isRateLimited, retryPolicy)) {
+          throw (
+            retryError ??
+            new RateLimitExhaustedError(
+              `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+            )
           );
         }
 
-        // Success
-        this.handleSuccess();
-        this.completedRequests++;
-        return result;
-      } catch (error) {
-        // Re-throw sentinel error immediately to prevent double-release/double-count
-        if (error instanceof RateLimitExhaustedError) {
-          throw error;
-        }
+        attempt++;
+        this.retriedRequests++;
+        const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+        this.emit('request:retrying', {
+          rateLimitKey: this.rateLimitKey,
+          attempt,
+          delayMs: delay,
+          reason: isRateLimited ? 'ratelimit' : 'error',
+        });
 
-        const latencyMs = Date.now() - startTime;
-        this.latencies.push(latencyMs);
-
-        lastError = error as Error;
-
-        // Release slot
-        this.slotQueue.release();
-
-        // Cancellation is final, even when its message resembles a retryable error.
-        if (
-          error instanceof Error &&
-          (error.name === 'AbortError' || error.name === 'AbortException')
-        ) {
-          this.failedRequests++;
-          throw error;
-        }
-
-        // Check if rate limited (from error, not result)
-        const isRateLimited =
-          options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
-        const retryAfterMs = options.getRetryAfter?.(undefined, lastError);
-
-        if (isRateLimited) {
-          this.handleRateLimit(retryAfterMs);
-        }
-
-        // Check if we should retry
-        if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
-          attempt++;
-          this.retriedRequests++;
-          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
-
-          this.emit('request:retrying', {
-            rateLimitKey: this.rateLimitKey,
-            attempt,
-            delayMs: delay,
-            reason: isRateLimited ? 'ratelimit' : 'error',
-          });
-
-          await this.sleep(delay);
-          continue;
-        }
-
-        // No more retries
-        this.failedRequests++;
-        throw lastError;
+        // Both result and exception retries wait after their slot is released.
+        await sleepWithAbort(delay, options.abortSignal);
       }
+    } catch (error) {
+      this.failedRequests++;
+      throw error;
     }
   }
 
@@ -374,10 +353,6 @@ export class ProviderRateLimitState extends EventEmitter {
       message.includes('rate limit') ||
       message.includes('too many requests')
     );
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

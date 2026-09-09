@@ -4,7 +4,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
-import { getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs, isCallerAbortError, throwIfAborted } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -157,6 +157,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'openrouter',
@@ -203,6 +204,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   ): Promise<ProviderResponse> {
     // Get the request body and config
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
@@ -243,11 +245,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));
+      throwIfAborted(callApiOptions?.abortSignal);
 
       if (status < 200 || status >= 300) {
         return {
@@ -255,6 +259,9 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         };
       }
     } catch (err) {
+      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
