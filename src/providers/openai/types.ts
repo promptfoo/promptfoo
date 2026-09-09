@@ -112,10 +112,10 @@ export interface OpenAiMCPTool {
 }
 
 // Responses API specific tool types
-export interface OpenAiWebSearchTool {
+export interface OpenAiWebSearchTool extends Omit<OpenAI.Responses.WebSearchTool, 'type'> {
   type: 'web_search' | 'web_search_preview';
-  search_context_size?: 'small' | 'medium' | 'large';
-  user_location?: string;
+  external_web_access?: boolean;
+  return_token_budget?: 'default' | 'unlimited';
 }
 
 export interface OpenAiCodeInterpreterTool {
