@@ -177,11 +177,16 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
    * inherited from a shared provider config. `OPENAI_API_KEY` names one specific vendor's
    * credential, so it is inherited only when the config routes to that vendor; otherwise a
    * `portkey:claude-sonnet-4-6` target would ship the user's OpenAI key to a different
-   * provider. Callers that need another bearer can set one explicitly through `config.apiKey`
-   * or `config.headers`.
+   * provider. A passthrough to another vendor takes its bearer from `config.apiKey`; in the
+   * managed shapes, where nothing is forwarded, only `config.headers` can still set one.
    */
   getApiKey(): string | undefined {
-    const upstream = this.config.portkeyProvider;
+    // Provider names come from user YAML, so guard the type and compare case-insensitively:
+    // `portkeyProvider: OpenAI` names the same upstream as `openai`.
+    const upstream =
+      typeof this.config.portkeyProvider === 'string'
+        ? this.config.portkeyProvider.toLowerCase()
+        : '';
     if (
       !upstream ||
       upstream.startsWith('@') ||

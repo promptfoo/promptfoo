@@ -308,6 +308,26 @@ describe('PortkeyChatCompletionProvider', () => {
       expect(provider.getApiKey()).toBe('sk-ant-explicit');
     });
 
+    // Provider names arrive from user YAML, where casing is not enforced.
+    it.each([['openai'], ['OpenAI'], ['OPENAI']])(
+      'should inherit OPENAI_API_KEY for an openai passthrough spelled %s',
+      (portkeyProvider) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+          config: { portkeyProvider },
+        });
+        expect(provider.getApiKey()).toBe('sk-openai');
+      },
+    );
+
+    it('should not throw when portkeyProvider is not a string', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 123 as unknown as string },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
     it('should prefer the per-provider env override for the openai passthrough bearer', () => {
       vi.stubEnv('OPENAI_API_KEY', 'sk-process-env');
       const provider = new PortkeyChatCompletionProvider('gpt-4o', {
