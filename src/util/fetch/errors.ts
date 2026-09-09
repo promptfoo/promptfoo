@@ -24,6 +24,7 @@ export interface SystemError extends Error {
  */
 export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
+  'credit_balance_exhausted',
   'billing_hard_limit_reached',
   'billing_not_active',
   'access_terminated',
@@ -210,6 +211,27 @@ export function isHttpRateLimitError(err: unknown): err is HttpRateLimitError {
   return err instanceof HttpRateLimitError;
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Pick the code to classify on from a `{ code, type }` pair. The specific
+ * `code` wins, unless only the broader `type` names a hard quota (OpenAI pairs
+ * `type: 'insufficient_quota'` with billing-specific codes such as
+ * `credit_balance_exhausted`); otherwise an unrecognized code would hide the
+ * quota classification and the request would be retried.
+ */
+function pickRateLimitErrorCode(
+  code: string | undefined,
+  type: string | undefined,
+): string | undefined {
+  if (code !== undefined && (isHardQuotaCode(code) || !isHardQuotaCode(type))) {
+    return code;
+  }
+  return type ?? code;
+}
+
 /**
  * Best-effort extraction of an error code from a parsed response body across
  * provider variants (OpenAI / Azure / Anthropic / generic JSON-RPC style).
@@ -223,21 +245,13 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
   // OpenAI / Azure OpenAI: { error: { code, type, message } }
   if (typeof root.error === 'object' && root.error !== null) {
     const err = root.error as Record<string, unknown>;
-    if (typeof err.code === 'string' && err.code.length > 0) {
-      return err.code;
-    }
-    if (typeof err.type === 'string' && err.type.length > 0) {
-      return err.type;
+    const code = pickRateLimitErrorCode(nonEmptyString(err.code), nonEmptyString(err.type));
+    if (code !== undefined) {
+      return code;
     }
   }
 
-  if (typeof root.code === 'string' && root.code.length > 0) {
-    return root.code;
-  }
-  if (typeof root.type === 'string' && root.type.length > 0) {
-    return root.type;
-  }
-  return undefined;
+  return pickRateLimitErrorCode(nonEmptyString(root.code), nonEmptyString(root.type));
 }
 
 /**

@@ -1818,6 +1818,40 @@ describe('fetchWithRetries', () => {
       expect(sleep).not.toHaveBeenCalled();
     });
 
+    it('fails fast on credit_balance_exhausted (OpenAI prepaid balance at 0)', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            code: 'credit_balance_exhausted',
+            message: 'You have no credits remaining',
+            type: 'insufficient_quota',
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('quota');
+      expect(rl.code).toBe('credit_balance_exhausted');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('fails fast when only error.type names a hard quota next to an unknown code', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: { error: { code: 'new_billing_code', type: 'insufficient_quota' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect((err as HttpRateLimitError).code).toBe('insufficient_quota');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('fails fast on billing_hard_limit_reached', async () => {
       const quotaResponse = rateLimitedJsonResponse({
         body: { error: { code: 'billing_hard_limit_reached', message: 'billing limit hit' } },

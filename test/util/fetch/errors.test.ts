@@ -218,6 +218,7 @@ describe('isTransientConnectionError', () => {
 describe('isHardQuotaCode', () => {
   it.each([
     ['insufficient_quota', true],
+    ['credit_balance_exhausted', true],
     ['billing_hard_limit_reached', true],
     ['billing_not_active', true],
     ['access_terminated', true],
@@ -247,6 +248,37 @@ describe('extractRateLimitErrorCode', () => {
     expect(extractRateLimitErrorCode({ error: { type: 'rate_limit_error' } })).toBe(
       'rate_limit_error',
     );
+  });
+
+  it('keeps the specific code when both code and type name a hard quota', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: {
+          code: 'credit_balance_exhausted',
+          message: 'You have no credits remaining',
+          type: 'insufficient_quota',
+        },
+      }),
+    ).toBe('credit_balance_exhausted');
+  });
+
+  it('prefers a hard-quota error.type over an unrecognized error.code', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: { code: 'some_new_billing_code', type: 'insufficient_quota' },
+      }),
+    ).toBe('insufficient_quota');
+    expect(
+      extractRateLimitErrorCode({ code: 'some_new_billing_code', type: 'quota_exceeded' }),
+    ).toBe('quota_exceeded');
+  });
+
+  it('keeps error.code when error.type is not a hard quota', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: { code: 'rate_limit_exceeded', type: 'rate_limit_error' },
+      }),
+    ).toBe('rate_limit_exceeded');
   });
 
   it('reads top-level code', () => {
