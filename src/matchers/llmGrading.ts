@@ -166,10 +166,16 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
 }
 
 function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
-  if (!audio?.data || llmOutput.trim() !== audio.data.trim()) {
+  if (!audio?.data) {
     return llmOutput;
   }
-  return audio.transcript || '[Audio output]';
+  const outputData = llmOutput
+    .trim()
+    .replace(/^data:audio\/[^;,]+;base64,/i, '')
+    .replace(/\s/g, '');
+  return outputData === audio.data.replace(/\s/g, '')
+    ? audio.transcript || '[Audio output]'
+    : llmOutput;
 }
 
 export async function matchesLlmRubric(

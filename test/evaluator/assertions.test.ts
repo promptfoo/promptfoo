@@ -15,6 +15,41 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('finishes audio grading before collecting the next serial target response', async () => {
+    const callOrder: string[] = [];
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+      callOrder.push('target');
+      return {
+        output: 'Hello.',
+        audio: { data: Buffer.alloc(2048, 1).toString('base64'), format: 'wav' },
+      };
+    });
+    const grader: ApiProvider = {
+      id: () => 'audio-grader',
+      getAudioInputFormat: () => 'openai',
+      callApi: vi.fn(async () => {
+        callOrder.push('grader');
+        return { output: '{"pass":true,"score":1}' };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Say hello')],
+      tests: Array.from({ length: 3 }, () => ({
+        assert: [{ type: 'llm-rubric', value: 'The speaker sounds calm.', provider: grader }],
+      })),
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual(['target', 'grader', 'target', 'grader', 'target', 'grader']);
+    for (const row of summary.results) {
+      expect(row.response?.audio?.blobRef).toBeDefined();
+      expect(row.response?.audio?.data).toBeUndefined();
+    }
+  });
+
   it.each([1, 2])(
     'grades native audio after blob extraction with concurrency %s',
     async (maxConcurrency) => {

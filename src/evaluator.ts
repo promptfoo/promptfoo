@@ -1446,7 +1446,8 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
-  if (deferGrading) {
+  // Finish audio grading per row instead of retaining every inline clip in the queue.
+  if (deferGrading && !response.audio?.data) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(

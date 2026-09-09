@@ -143,6 +143,26 @@ describe('llm-rubric audio grading', () => {
     ).toBe(data);
   });
 
+  it.each([
+    [audio.data, audio.data.replace(/.{4}/g, '$&\r\n')],
+    [audio.data.replace(/.{4}/g, '$&\r\n'), audio.data],
+    [`data:audio/wav;base64,${audio.data}`, audio.data],
+  ])('recognizes equivalent base64 output formatting', async (output, data) => {
+    const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
+    const targetAudio = { ...audio, data };
+    const result = await grade(provider, targetAudio, {
+      output,
+      outputString: output,
+      providerResponse: { output, audio: targetAudio },
+    });
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+    expect(body.messages[1].content[0]).toEqual({
+      type: 'text',
+      text: 'Grade Hello. for The speaker sounds calm.',
+    });
+    expect(result.metadata?.renderedGradingPrompt).not.toContain(audio.data);
+  });
+
   it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
     'keeps transcript grading for a text grader ($modelName)',
     async (provider) => {
