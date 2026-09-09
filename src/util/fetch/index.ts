@@ -20,6 +20,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
@@ -669,7 +670,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;

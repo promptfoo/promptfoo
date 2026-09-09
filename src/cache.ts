@@ -20,6 +20,7 @@ import {
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -596,7 +597,7 @@ function getAbortSignalId(signal: AbortSignal) {
 }
 
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
@@ -851,7 +852,7 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
   // Forward a Request-owned signal too, while retaining an explicit override.

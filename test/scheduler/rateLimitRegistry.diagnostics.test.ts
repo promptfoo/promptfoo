@@ -8,6 +8,7 @@ import {
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { SlotQueue } from '../../src/scheduler/slotQueue';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 import { createDeferred } from '../util/utils';
 
@@ -87,6 +88,93 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
         activeRequests: 0,
         queueDepth: 0,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([true, false])(
+    'learns completed success quota before releasing its slot (caller cancelled: %s)',
+    async (cancelled) => {
+      const registry = createRegistry();
+      const controller = new AbortController();
+      const secondController = new AbortController();
+      const removeListener = vi.spyOn(secondController.signal, 'removeEventListener');
+      const releaseSlot = vi.spyOn(SlotQueue.prototype, 'release');
+      const learned = vi.fn();
+      registry.on('ratelimit:learned', learned);
+      const response = createDeferred<ProviderResponse>();
+      const callApi = vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementationOnce(() => response.promise)
+        .mockResolvedValue({ output: 'unaffected caller' });
+      const provider: ApiProvider = {
+        id: () => 'completed-quota-pool',
+        config: { maxRetries: 3 },
+        callApi,
+      };
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const first = wrapped
+        .callApi('first', undefined, { abortSignal: controller.signal })
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(callApi).toHaveBeenCalledOnce();
+      const second = wrapped.callApi('second', undefined, {
+        abortSignal: secondController.signal,
+      });
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 1,
+        queueDepth: 1,
+      });
+      const reason = new Error('cancel completed caller');
+      if (cancelled) {
+        controller.abort(reason);
+      }
+      response.resolve({
+        output: 'completed first response',
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              'x-ratelimit-limit-requests': '10',
+              'x-ratelimit-remaining-requests': '0',
+              'x-ratelimit-reset-requests': '2s',
+            },
+          },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      if (cancelled) {
+        expect(await first).toMatchObject({ name: 'AbortError', message: reason.message });
+      } else {
+        expect(await first).toMatchObject({ output: 'completed first response' });
+      }
+      expect(learned).toHaveBeenCalledOnce();
+      expect(releaseSlot).toHaveBeenCalledOnce();
+      expect(callApi).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 0,
+        queueDepth: 1,
+        completedRequests: cancelled ? 0 : 1,
+        failedRequests: cancelled ? 1 : 0,
+        retriedRequests: 0,
+      });
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(callApi).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(second).resolves.toEqual({ output: 'unaffected caller' });
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(releaseSlot).toHaveBeenCalledTimes(2);
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        totalRequests: 2,
+        activeRequests: 0,
+        queueDepth: 0,
+        completedRequests: cancelled ? 1 : 2,
+        failedRequests: cancelled ? 1 : 0,
+        retriedRequests: 0,
       });
       expect(vi.getTimerCount()).toBe(0);
     },

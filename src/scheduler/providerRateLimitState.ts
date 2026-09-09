@@ -182,11 +182,6 @@ export class ProviderRateLimitState extends EventEmitter {
             'error' in result &&
             typeof result.error === 'string' &&
             result.error.length > 0;
-          if (!hasErrorResponse) {
-            throwIfAborted(options.abortSignal);
-          }
-          this.latencies.push(Date.now() - startTime);
-
           const headers = options.getHeaders?.(result);
           isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
           retryAfterMs = options.getRetryAfter?.(result, undefined);
@@ -198,6 +193,12 @@ export class ProviderRateLimitState extends EventEmitter {
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
           }
+          // A completed response still consumes quota when its caller cancels.
+          // Learn it before discarding the result and releasing the slot.
+          if (!hasErrorResponse) {
+            throwIfAborted(options.abortSignal);
+          }
+          this.latencies.push(Date.now() - startTime);
           releaseSlot();
 
           // Keep an independent failure's diagnostic and metadata intact, but
