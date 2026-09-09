@@ -88,8 +88,8 @@ export function createCerebrasProvider(
         model?: unknown;
       };
       const effectiveConfig = { ...passthrough, ...config };
-      const modelName =
-        typeof effectiveConfig.model === 'string' ? effectiveConfig.model : this.modelName;
+      // The request body uses the provider selector unless passthrough overrides it.
+      const modelName = typeof passthrough.model === 'string' ? passthrough.model : this.modelName;
       return calculateCerebrasCost(
         modelName,
         effectiveConfig,

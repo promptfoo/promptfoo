@@ -969,6 +969,26 @@ describe('loadApiProvider', () => {
     },
   );
 
+  it.each(
+    ['codex-sdk', 'codex-app-server'].flatMap((route) =>
+      [
+        { base_url: 'https://gateway.example/v1' },
+        { model_provider: 'tenant' },
+        { cli_config: { model_provider: 'tenant' } },
+      ].map((config) => ({ route, config })),
+    ),
+  )(
+    'loads opaque custom Codex models through the public loader ($route, $config)',
+    async ({ route, config }) => {
+      const provider = await loadApiProvider(`openai:${route}:vendor/gpt-transcribe`, {
+        options: { id: 'tenant-provider', config },
+      });
+
+      expect(provider.id()).toBe('tenant-provider');
+      expect(provider).toHaveProperty('config.model', 'vendor/gpt-transcribe');
+    },
+  );
+
   it('should load OpenAI Codex provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex:gpt-5.4');
 

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import { calculateCerebrasCost, createCerebrasProvider } from '../../src/providers/cerebras';
 import { loadApiProvider } from '../../src/providers/index';
 import { mockProcessEnv } from '../util/utils';
@@ -10,15 +11,22 @@ import type { ApiProvider } from '../../src/types/index';
 
 type ProviderEnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
 
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
+
 describe('Cerebras provider', () => {
   let provider: ApiProvider;
   let restoreEnv: () => void;
 
   beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
     restoreEnv = mockProcessEnv({ CEREBRAS_API_KEY: 'test-key' });
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     restoreEnv();
   });
 
@@ -219,6 +227,113 @@ describe('Cerebras provider', () => {
       );
       expect(body.max_tokens).toBe(1024);
       expect(body.max_completion_tokens).toBeUndefined();
+    });
+  });
+
+  describe('request model billing', () => {
+    it.each([
+      {
+        name: 'ignores a top-level prompt model that is not sent',
+        model: 'gemma-4-31b',
+        providerConfig: {},
+        promptConfig: { model: 'gpt-oss-120b' },
+        expectedModel: 'gemma-4-31b',
+        expectedCost: 2.48,
+      },
+      {
+        name: 'preserves the provider passthrough model over a top-level prompt model',
+        model: 'gemma-4-31b',
+        providerConfig: { model: 'zai-glm-4.7' },
+        promptConfig: { model: 'gpt-oss-120b' },
+        expectedModel: 'zai-glm-4.7',
+        expectedCost: 5,
+      },
+      {
+        name: 'uses the prompt passthrough model over provider and top-level prompt models',
+        model: 'gemma-4-31b',
+        providerConfig: { model: 'zai-glm-4.7' },
+        promptConfig: { model: 'gemma-4-31b', passthrough: { model: 'gpt-oss-120b' } },
+        expectedModel: 'gpt-oss-120b',
+        expectedCost: 1.1,
+      },
+      {
+        name: 'uses the provider selector when prompt passthrough replaces the model override',
+        model: 'gemma-4-31b',
+        providerConfig: { model: 'zai-glm-4.7' },
+        promptConfig: { model: 'gpt-oss-120b', passthrough: {} },
+        expectedModel: 'gemma-4-31b',
+        expectedCost: 2.48,
+      },
+      {
+        name: 'leaves opaque provider models unpriced despite a known top-level prompt model',
+        model: 'opaque-model',
+        providerConfig: {},
+        promptConfig: { model: 'gpt-oss-120b' },
+        expectedModel: 'opaque-model',
+        expectedCost: undefined,
+      },
+      {
+        name: 'leaves opaque passthrough models unpriced despite a known top-level prompt model',
+        model: 'gemma-4-31b',
+        providerConfig: {},
+        promptConfig: { model: 'gpt-oss-120b', passthrough: { model: 'opaque-model' } },
+        expectedModel: 'opaque-model',
+        expectedCost: undefined,
+      },
+      {
+        name: 'preserves prompt pricing overrides over provider pricing defaults',
+        model: 'gemma-4-31b',
+        providerConfig: {
+          model: 'gpt-oss-120b',
+          cost: 9 / 1e6,
+          inputCost: 1 / 1e6,
+          outputCost: 2 / 1e6,
+        },
+        promptConfig: { model: 'zai-glm-4.7', inputCost: 3 / 1e6, outputCost: 4 / 1e6 },
+        expectedModel: 'gpt-oss-120b',
+        expectedCost: 7,
+      },
+    ])('$name', async ({ model, providerConfig, promptConfig, expectedModel, expectedCost }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'response' } }],
+          usage: {
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+            total_tokens: 2_000_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createCerebrasProvider(`cerebras:${model}`, {
+        config: { config: providerConfig },
+      });
+      const context = { prompt: { raw: 'hello', label: 'hello', config: promptConfig }, vars: {} };
+
+      const result = await provider.callApi('hello', context);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('response');
+      expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.model).toBe(expectedModel);
+      if (expectedCost === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(expectedCost, 10);
+      }
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { choices: [{ message: { content: 'response' } }] },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const cachedResult = await provider.callApi('hello', context);
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.cost).toBe(0);
     });
   });
 
