@@ -30,6 +30,9 @@ export async function createStreamingConnection(
   if (config.outputFormat) {
     query.set('output_format', config.outputFormat);
   }
+  if (config.seed !== undefined) {
+    query.set('seed', String(config.seed));
+  }
   const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?${query}`;
 
   // Initial configuration

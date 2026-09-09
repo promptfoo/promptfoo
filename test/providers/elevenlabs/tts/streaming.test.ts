@@ -22,3 +22,18 @@ it.each([undefined, 'pcm_16000', 'ulaw_8000'] as const)(
     expect(config).not.toHaveProperty('output_format');
   },
 );
+
+it.each([42, 0, undefined])('preserves optional seed %s in the WebSocket query', async (seed) => {
+  await createStreamingConnection('fixture-key', 'fixture-voice', {
+    modelId: 'eleven_multilingual_v2',
+    outputFormat: 'pcm_16000',
+    seed,
+  });
+
+  const [endpoint, config] = vi.mocked(ElevenLabsWebSocketClient.prototype.connect).mock.calls[0];
+  const url = new URL(endpoint, 'wss://example.test');
+  expect(url.searchParams.get('seed')).toBe(seed === undefined ? null : String(seed));
+  expect(url.searchParams.get('model_id')).toBe('eleven_multilingual_v2');
+  expect(url.searchParams.get('output_format')).toBe('pcm_16000');
+  expect(config).not.toHaveProperty('seed');
+});

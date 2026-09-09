@@ -110,6 +110,7 @@ export interface VoiceRemixConfig {
 export interface TTSStreamConfig {
   modelId: string;
   outputFormat?: OutputFormat;
+  seed?: number;
   voiceSettings?: VoiceSettings;
   baseUrl?: string;
   keepAliveInterval?: number;

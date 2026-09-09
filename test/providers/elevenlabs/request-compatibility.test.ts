@@ -7,6 +7,8 @@ import { getCache, isCacheEnabled } from '../../../src/cache';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import { ElevenLabsSTTProvider } from '../../../src/providers/elevenlabs/stt';
 import { ElevenLabsTTSProvider } from '../../../src/providers/elevenlabs/tts';
+import { handleStreamingTTS } from '../../../src/providers/elevenlabs/tts/streaming';
+import { ElevenLabsWebSocketClient } from '../../../src/providers/elevenlabs/websocket-client';
 
 import type { ElevenLabsSTTConfig, STTResponse } from '../../../src/providers/elevenlabs/stt/types';
 
@@ -16,6 +18,11 @@ const transcriptionExample = load(
 
 vi.mock('../../../src/providers/elevenlabs/client');
 vi.mock('../../../src/providers/elevenlabs/cost-tracker');
+vi.mock('../../../src/providers/elevenlabs/websocket-client');
+vi.mock('../../../src/providers/elevenlabs/tts/streaming', async (importOriginal) => ({
+  ...(await importOriginal()),
+  handleStreamingTTS: vi.fn(),
+}));
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   isCacheEnabled: vi.fn(() => false),
@@ -26,30 +33,70 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.restoreAllMocks());
 
 describe('ElevenLabs documented request contracts', () => {
-  it('sends TTS format and latency settings as query parameters, preserving binary audio', async () => {
-    vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('fixture audio'));
-    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
-      config: {
-        apiKey: 'fixture-key',
-        cache: false,
-        outputFormat: 'pcm_16000',
-        optimizeStreamingLatency: 0,
-        seed: 42,
-      },
-    });
-    expect(await provider.callApi('Hello')).toMatchObject({
-      audio: { data: Buffer.from('fixture audio').toString('base64'), format: 'pcm' },
-      cached: false,
-    });
-    const [endpoint, body] = vi.mocked(ElevenLabsClient.prototype.post).mock.calls[0];
-    const url = new URL(endpoint, 'https://example.test');
-    expect(url.pathname).toBe('/text-to-speech/fixture-voice');
-    expect(url.searchParams.get('output_format')).toBe('pcm_16000');
-    expect(url.searchParams.get('optimize_streaming_latency')).toBe('0');
-    expect(body).toMatchObject({ text: 'Hello', model_id: 'eleven_multilingual_v2', seed: 42 });
-    expect(body).not.toHaveProperty('output_format');
-    expect(body).not.toHaveProperty('optimize_streaming_latency');
-  });
+  it.each([42, 0, undefined])(
+    'keeps HTTP seed %s in the body with format and latency in the query',
+    async (seed) => {
+      vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('fixture audio'));
+      const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+        config: {
+          apiKey: 'fixture-key',
+          cache: false,
+          outputFormat: 'pcm_16000',
+          optimizeStreamingLatency: 0,
+          seed,
+        },
+      });
+      expect(await provider.callApi('Hello')).toMatchObject({
+        audio: { data: Buffer.from('fixture audio').toString('base64'), format: 'pcm' },
+        cached: false,
+      });
+      const [endpoint, body] = vi.mocked(ElevenLabsClient.prototype.post).mock.calls[0];
+      const url = new URL(endpoint, 'https://example.test');
+      expect(url.pathname).toBe('/text-to-speech/fixture-voice');
+      expect(url.searchParams.get('output_format')).toBe('pcm_16000');
+      expect(url.searchParams.get('optimize_streaming_latency')).toBe('0');
+      expect(body).toMatchObject({ text: 'Hello', model_id: 'eleven_multilingual_v2' });
+      if (seed === undefined) {
+        expect(body).not.toHaveProperty('seed');
+      } else {
+        expect(body).toHaveProperty('seed', seed);
+      }
+      expect(url.searchParams.has('seed')).toBe(false);
+      expect(body).not.toHaveProperty('output_format');
+      expect(body).not.toHaveProperty('optimize_streaming_latency');
+    },
+  );
+
+  it.each([42, 0, undefined])(
+    'forwards configured streaming seed %s to the native handshake',
+    async (seed) => {
+      const audio = Buffer.alloc(32).toString('base64');
+      vi.mocked(handleStreamingTTS).mockImplementation(async (client) => ({
+        client,
+        chunks: [{ audio, chunkIndex: 0, timestamp: Date.now() }],
+        alignments: [],
+        errors: [],
+        startTime: Date.now(),
+      }));
+      const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+        config: { apiKey: 'fixture-key', streaming: true, outputFormat: 'pcm_16000', seed },
+      });
+
+      const response = await provider.callApi('Hello');
+
+      expect(response.error).toBeUndefined();
+      expect(response.audio).toMatchObject({ data: audio, format: 'pcm' });
+      const [endpoint, initialization] = vi.mocked(ElevenLabsWebSocketClient.prototype.connect).mock
+        .calls[0];
+      const url = new URL(endpoint, 'wss://example.test');
+      expect(url.pathname).toBe('/v1/text-to-speech/fixture-voice/stream-input');
+      expect(url.searchParams.get('model_id')).toBe('eleven_multilingual_v2');
+      expect(url.searchParams.get('output_format')).toBe('pcm_16000');
+      expect(url.searchParams.get('seed')).toBe(seed === undefined ? null : String(seed));
+      expect(initialization).not.toHaveProperty('seed');
+      expect(ElevenLabsClient.prototype.post).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(transcriptionExample.providers)(
     'transcribes the runnable $id example with Scribe v2',

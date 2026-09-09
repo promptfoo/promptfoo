@@ -403,6 +403,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       const streamConfig: TTSStreamConfig = {
         modelId: this.config.modelId,
         outputFormat: this.config.outputFormat,
+        seed: this.config.seed,
         voiceSettings: this.config.voiceSettings,
         baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
         pronunciationDictionaryLocators: this.config.pronunciationDictionaryId
