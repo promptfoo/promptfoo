@@ -676,6 +676,37 @@ describe('SageMakerEmbeddingProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('uses one endpoint snapshot for both parts of an embedding cache key', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2] }));
+    const provider = new SageMakerEmbeddingProvider('first-endpoint', {
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    vi.spyOn(provider, 'getEndpointName')
+      .mockReturnValueOnce('first-endpoint')
+      .mockReturnValue('later-endpoint');
+
+    expect(await provider.callEmbeddingApi('text')).toMatchObject({ cached: true });
+    const configHash = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          endpoint: 'first-endpoint',
+          modelType: 'custom',
+          contentType: 'application/json',
+          acceptType: 'application/json',
+          region: 'us-east-1',
+        }),
+      )
+      .digest('hex')
+      .substring(0, 8);
+    const key = mockCacheGet.mock.calls[0][0];
+    expect(key).toMatch(/^sagemaker:embedding:v1:first-endpoint:/);
+    expect(key.endsWith(`:${configHash}`)).toBe(true);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
   describe('cache flag behavior', () => {

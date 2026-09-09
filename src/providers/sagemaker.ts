@@ -97,6 +97,14 @@ abstract class SageMakerGenericProvider {
   private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
   private readonly runtimeClients = new Map<string, SageMakerRuntimeClient>();
   private readonly runtimeInitializations = new Map<string, Promise<SageMakerRuntimeClient>>();
+  private profileCredentials?: {
+    region: string;
+    profile: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    sessionToken?: string;
+    provider: SageMakerRuntimeClient['config']['credentials'];
+  };
   private runtimeGeneration = 0;
   private readonly activeRequests = new Set<AbortController>();
   config: SageMakerConfig;
@@ -145,19 +153,20 @@ abstract class SageMakerGenericProvider {
    * Get AWS credentials from config or environment
    */
   async getCredentials(): Promise<any> {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
+    const { accessKeyId, secretAccessKey, sessionToken, profile } = this.config;
+    if (accessKeyId && secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
       };
     }
-    if (this.config.profile) {
-      logger.debug(`Using AWS profile: ${this.config.profile}`);
+    if (profile) {
+      logger.debug(`Using AWS profile: ${profile}`);
       try {
         const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
+        return fromSSO({ profile });
       } catch {
         throw new Error(
           `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso`,
@@ -191,7 +200,21 @@ abstract class SageMakerGenericProvider {
             const { loadConfigsForDefaultMode } = await import('@smithy/core/client');
             const { resolveDefaultsModeConfig } = await import('@smithy/core/config');
             this.assertRuntimeGeneration(generation);
-            const credentials = await this.getCredentials();
+            const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
+            const usesProfile = profile && !(accessKeyId && secretAccessKey);
+            const cachedCredentials = this.profileCredentials;
+            if (
+              !usesProfile ||
+              cachedCredentials?.region !== runtimeRegion ||
+              cachedCredentials.profile !== profile ||
+              cachedCredentials.accessKeyId !== accessKeyId ||
+              cachedCredentials.secretAccessKey !== secretAccessKey ||
+              cachedCredentials.sessionToken !== sessionToken
+            ) {
+              this.profileCredentials = undefined;
+            }
+            const retainedCredentials = this.profileCredentials?.provider;
+            const credentials = retainedCredentials ?? (await this.getCredentials());
             const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
             this.assertRuntimeGeneration(generation);
             const client = new SageMakerRuntimeClient({
@@ -206,6 +229,18 @@ abstract class SageMakerGenericProvider {
               },
               ...(credentials ? { credentials } : {}),
             });
+            if (usesProfile) {
+              // Keep the SDK's refreshable SSO credentials when idle transport clients are destroyed.
+              // The default chain can bind an STS client to this transport, so it is not retained here.
+              this.profileCredentials = {
+                region: runtimeRegion,
+                profile,
+                accessKeyId,
+                secretAccessKey,
+                sessionToken,
+                provider: retainedCredentials ?? client.config.credentials,
+              };
+            }
             this.runtimeClients.set(runtimeRegion, client);
             logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
             return client;
@@ -960,9 +995,10 @@ export class SageMakerEmbeddingProvider
    * Uses crypto.createHash to generate a shorter, more efficient key
    */
   private getCacheKey(text: string): string {
+    const endpoint = this.getEndpointName();
     // Create a deterministic representation of the request parameters
     const configForKey = {
-      endpoint: this.getEndpointName(),
+      endpoint,
       modelType: this.config.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),
@@ -976,7 +1012,7 @@ export class SageMakerEmbeddingProvider
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
     const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
-    return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
+    return `sagemaker:embedding:v1:${endpoint}:${textHash}:${configHash}`;
   }
 
   /**
