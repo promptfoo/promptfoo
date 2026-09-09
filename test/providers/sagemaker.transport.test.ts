@@ -29,7 +29,7 @@ describe('SageMaker SDK transport configuration', () => {
     'auto-same-region',
     'auto-cross-region',
     'profile',
-  ])('preserves %s SDK defaults when preparing the shared HTTP pool', async (defaultsMode) => {
+  ])('shares and cleans up the HTTP agent with %s SDK defaults', async (defaultsMode) => {
     vi.useFakeTimers();
     vi.stubEnv(
       'AWS_DEFAULTS_MODE',
@@ -77,6 +77,13 @@ describe('SageMaker SDK transport configuration', () => {
           expect(pending).rejects.toBe(intercepted),
         ),
       );
+      expect(request).toHaveBeenCalledTimes(2);
+      const firstAgent = (request.mock.calls[0][0] as http.RequestOptions).agent as http.Agent;
+      const secondAgent = (request.mock.calls[1][0] as http.RequestOptions).agent;
+      expect(firstAgent).toBeInstanceOf(http.Agent);
+      expect(secondAgent, 'Concurrent first HTTP requests must share one agent').toBe(firstAgent);
+      expect(handler.httpHandlerConfigs().httpAgent).toBe(firstAgent);
+
       await expect(referenceHandler.handle(requestInput, {})).rejects.toBe(intercepted);
       const actual = handler.httpHandlerConfigs();
       const expected = referenceHandler.httpHandlerConfigs();
@@ -87,6 +94,11 @@ describe('SageMaker SDK transport configuration', () => {
       });
       expect(actual.httpAgent).toMatchObject({ keepAlive: true, maxSockets: 50 });
       expect(request).toHaveBeenCalledTimes(3);
+
+      const destroyAgent = vi.spyOn(firstAgent, 'destroy');
+      provider.cleanup();
+      provider.cleanup();
+      expect(destroyAgent).toHaveBeenCalledTimes(1);
     } finally {
       provider.cleanup();
       reference.destroy();
