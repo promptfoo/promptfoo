@@ -3,8 +3,10 @@ import { AnthropicMessagesProvider } from './messages';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+// Default model to use for all default providers. Sonnet 5 is the current-generation
+// Sonnet: 1M context, cheaper than Sonnet 4.6 ($2/$10 vs $3/$15), and it accepts the
+// forced `tool_choice` the llm-rubric grader below depends on.
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be
@@ -116,7 +118,10 @@ const webSearchProviderFactory = createLazyProvider(
       config: {
         tools: [
           {
-            type: 'web_search_20250305',
+            // Current web search variant (dynamic filtering). Supported on Sonnet 5,
+            // Sonnet 4.6, and Opus 4.6+; `web_search_20250305` is the older basic
+            // variant kept for pre-4.6 models and Vertex.
+            type: 'web_search_20260209',
             name: 'web_search',
             max_uses: 5,
           } as any,

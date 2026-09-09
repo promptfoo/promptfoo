@@ -203,6 +203,10 @@ const CLAUDE_5_OR_LATER_PATTERN =
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
+// Opus/Sonnet 4.6 specifically. The 4.6 generation is where Anthropic removed assistant
+// message prefill; 4.5 and earlier still accept it, so this cannot reuse the 4.5-and-4.6
+// regional-premium pattern above.
+const CLAUDE_4_6_PATTERN = /(^|[^a-z0-9])claude-(?:opus|sonnet)-4-6(?![0-9])/i;
 
 interface ClaudeModelFamily {
   /** Recognizes this family's IDs across every provider naming scheme. */
@@ -228,6 +232,12 @@ interface ClaudeModelFamily {
   disabledThinkingEffortCapped?: boolean;
   /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
   regionalPremium?: boolean;
+  /**
+   * Rejects a trailing assistant message ("prefill") with a 400. Removed across the board in
+   * the 4.6 generation and every family after it; Opus/Sonnet/Haiku 4.5 and earlier still
+   * accept it. Verified live against the Messages API on 2026-09-09.
+   */
+  prefillUnsupported?: boolean;
 }
 
 /**
@@ -244,6 +254,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     forcedToolChoiceUnsupported: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   {
@@ -251,6 +262,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
@@ -261,6 +273,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
@@ -272,6 +285,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -279,15 +293,20 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_OPUS_48_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   {
     match: CLAUDE_OPUS_47_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    prefillUnsupported: true,
     regionalPremium: true,
   },
   { match: CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN, regionalPremium: true },
+  // Opus/Sonnet 4.6 keep every sampling control, so they carry no warningName — the only
+  // thing they lost relative to 4.5 is assistant prefill.
+  { match: CLAUDE_4_6_PATTERN, prefillUnsupported: true },
 ];
 
 /**
@@ -319,6 +338,16 @@ export function isClaudeSonnet5Model(modelId: string): boolean {
 
 export function isForcedToolChoiceUnsupportedClaudeModel(modelId: string): boolean {
   return hasClaudeCapability(modelId, 'forcedToolChoiceUnsupported');
+}
+
+/**
+ * True when a trailing assistant message ("prefill") returns a 400 on this model. Anthropic
+ * removed prefill in the 4.6 generation and kept it removed in every family since, so this
+ * covers Opus/Sonnet 4.6, Opus 4.7/4.8, Opus 5, Sonnet 5, and the Fable/Mythos 5 families.
+ * Opus/Sonnet/Haiku 4.5 and earlier still accept it.
+ */
+export function isPrefillUnsupportedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'prefillUnsupported');
 }
 
 /**

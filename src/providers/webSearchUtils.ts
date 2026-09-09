@@ -107,8 +107,13 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool
-  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
+  // Check for Anthropic with web_search tool. Both variants count: `web_search_20260209`
+  // is the current one (dynamic filtering), `web_search_20250305` the older basic variant
+  // still used for pre-4.6 models and on Vertex.
+  if (
+    id.includes('anthropic') &&
+    hasTool(provider, (t) => t.type === 'web_search_20250305' || t.type === 'web_search_20260209')
+  ) {
     return true;
   }
 
@@ -126,15 +131,15 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.8 Opus with web search tool
+  // Anthropic Claude Opus 5 with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-8', {
+      return await loadApiProvider('anthropic:messages:claude-opus-5', {
         options: {
           config: {
             tools: [
               {
-                type: 'web_search_20250305',
+                type: 'web_search_20260209',
                 name: 'web_search',
                 max_uses: 5,
               } as any,

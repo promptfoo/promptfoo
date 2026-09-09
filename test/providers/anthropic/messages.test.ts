@@ -3152,12 +3152,11 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe('Opus 4.6 prefill warning', () => {
-    it('should warn when assistant prefilling is used with claude-opus-4-6', async () => {
-      const provider = createProvider('claude-opus-4-6', { config: {} });
-      const mockResp = {
+  describe('assistant prefill warning', () => {
+    const makeResp = (model: string) =>
+      ({
         content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-opus-4-6',
+        model,
         id: 'test-id',
         role: 'assistant',
         stop_reason: 'end_turn',
@@ -3165,49 +3164,50 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
+      }) as Anthropic.Messages.Message;
 
+    const callWithPrefill = async (model: string) => {
+      const provider = createProvider(model, { config: {} });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(makeResp(model));
+      const warnSpy = vi.spyOn(logger, 'warn');
       await provider.callApi(
         JSON.stringify([
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'I will' },
         ]),
       );
+      return warnSpy;
+    };
 
+    // Anthropic removed assistant prefill in the 4.6 generation and kept it removed in
+    // every family since. Verified live against the Messages API on 2026-09-09.
+    it.each([
+      'claude-opus-4-6',
+      'claude-sonnet-4-6',
+      'claude-opus-4-7',
+      'claude-opus-4-8',
+      'claude-opus-5',
+      'claude-sonnet-5',
+      'claude-fable-5',
+      'claude-fable-5-1',
+      'claude-mythos-5-1',
+    ])('warns when assistant prefilling is used with %s', async (model) => {
+      const warnSpy = await callWithPrefill(model);
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported on Claude Opus 4.6'),
+        expect.stringContaining(`Assistant message prefilling is not supported on ${model}`),
       );
     });
 
-    it('should not warn for non-Opus 4.6 models with prefilling', async () => {
-      const provider = createProvider('claude-sonnet-4-6', { config: {} });
-      const mockResp = {
-        content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-sonnet-4-6',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
-
-      await provider.callApi(
-        JSON.stringify([
-          { role: 'user', content: 'Hello' },
-          { role: 'assistant', content: 'I will' },
-        ]),
-      );
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported'),
-      );
-    });
+    // The 4.5 generation and older still accept a trailing assistant turn.
+    it.each(['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-3-opus-20240229'])(
+      'does not warn for %s, which still accepts prefill',
+      async (model) => {
+        const warnSpy = await callWithPrefill(model);
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('Assistant message prefilling is not supported'),
+        );
+      },
+    );
   });
 
   describe('Claude generation detection with Anthropic-compatible gateways', () => {

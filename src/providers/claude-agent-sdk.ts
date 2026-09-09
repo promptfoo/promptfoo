@@ -711,7 +711,7 @@ export interface ClaudeCodeOptions {
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
-   * @see https://docs.anthropic.com/en/api/beta-headers
+   * @see https://docs.claude.com/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
 
@@ -721,7 +721,7 @@ export interface ClaudeCodeOptions {
    * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
    * - { type: 'disabled' } - No extended thinking
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   * @see https://docs.claude.com/en/docs/build-with-claude/adaptive-thinking
    */
   thinking?: ThinkingConfig;
 
@@ -748,7 +748,7 @@ export interface ClaudeCodeOptions {
    * - 'xhigh' - Extra high reasoning (Opus 4.7+); sits between 'high' and 'max'
    * - 'max' - Maximum effort
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   * @see https://docs.claude.com/en/docs/build-with-claude/effort
    */
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -845,7 +845,7 @@ export interface ClaudeCodeOptions {
    *     args: ['--hidden']
    * ```
    *
-   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   * @see https://docs.claude.com/en/docs/claude-code/settings#sandbox-settings
    */
   sandbox?: SandboxSettings;
 

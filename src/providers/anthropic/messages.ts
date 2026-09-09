@@ -40,6 +40,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
+  isPrefillUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -840,13 +841,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       );
     }
 
-    // Warn about assistant prefilling on Opus 4.6 (not supported, returns 400)
-    const isOpus46 = this.modelName.startsWith('claude-opus-4-6');
-    if (isOpus46 && extractedMessages.length > 0) {
+    // Warn about assistant prefilling, which Anthropic removed in the 4.6 generation and
+    // every family since (Opus/Sonnet 4.6, Opus 4.7/4.8, Opus 5, Sonnet 5, Fable/Mythos 5).
+    // The request still goes out — Anthropic is the authority on which models accept it —
+    // but the 400 it returns says nothing about the trailing assistant turn being the cause.
+    if (isPrefillUnsupportedClaudeModel(this.modelName) && extractedMessages.length > 0) {
       const lastMessage = extractedMessages[extractedMessages.length - 1];
       if (lastMessage.role === 'assistant') {
         logger.warn(
-          'Assistant message prefilling is not supported on Claude Opus 4.6 and will cause a 400 error. Remove the trailing assistant message from your prompt.',
+          `Assistant message prefilling is not supported on ${this.modelName} and will cause a 400 error. Remove the trailing assistant message from your prompt.`,
         );
       }
     }

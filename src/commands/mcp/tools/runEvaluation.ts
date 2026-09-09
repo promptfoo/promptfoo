@@ -84,7 +84,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Filter to specific providers by ID.
-            Examples: "openai:gpt-4", ["openai:gpt-4", "anthropic:claude-sonnet-4-6"]
+            Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
           `,
         ),
       maxConcurrency: z
@@ -513,7 +513,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               singleTestCase: '{"testCaseIndices": 0}',
               multipleTestCases: '{"testCaseIndices": [0, 2, 5]}',
               testCaseRange: '{"testCaseIndices": {"start": 0, "end": 3}}',
-              withFilters: '{"promptFilter": "my-prompt", "providerFilter": "openai:gpt-4"}',
+              withFilters: '{"promptFilter": "my-prompt", "providerFilter": "openai:gpt-5.6"}',
             },
           },
         };

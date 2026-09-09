@@ -31,7 +31,7 @@ export interface AgentConfig {
   firstMessage?: string; // Agent's opening message
   language?: string; // ISO 639-1 language code
   voiceId?: string; // Voice to use for agent
-  llmModel?: string; // LLM model (gpt-4, claude-3-opus, etc.)
+  llmModel?: string; // LLM model (gpt-5.6, claude-opus-5, etc.)
   temperature?: number; // LLM temperature (0-1)
   maxTokens?: number; // Max tokens per LLM response
   tools?: AgentTool[]; // Available tools for agent
