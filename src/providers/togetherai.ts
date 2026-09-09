@@ -35,6 +35,24 @@ const localOptions = {
   Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
 const localOptionNames = new Set(Object.keys(localOptions));
 
+// The OpenAI provider resolves these itself: it loads `file://` references, renders
+// Nunjucks vars and normalizes tool shapes. `passthrough` is spread into the body last,
+// so a raw copy of one of them would clobber the resolved value.
+const resolvedOptionNames = new Set<string>([
+  'functions',
+  'reasoning_effort',
+  'response_format',
+  'tool_choice',
+  'tools',
+] satisfies (keyof OpenAiCompletionOptions)[]);
+
+const providersByType = {
+  chat: OpenAiChatCompletionProvider,
+  completion: OpenAiCompletionProvider,
+  embedding: OpenAiEmbeddingProvider,
+  embeddings: OpenAiEmbeddingProvider,
+};
+
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
  *
@@ -53,7 +71,9 @@ export function createTogetherAiProvider(
 
   const config = options.config?.config || {};
   const modelParameters = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !localOptionNames.has(key)),
+    Object.entries(config).filter(
+      ([key]) => !localOptionNames.has(key) && !resolvedOptionNames.has(key),
+    ),
   );
   const togetherAiConfig = {
     ...options.config,
@@ -67,18 +87,9 @@ export function createTogetherAiProvider(
     },
   };
 
-  if (splits[1] === 'chat') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'completion') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, togetherAiConfig);
-  } else {
-    // If no specific type is provided, default to chat
-    const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  }
+  // If no specific type is provided, the whole remainder is the model name and we
+  // default to chat.
+  const Provider = providersByType[splits[1] as keyof typeof providersByType];
+  const modelName = splits.slice(Provider ? 2 : 1).join(':');
+  return new (Provider ?? OpenAiChatCompletionProvider)(modelName, togetherAiConfig);
 }

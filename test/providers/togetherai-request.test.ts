@@ -113,6 +113,26 @@ describe.each([
   });
 });
 
+it('sends the model parameters the OpenAI provider resolved, not their raw copies', async () => {
+  const provider = createTogetherAiProvider('togetherai:chat:fixture-model', {
+    config: {
+      config: {
+        apiKey: 'configured-key',
+        tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+        response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+      },
+    },
+  });
+  const response = await provider.callApi('fixture prompt', {
+    prompt: { raw: 'fixture prompt', label: 'fixture' },
+    vars: { toolName: 'get_weather', schemaName: 'weather' },
+  });
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+  expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'weather' } });
+});
+
 it('preserves the normalized provider environment over the factory context', () => {
   const provider = createTogetherAiProvider('togetherai:chat:fixture-model', {
     env: { TOGETHER_API_KEY: 'context-key' },
