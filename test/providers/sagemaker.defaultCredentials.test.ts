@@ -274,8 +274,10 @@ sso_role_name = TestRole
         mode === 'SDK baseline'
           ? defaultProvider()
           : async (options?: { forceRefresh?: boolean }) => {
-              client ??= await provider.getSageMakerRuntimeInstance();
-              return client.config.credentials(options);
+              const runtime: SageMakerRuntimeClient =
+                client ?? (await provider.getSageMakerRuntimeInstance());
+              client = runtime;
+              return runtime.config.credentials(options);
             };
       expect((await resolve()).accessKeyId).toBe('SSO_1');
       if (mode === 'SageMaker') {
