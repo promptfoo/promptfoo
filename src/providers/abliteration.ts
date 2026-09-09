@@ -2,7 +2,6 @@ import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
@@ -34,16 +33,6 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
         showThinking: providerOptions.config?.showThinking ?? false,
       },
     });
-  }
-
-  override getApiKey(): string | undefined {
-    const apiKeyEnvar = this.config.apiKeyEnvar as EnvVarKey | undefined;
-    return (
-      this.config.apiKey ||
-      (apiKeyEnvar
-        ? this.env?.[apiKeyEnvar as keyof EnvOverrides] || getEnvString(apiKeyEnvar)
-        : undefined)
-    );
   }
 
   override getOrganization(): undefined {
