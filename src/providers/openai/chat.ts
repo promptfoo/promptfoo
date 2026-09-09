@@ -500,8 +500,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.shouldBustCache(context),
         this.config.maxRetries,
       ));
-      throwIfAborted(callApiOptions?.abortSignal);
-
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
 
@@ -541,6 +539,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
         };
       }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
       const signal = callApiOptions?.abortSignal;
       if (isCallerAbortError(err, signal)) {

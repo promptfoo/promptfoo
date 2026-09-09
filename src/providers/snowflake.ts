@@ -144,13 +144,12 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
           'json',
           context?.bustCache ?? context?.debug,
         ));
-      throwIfAborted(callApiOptions?.abortSignal);
-
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
       if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
         throwIfAborted(callApiOptions?.abortSignal);
