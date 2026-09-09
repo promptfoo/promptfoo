@@ -818,20 +818,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
-      ws.on('open', async () => {
+      ws.on('open', () => {
         logger.debug('WebSocket connection established successfully');
-
-        // Create a conversation item with the user's prompt - immediately after connection
-        // Don't send ping event as it's not supported
-        sendEvent({
-          type: 'conversation.item.create',
-          previous_item_id: null,
-          item: {
-            type: 'message',
-            role: 'user',
-            content: promptContent,
-          },
-        });
       });
 
       ws.on('message', async (data: Buffer) => {
@@ -1115,18 +1103,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               ws.close();
 
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
+              // Usage may report audio tokens even when no audio delta arrived.
               if (
                 usage?.output_token_details?.audio_tokens &&
                 usage.output_token_details.audio_tokens > 0
               ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
                 logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
+                  `Audio tokens reported in usage: ${usage.output_token_details.audio_tokens}`,
                 );
               }
 
@@ -1171,7 +1154,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   usage,
                   usageEvents,
                   // Include audio data in metadata if available
-                  ...(hasAudioContent && {
+                  ...(finalAudioData !== null && {
                     audio: {
                       data: finalAudioData,
                       format: audioFormat,
