@@ -171,9 +171,13 @@ describe('envars', () => {
   describe('dotenv loading', () => {
     // A developer's gitignored .env must never reach the suite: tests would pick up
     // real credentials and diverge from CI, which has none.
+    // Resolved up front because os.tmpdir() reads TEMP/TMP, which the cleared-environment
+    // case below wipes: on Windows that yields the unusable path "undefined\temp".
+    const tmpRoot = os.tmpdir();
+
     async function reimportEnvarsBesideDotenv(): Promise<void> {
       const originalCwd = process.cwd();
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dotenv-'));
+      const dir = fs.mkdtempSync(path.join(tmpRoot, 'promptfoo-dotenv-'));
       fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=leaked\n');
 
       try {
