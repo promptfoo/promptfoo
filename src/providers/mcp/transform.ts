@@ -129,21 +129,41 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.push(config.server);
   }
 
+  // An explicit `name` owns its key, so two servers sharing one is a config error.
+  // Checked before transforming, which would otherwise fetch OAuth tokens for a
+  // configuration we are about to reject.
+  const names = serverConfigs.flatMap((server) => server.name ?? []);
+  const duplicateName = names.find((name, index) => names.indexOf(name) !== index);
+  if (duplicateName) {
+    throw new Error(
+      `Duplicate Claude Agent SDK MCP server \`${duplicateName}\`; give each configured server a unique \`name\`.`,
+    );
+  }
+
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
-  const seen = new Set<string>();
-  for (const [key] of servers) {
-    if (seen.has(key)) {
-      throw new Error(
-        `Duplicate Claude Agent SDK MCP server \`${key}\`; give each configured server a unique \`name\`.`,
-      );
+  // An unnamed server falls back to a coarse identifier that several servers can
+  // share, so suffix collisions instead of letting `Object.fromEntries` drop one.
+  // The key becomes the SDK's server name — it lands in `mcp__<key>__<tool>` and in
+  // debug logs — so it deliberately carries no `args`, `env`, or auth values.
+  const taken = new Set(names);
+  const entries = servers.map((server, index) => {
+    const { name, url, command } = serverConfigs[index];
+    if (name) {
+      return [name, server] as const;
     }
-    seen.add(key);
-  }
+    const fallback = url ?? command ?? 'default';
+    let key = fallback;
+    for (let suffix = 2; taken.has(key); suffix++) {
+      key = `${fallback}_${suffix}`;
+    }
+    taken.add(key);
+    return [key, server] as const;
+  });
 
-  return Object.fromEntries(servers);
+  return Object.fromEntries(entries);
 }
 
 export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
@@ -207,10 +227,7 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
 
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  // The key identifies the server, so fall back to whatever actually distinguishes
-  // one unnamed server from another rather than to a field it may not set.
-  let key: string;
+): Promise<ClaudeCodeMcpServerConfig> {
   let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
@@ -229,14 +246,12 @@ async function transformMCPServerConfigToClaudeCode(
     const queryParams = getAuthQueryParams(renderedConfig);
     const serverUrl = applyQueryParams(config.url, queryParams);
 
-    key = config.url;
     out = {
       type: 'http',
       url: serverUrl,
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
   } else if (config.command) {
-    key = [config.command, ...(config.args ?? [])].join(' ');
     out = {
       type: 'stdio',
       command: config.command,
@@ -246,7 +261,6 @@ async function transformMCPServerConfigToClaudeCode(
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
-    key = config.path;
     out = {
       type: 'stdio',
       command,
@@ -257,5 +271,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [config.name ?? key, out];
+  return out;
 }
