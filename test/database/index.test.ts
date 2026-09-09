@@ -845,7 +845,7 @@ describe('database', () => {
     );
 
     it.each(['reconnect-failure', 'configuration-failure'])(
-      'rejects later statements and transactions after %s',
+      'rejects later statements and transactions after %s, but reopens on demand',
       async (mode) => {
         const result = await runDatabaseProbe<LockRecoveryProbeResult>(
           'lockRecoveryProbe',
@@ -859,8 +859,13 @@ describe('database', () => {
         expect(result.followupError).toMatch(/closed/i);
         expect(result.transactionAfterFailureError).toMatch(/closed/i);
         expect(result.callbackCalls).toBe(0);
-        expect(result.beforeCloseIds).toEqual([1]);
-        expect(result.afterCloseIds).toEqual([1]);
+        // The closed client is evicted, so getDb() opens a fresh one instead of
+        // failing every remaining write for the life of the process.
+        expect(result.dbOpenAfterFailure).toBe(false);
+        expect(result.reopenedError).toBeNull();
+        expect(result.reopenedRowsAffected).toBe(1);
+        expect(result.beforeCloseIds).toEqual([1, 5]);
+        expect(result.afterCloseIds).toEqual([1, 5]);
       },
     );
   });
