@@ -1991,6 +1991,8 @@ image inputs with streaming text and audio outputs.
 
 ### Supported Realtime Models
 
+Availability follows [OpenAI's lifecycle notices](https://developers.openai.com/api/docs/deprecations). The dated `gpt-4o-mini-realtime-preview-2024-12-17` selector retains Realtime routing because its [model card](https://developers.openai.com/api/docs/models/gpt-4o-mini-realtime-preview) lists that endpoint; it is a legacy preview, not a recommended new default.
+
 - `gpt-realtime-2.1` - Current flagship realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens, $5/$0.50 per 1M image/cached-image input tokens)
 - `gpt-realtime-2.1-mini` - Current cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens, $0.80/$0.08 per 1M image/cached-image input tokens)
 - `gpt-realtime-2` - Reasoning-capable realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens)
