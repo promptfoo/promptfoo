@@ -1339,7 +1339,7 @@ For Grok 4.6 Runtime inference profiles, promptfoo estimates standard costs usin
 `us.` profiles cost $2.20 input / $6.60 output / $0.55 cached input per million tokens;
 `global.` profiles cost $2 / $6 / $0.50. Other service tiers and cache writes have no estimate.
 These rates do not establish whether an API route or region is available. Mantle paths do not
-currently estimate Grok 4.6 costs; an eval displaying `$0` does not mean the request is free.
+currently estimate Grok 4.6 costs.
 
 :::
 
@@ -1405,7 +1405,6 @@ providers:
   `bedrock:openai.gpt-5.6-sol` selects **Responses**. Use bare model IDs on Mantle, without
   `us.` or `global.` prefixes. Sol supports Mantle in `us-east-1` and `us-east-2`; choose a
   supported Region for each tier from its AWS model card.
-- The bare `bedrock:xai.grok-4.3` form also selects **Responses** and surfaces reasoning tokens.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.
