@@ -22,7 +22,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -384,6 +388,32 @@ describe('evaluator', () => {
           response: expect.objectContaining({ output: 'Denver' }),
         }),
       );
+    });
+
+    it('updates persisted prompt cache metrics when appending cached results', async () => {
+      const eval_ = await Eval.create({}, [{ raw: 'cached prompt', label: 'cached prompt' }], {
+        id: 'set-results-cached-row',
+      });
+      await eval_.addPrompts([
+        createCompletedPrompt('cached prompt', {
+          metrics: createPromptMetrics({ cachedRows: 0 }),
+        }),
+      ]);
+      const result = await EvalResult.createFromEvaluateResult(
+        eval_.id,
+        createEvaluateResult({
+          promptIdx: 0,
+          response: { output: 'cached', cached: true },
+        }),
+        { persist: false },
+      );
+
+      await eval_.setResults([result]);
+
+      expect(eval_.getStats().cachedRows).toBe(1);
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded?.prompts[0].metrics?.cachedRows).toBe(1);
+      expect(reloaded?.getStats().cachedRows).toBe(1);
     });
   });
 

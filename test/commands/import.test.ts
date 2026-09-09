@@ -771,6 +771,7 @@ describe('importCommand', () => {
       expect(importedEval!.prompts).toHaveLength(1);
       expect(importedEval!.prompts[0].metrics?.testPassCount).toBe(1);
       expect(importedEval!.prompts[0].metrics?.testFailCount).toBe(1);
+      expect(importedEval!.prompts[0].metrics?.cachedRows).toBe(0);
       expect(importedEval!.prompts[0].metrics?.assertPassCount).toBe(5);
       expect(importedEval!.prompts[0].metrics?.assertFailCount).toBe(1);
 

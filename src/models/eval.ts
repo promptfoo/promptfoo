@@ -54,6 +54,7 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  clearCountCache,
   getCachedResponseRowsCount as getCachedResponseRowsCountFromDb,
   getCachedResultsCount,
   getTotalResultRowCount,
@@ -111,6 +112,24 @@ function isValidCachedRowsMetric(value: unknown): value is number {
 
 function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
   return prompts.some((prompt) => !isValidCachedRowsMetric(prompt.metrics?.cachedRows));
+}
+
+function updateCachedRowsMetrics(prompts: CompletedPrompt[], results: EvalResult[]): boolean {
+  let updated = false;
+  for (const result of results) {
+    if (result.response?.cached !== true) {
+      continue;
+    }
+
+    const metrics = prompts[result.promptIdx]?.metrics;
+    if (!metrics || !isValidCachedRowsMetric(metrics.cachedRows)) {
+      continue;
+    }
+
+    metrics.cachedRows += 1;
+    updated = true;
+  }
+  return updated;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -1411,6 +1430,7 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
+    const cachedRowsMetricsUpdated = updateCachedRowsMetrics(this.prompts, results);
     if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
@@ -1423,6 +1443,14 @@ export default class Eval {
           })),
         )
         .run();
+      if (cachedRowsMetricsUpdated) {
+        await db
+          .update(evalsTable)
+          .set({ prompts: this.prompts })
+          .where(eq(evalsTable.id, this.id))
+          .run();
+      }
+      clearCountCache(this.id);
       notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;
