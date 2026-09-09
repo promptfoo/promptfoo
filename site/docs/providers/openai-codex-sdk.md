@@ -484,7 +484,7 @@ Set `maxRetries` on the provider itself. The scheduler reads it from the provide
 | `model`                  | Codex configuration       | Requested model; a model in the provider ID takes precedence                             |
 | `model_reasoning_effort` | Codex configuration       | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`, subject to model support |
 | `working_dir`            | Process working directory | Existing working directory; relative paths use the config directory                      |
-| `additional_directories` | None                      | Additional writable directories for `workspace-write`; paths use the config directory    |
+| `additional_directories` | Codex configuration       | Additional writable directories for `workspace-write`; paths use the config directory    |
 | `skip_git_repo_check`    | `false`                   | Allow an existing working directory outside Git                                          |
 | `sandbox_mode`           | Codex configuration       | `read-only`, `workspace-write`, or `danger-full-access`                                  |
 | `approval_policy`        | Codex configuration       | Use `never` for unattended runs; `on-request` depends on the runtime's approval handling |
