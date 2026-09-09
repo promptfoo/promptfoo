@@ -187,6 +187,15 @@ export const EXAMPLE_REPLACEMENTS: Record<string, string> = {
   'dbrx-benchmark': 'dbrx-benchmark was removed because DBRX is no longer available.',
 };
 
+// These examples must not be downloaded even when an older release still contains them.
+export function getUnsupportedExampleReason(exampleName: string): string | undefined {
+  const root = exampleName.split('/')[0];
+  if (root === 'github-models' || root === 'provider-github-models') {
+    return 'GitHub Models has been retired, so this example is no longer supported.';
+  }
+  return undefined;
+}
+
 // Examples that were intentionally removed from current examples/
 // but can still be downloaded from a legacy git ref for backwards compatibility.
 export const REMOVED_EXAMPLES: Record<
@@ -216,20 +225,10 @@ export const REMOVED_EXAMPLES: Record<
     legacyRef: '0.120.26',
     reason: 'gemma-vs-mistral was removed because the underlying model is no longer available.',
   },
-  'github-models': {
-    legacyRef: '0.120.26',
-    reason:
-      'github-models was removed because GitHub retired GitHub Models, including its inference API, on July 30, 2026.',
-  },
   'openai-deep-research': {
     legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
     reason:
       'This historical example uses retired OpenAI deep-research models and cannot run against the current OpenAI API.',
-  },
-  'provider-github-models': {
-    legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
-    reason:
-      'provider-github-models was removed because GitHub retired GitHub Models, including its inference API, on July 30, 2026.',
   },
   'redteam-dalle': {
     legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
