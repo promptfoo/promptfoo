@@ -183,6 +183,10 @@ describe('OpenAI Realtime Provider', () => {
       );
 
       const handler = mockHandlers.message[0];
+      handler(Buffer.from(JSON.stringify({ type: 'session.created' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
       handler(Buffer.from(JSON.stringify({ type: 'session.ready' })));
       expect(
         sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),

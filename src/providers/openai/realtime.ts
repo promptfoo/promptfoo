@@ -818,6 +818,23 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
+      let initialPromptSent = false;
+      const sendInitialPrompt = () => {
+        if (initialPromptSent) {
+          return;
+        }
+        initialPromptSent = true;
+        sendEvent({
+          type: 'conversation.item.create',
+          previous_item_id: null,
+          item: {
+            type: 'message',
+            role: 'user',
+            content: promptContent,
+          },
+        });
+      };
+
       ws.on('open', () => {
         logger.debug('WebSocket connection established successfully');
       });
@@ -838,22 +855,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           switch (message.type) {
             case 'session.ready':
               logger.debug('Session ready on WebSocket');
-
-              // Create a conversation item with the user's prompt
-              sendEvent({
-                type: 'conversation.item.create',
-                previous_item_id: null,
-                item: {
-                  type: 'message',
-                  role: 'user',
-                  content: promptContent,
-                },
-              });
+              sendInitialPrompt();
               break;
 
             case 'session.created':
               logger.debug('Session created on WebSocket');
-              // No need to do anything here as we'll wait for session.ready
+              sendInitialPrompt();
               break;
 
             case 'conversation.item.created':
