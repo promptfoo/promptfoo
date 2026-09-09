@@ -185,7 +185,7 @@ function getEffectiveOpenAiApiModel(
 
   const bareModelUsesPassthrough =
     !modelName &&
-    (OPENAI_BARE_RESPONSES_MODELS.has(modelType) ||
+    (shouldDefaultToOpenAiResponses(modelType) ||
       OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
       OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
       OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
