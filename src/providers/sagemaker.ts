@@ -165,6 +165,40 @@ abstract class SageMakerGenericProvider {
   }
 
   /**
+   * Non-secret identity of the principal that will sign the request, following the same
+   * precedence as getCredentials(). Endpoint names are reused across accounts, so two
+   * profiles pointed at the same name must not share cached responses.
+   */
+  private getCredentialScope(): Record<string, string | undefined> {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return { source: 'config', accessKeyId: this.config.accessKeyId };
+    }
+    if (this.config.profile) {
+      return { source: 'profile', profile: this.config.profile };
+    }
+    // The default chain resolves at request time; key off what selects the account.
+    return {
+      source: 'default',
+      profile: process.env.AWS_PROFILE,
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    };
+  }
+
+  /**
+   * Hash a snapshotted request, and the credentials that will sign it, into a cache key.
+   */
+  protected buildCacheKey(
+    version: string,
+    request: { endpoint: string } & Record<string, unknown>,
+  ): string {
+    const hash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ ...request, credentials: this.getCredentialScope() }))
+      .digest('hex');
+    return `sagemaker:${version}:${request.endpoint}:${hash}`;
+  }
+
+  /**
    * Initialize and return the SageMaker runtime client
    */
   async getSageMakerRuntimeInstance(region?: string) {
@@ -695,13 +729,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       region: this.getRegion(),
     };
     let cacheKey: string | undefined;
-    const getCacheKey = () => {
-      if (cacheKey === undefined) {
-        const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
-        cacheKey = `sagemaker:v3:${request.endpoint}:${hash}`;
-      }
-      return cacheKey;
-    };
+    const getCacheKey = () => (cacheKey ??= this.buildCacheKey('v4', request));
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
@@ -854,26 +882,17 @@ export class SageMakerEmbeddingProvider
 
   /**
    * Generate a consistent cache key for SageMaker embedding requests
-   * Uses crypto.createHash to generate a shorter, more efficient key
    */
   private getCacheKey(text: string): string {
-    // Create a deterministic representation of the request parameters
-    const configForKey = {
+    return this.buildCacheKey('embedding:v2', {
+      text,
       endpoint: this.getEndpointName(),
       modelType: this.config.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),
       region: this.getRegion(),
       responseFormat: this.config.responseFormat,
-    };
-
-    const configStr = JSON.stringify(configForKey);
-
-    // Generate shorter, more efficient hashed keys
-    const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
-
-    return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
+    });
   }
 
   /**

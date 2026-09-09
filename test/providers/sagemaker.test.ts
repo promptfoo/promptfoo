@@ -498,6 +498,58 @@ describe('SageMakerCompletionProvider', () => {
       expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps cached completions separate per AWS profile', async () => {
+      mockSend.mockImplementation(async () => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: process.env.AWS_PROFILE })),
+      }));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+
+      for (const profile of ['staging', 'production']) {
+        vi.stubEnv('AWS_PROFILE', profile);
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: profile });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({
+          output: profile,
+          cached: true,
+        });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['profile', [{ profile: 'staging' }, { profile: 'production' }]],
+      [
+        'credentials',
+        [
+          { accessKeyId: 'AKIASTAGING', secretAccessKey: 'staging-secret' },
+          { accessKeyId: 'AKIAPRODUCTION', secretAccessKey: 'production-secret' },
+        ],
+      ],
+    ] as const)('keeps cached completions separate per configured %s', async (_label, accounts) => {
+      mockSend
+        .mockResolvedValueOnce({
+          Body: new TextEncoder().encode(JSON.stringify({ output: 'staging garden' })),
+        })
+        .mockResolvedValueOnce({
+          Body: new TextEncoder().encode(JSON.stringify({ output: 'production garden' })),
+        });
+      const providers = accounts.map((account) => {
+        const provider = new SageMakerCompletionProvider('test-endpoint', {
+          config: { region: 'us-east-1', modelType: 'custom', ...account },
+        });
+        vi.spyOn(provider, 'getCredentials').mockResolvedValue(undefined);
+        return provider;
+      });
+
+      for (const [index, provider] of providers.entries()) {
+        const output = index === 0 ? 'staging garden' : 'production garden';
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output, cached: true });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
     it('does not replay a cached success when a changed request fails', async () => {
       mockSend
         .mockResolvedValueOnce({
@@ -676,6 +728,39 @@ describe('SageMakerEmbeddingProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  describe('cache identity', () => {
+    it('keeps cached embeddings separate per AWS profile', async () => {
+      const entries = new Map<string, string>();
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        entries.set(key, value);
+      });
+      mockSend.mockImplementation(async () => ({
+        Body: new TextEncoder().encode(
+          JSON.stringify({ embedding: [process.env.AWS_PROFILE === 'staging' ? 0.1 : 0.2] }),
+        ),
+      }));
+      const provider = new SageMakerEmbeddingProvider('test-embedding-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+
+      for (const [profile, embedding] of [
+        ['staging', [0.1]],
+        ['production', [0.2]],
+      ] as const) {
+        vi.stubEnv('AWS_PROFILE', profile);
+        expect(await provider.callEmbeddingApi('A quiet garden')).toMatchObject({ embedding });
+        expect(await provider.callEmbeddingApi('A quiet garden')).toMatchObject({
+          embedding,
+          cached: true,
+        });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('cache flag behavior', () => {
