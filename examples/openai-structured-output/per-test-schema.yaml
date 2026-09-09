@@ -13,9 +13,9 @@ prompts:
   - 'Answer this question: {{question}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:chat:gpt-5.6-luna
     config:
-      temperature: 0
+      reasoning_effort: none
 
 # Parse JSON output so assertions can access properties directly
 defaultTest:

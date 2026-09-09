@@ -7,7 +7,7 @@ npx promptfoo@latest init --example openai-images
 cd openai-images
 ```
 
-A simple example showing how to evaluate OpenAI's current image generation models (GPT Image 2, GPT Image 1.5, GPT Image 1, GPT Image 1 Mini) with promptfoo.
+Compare GPT Image 2.5 Flare and Sunburst with earlier OpenAI image models in promptfoo.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ promptfoo view
 
 ## What's in this Example
 
-- Compares GPT Image 2, GPT Image 1.5, GPT Image 1, and GPT Image 1 Mini outputs
+- Compares GPT Image 2.5 Flare and Sunburst with GPT Image 2, 1.5, 1, and 1 Mini
 - Uses text-to-image generation through the Image API generations endpoint
 - Tests artistic style prompts across different models
 - Configures different image sizes and quality settings
@@ -35,9 +35,29 @@ promptfoo view
 
 ## Supported Models
 
-### GPT Image 2 (Recommended)
+### GPT Image 2.5 Flare and Sunburst (Recommended)
 
-OpenAI's latest image generation model with flexible custom sizes and improved output controls.
+Use Flare for everyday image generation. Sunburst is designed for precise editing; this example compares its text-to-image output. Both support custom sizes, transparent backgrounds, and quality settings through `max`.
+
+```yaml
+providers:
+  - id: openai:image:gpt-image-2.5-flare
+    config:
+      size: 1536x1024
+      quality: high # low, medium, high, xhigh, max, auto
+      background: transparent
+      output_format: png # png or webp for transparent backgrounds
+  - id: openai:image:gpt-image-2.5-sunburst
+    config:
+      size: 1536x1024
+      quality: high
+      background: transparent
+      output_format: png
+```
+
+### GPT Image 2
+
+Earlier image model with flexible custom sizes and opaque backgrounds.
 
 ```yaml
 providers:
@@ -103,20 +123,31 @@ providers:
 
 ### DALL-E 3 and DALL-E 2
 
-`dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
+`dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2.5-flare` or `gpt-image-2.5-sunburst` for new evals.
 
 Promptfoo's `openai:image` provider currently supports text-to-image generation. Image edits/reference inputs, variations, and streaming partial images are not part of this example and are rejected if configured.
 
 ## Pricing
+
+Flare and Sunburst share these [standard rates](https://developers.openai.com/api/docs/pricing), in USD per million tokens:
+
+| Input type | Input | Cached input | Output |
+| ---------- | ----- | ------------ | ------ |
+| Text       | $5    | $1.25        | —      |
+| Image      | $8    | $2           | $30    |
+
+Promptfoo calculates GPT Image 2.5 costs from returned usage. If usage is missing, cost stays unset. Equal token rates do not mean equal cost per image: each model and quality setting can use different token counts.
+
+Output-only estimates for earlier models:
 
 | Model            | Quality | Size      | Price per image |
 | ---------------- | ------- | --------- | --------------- |
 | GPT Image 2      | Low     | 1024x1024 | $0.006          |
 | GPT Image 2      | Medium  | 1024x1024 | $0.053          |
 | GPT Image 2      | High    | 1024x1024 | $0.211          |
-| GPT Image 1.5    | Low     | 1024x1024 | ~$0.064         |
-| GPT Image 1.5    | Medium  | 1024x1024 | ~$0.128         |
-| GPT Image 1.5    | High    | 1024x1024 | ~$0.192         |
+| GPT Image 1.5    | Low     | 1024x1024 | $0.009          |
+| GPT Image 1.5    | Medium  | 1024x1024 | $0.034          |
+| GPT Image 1.5    | High    | 1024x1024 | $0.133          |
 | GPT Image 1      | Low     | 1024x1024 | $0.011          |
 | GPT Image 1      | Medium  | 1024x1024 | $0.042          |
 | GPT Image 1      | High    | 1024x1024 | $0.167          |
@@ -124,7 +155,7 @@ Promptfoo's `openai:image` provider currently supports text-to-image generation.
 | GPT Image 1 Mini | Medium  | 1024x1024 | $0.011          |
 | GPT Image 1 Mini | High    | 1024x1024 | $0.036          |
 
-**Note:** Prices shown are 1024x1024 output image estimates and do not include input text tokens. For GPT Image 2 `auto` quality or custom sizes, promptfoo preserves OpenAI usage metadata and leaves `cost` unset instead of guessing.
+**Note:** The per-image estimates exclude input tokens. Promptfoo uses returned usage when available. Without usage, GPT Image 2 `auto` quality or custom sizes leave `cost` unset.
 
 ## Documentation
 
