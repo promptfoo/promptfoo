@@ -7,15 +7,21 @@ import {
 } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
+import type { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
-export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
 type TrajectoryAttributes = Record<string, unknown>;
 
 export interface TrajectoryStepMatcher {
   name?: string;
   pattern?: string;
   type?: TrajectoryStepType | TrajectoryStepType[];
+}
+
+export interface TrajectoryStepStatusMatcher extends TrajectoryStepMatcher {
+  status: 'success' | 'error' | number;
+  message?: string;
 }
 
 export interface TrajectoryStep {
@@ -443,6 +449,33 @@ export function matchesTrajectoryStep(
   }
 
   return step.aliases.some((alias) => matchesPattern(alias, matchPattern));
+}
+
+export function matchesTrajectoryStepStatus(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepStatusMatcher,
+): boolean {
+  if (!matchesTrajectoryStep(step, matcher)) {
+    return false;
+  }
+
+  const status = matcher.status;
+  const code = step.statusCode;
+  if (code === undefined) {
+    return false;
+  }
+
+  const statusMatches =
+    typeof status === 'number'
+      ? code === status
+      : status === 'success'
+        ? code === 1 || (code >= 200 && code < 400)
+        : code === 2 || (code >= 400 && code < 600);
+  if (!statusMatches) {
+    return false;
+  }
+
+  return matcher.message === undefined || matchesPattern(step.statusMessage ?? '', matcher.message);
 }
 
 export function formatTrajectoryStep(step: TrajectoryStep): string {
