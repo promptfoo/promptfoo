@@ -852,8 +852,10 @@ export function resolveTestsWatchPaths(
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
-      // A value may be a list of references, or nest them, and generateVarCombinations()
-      // and renderPrompt() read every one, so walk the whole mapping.
+      // generateVarCombinations() fans a list value out into one case per entry and
+      // renderPrompt() then loads each, so a top-level string scan misses them. Share the
+      // tests-file walker instead. It also reaches deeper nesting, which the loader leaves
+      // as a literal -- watching an extra file only costs a spurious re-run.
       return collectConfigFileReferences(entry.vars, basePath);
     }
     return [];

@@ -184,6 +184,11 @@ function logWatchError(error: unknown): void {
   } else if (!(error instanceof EmailValidationError)) {
     // Account helpers already render their own user-facing failures.
     logger.error(error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      // The rejection this replaces printed a stack, the only pointer to where an
+      // unexpected failure came from. Keep it, below the user-facing message.
+      logger.debug(error.stack);
+    }
   }
 }
 
