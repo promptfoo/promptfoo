@@ -8,5 +8,13 @@ export default function (vars) {
     return vars;
   }
 
-  return { ...vars, audioFile: path.resolve(exampleDirectory, vars.audioFile) };
+  const resolveAudioFile = (audioFile) =>
+    audioFile ? path.resolve(exampleDirectory, audioFile) : audioFile;
+
+  return {
+    ...vars,
+    audioFile: Array.isArray(vars.audioFile)
+      ? vars.audioFile.map(resolveAudioFile)
+      : resolveAudioFile(vars.audioFile),
+  };
 }
