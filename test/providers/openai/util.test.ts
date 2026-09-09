@@ -544,9 +544,17 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
   });
 
+  // Availability re-verified against GET /v1/models/<id> on 2026-09-09.
   it.each([
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+    'gpt-5-codex',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -1013,8 +1021,6 @@ describe('OpenAI model catalogs', () => {
   it.each([
     'chatgpt-4o-latest',
     'codex-mini-latest',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
     'gpt-3.5-turbo-0301',
     'gpt-3.5-turbo-0613',
     'gpt-3.5-turbo-16k-0613',
@@ -1032,13 +1038,8 @@ describe('OpenAI model catalogs', () => {
     'gpt-4o-search-preview-2025-03-11',
     'gpt-5-chat',
     'gpt-5-chat-latest',
-    'gpt-5-codex',
     'gpt-5.1-chat-latest',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     'gpt-5.2-chat-latest',
-    'gpt-5.2-codex',
     'gpt-5.3-chat-latest',
     'gpt-audio-mini-2025-10-06',
     'gpt-realtime-mini-2025-10-06',

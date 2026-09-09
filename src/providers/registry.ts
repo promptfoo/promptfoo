@@ -1068,12 +1068,8 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (shouldDefaultToOpenAiResponses(modelType)) {
-        return new OpenAiResponsesProvider(modelType, providerOptions);
-      }
-      if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiChatCompletionProvider(modelType, providerOptions);
-      }
+      // Models living on a different endpoint family are matched before the version
+      // gate, so a future `gpt-6-realtime`-style name is not swallowed by it.
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
       }
@@ -1082,6 +1078,12 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
+      }
+      if (shouldDefaultToOpenAiResponses(modelType)) {
+        return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
