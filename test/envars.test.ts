@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import {
@@ -161,6 +165,27 @@ describe('envars', () => {
       dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
 
       expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+    });
+  });
+
+  describe('dotenv loading', () => {
+    it('does not load a .env file into a test process', async () => {
+      // A developer's gitignored .env must never reach the suite: tests would pick up
+      // real credentials and diverge from CI, which has none.
+      const originalCwd = process.cwd();
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dotenv-'));
+      fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=leaked\n');
+
+      try {
+        process.chdir(dir);
+        vi.resetModules();
+        await import('../src/envars');
+
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+      } finally {
+        process.chdir(originalCwd);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 
