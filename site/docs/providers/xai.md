@@ -702,10 +702,12 @@ providers:
       resolution: '720p'
 ```
 
-Reference-to-video requires a non-empty prompt and at least one reference image or preset voice. It
-cannot be combined with `image` or `video`, and its resolution is capped at 720p. The Video 1.5
-family supports durations up to 15 seconds; the legacy `grok-imagine-video` model is limited to 10
-seconds and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
+Video 1.5 can combine a starting `image` with `reference_images`, preset `reference_audios`, or both.
+The prompt is optional when an `image` or `reference_images` is supplied; text-only and voice-only
+requests require a non-empty prompt. Reference-to-video cannot be combined with video editing,
+and its resolution is capped at 720p. The Video 1.5 family supports durations up to 15 seconds.
+The legacy `grok-imagine-video` model is limited to 10 seconds for reference-to-video, rejects
+starting-image/reference-image combinations, and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
 restricted to trusted partners in the United States.
 
 #### Pricing
