@@ -370,7 +370,9 @@ export class MCPClient {
     oauthConfig: OAuthServerConfig,
     forceRefresh: boolean,
   ): Promise<void> {
-    // If a refresh is already in progress, wait for it instead of starting a new one.
+    // Wait for each active refresh lock. Its owner clears it in finally; once no lock
+    // remains, this caller either uses the refreshed token or starts its own refresh.
+    // Another caller may install a new lock while we wait, so check again each time.
     while (true) {
       const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
       if (!existingRefreshPromise) {
@@ -384,10 +386,10 @@ export class MCPClient {
         if (this.hasValidToken(serverKey)) {
           return;
         }
-        // Token still needs refresh after waiting, so fall through and try again.
+        // The token is still stale; check for a replacement lock before refreshing.
         logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
       } catch {
-        // If the in-progress refresh failed, we'll try again below
+        // The lock owner cleans up even on failure; check for a replacement lock.
         logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
       }
     }
@@ -476,6 +478,8 @@ export class MCPClient {
         let currentClient = client;
         let retried = false;
 
+        // A successful call returns. Authentication failure allows one refresh and
+        // one retry; all other failures return an error after the catch block.
         while (true) {
           try {
             const result = await currentClient.callTool(

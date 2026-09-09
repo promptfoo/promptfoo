@@ -203,29 +203,52 @@ export function isSecretField(fieldName: string): boolean {
 }
 
 /**
- * Credential words that make an environment variable name secret-bearing.
- *
- * Singular only, on purpose: each `_`-delimited word is matched by suffix, so `MAX_TOKENS`
- * (word `TOKENS`) and `RETRY_KEYS` stay out of the match while `GITHUB_TOKEN`,
- * `STRIPE_SECRET_KEY` and `PGPASSWORD` are caught.
+ * Matched as a whole `_`-delimited word only. `KEY` is short enough to sit inside ordinary
+ * words — `PORTKEY_API_BASE_URL` is a documented endpoint, `MONKEY` is a word — so the
+ * credential compounds that end in it are listed explicitly below instead.
  */
-const ENV_SECRET_WORDS = new Set([
-  'TOKEN',
-  'SECRET',
+const ENV_SECRET_WHOLE_WORDS = new Set(['KEY']);
+
+/**
+ * Matched as a whole word *or* a suffix, so fused vendor spellings are caught:
+ * `PGPASSWORD`, `GCP_PRIVATEKEY`, `DBPWD`, `DATABASEDSN`. Each is either long enough that a
+ * suffix match is unambiguous, or (like `PWD`/`DSN`) has no ordinary-word collisions.
+ *
+ * Singular on purpose: `MAX_TOKENS` ends with `TOKENS`, which does not end with `TOKEN`.
+ */
+const ENV_SECRET_SUFFIX_WORDS = [
   'PASSWORD',
   'PASSWD',
-  'PWD',
-  'KEY',
-  'APIKEY',
-  'CREDENTIAL',
-  'CREDENTIALS',
   'PASSPHRASE',
-  'AUTH',
+  'CREDENTIALS',
+  'CREDENTIAL',
+  'SECRET',
+  'TOKEN',
+  'PWD',
   'DSN',
-]);
+  // Every credential name in SECRET_FIELD_NAMES that ends in `key`, so a prefixed spelling
+  // (`APP_ENCRYPTIONKEY`, `VENDOR_CERTKEY`) is still caught even though the exact-name match
+  // cannot see past the prefix. Derived rather than hand-listed so the two stay in sync; all
+  // are at least six characters, so none of them matches `PORTKEY` or `MONKEY`.
+  ...[...SECRET_FIELD_NAMES].filter((name) => name.endsWith('key') && name.length > 3),
+  // Not in SECRET_FIELD_NAMES on its own — that set carries `accesskeyid` — but the bare
+  // compound shows up in env vars.
+  'accesskey',
+].map((word) => word.toUpperCase());
 
-/** SCREAMING_SNAKE_CASE (underscores optional): `GITHUB_TOKEN`, `PGPASSWORD` — not `apiKey`. */
-const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+/**
+ * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
+ * hold a credential; `WATSONX_AI_AUTH_TYPE` names a method and `OAUTH_SCOPE` is not an
+ * `AUTH` word at all.
+ */
+const ENV_SECRET_TERMINAL_WORDS = new Set(['AUTH']);
+
+/**
+ * An environment-variable-shaped name. Leading underscores are legal and used in practice
+ * (`_GITHUB_TOKEN`), so they must not be a way around the check. Case is normalized before
+ * this is applied.
+ */
+const ENV_VAR_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
 
 /**
  * Check whether an environment-variable name looks credential-bearing.
@@ -236,22 +259,26 @@ const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
  * place a config is *expected* to hold credentials; treat a credential-worded key there
  * as secret.
  *
- * Restricted to SCREAMING_SNAKE_CASE so it never fires on ordinary config fields
- * (`maxTokens`, `tokenCount`, `keyName`), which keep the exact-name behavior.
+ * Case is normalized first: nothing requires an env var to be uppercase, and a lowercase
+ * `github_token` reaches the subprocess exactly like `GITHUB_TOKEN` does.
  */
 export function isSecretEnvVarName(name: string): boolean {
   if (isSecretField(name)) {
     return true;
   }
-  if (!ENV_VAR_NAME_RE.test(name)) {
+  const normalized = name.toUpperCase();
+  if (!ENV_VAR_NAME_RE.test(normalized)) {
     return false;
   }
-  // A word matches when it *ends with* a credential word, so the vendor-prefixed spellings
-  // that have no separator (`PGPASSWORD`, `AWS_SECRETKEY`) match too. Suffix rather than
-  // substring keeps the plurals out: `TOKENS` does not end with `TOKEN`.
-  return name
-    .split('_')
-    .some((word) => [...ENV_SECRET_WORDS].some((secret) => word.endsWith(secret)));
+  const words = normalized.split('_');
+  if (ENV_SECRET_TERMINAL_WORDS.has(words[words.length - 1])) {
+    return true;
+  }
+  return words.some(
+    (word) =>
+      ENV_SECRET_WHOLE_WORDS.has(word) ||
+      ENV_SECRET_SUFFIX_WORDS.some((secret) => word.endsWith(secret)),
+  );
 }
 
 /**
