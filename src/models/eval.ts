@@ -54,6 +54,7 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  getCachedResponseRowsCount as getCachedResponseRowsCountFromDb,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -89,6 +90,19 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+function countCachedRows(results: unknown): number {
+  if (!Array.isArray(results)) {
+    return 0;
+  }
+
+  return results.reduce((count, result) => {
+    if (!result || typeof result !== 'object') {
+      return count;
+    }
+    return count + Number((result as EvaluateResult).response?.cached === true);
+  }, 0);
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -835,6 +849,17 @@ export default class Eval {
     return getTotalResultRowCount(this.id);
   }
 
+  /** Get the number of result rows served from the response cache. */
+  async getCachedResponseRowsCount(): Promise<number> {
+    if (this.useOldResults()) {
+      return this.getStats().cachedRows ?? 0;
+    }
+    if (this._resultsLoaded) {
+      return countCachedRows(this.results);
+    }
+    return getCachedResponseRowsCountFromDb(this.id);
+  }
+
   /**
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
@@ -1402,18 +1427,19 @@ export default class Eval {
   getStats(): EvaluateStats {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      const legacyResults = Array.isArray(this.oldResults.results) ? this.oldResults.results : [];
-      const cachedRows =
-        this.oldResults.stats.cachedRows ??
-        legacyResults.reduce((count, result) => {
-          if (!result || typeof result !== 'object') {
-            return count;
-          }
-          return count + (result.response?.cached === true ? 1 : 0);
-        }, 0);
-      this.oldResults.stats.cachedRows = cachedRows;
+      const legacyStats: EvaluateStats =
+        this.oldResults.stats && typeof this.oldResults.stats === 'object'
+          ? this.oldResults.stats
+          : {
+              successes: 0,
+              failures: 0,
+              errors: 0,
+              tokenUsage: createEmptyTokenUsage(),
+            };
+      const cachedRows = legacyStats.cachedRows ?? countCachedRows(this.oldResults.results);
+      legacyStats.cachedRows = cachedRows;
       return {
-        ...this.oldResults.stats,
+        ...legacyStats,
         cachedRows,
       };
     }
@@ -1442,6 +1468,15 @@ export default class Eval {
       stats.tokenUsage,
       this.config.metadata?.generationAccounting?.tokenUsage,
     );
+
+    if (
+      stats.cachedRows === 0 &&
+      this._resultsLoaded &&
+      this.results.length > 0 &&
+      this.prompts.every((prompt) => prompt.metrics?.cachedRows === undefined)
+    ) {
+      stats.cachedRows = countCachedRows(this.results);
+    }
 
     return stats;
   }

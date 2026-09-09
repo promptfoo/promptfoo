@@ -69,6 +69,48 @@ describe('evaluator', () => {
     vi.resetAllMocks();
   });
 
+  describe('legacy cached-row stats', () => {
+    it('defaults missing stats and ignores malformed legacy result entries', async () => {
+      const evalId = 'legacy-cached-row-stats';
+      const db = await getDb();
+      await db
+        .insert(evalsTable)
+        .values({
+          id: evalId,
+          config: {},
+          results: {
+            version: 2,
+            timestamp: new Date().toISOString(),
+            results: [null, { response: { cached: true } }],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+          },
+        })
+        .run();
+
+      const evalRecord = await Eval.findById(evalId);
+
+      expect(evalRecord?.getStats()).toMatchObject({
+        successes: 0,
+        failures: 0,
+        errors: 0,
+        cachedRows: 1,
+      });
+    });
+
+    it('derives cached rows for V4 results when prompt metrics predate the field', async () => {
+      const evalRecord = await EvalFactory.create({ numResults: 0 });
+      await evalRecord.addResult(
+        createEvaluateResult({
+          response: { output: 'cached result', cached: true },
+        }),
+      );
+
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(1);
+    });
+  });
+
   describe('addPrompts', () => {
     it('should notify watchers when persisted prompt metadata changes', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
