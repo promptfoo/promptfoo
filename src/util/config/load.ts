@@ -518,13 +518,10 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
-/**
- * Reads multiple configuration files and combines them into a single UnifiedConfig.
- *
- * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
- * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
- */
-export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+async function prepareCombinedConfig(
+  configPaths: string[],
+  deferTests: boolean = false,
+): Promise<{ config: UnifiedConfig; loadTests: () => Promise<void> }> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -569,19 +566,24 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (let i = 0; i < configs.length; i++) {
-    const config = configs[i];
-    const configPath = configPaths[i];
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
-    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
-      // Handle TestGeneratorConfig object
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
+  const loadTests = async () => {
+    for (let i = 0; i < configs.length; i++) {
+      const config = configs[i];
+      const configPath = configPaths[i];
+      if (typeof config.tests === 'string') {
+        const newTests = await readTests(config.tests, path.dirname(configPath));
+        tests.push(...newTests);
+      } else if (Array.isArray(config.tests)) {
+        tests.push(...config.tests);
+      } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+        // Handle TestGeneratorConfig object
+        const newTests = await readTests(config.tests, path.dirname(configPath));
+        tests.push(...newTests);
+      }
     }
+  };
+  if (!deferTests) {
+    await loadTests();
   }
 
   const extensions: UnifiedConfig['extensions'] = [];
@@ -758,7 +760,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  return combinedConfig;
+  return { config: combinedConfig, loadTests };
+}
+
+/**
+ * Reads multiple configuration files and combines them into a single UnifiedConfig.
+ *
+ * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
+ * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
+ */
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const { config } = await prepareCombinedConfig(configPaths);
+  return config;
 }
 
 /**
@@ -780,8 +793,11 @@ export async function resolveConfigs(
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
+  let loadFileTests: (() => Promise<void>) | undefined;
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    const prepared = await prepareCombinedConfig(configPaths, true);
+    fileConfig = prepared.config;
+    loadFileTests = prepared.loadTests;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
@@ -911,6 +927,7 @@ export async function resolveConfigs(
   // Select the current suite before loading providers so watch reloads cannot
   // inherit environment overrides removed from the previous configuration.
   cliState.config = config;
+  await loadFileTests?.();
   config.defaultTest = processedDefaultTest
     ? await readTest(processedDefaultTest, basePath, true)
     : undefined;

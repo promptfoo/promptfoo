@@ -135,6 +135,111 @@ describe('Envoy config reload', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'uses the process URL',
+      processUrl: 'https://process.example/v1/',
+      suiteUrl: undefined,
+      apiBaseUrl: undefined,
+      expectedUrl: 'https://process.example/v1/chat/completions',
+    },
+    {
+      name: 'rejects a missing gateway',
+      processUrl: undefined,
+      suiteUrl: undefined,
+      apiBaseUrl: undefined,
+      expectedUrl: undefined,
+    },
+    {
+      name: 'preserves the explicit provider URL',
+      processUrl: 'https://process.example/v1/',
+      suiteUrl: undefined,
+      apiBaseUrl: 'https://provider.example/custom/',
+      expectedUrl: 'https://provider.example/custom/chat/completions',
+    },
+    {
+      name: 'uses the replacement suite URL',
+      processUrl: 'https://process.example/v1/',
+      suiteUrl: 'https://current-suite.example/v1/',
+      apiBaseUrl: undefined,
+      expectedUrl: 'https://current-suite.example/v1/chat/completions',
+    },
+  ])(
+    'reloads an external YAML test provider and $name',
+    async ({ processUrl, suiteUrl, apiBaseUrl, expectedUrl }) => {
+      mockProcessEnv({ ENVOY_API_BASE_URL: processUrl });
+      const firstPath = path.join(tempDir, 'first-external.json');
+      const secondPath = path.join(tempDir, 'second-external.json');
+      const testsDirectory = path.join(tempDir, 'cases');
+      const testsPath = path.join(testsDirectory, 'tests.yaml');
+      fs.mkdirSync(testsDirectory);
+      fs.writeFileSync(path.join(testsDirectory, 'vars.yaml'), 'greeting: Hello\n');
+      const writeTests = (url?: string) => {
+        fs.writeFileSync(
+          testsPath,
+          `- provider:\n    id: envoy:external\n    config:\n      apiKey: test-envoy-key\n${
+            url ? `      apiBaseUrl: ${JSON.stringify(url)}\n` : ''
+          }  vars: vars.yaml\n  assert:\n    - type: equals\n      value: Hello\n`,
+        );
+      };
+      const baseConfig = {
+        prompts: ['{{greeting}}'],
+        providers: ['echo'],
+        tests: 'cases/tests.yaml',
+      };
+      fs.writeFileSync(
+        firstPath,
+        JSON.stringify({ ...baseConfig, env: { ENVOY_API_BASE_URL: 'https://suite.example/' } }),
+      );
+      fs.writeFileSync(
+        secondPath,
+        JSON.stringify({
+          ...baseConfig,
+          ...(suiteUrl ? { env: { ENVOY_API_BASE_URL: suiteUrl } } : {}),
+        }),
+      );
+      writeTests();
+
+      for (const [configPath, url] of [
+        [firstPath, 'https://suite.example/v1/chat/completions'],
+        [secondPath, expectedUrl],
+      ] as const) {
+        clearConfigCache();
+        vi.mocked(fetchWithCache).mockClear();
+        if (configPath === secondPath) {
+          writeTests(apiBaseUrl);
+        }
+        if (url === undefined) {
+          await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
+            'Envoy provider requires a gateway URL',
+          );
+          expect(fetchWithCache).not.toHaveBeenCalled();
+          expect(cliState.config?.env?.ENVOY_API_BASE_URL).toBeUndefined();
+          continue;
+        }
+
+        const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+        expect(cliState.config).toBe(config);
+        expect(testSuite.providers.map((provider) => provider.id())).toEqual(['echo']);
+        expect(testSuite.tests).toHaveLength(1);
+        const test = testSuite.tests?.[0];
+        expect(test?.vars).toEqual({ greeting: 'Hello' });
+        if (!test || !isApiProvider(test.provider)) {
+          throw new Error('Expected the external YAML test to have an instantiated provider');
+        }
+        expect(test.provider.id()).toBe('external');
+        expect((await test.provider.callApi('Hello')).output).toBe('Hello');
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(url);
+        expect(
+          JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string),
+        ).toMatchObject({
+          model: 'external',
+        });
+      }
+    },
+  );
+
   it('reloads the gateway used to construct the defaultTest provider', async () => {
     const firstPath = path.join(tempDir, 'first-default-test.json');
     const secondPath = path.join(tempDir, 'second-default-test.json');
