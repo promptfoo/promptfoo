@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
+import { HttpRequest } from '@smithy/core/transport';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import type { NodeHttpHandler } from '@smithy/node-http-handler';
@@ -64,13 +65,13 @@ describe('SageMaker SDK transport configuration', () => {
       const runtime = await provider.getSageMakerRuntimeInstance();
       const handler = runtime.config.requestHandler as NodeHttpHandler;
       const referenceHandler = reference.config.requestHandler as NodeHttpHandler;
-      const requestInput = {
+      const requestInput = new HttpRequest({
         protocol: 'http:',
         hostname: '127.0.0.1',
         path: '/',
         method: 'POST',
         headers: {},
-      };
+      });
       await Promise.all(
         [handler.handle(requestInput, {}), handler.handle(requestInput, {})].map((pending) =>
           expect(pending).rejects.toBe(intercepted),
