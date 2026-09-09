@@ -306,6 +306,7 @@ interface GoogleVideoMediaBasePaths {
   image?: string;
   lastFrame?: string;
   referenceImages?: string;
+  sourceVideo?: string;
 }
 
 function hasOwnVideoOption(
@@ -351,6 +352,7 @@ function mergeGoogleVideoRequestConfig(
       image: promptOwnsImage ? promptMediaBasePath : providerConfig.basePath,
       lastFrame: promptOwnsLastFrame ? promptMediaBasePath : providerConfig.basePath,
       referenceImages: promptOwnsReferenceImages ? promptMediaBasePath : providerConfig.basePath,
+      sourceVideo: promptOwnsSourceVideo ? promptMediaBasePath : providerConfig.basePath,
     },
   };
 }
@@ -466,6 +468,23 @@ export class GoogleVideoProvider implements ApiProvider {
       return { data: fs.readFileSync(filePath).toString('base64') };
     }
     return { data: imagePath };
+  }
+
+  private loadVideoData(
+    videoPath: string,
+    config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
+  ): { data?: string; error?: string } {
+    if (videoPath.startsWith('file://')) {
+      const filePath = path.resolve(
+        config.basePath || process.cwd(),
+        videoPath.slice('file://'.length),
+      );
+      if (!fs.existsSync(filePath)) {
+        return { error: `Video file not found: ${filePath}` };
+      }
+      return { data: fs.readFileSync(filePath).toString('base64') };
+    }
+    return { data: videoPath };
   }
 
   /**
@@ -587,6 +606,7 @@ export class GoogleVideoProvider implements ApiProvider {
       image: config.basePath,
       lastFrame: config.basePath,
       referenceImages: config.basePath,
+      sourceVideo: config.basePath,
     },
   ): { body?: Record<string, unknown>; error?: string } {
     const instance: Record<string, unknown> = { prompt };
@@ -671,18 +691,25 @@ export class GoogleVideoProvider implements ApiProvider {
       if (sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Provide the URI returned by a previous Veo generation via `sourceVideo`.',
+            'Google AI Studio Veo does not accept operation IDs for video extension. Provide a previous Veo video URI, file:// path, or base64 bytes via `sourceVideo`.',
         };
       }
-      if (!isReusableAiStudioVideoUri(sourceVideo)) {
+      if (isReusableAiStudioVideoUri(sourceVideo)) {
+        instance.video = { uri: sourceVideo };
+      } else if (sourceVideo.startsWith('file://') || !sourceVideo.includes('://')) {
+        const { data, error } = this.loadVideoData(sourceVideo, {
+          basePath: mediaBasePaths.sourceVideo,
+        });
+        if (error) {
+          return { error };
+        }
+        instance.video = { inlineData: { mimeType: 'video/mp4', data } };
+      } else {
         return {
           error:
-            'Google AI Studio Veo video extension requires the URI returned by a previous Veo generation; downloaded files and base64 video bytes are not supported.',
+            'Google AI Studio Veo video extension requires a previous Veo video URI, file:// path, or base64 bytes.',
         };
       }
-      instance.video = {
-        uri: sourceVideo,
-      };
     }
 
     const body: Record<string, unknown> = {

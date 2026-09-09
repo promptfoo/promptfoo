@@ -129,13 +129,14 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   protected override sanitizeRequestHeaders(
     headers: Record<string, string>,
   ): Record<string, string> {
-    // A configured proxy may require its own explicit bearer credential.
+    // A configured proxy may require its own explicit bearer credential or API key.
     // Native AWS credentials and Anthropic-scoped defaults stay isolated.
-    const allowProxyAuthorization = isConfiguredBedrockProxy(this.config.apiBaseUrl);
+    const allowProxyCredentials = isConfiguredBedrockProxy(this.config.apiBaseUrl);
     return Object.fromEntries(
       Object.entries(headers).filter(
         ([name]) =>
-          (allowProxyAuthorization && name.toLowerCase() === 'authorization') ||
+          (allowProxyCredentials &&
+            (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
           !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
       ),
     );

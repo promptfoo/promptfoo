@@ -303,6 +303,89 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('config-relative media paths', () => {
+    it.each(['sourceVideo', 'extendVideoId'] as const)(
+      'sends raw %s bytes as inline video through Google AI Studio',
+      async (field) => {
+        const data = Buffer.from('previous Veo video').toString('base64');
+
+        const result = await callVideoProviderWithPromptConfig(
+          'Google AI Studio',
+          { [field]: data },
+          {},
+        );
+
+        expect(result.error).toBeUndefined();
+        expect(getLastVideoCreateRequestBody('Google AI Studio').instances[0].video).toEqual({
+          inlineData: { mimeType: 'video/mp4', data },
+        });
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['inherited', 'prompt', 'prompt without basePath'] as const)(
+      'loads %s source video relative to its owning config for Google AI Studio',
+      async (owner) => {
+        const providerBasePath = path.resolve('/tmp', 'provider-config');
+        const promptBasePath = path.resolve('/tmp', 'prompt-config');
+        const fileRef = 'file://assets/previous-video.mp4';
+        const expectedPath = path.resolve(
+          owner === 'prompt' ? promptBasePath : providerBasePath,
+          'assets/previous-video.mp4',
+        );
+        const videoBytes = Buffer.from('previous Veo file');
+        vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+        vi.mocked(fs.readFileSync).mockReturnValue(videoBytes);
+
+        const result = await callVideoProviderWithPromptConfig(
+          'Google AI Studio',
+          { basePath: providerBasePath, sourceVideo: fileRef },
+          owner === 'inherited'
+            ? { basePath: promptBasePath }
+            : {
+                ...(owner === 'prompt' ? { basePath: promptBasePath } : {}),
+                extendVideoId: fileRef,
+              },
+        );
+
+        expect(result.error).toBeUndefined();
+        expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath);
+        expect(getLastVideoCreateRequestBody('Google AI Studio').instances[0].video).toEqual({
+          inlineData: { mimeType: 'video/mp4', data: videoBytes.toString('base64') },
+        });
+      },
+    );
+
+    it('reports a missing source video before sending a Google AI Studio request', async () => {
+      const basePath = path.resolve('/tmp', 'provider-config');
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const result = await callVideoProviderWithPromptConfig(
+        'Google AI Studio',
+        { basePath, sourceVideo: 'file://missing.mp4' },
+        {},
+      );
+
+      expect(result.error).toContain(
+        `Video file not found: ${path.resolve(basePath, 'missing.mp4')}`,
+      );
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'models/veo-3.1-generate-preview/operations/previous-op',
+      'https://storage.example.com/previous-video.mp4',
+      'gs://test-bucket/previous-video.mp4',
+    ])('rejects unsupported source video URI %s on Google AI Studio', async (sourceVideo) => {
+      const result = await callVideoProviderWithPromptConfig(
+        'Google AI Studio',
+        { sourceVideo },
+        {},
+      );
+
+      expect(result.error).toContain('Google AI Studio Veo');
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
     it('resolves image files relative to the config directory', () => {
       const fileRef = 'file://assets/start-frame.png';
       const basePath = path.resolve('/tmp', 'google-video');
@@ -1834,35 +1917,25 @@ describe('GoogleVideoProvider', () => {
       },
     );
 
-    it.each(videoTransports)(
-      'rejects local and inline extension sources on %s',
-      async (transport) => {
-        for (const sourceVideo of [
-          'file://source.mp4',
-          'file://source.mov',
-          Buffer.from('source video').toString('base64'),
-          'data:video/webm;base64,dmlkZW8=',
-        ]) {
-          const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-            config: {
-              sourceVideo,
-              ...(transport === 'Vertex'
-                ? { vertexai: true, projectId: 'test-project' }
-                : { vertexai: false, apiKey: 'test-api-key' }),
-            },
-          });
+    it('rejects local and inline extension sources on Vertex', async () => {
+      for (const sourceVideo of [
+        'file://source.mp4',
+        'file://source.mov',
+        Buffer.from('source video').toString('base64'),
+        'data:video/webm;base64,dmlkZW8=',
+      ]) {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+          config: { sourceVideo, vertexai: true, projectId: 'test-project' },
+        });
 
-          const result = await provider.callApi('Extend');
+        const result = await provider.callApi('Extend');
 
-          expect(result.error).toContain(
-            transport === 'Vertex' ? 'gs://' : 'URI returned by a previous Veo generation',
-          );
-          expect(mockRequest).not.toHaveBeenCalled();
-          expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-          expect(fs.readFileSync).not.toHaveBeenCalled();
-        }
-      },
-    );
+        expect(result.error).toContain('gs://');
+        expect(mockRequest).not.toHaveBeenCalled();
+        expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      }
+    });
 
     it('preserves opaque GCS extension sources', async () => {
       const sourceVideo = 'gs://video-bucket/opaque-source';
