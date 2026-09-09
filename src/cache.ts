@@ -14,6 +14,7 @@ import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
+  getCloudAuthHeaderName,
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
@@ -428,15 +429,28 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
   }
 }
 
-function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
+export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
-  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
-  // without overriding a caller-supplied Authorization.
+  // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
+  // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
+  // whatever header name is configured, without overriding a caller-supplied header.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !headers.has('Authorization')) {
-    headers.set('Authorization', cloudAuth);
+  // Whenever a cloud credential resolves for this request, its header name is
+  // sensitive and must be fingerprinted below — whether this function injects it
+  // (headers.set) or a caller already set it explicitly beforehand (e.g.
+  // resolveGuardrailsApi via cloudConfig.getAuthHeaders()). A custom header name
+  // and/or a short on-prem token can both evade the generic
+  // isSecretField/looksLikeSecret heuristics used for ordinary headers, so this
+  // must not depend on whether headers.set() actually ran here. Lowercased once
+  // at capture because Headers.entries() below always yields lowercase names.
+  let cloudAuthHeaderNameForFingerprint: string | undefined;
+  if (cloudAuth) {
+    const cloudAuthHeaderName = getCloudAuthHeaderName();
+    cloudAuthHeaderNameForFingerprint = cloudAuthHeaderName.toLowerCase();
+    if (!headers.has(cloudAuthHeaderName)) {
+      headers.set(cloudAuthHeaderName, cloudAuth);
+    }
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);
@@ -450,7 +464,12 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
     })
-    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
+    .map(([name, value]) => [
+      name,
+      name === cloudAuthHeaderNameForFingerprint
+        ? fingerprintFetchCacheSecret(value)
+        : getStringForFetchCacheKey(value, name),
+    ]);
 }
 
 function hashFetchCacheKey(identity: unknown) {

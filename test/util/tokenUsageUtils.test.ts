@@ -295,6 +295,127 @@ describe('tokenUsageUtils', () => {
       expect(target.numRequests).toBe(1);
     });
 
+    it('retains the logical footprint of a cached target without incurring another request', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 12 },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 100,
+        numRequests: 1,
+        completionDetails: { reasoning: 12 },
+        incurredTokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+      });
+    });
+
+    it('preserves independently incurred attacker usage when the target response is cached', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          attacker: {
+            total: 28,
+            prompt: 20,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 3 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 100,
+        numRequests: 1,
+        attacker: {
+          total: 28,
+          prompt: 20,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 28, numRequests: 1 },
+        },
+      });
+    });
+
+    it('counts a cached target turn as one probe when fresh grading still runs', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(
+        target,
+        {
+          cached: true,
+          tokenUsage: { prompt: 60, completion: 40, numRequests: 1 },
+        },
+        { countCachedAsRequest: true },
+      );
+
+      expect(target).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 100,
+        numRequests: 1,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('counts a cached response without usage as a logical turn but not an incurred request', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, { cached: true });
+
+      expect(target).toMatchObject({
+        total: 0,
+        cached: 0,
+        numRequests: 1,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('keeps provider-side prompt cache hits in incurred usage because a model call still ran', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, cached: 45, numRequests: 1 },
+      });
+
+      expect(target).toMatchObject({
+        total: 100,
+        cached: 45,
+        numRequests: 1,
+      });
+      expect(target.incurredTokenUsage ?? target).toMatchObject({
+        total: 100,
+        cached: 45,
+        numRequests: 1,
+      });
+    });
+
     it('should increment numRequests when response exists but has no tokenUsage', () => {
       const target = createEmptyTokenUsage();
       const response = {};
@@ -387,7 +508,7 @@ describe('tokenUsageUtils', () => {
       });
     });
 
-    it('does not add historical usage from fully cached attacker responses', () => {
+    it('keeps cached attacker usage in the logical footprint but excludes it from incurred usage', () => {
       const target = createEmptyTokenUsage();
 
       accumulateAttackerTokenUsage(target, {
@@ -395,8 +516,132 @@ describe('tokenUsageUtils', () => {
         tokenUsage: { total: 32, prompt: 20, completion: 12, numRequests: 1 },
       });
 
-      expect(target.attacker).toBeUndefined();
-      expect(target.numRequests).toBe(0);
+      expect(target).toMatchObject({
+        numRequests: 0,
+        attacker: { total: 32, prompt: 20, completion: 12, numRequests: 1 },
+        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+      });
+    });
+
+    it('discards historical incurred attacker and grading usage without losing fresh target work', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 21, prompt: 14, completion: 7 },
+      });
+
+      accumulateAttackerTokenUsage(target, {
+        cached: true,
+        tokenUsage: {
+          total: 10,
+          prompt: 7,
+          completion: 3,
+          numRequests: 1,
+          assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 10,
+            prompt: 7,
+            completion: 3,
+            numRequests: 1,
+            assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 21,
+        prompt: 14,
+        completion: 7,
+        numRequests: 1,
+        attacker: { total: 10, prompt: 7, completion: 3, numRequests: 1 },
+        assertions: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 21,
+          prompt: 14,
+          completion: 7,
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+          assertions: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
+    it('preserves explicit incurred attacker and grading usage for fresh composite responses', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: {
+          total: 10,
+          numRequests: 2,
+          assertions: { total: 5, numRequests: 2 },
+          incurredTokenUsage: {
+            total: 6,
+            numRequests: 1,
+            assertions: { total: 2, numRequests: 1 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        attacker: { total: 10, numRequests: 2 },
+        assertions: { total: 5, numRequests: 2 },
+        incurredTokenUsage: {
+          attacker: { total: 6, numRequests: 1 },
+          assertions: { total: 2, numRequests: 1 },
+        },
+      });
+    });
+
+    it('requires explicit cache provenance for normalized attacker usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 32, prompt: 32, completion: 0, cached: 32, numRequests: 0 },
+      });
+
+      expect(target).toMatchObject({
+        numRequests: 0,
+        attacker: { total: 32, prompt: 32, cached: 32, numRequests: 0 },
+      });
+      expect(target).not.toHaveProperty('incurredTokenUsage');
+    });
+
+    it('keeps fully prompt-cached attacker usage incurred when tracking actual work', () => {
+      const target = createEmptyTokenUsage();
+      target.incurredTokenUsage = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 32, prompt: 32, completion: 0, cached: 32, numRequests: 0 },
+      });
+
+      expect(target).toMatchObject({
+        attacker: { total: 32, prompt: 32, cached: 32 },
+        incurredTokenUsage: { attacker: { total: 32, prompt: 32, cached: 32 } },
+      });
+    });
+
+    it('does not mistake provider-side prompt caching for a cached attacker response', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 32, prompt: 20, completion: 12, cached: 15, numRequests: 1 },
+      });
+
+      expect(target).toMatchObject({
+        attacker: { total: 32, prompt: 20, completion: 12, cached: 15, numRequests: 1 },
+      });
+      expect(target).not.toHaveProperty('incurredTokenUsage');
+    });
+
+    it('does not infer an attacker cache replay when the response is explicitly fresh', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        cached: false,
+        tokenUsage: { total: 0, cached: 32, numRequests: 0 },
+      });
+
+      expect(target).toMatchObject({ attacker: { total: 0, cached: 32, numRequests: 0 } });
+      expect(target).not.toHaveProperty('incurredTokenUsage');
     });
 
     it('routes grading-model work nested in an attack task into the grading bucket', () => {
@@ -472,7 +717,10 @@ describe('tokenUsageUtils', () => {
         tokenUsage: { total: 40, cached: 40, numRequests: 0 },
       });
 
-      expect(target.assertions).toMatchObject({ total: 0, cached: 40, numRequests: 0 });
+      expect(target).toMatchObject({
+        assertions: { total: 40, cached: 40, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
     });
 
     it('does not count explicitly cached strategy responses with missing usage', () => {
@@ -480,7 +728,10 @@ describe('tokenUsageUtils', () => {
 
       accumulateGradingResponseTokenUsage(target, { cached: true });
 
-      expect(target.assertions).toMatchObject({ total: 0, numRequests: 0 });
+      expect(target).toMatchObject({
+        assertions: { total: 0, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
     });
 
     it('counts fresh strategy grading tasks normalized to zero requests', () => {
@@ -533,6 +784,34 @@ describe('tokenUsageUtils', () => {
       expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(true);
       expect(target.generation).toMatchObject({ total: 0, numRequests: 3 });
       expect(target.numRequests).toBe(0);
+    });
+
+    it('preserves logical and incurred cached generation as separate scan buckets', () => {
+      const target = createEmptyTokenUsage();
+      target.total = 10;
+      target.numRequests = 1;
+
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          total: 30,
+          prompt: 20,
+          completion: 10,
+          cached: 30,
+          numRequests: 1,
+          incurredTokenUsage: { total: 0, numRequests: 0 },
+        }),
+      ).toBe(true);
+
+      expect(target).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 30, cached: 30, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          numRequests: 1,
+          generation: { total: 0, numRequests: 0 },
+        },
+      });
     });
   });
 

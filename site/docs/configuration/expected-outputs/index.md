@@ -149,6 +149,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](/docs/configuration/expected-outputs/deterministic/#tool-call-f1)                                   | Tool-call F1 score meets the threshold                             |
 | [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
@@ -438,12 +439,12 @@ For more advanced test cases, we recommend using a testing framework like [Jest 
 If you have a set of common assertions that you want to apply to multiple test cases, you can create assertion templates and reuse them across your configuration.
 
 ```yaml
-// highlight-start
+# highlight-start
 assertionTemplates:
   containsMentalHealth:
     type: javascript
     value: output.toLowerCase().includes('mental health')
-// highlight-end
+# highlight-end
 
 prompts:
   - file://prompt1.txt
@@ -455,13 +456,13 @@ tests:
   - vars:
       input: Tell me about the benefits of exercise.
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
   - vars:
       input: How can I improve my well-being?
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.

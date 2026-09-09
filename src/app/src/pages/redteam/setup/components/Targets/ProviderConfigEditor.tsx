@@ -6,6 +6,11 @@ import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetCo
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CodexSecurityConfiguration, {
+  CODEX_SECURITY_AUTH_OPTIONS,
+  CODEX_SECURITY_OPERATION_OPTIONS,
+  CODEX_SECURITY_REASONING_OPTIONS,
+} from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
@@ -222,6 +227,9 @@ function ProviderConfigEditor({
 
     if (field === 'id') {
       updatedTarget.id = value as string;
+      if (providerType === 'codex-security') {
+        delete updatedTarget.config.model;
+      }
       if (shouldRemoveMcpConfig(currentProvider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
@@ -355,6 +363,73 @@ function ProviderConfigEditor({
       const url = structuredProvider.config.url || provider.id;
       if (!url || !validateUrl(url, 'websocket')) {
         errors.push('Valid WebSocket URL is required');
+      }
+    } else if (providerType === 'codex-security') {
+      if (
+        provider.id !== 'openai:codex-security' &&
+        !provider.id.startsWith('openai:codex-security:')
+      ) {
+        errors.push('Codex Security provider ID must start with openai:codex-security');
+      }
+      if (
+        provider.config.operation !== undefined &&
+        !CODEX_SECURITY_OPERATION_OPTIONS.some(
+          (option) => option.value === provider.config.operation,
+        )
+      ) {
+        errors.push('Unsupported Codex Security operation');
+      }
+      if (
+        provider.config.auth !== undefined &&
+        !CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === provider.config.auth)
+      ) {
+        errors.push('Unsupported Codex Security authentication method');
+      }
+      if (
+        [provider.config.model_reasoning_effort, provider.config.reasoning_effort].some(
+          (effort) =>
+            effort !== undefined &&
+            !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
+        )
+      ) {
+        errors.push('Unsupported Codex Security reasoning effort');
+      }
+      const repository = provider.config.repository ?? provider.config.working_dir;
+      if (typeof repository !== 'string' || !repository.trim()) {
+        errors.push('Repository path is required');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        !provider.config.base_ref &&
+        !provider.config.working_tree
+      ) {
+        errors.push('A base Git reference or working tree target is required for diff scans');
+      }
+      if (provider.config.working_tree && provider.config.head_ref) {
+        errors.push('Working-tree scans cannot specify a head Git reference');
+      }
+      if (
+        provider.config.operation !== 'security-diff-scan' &&
+        (provider.config.base_ref || provider.config.head_ref || provider.config.working_tree)
+      ) {
+        errors.push('Git diff target options require the diff scan operation');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        Array.isArray(provider.config.paths) &&
+        provider.config.paths.length > 0
+      ) {
+        errors.push('Scoped repository paths cannot be combined with diff scans');
+      }
+      if (
+        provider.config.model_reasoning_effort &&
+        provider.config.reasoning_effort &&
+        provider.config.model_reasoning_effort !== provider.config.reasoning_effort
+      ) {
+        errors.push('Reasoning effort settings must match');
+      }
+      if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
+        errors.push('Maximum scan cost must be greater than 0');
       }
     } else if (
       [
@@ -557,6 +632,13 @@ function ProviderConfigEditor({
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
           onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
+        />
+      )}
+
+      {providerType === 'codex-security' && (
+        <CodexSecurityConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
         />
       )}
 

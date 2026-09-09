@@ -3,8 +3,8 @@ import type { GradingResult, TokenUsage } from '../types/index';
 /**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
- * the existing completionDetails shape (passing through whatever the
- * provider returned, or undefined if not present).
+ * the existing completionDetails shape and any incurred usage reported by
+ * the provider.
  */
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
@@ -26,6 +26,9 @@ export function normalizeMatcherTokenUsage(
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
+    ...(tokenUsage?.incurredTokenUsage && {
+      incurredTokenUsage: tokenUsage.incurredTokenUsage,
+    }),
   };
 }
 

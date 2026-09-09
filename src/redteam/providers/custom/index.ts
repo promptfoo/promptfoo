@@ -756,7 +756,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
       await sleep(redTeamingChat.delay);
@@ -1002,7 +1002,7 @@ export class CustomProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
@@ -1066,7 +1066,7 @@ export class CustomProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);

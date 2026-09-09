@@ -42,7 +42,6 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,

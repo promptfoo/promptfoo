@@ -1079,6 +1079,100 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       },
     );
 
+    it('publishes executed MCP tool calls as metadata.toolCalls', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_abc',
+                    function: { name: 'read_file', arguments: '{"path":"README.md"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: '# Title' }),
+      };
+
+      const result = await provider.callApi('Read the file');
+
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'call_abc',
+          name: 'read_file',
+          input: { path: 'README.md' },
+          output: '# Title',
+          is_error: false,
+        },
+      ]);
+    });
+
+    it('records a failed MCP tool call, and the raw arguments when they will not parse', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { id: 'call_bad', function: { name: 'read_file', arguments: '{not json' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn(),
+      };
+
+      const result = await provider.callApi('Read the file');
+
+      // The argument JSON never parsed, so the call never ran — the raw payload is
+      // kept so the bad arguments are still visible to an assertion.
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'call_bad', name: 'read_file', input: '{not json', is_error: true },
+      ]);
+    });
+
+    it('omits metadata.toolCalls when no MCP tool ran', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Hello' } }],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Say hi');
+
+      expect(result.metadata?.toolCalls).toBeUndefined();
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {
