@@ -77,37 +77,49 @@ describe('SageMaker profile credentials across idle cleanup', () => {
     vi.useRealTimers();
   });
 
-  it('signs a later request with valid role credentials after the SSO login token expires', async () => {
-    const roleCredentials = credentials('FIRST_ROLE');
-    const resolveSSO = vi.fn(async () => {
-      if (Date.now() > startTime.getTime() + 60_000) {
-        throw new Error('The SSO session associated with this profile has expired');
+  it.each([
+    ['AWS_SAGEMAKER_TEMPERATURE', '0.2'],
+    ['AWS_SAGEMAKER_MAX_TOKENS', '64'],
+    ['AWS_SAGEMAKER_TOP_P', '0.8'],
+    ['AWS_SAGEMAKER_MAX_RETRIES', '2'],
+  ] as const)(
+    'keeps valid role credentials when %s changes after SSO login expiry',
+    async (key, value) => {
+      vi.stubEnv(key, undefined);
+      const roleCredentials = credentials('FIRST_ROLE');
+      const resolveSSO = vi.fn(async () => {
+        if (Date.now() > startTime.getTime() + 60_000) {
+          throw new Error('The SSO session associated with this profile has expired');
+        }
+        return roleCredentials;
+      });
+      fromSSO.mockReturnValue(resolveSSO);
+      const { provider, clients, requests } = createProvider();
+
+      expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
+      expect(provider.sagemakerRuntime).toBeUndefined();
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      vi.stubEnv(key, value);
+      const secondResponse = await provider.callApi('second row');
+      expect(secondResponse.error).toBeUndefined();
+      expect(secondResponse.output).toBe('offline response');
+
+      expect(clients.size).toBe(2);
+      for (const client of clients) {
+        expect(client.destroy).toHaveBeenCalledOnce();
       }
-      return roleCredentials;
-    });
-    fromSSO.mockReturnValue(resolveSSO);
-    const { provider, clients, requests } = createProvider();
-
-    expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
-    expect(provider.sagemakerRuntime).toBeUndefined();
-    vi.setSystemTime(startTime.getTime() + 120_000);
-    const secondResponse = await provider.callApi('second row');
-    expect(secondResponse.error).toBeUndefined();
-    expect(secondResponse.output).toBe('offline response');
-
-    expect(clients.size).toBe(2);
-    for (const client of clients) {
-      expect(client.destroy).toHaveBeenCalledOnce();
-    }
-    expect(requests).toHaveLength(2);
-    expect(
-      requests.every((request) => request.headers.authorization.includes('Credential=FIRST_ROLE/')),
-    ).toBe(true);
-    expect(fromSSO).toHaveBeenCalledOnce();
-    expect(resolveSSO).toHaveBeenCalledOnce();
-    const [first, second] = [...clients];
-    expect(second.config.credentials).toBe(first.config.credentials);
-  });
+      expect(requests).toHaveLength(2);
+      expect(
+        requests.every((request) =>
+          request.headers.authorization.includes('Credential=FIRST_ROLE/'),
+        ),
+      ).toBe(true);
+      expect(fromSSO).toHaveBeenCalledOnce();
+      expect(resolveSSO).toHaveBeenCalledOnce();
+      const [first, second] = [...clients];
+      expect(second.config.credentials).toBe(first.config.credentials);
+    },
+  );
 
   it('coalesces refreshes and retries after a refresh failure', async () => {
     const resolveSSO = vi.fn().mockResolvedValueOnce(credentials('FIRST_ROLE'));

@@ -23,6 +23,7 @@ vi.mock('../../src/cache', () => ({
   getCache: vi.fn().mockReturnValue(mockCacheObject),
   isCacheEnabled: mockIsCacheEnabled,
 }));
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
@@ -33,6 +34,15 @@ vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
     return params;
   }),
 }));
+
+vi.mock('@smithy/core/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@smithy/core/config')>();
+  return {
+    ...actual,
+    // Keep the mocked SDK fixture from resolving auto defaults through IMDS.
+    resolveDefaultsModeConfig: () => async () => 'legacy' as const,
+  };
+});
 
 import {
   SageMakerCompletionProvider,

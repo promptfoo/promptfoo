@@ -7,6 +7,7 @@ import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { HttpRequest } from '@smithy/core/transport';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
+import { mockProcessEnv } from '../util/utils';
 import type { NodeHttpHandler } from '@smithy/node-http-handler';
 
 vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
@@ -20,6 +21,53 @@ describe('SageMaker SDK transport configuration', () => {
     vi.doUnmock('@aws-sdk/client-sagemaker-runtime');
     vi.doUnmock('@aws-sdk/credential-provider-node');
   });
+
+  it.each(['AWS_DEFAULTS_MODE', 'profile defaults_mode'])(
+    'preserves the SDK configuration error for invalid %s',
+    async (source) => {
+      const invalidDefaultsMode = 'invalid-defaults-mode';
+      const configDirectory = await mkdtemp(path.join(tmpdir(), 'promptfoo-sagemaker-sdk-'));
+      const configFile = path.join(configDirectory, 'config');
+      const credentialsFile = path.join(configDirectory, 'credentials');
+      const restoreEnv = mockProcessEnv({
+        AWS_DEFAULTS_MODE: source === 'AWS_DEFAULTS_MODE' ? invalidDefaultsMode : undefined,
+        AWS_CONFIG_FILE: configFile,
+        AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        AWS_PROFILE: 'sagemaker-proof',
+      });
+      const provider = new SageMakerCompletionProvider('endpoint', {
+        config: {
+          modelType: 'custom',
+          region: 'us-east-1',
+          accessKeyId: 'offline-placeholder',
+          secretAccessKey: 'offline-placeholder',
+        },
+      });
+
+      try {
+        await writeFile(
+          configFile,
+          `[profile sagemaker-proof]\ndefaults_mode = ${
+            source === 'profile defaults_mode' ? invalidDefaultsMode : 'standard'
+          }\n`,
+        );
+        await writeFile(credentialsFile, '');
+
+        const initialization = provider.getSageMakerRuntimeInstance();
+        await expect(initialization).rejects.toMatchObject({
+          name: 'Error',
+          message:
+            'Invalid parameter for "defaultsMode", expect in-region, cross-region, mobile, standard, legacy, ' +
+            `got ${invalidDefaultsMode}`,
+        });
+        await expect(initialization).rejects.not.toThrow('npm install');
+      } finally {
+        provider.cleanup();
+        restoreEnv();
+        await rm(configDirectory, { recursive: true });
+      }
+    },
+  );
 
   it.each([
     'legacy',

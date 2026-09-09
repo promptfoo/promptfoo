@@ -24,9 +24,22 @@ import type { TransformContext, TransformFunction } from '../types/transform';
 /**
  * Sleep utility function for implementing delays
  * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified delay
+ * @returns Promise that resolves after the specified delay or rejects on cancellation
  */
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 
 function stringifyTransformResult(result: unknown): string | undefined {
   if (result === undefined || result === null) {
@@ -84,6 +97,44 @@ const SageMakerConfigSchema = z.strictObject({
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
+// Inputs read by the SDK's credential providers and their nested service clients.
+// Inference and retry settings must not discard still-valid memoized credentials.
+const CREDENTIAL_ENV_VARS = [
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AWS_CREDENTIAL_EXPIRATION',
+  'AWS_CREDENTIAL_SCOPE',
+  'AWS_ACCOUNT_ID',
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'HOME',
+  'USERPROFILE',
+  'HOMEPATH',
+  'HOMEDRIVE',
+  'AWS_WEB_IDENTITY_TOKEN_FILE',
+  'AWS_ROLE_ARN',
+  'AWS_ROLE_SESSION_NAME',
+  'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
+  'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN',
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE',
+  'AWS_EC2_METADATA_DISABLED',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
+  'AWS_EC2_METADATA_V1_DISABLED',
+  'AWS_LOGIN_CACHE_DIRECTORY',
+  'AWS_ENDPOINT_URL',
+  'AWS_ENDPOINT_URL_STS',
+  'AWS_ENDPOINT_URL_SSO',
+  'AWS_ENDPOINT_URL_SSO_OIDC',
+  'AWS_ENDPOINT_URL_SIGNIN',
+  'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+  'AWS_USE_FIPS_ENDPOINT',
+  'AWS_USE_DUALSTACK_ENDPOINT',
+] as const;
+
 type CredentialScope = Pick<
   SageMakerConfig,
   'profile' | 'accessKeyId' | 'secretAccessKey' | 'sessionToken'
@@ -104,6 +155,7 @@ abstract class SageMakerGenericProvider {
   sagemakerRuntime?: any; // SageMaker runtime client
   private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
   private readonly runtimeClients = new Map<string, SageMakerRuntimeClient>();
+  private readonly runtimeClockOffsets = new Map<string, number>();
   private readonly runtimeInitializations = new Map<string, Promise<SageMakerRuntimeClient>>();
   private retainedCredentials?: {
     scope: CredentialScope;
@@ -207,81 +259,88 @@ abstract class SageMakerGenericProvider {
           sessionToken,
           // Keep credential source inputs private and in memory; the SDK owns their resolution.
           environment: Object.fromEntries(
-            Object.entries(process.env).filter(
-              ([name]) =>
-                name.startsWith('AWS_') ||
-                ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH'].includes(name),
-            ),
+            CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
           ),
         };
         initialization = (async () => {
-          try {
-            const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
-            const { loadConfigsForDefaultMode } = await import('@smithy/core/client');
-            const { resolveDefaultsModeConfig } = await import('@smithy/core/config');
+          const importError = (cause: unknown): never => {
             this.assertRuntimeGeneration(generation);
-            const cached = this.retainedCredentials?.scope;
-            if (
-              !cached ||
-              cached.region !== scope.region ||
-              cached.profile !== scope.profile ||
-              cached.accessKeyId !== scope.accessKeyId ||
-              cached.secretAccessKey !== scope.secretAccessKey ||
-              cached.sessionToken !== scope.sessionToken ||
-              Object.keys(cached.environment).length !== Object.keys(scope.environment).length ||
-              Object.entries(scope.environment).some(
-                ([name, value]) => cached.environment[name] !== value,
-              )
-            ) {
-              this.retainedCredentials = undefined;
-            }
-            const retainedCredentials = this.retainedCredentials?.provider;
-            let credentials = retainedCredentials ?? (await this.getCredentials(scope));
-            if (!credentials) {
-              const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
-              const chain = defaultProvider({
-                profile: scope.environment.AWS_PROFILE,
-                filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE,
-                configFilepath: scope.environment.AWS_CONFIG_FILE,
-              });
-              // STS may retain its caller's handler. Supply only the region so credential
-              // clients own their transport and remain usable after SageMaker cleanup.
-              const callerClientConfig = { region: async () => runtimeRegion };
-              const isolated: typeof chain = (options) => chain({ ...options, callerClientConfig });
-              credentials = isolated;
-            }
-            const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
-            this.assertRuntimeGeneration(generation);
-            const client = new SageMakerRuntimeClient({
-              region: runtimeRegion,
-              defaultsMode,
-              maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
-              retryMode: 'adaptive',
-              requestHandler: {
-                ...loadConfigsForDefaultMode(defaultsMode),
-                // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
-                httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }),
-              },
-              ...(credentials ? { credentials } : {}),
-            });
-            if (!(scope.accessKeyId && scope.secretAccessKey)) {
-              // Preserve the SDK memoizer, including the default chain's background refresh.
-              this.retainedCredentials = {
-                scope,
-                provider: scope.profile
-                  ? (retainedCredentials ?? client.config.credentials)
-                  : credentials,
-              };
-            }
-            this.runtimeClients.set(runtimeRegion, client);
-            logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
-            return client;
-          } catch {
-            this.assertRuntimeGeneration(generation);
-            throw new Error(
-              'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+            throw Object.assign(
+              new Error(
+                'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+              ),
+              { cause },
             );
+          };
+          const { SageMakerRuntimeClient } = await import(
+            '@aws-sdk/client-sagemaker-runtime'
+          ).catch(importError);
+          const { loadConfigsForDefaultMode } = await import('@smithy/core/client').catch(
+            importError,
+          );
+          const { resolveDefaultsModeConfig } = await import('@smithy/core/config').catch(
+            importError,
+          );
+          this.assertRuntimeGeneration(generation);
+          const cached = this.retainedCredentials?.scope;
+          if (
+            !cached ||
+            cached.region !== scope.region ||
+            cached.profile !== scope.profile ||
+            cached.accessKeyId !== scope.accessKeyId ||
+            cached.secretAccessKey !== scope.secretAccessKey ||
+            cached.sessionToken !== scope.sessionToken ||
+            Object.keys(cached.environment).length !== Object.keys(scope.environment).length ||
+            Object.entries(scope.environment).some(
+              ([name, value]) => cached.environment[name] !== value,
+            )
+          ) {
+            this.retainedCredentials = undefined;
           }
+          const retainedCredentials = this.retainedCredentials?.provider;
+          let credentials = retainedCredentials ?? (await this.getCredentials(scope));
+          if (!credentials) {
+            const { defaultProvider } = await import('@aws-sdk/credential-provider-node').catch(
+              importError,
+            );
+            const chain = defaultProvider({
+              profile: scope.environment.AWS_PROFILE,
+              filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE,
+              configFilepath: scope.environment.AWS_CONFIG_FILE,
+            });
+            // STS may retain its caller's handler. Supply only the region so credential
+            // clients own their transport and remain usable after SageMaker cleanup.
+            const callerClientConfig = { region: async () => runtimeRegion };
+            const isolated: typeof chain = (options) => chain({ ...options, callerClientConfig });
+            credentials = isolated;
+          }
+          const defaultsMode = await resolveDefaultsModeConfig({ region: runtimeRegion })();
+          this.assertRuntimeGeneration(generation);
+          const client = new SageMakerRuntimeClient({
+            region: runtimeRegion,
+            systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
+            defaultsMode,
+            maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+            retryMode: 'adaptive',
+            requestHandler: {
+              ...loadConfigsForDefaultMode(defaultsMode),
+              // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
+              httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }),
+            },
+            ...(credentials ? { credentials } : {}),
+          });
+          if (!(scope.accessKeyId && scope.secretAccessKey)) {
+            // Preserve the SDK memoizer, including the default chain's background refresh.
+            this.retainedCredentials = {
+              scope,
+              provider: scope.profile
+                ? (retainedCredentials ?? client.config.credentials)
+                : credentials,
+            };
+          }
+          this.runtimeClients.set(runtimeRegion, client);
+          logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
+          return client;
         })();
         this.runtimeInitializations.set(runtimeRegion, initialization);
       }
@@ -340,6 +399,13 @@ abstract class SageMakerGenericProvider {
       controller.abort(new Error('SageMaker provider was shut down during the request'));
     }
     const clients = [...this.runtimeClients.values()];
+    for (const [region, client] of this.runtimeClients) {
+      const offset = client.config?.systemClockOffset;
+      if (typeof offset === 'number' && Number.isFinite(offset)) {
+        // Keep the SDK's learned signing correction when only its transport is replaced.
+        this.runtimeClockOffsets.set(region, offset);
+      }
+    }
     this.runtimeClients.clear();
     this.runtimeInitializations.clear();
     if (clients.includes(this.sagemakerRuntime)) {
@@ -906,7 +972,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
       );
-      await sleep(delayMs);
+      await sleep(delayMs, abortSignal);
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -1127,7 +1193,7 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      await sleep(delayMs);
+      await sleep(delayMs, abortSignal);
     }
 
     // Not in cache or cache disabled, make the actual API call

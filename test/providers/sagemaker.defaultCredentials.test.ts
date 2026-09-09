@@ -217,15 +217,22 @@ sso_role_name = TestRole
     await rm(directory, { recursive: true, force: true });
   });
 
-  it.each(['AWS_PROFILE', 'default', 'assume-role'] as const)(
-    'keeps valid %s role credentials after the login expires and Sage is destroyed',
+  it.each(['AWS_PROFILE', 'default', 'assume-role', 'explicit profile'] as const)(
+    'keeps valid %s role credentials while tuning inference after the login expires',
     async (source) => {
       const isRole = source === 'assume-role';
       const contents = isRole
         ? `[profile named]\nrole_arn = arn:aws:iam::123456789012:role/Target\nsource_profile = source\n${ssoProfile('source')}`
         : ssoProfile(source === 'default' ? 'default' : 'named');
-      await configure(contents, source === 'default' ? null : 'named');
-      const provider = createProvider();
+      await configure(
+        contents,
+        source === 'default' || source === 'explicit profile' ? null : 'named',
+      );
+      const provider = createProvider({
+        modelType: 'openai',
+        responseFormat: { path: 'json.output' },
+        ...(source === 'explicit profile' ? { profile: 'named' } : {}),
+      });
       await expectSignedRow(provider, isRole ? 'STS_1' : 'SSO_1');
       const firstHandler = sageCalls[0].handler;
       if (isRole) {
@@ -238,6 +245,23 @@ sso_role_name = TestRole
       vi.setSystemTime(startTime.getTime() + 120_000);
       await expectSignedRow(provider, isRole ? 'STS_1' : 'SSO_1');
       expect(sageCalls[1].handler).not.toBe(firstHandler);
+      expect(ssoCalls).toHaveLength(1);
+      expect(stsCalls).toHaveLength(isRole ? 1 : 0);
+
+      // The login is expired, but the issued role credentials have 58 minutes
+      // left. Rebuilding Sage clients must not make inference tuning log in again.
+      for (const [variable, field, value, fallback] of [
+        ['AWS_SAGEMAKER_TEMPERATURE', 'temperature', '0.2', 0.7],
+        ['AWS_SAGEMAKER_MAX_TOKENS', 'max_tokens', '64', 1024],
+        ['AWS_SAGEMAKER_TOP_P', 'top_p', '0.8', 1],
+      ] as const) {
+        vi.stubEnv(variable, value);
+        await expectSignedRow(provider, isRole ? 'STS_1' : 'SSO_1');
+        expect(JSON.parse(String(sageCalls.at(-1)!.request.body))[field]).toBe(Number(value));
+        vi.stubEnv(variable, undefined);
+        await expectSignedRow(provider, isRole ? 'STS_1' : 'SSO_1');
+        expect(JSON.parse(String(sageCalls.at(-1)!.request.body))[field]).toBe(fallback);
+      }
       expect(ssoCalls).toHaveLength(1);
       expect(stsCalls).toHaveLength(isRole ? 1 : 0);
 
@@ -409,6 +433,7 @@ sso_role_name = TestRole
       await configure(ssoProfile() + ssoProfile('second'));
       const provider = createProvider();
       await expectSignedRow(provider, 'SSO_1');
+      vi.setSystemTime(startTime.getTime() + 120_000);
       if (input === 'profile') {
         vi.stubEnv('AWS_PROFILE', 'second');
       } else if (input === 'region') {
@@ -422,6 +447,12 @@ sso_role_name = TestRole
         await writeFile(nextCredentials, '');
         vi.stubEnv('AWS_SHARED_CREDENTIALS_FILE', nextCredentials);
       }
+      expect(await provider.callApi('changed credential source')).toMatchObject({
+        error: expect.stringContaining('The SSO session associated with this profile has expired'),
+      });
+      expect(sageCalls).toHaveLength(1);
+      expect(ssoCalls).toHaveLength(1);
+      renewToken();
       await expectSignedRow(provider, 'SSO_2');
       expect(ssoCalls).toHaveLength(2);
       expect(sageCalls[1].request.headers.authorization).toContain(

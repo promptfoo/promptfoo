@@ -6,26 +6,32 @@ import {
   SageMakerEmbeddingProvider,
 } from '../../src/providers/sagemaker';
 
-const { runtimes, mockSend, mockCacheGet, mockIsCacheEnabled } = vi.hoisted(() => ({
+const {
+  runtimes,
+  mockRuntimeClient,
+  mockInvokeEndpointCommand,
+  mockSend,
+  mockCacheGet,
+  mockIsCacheEnabled,
+  mockResolveDefaultsModeConfig,
+} = vi.hoisted(() => ({
   runtimes: [] as { region: string; send: Mock; destroy: Mock }[],
+  mockRuntimeClient: vi.fn(),
+  mockInvokeEndpointCommand: vi.fn(),
   mockSend: vi.fn(),
   mockCacheGet: vi.fn(),
   mockIsCacheEnabled: vi.fn(),
+  mockResolveDefaultsModeConfig: vi.fn(),
+}));
+
+vi.mock('@smithy/core/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smithy/core/config')>()),
+  resolveDefaultsModeConfig: mockResolveDefaultsModeConfig,
 }));
 
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
-  SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region }) {
-    const runtime = {
-      region,
-      send: vi.fn((command, options) => mockSend(command, region, options)),
-      destroy: vi.fn(),
-    };
-    runtimes.push(runtime);
-    return runtime;
-  }),
-  InvokeEndpointCommand: vi.fn().mockImplementation(function (input) {
-    return input;
-  }),
+  SageMakerRuntimeClient: mockRuntimeClient,
+  InvokeEndpointCommand: mockInvokeEndpointCommand,
 }));
 
 vi.mock('../../src/cache', () => ({
@@ -53,9 +59,22 @@ describe('SageMaker runtime lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runtimes.length = 0;
+    mockRuntimeClient.mockReset().mockImplementation(function ({ region }) {
+      const runtime = {
+        region,
+        send: vi.fn((command, options) => mockSend(command, region, options)),
+        destroy: vi.fn(),
+      };
+      runtimes.push(runtime);
+      return runtime;
+    });
+    mockInvokeEndpointCommand.mockReset().mockImplementation(function (input) {
+      return input;
+    });
     mockSend.mockReset().mockImplementation(async (_command, region) => response(region));
     mockCacheGet.mockReset();
     mockIsCacheEnabled.mockReset().mockReturnValue(false);
+    mockResolveDefaultsModeConfig.mockReset().mockReturnValue(async () => 'legacy');
   });
 
   afterEach(async () => {
@@ -388,10 +407,10 @@ describe('SageMaker runtime lifecycle', () => {
         : new SageMakerEmbeddingProvider('endpoint', options);
     }
 
-    function call(provider: ReturnType<typeof createProvider>) {
+    function call(provider: ReturnType<typeof createProvider>, abortSignal?: AbortSignal) {
       return provider instanceof SageMakerEmbeddingProvider
-        ? provider.callEmbeddingApi('A garden')
-        : provider.callApi('A garden');
+        ? provider.callEmbeddingApi('A garden', undefined, { abortSignal })
+        : provider.callApi('A garden', undefined, { abortSignal });
     }
 
     it('aborts an active send when cleaned up', async () => {
@@ -420,6 +439,115 @@ describe('SageMaker runtime lifecycle', () => {
       expect(credentials).not.toHaveBeenCalled();
       expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
       expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('clears the delay immediately when its caller aborts', async () => {
+      vi.useFakeTimers();
+      const provider = createProvider();
+      provider.delay = 60_000;
+      const controller = new AbortController();
+      const reason = { message: 'Cancel the delayed request' };
+      const result = expect(call(provider, controller.signal)).rejects.toBe(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      controller.abort(reason);
+
+      expect(vi.getTimerCount()).toBe(0);
+      await result;
+      expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it.each(['caller abort', 'cleanup'] as const)(
+      'does not allocate a delay when a transform resumes after %s',
+      async (cancellation) => {
+        vi.useFakeTimers();
+        const provider = createProvider();
+        provider.delay = 60_000;
+        const started = deferred<void>();
+        const transformed = deferred<string>();
+        provider.transform = async () => {
+          started.resolve();
+          return transformed.promise;
+        };
+        const controller = new AbortController();
+        const result = expect(call(provider, controller.signal)).rejects.toThrow();
+        await started.promise;
+        if (cancellation === 'caller abort') {
+          controller.abort(new Error('Cancelled before the delay'));
+        } else {
+          provider.cleanup();
+        }
+        await result;
+        transformed.resolve('A garden');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(vi.getTimerCount()).toBe(0);
+        expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
+        expect(mockSend).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps another caller delay live when one caller aborts', async () => {
+      vi.useFakeTimers();
+      const provider = createProvider();
+      provider.delay = 60_000;
+      const bothAtDelay = deferred<void>();
+      const delayTimers = new Set<ReturnType<typeof setTimeout>>();
+      const schedule = globalThis.setTimeout;
+      const timerSpy = vi
+        .spyOn(globalThis, 'setTimeout')
+        .mockImplementation((callback, ms, ...args) => {
+          const timer = schedule(callback, ms, ...args);
+          if (ms === 60_000) {
+            delayTimers.add(timer);
+            if (delayTimers.size === 2) {
+              bothAtDelay.resolve();
+            }
+          }
+          return timer;
+        });
+      const controller = new AbortController();
+      const first = call(provider, controller.signal);
+      const second = call(provider);
+      const settlesBeforeDelay = (pending: Promise<unknown>, caller: string) =>
+        pending.then(
+          () => {
+            throw new Error(`${caller} finished before both delays registered`);
+          },
+          (cause) => {
+            throw Object.assign(new Error(`${caller} failed before both delays registered`), {
+              cause,
+            });
+          },
+        );
+
+      try {
+        await Promise.race([
+          bothAtDelay.promise,
+          settlesBeforeDelay(first, 'First caller'),
+          settlesBeforeDelay(second, 'Second caller'),
+        ]);
+        expect(delayTimers.size).toBe(2);
+        expect(vi.getTimerCount()).toBe(2);
+        const firstAborted = expect(first).rejects.toThrow('Cancel first');
+        controller.abort(new Error('Cancel first'));
+        await firstAborted;
+
+        expect(vi.getTimerCount()).toBe(1);
+        expect(mockSend).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await expect(second).resolves.toMatchObject(
+          kind === 'completion' ? { output: 'us-east-1' } : { embedding: [0.1, 0.2] },
+        );
+        expect(mockSend).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        provider.cleanup();
+        await Promise.allSettled([first, second]);
+        timerSpy.mockRestore();
+      }
     });
 
     it.each(['cache lookup', 'transform', 'delay', 'client acquisition'] as const)(
@@ -457,7 +585,7 @@ describe('SageMaker runtime lifecycle', () => {
           await vi.advanceTimersByTimeAsync(0);
           expect(vi.getTimerCount()).toBe(1);
           await provider.cleanup();
-          await vi.advanceTimersByTimeAsync(100);
+          expect(vi.getTimerCount()).toBe(0);
         } else if (stage !== 'client acquisition') {
           await started.promise;
           await provider.cleanup();
