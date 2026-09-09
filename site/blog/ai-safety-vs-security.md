@@ -321,7 +321,7 @@ The twist? Many attacks combine both. A jailbreak (safety) might be the first st
 Current frontier models show significant improvements but remain vulnerable:
 
 - **GPT-4o and GPT-4.1**: OpenAI's models include improved safety training and reasoning capabilities
-- **Claude 3.5 Sonnet**: Anthropic's constitutional AI approach shows improved resistance to jailbreaking
+- **Claude Opus 5 and Sonnet 5**: Anthropic's constitutional AI approach shows improved resistance to jailbreaking
 - **Gemini 2.0**: Google's model demonstrates strong performance against obvious attacks but remains vulnerable to context-based exploits
 
 This dynamic illustrates the ongoing evolution of both defensive and offensive capabilities in AI systems, where improvements in model robustness are met with increasingly sophisticated attack methodologies.
@@ -461,7 +461,7 @@ defaultTest:
   options:
     rubricProvider: openai:gpt-4o # Use a more powerful judge
     # Or use Claude for evaluation:
-    # rubricProvider: anthropic:claude-sonnet-4
+    # rubricProvider: anthropic:claude-sonnet-5
 ```
 
 ### Advanced Testing with Multiple Rubrics
@@ -472,7 +472,7 @@ For comprehensive testing, combine multiple rubrics to catch edge cases:
 # Advanced Safety & Security Testing
 providers:
   - openai:gpt-5
-  - anthropic:claude-sonnet-4
+  - anthropic:claude-sonnet-5
 
 tests:
   # Combined Safety/Security: Authority + Jailbreak
@@ -728,7 +728,7 @@ prompts:
     {{content}}
 
 providers:
-  - anthropic:claude-opus-4-1
+  - anthropic:claude-opus-5
 
 tests:
   # Safety: Harmful content
