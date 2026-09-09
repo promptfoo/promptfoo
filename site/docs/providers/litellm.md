@@ -117,7 +117,11 @@ providers:
     config:
       # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
       max_tokens: 4096
-      # Claude 5 models reject temperature/top_p/top_k; use `effort` instead
+      # Claude 5 models reject temperature/top_p/top_k. A top-level `effort` is NOT
+      # forwarded by the LiteLLM wrapper — send it through `passthrough` instead:
+      #   passthrough:
+      #     output_config:
+      #       effort: high
       # Any other LiteLLM-supported parameters
 ```
 

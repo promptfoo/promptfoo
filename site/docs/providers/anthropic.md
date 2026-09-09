@@ -478,7 +478,7 @@ The disk response cache is skipped while `mcp.enabled` is `true`, because tool r
 
 See the [MCP integration guide](/docs/integrations/mcp/) for full server configuration options (auth, timeouts, multiple servers, etc.) and the [Anthropic MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp).
 
-See the [Anthropic Tool Use Guide](https://platform.claude.com/docs/en/docs/build-with-claude/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
+See the [Anthropic Tool Use Guide](https://platform.claude.com/docs/en/build-with-claude/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
 
 ### Images / Vision
 
@@ -538,7 +538,7 @@ Common use cases for caching:
 
 Cache read and creation token counts are tracked in the response's token usage details.
 
-See [Anthropic's Prompt Caching Guide](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
+See [Anthropic's Prompt Caching Guide](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
 
 ### Citations
 
@@ -565,7 +565,7 @@ prompts:
       text: 'Your question here'
 ```
 
-See [Anthropic's Citations Guide](https://platform.claude.com/docs/en/docs/build-with-claude/citations) for more details.
+See [Anthropic's Citations Guide](https://platform.claude.com/docs/en/build-with-claude/citations) for more details.
 
 ### PDF Documents
 
@@ -747,7 +747,7 @@ thinking:
 
 In adaptive mode, Claude decides when and how much to think based on the complexity of the request. Control depth with [`effort`](#effort-level) rather than a token budget.
 
-2. Enabled thinking (**legacy** — Haiku 4.5 and older only):
+2. Enabled thinking (**legacy** — Opus 4.6 / Sonnet 4.6 and older):
 
 ```yaml
 thinking:
@@ -756,9 +756,13 @@ thinking:
 ```
 
 Fable 5/5.1, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
-(`"thinking.type.enabled" is not supported for this model`), and it is deprecated on
-Opus 4.6 / Sonnet 4.6. Promptfoo converts an `enabled` budget to `{ type: 'adaptive' }`
-on those models and warns once — but write new configs against `adaptive` + `effort`.
+(`"thinking.type.enabled" is not supported for this model`); on those models promptfoo
+converts an `enabled` budget to `{ type: 'adaptive' }` and warns once.
+
+Opus 4.6, Sonnet 4.6, and the 4.5 generation still **accept** a manual budget, and
+promptfoo passes it through unchanged — so a precise thinking-token ceiling remains
+available there. It is deprecated on 4.6, so write new configs against `adaptive` +
+`effort`.
 
 3. Disabled thinking:
 
@@ -821,7 +825,12 @@ Example response with thinking enabled:
 
 #### Controlling Thinking Output
 
-By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+Two separate controls decide whether you see reasoning. The API's `thinking.display`
+decides whether Claude returns any reasoning text — it defaults to `omitted` on every
+current model, so you must set `display: 'summarized'` first. Promptfoo's `showThinking`
+then decides whether returned reasoning is rendered into the output (default `true`).
+Setting `showThinking: true` cannot reveal reasoning that `display: 'omitted'` never
+returned.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -881,7 +890,7 @@ When using extended output:
 - Thinking shares the `max_tokens` budget with the answer, so leave headroom for both
 - The model may not use the entire allocated budget
 
-See [Anthropic's Extended Thinking Guide](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+See [Anthropic's Extended Thinking Guide](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
 ### Effort Level
 
@@ -1013,7 +1022,7 @@ providers:
 
 **Incompatible with:** citations, message prefilling
 
-See [Anthropic's guide](https://platform.claude.com/docs/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
+See [Anthropic's guide](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
 
 ## Model-Graded Tests
 
