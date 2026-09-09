@@ -68,13 +68,9 @@ function normalizeContentPart(part: unknown, role: unknown): unknown {
  *
  * Only role-bearing message objects are touched. Explicit `type: 'message'` input items are
  * messages too; other typed items (function calls, tool outputs, reasoning items) must keep
- * their shape verbatim. A non-array input (a plain string prompt) is returned unchanged.
+ * their shape verbatim.
  */
-function normalizeResponsesInput<T>(input: T): T {
-  if (!Array.isArray(input)) {
-    return input;
-  }
-
+function normalizeResponsesInput(input: unknown[]): unknown[] {
   return input.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       return item;
@@ -91,7 +87,7 @@ function normalizeResponsesInput<T>(input: T): T {
       ...message,
       content: message.content.map((part) => normalizeContentPart(part, message.role)),
     };
-  }) as T;
+  });
 }
 
 /**
