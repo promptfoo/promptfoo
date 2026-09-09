@@ -1402,10 +1402,19 @@ export default class Eval {
   getStats(): EvaluateStats {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
+      const legacyResults = Array.isArray(this.oldResults.results) ? this.oldResults.results : [];
+      const cachedRows =
+        this.oldResults.stats.cachedRows ??
+        legacyResults.reduce((count, result) => {
+          if (!result || typeof result !== 'object') {
+            return count;
+          }
+          return count + (result.response?.cached === true ? 1 : 0);
+        }, 0);
+      this.oldResults.stats.cachedRows = cachedRows;
       return {
         ...this.oldResults.stats,
-        cachedRows: this.oldResults.results.filter((result) => result.response?.cached === true)
-          .length,
+        cachedRows,
       };
     }
 

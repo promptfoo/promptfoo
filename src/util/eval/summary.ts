@@ -361,7 +361,11 @@ function getResultsLines({
   const cacheHitLine =
     cachedRows === undefined
       ? []
-      : [`  ${chalk.white.bold(cachedRows.toLocaleString())} cached rows`];
+      : [
+          `  ${chalk.white.bold(cachedRows.toLocaleString())} cached ${
+            cachedRows === 1 ? 'row' : 'rows'
+          }`,
+        ];
 
   return [
     '',

@@ -3659,10 +3659,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       await this.updatePromptMetricsForRow({
@@ -3672,6 +3668,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount,
         row,
       });
+
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,

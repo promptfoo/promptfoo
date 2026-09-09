@@ -576,8 +576,13 @@ describe('generateEvalSummary', () => {
       };
 
       const output = stripAnsi(generateEvalSummary(params).join('\n'));
+      const singularOutput = stripAnsi(
+        generateEvalSummary({ ...params, cachedRows: 1 }).join('\n'),
+      );
 
       expect(output).toContain('2 cached rows');
+      expect(singularOutput).toContain('1 cached row');
+      expect(singularOutput).not.toContain('1 cached rows');
     });
 
     it('should show partial cached tokens', () => {
