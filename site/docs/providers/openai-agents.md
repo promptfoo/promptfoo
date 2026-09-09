@@ -71,6 +71,9 @@ implicit default as a stable eval input.
 replaces the corresponding field on the initial agent and every handoff agent, including agents
 loaded from a file. Omit either option to preserve that field from each agent definition.
 
+Agents invoked independently by guardrails, tool callbacks, or `Agent.asTool()` keep their own
+model and settings. Configure those agents directly when comparing models across a nested workflow.
+
 ## File-Based Configuration
 
 Load agent and tools from external files:
