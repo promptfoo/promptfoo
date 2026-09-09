@@ -221,6 +221,66 @@ describe('GeminiImageProvider', () => {
     );
   });
 
+  it.each(['provider', 'process'])(
+    'should keep regional %s GOOGLE_LOCATION on Vertex OAuth',
+    async (scope) => {
+      if (scope === 'provider') {
+        mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'ambient-project' });
+      } else {
+        mockProcessEnv({ GOOGLE_LOCATION: 'europe-west1' });
+      }
+      const request = vi.fn().mockResolvedValue({
+        data: {
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } }] } },
+          ],
+        },
+      });
+      mockGetGoogleClient.mockResolvedValue({
+        client: { request },
+        projectId: 'test-project',
+      });
+      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+        config: { vertexai: true },
+        env:
+          scope === 'provider'
+            ? { GOOGLE_API_KEY: 'scoped-key', GOOGLE_LOCATION: 'europe-west1' }
+            : undefined,
+      });
+
+      const result = await provider.callApi('Draw a circle');
+
+      expect(result.error).toBeUndefined();
+      expect(result.images).toHaveLength(1);
+      expect(mockGetGoogleClient).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(request).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          url: 'https://europe-west1-aiplatform.googleapis.com/v1/projects/test-project/locations/europe-west1/publishers/google/models/gemini-2.5-flash-image:generateContent',
+        }),
+      );
+    },
+  );
+
+  it.each(['provider', 'process'])(
+    'should reject regional %s GOOGLE_LOCATION for explicit Vertex Express',
+    async (scope) => {
+      if (scope === 'process') {
+        mockProcessEnv({ GOOGLE_LOCATION: 'europe-west1' });
+      }
+      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+        config: { vertexai: true, expressMode: true },
+        env: scope === 'provider' ? { GOOGLE_LOCATION: 'europe-west1' } : undefined,
+      });
+
+      const result = await provider.callApi('Draw a circle');
+
+      expect(result.error).toContain('region europe-west1 was configured');
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('should use Vertex Express when vertexai is true with an API key and no project', async () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
       config: { vertexai: true, apiKey: 'vertex-express-key' },

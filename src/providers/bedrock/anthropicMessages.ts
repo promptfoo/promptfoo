@@ -132,14 +132,19 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     // A configured proxy may require its own explicit bearer credential or API key.
     // Native AWS credentials and Anthropic-scoped defaults stay isolated.
     const allowProxyCredentials = isConfiguredBedrockProxy(this.config.apiBaseUrl);
-    return Object.fromEntries(
-      Object.entries(headers).filter(
-        ([name]) =>
-          (allowProxyCredentials &&
-            (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
-          !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+    return {
+      ...Object.fromEntries(
+        Object.entries(headers).filter(
+          ([name]) =>
+            (allowProxyCredentials &&
+              (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
+            !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+        ),
       ),
-    );
+      // The SDK merges request headers after the null defaults used to suppress
+      // ambient Anthropic headers, so restore Bedrock's required version here.
+      'anthropic-version': '2023-06-01',
+    };
   }
 }
 

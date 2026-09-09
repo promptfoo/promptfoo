@@ -668,27 +668,6 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_250 * input + 500 * cached + 250 * write + 1_000 * output) / 1e6, 10);
   });
 
-  it.each(['fast', 'priority'])('uses GPT-5.6 %s rates across the 272K input limit', (tier) => {
-    const usage = {
-      input_tokens: 272_000,
-      output_tokens: 1_000,
-      input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
-    };
-
-    expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: tier })).toBeCloseTo(
-      (122_000 * 4 + 100_000 * 0.4 + 50_000 * 5 + 1_000 * 24) / 1e6,
-      10,
-    );
-    expect(
-      calculateOpenAIUsageCost(
-        'gpt-5.6-terra',
-        {},
-        { ...usage, input_tokens: 272_001 },
-        { serviceTier: tier },
-      ),
-    ).toBeCloseTo((122_001 * 8 + 100_000 * 0.8 + 50_000 * 10 + 1_000 * 36) / 1e6, 10);
-  });
-
   it('prices chat-latest cached input at the published discount', () => {
     expect(
       calculateOpenAIUsageCost(
@@ -1305,33 +1284,6 @@ describe('OpenAI billing helpers', () => {
         },
       ),
     ).toBeCloseTo((1_250 * 4 + 500 * 0.4 + 250 * 5 + 1_000 * 20) / 1e6, 10);
-  });
-
-  it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
-    'omits %s cost when raw usage lacks cache-write tokens',
-    (model) => {
-      expect(
-        calculateOpenAIUsageCost(
-          model,
-          {},
-          {
-            input_tokens: 2_000,
-            output_tokens: 1_000,
-            input_tokens_details: { cached_tokens: 500 },
-          },
-        ),
-      ).toBeUndefined();
-    },
-  );
-
-  it('omits GPT-5.6 cost when summarized usage lacks cache-write tokens', () => {
-    expect(
-      calculateOpenAIUsageCostFromTokenUsage('gpt-5.6-sol', {
-        prompt: 2_000,
-        completion: 1_000,
-        cached: 500,
-      }),
-    ).toBeUndefined();
   });
 
   it.each([

@@ -60,6 +60,17 @@ export function getBedrockMantleChatBaseUrl(region: string, modelName?: string):
   return `${getBedrockMantleOrigin(region)}/${path}`;
 }
 
+function isBedrockMantleEndpoint(apiBaseUrl: string): boolean {
+  try {
+    return /^(?:[a-z0-9-]+\.)?bedrock-mantle(?:-fips)?\.[a-z0-9-]+(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/.test(
+      new URL(apiBaseUrl).hostname.replace(/\.+$/, ''),
+    );
+  } catch {
+    // Preserve custom endpoint handling in the underlying transport.
+    return false;
+  }
+}
+
 /**
  * OpenAI Chat Completions provider pinned to the Bedrock mantle endpoint. Behaves like the
  * OpenAI Platform chat provider (shared request/response/usage handling) but always targets the
@@ -151,14 +162,6 @@ export function createBedrockMantleChatProvider(
   modelName: string,
   providerOptions: BedrockMantleChatProviderOptions = {},
 ): BedrockMantleChatProvider {
-  const profile = modelName.match(/^[a-z]+\.(openai\.gpt-5\.6-(?:sol|terra|luna))$/);
-  if (profile) {
-    throw new Error(
-      `Amazon Bedrock inference profile "${modelName}" cannot be used on Mantle. Use ` +
-        `"bedrock:mantle:${profile[1]}" for Mantle Chat Completions or ` +
-        `"bedrock:converse:${modelName}" for Runtime Converse.`,
-    );
-  }
   if (isBedrockOpenAiResponsesModel(modelName) && !BEDROCK_OPENAI_CHAT_MODELS.has(modelName)) {
     throw new Error(
       `Amazon Bedrock model "bedrock:mantle:${modelName}" is not supported by promptfoo's ` +
@@ -187,6 +190,14 @@ export function createBedrockMantleChatProvider(
   }
 
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
+  const profile = modelName.match(/^[a-z]+\.(openai\.gpt-5\.6-(?:sol|terra|luna))$/);
+  if (profile && isBedrockMantleEndpoint(apiBaseUrl)) {
+    throw new Error(
+      `Amazon Bedrock inference profile "${modelName}" cannot be used on Mantle. Use ` +
+        `"bedrock:mantle:${profile[1]}" for Mantle Chat Completions or ` +
+        `"bedrock:converse:${modelName}" for Runtime Converse.`,
+    );
+  }
   const isGrok = isBedrockGrokModel(modelName);
 
   return new BedrockMantleChatProvider(modelName, {

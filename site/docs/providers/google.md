@@ -337,12 +337,11 @@ Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://de
 
 :::
 
-:::warning Gemini 2.5 shutdown
+:::note Gemini 2.5 lifecycle
 
-Google will shut down the Gemini API endpoints for `gemini-2.5-pro`, `gemini-2.5-flash`, and
-`gemini-2.5-flash-lite` on October 16, 2026. Migrate respectively to
-`gemini-3.1-pro-preview`, `gemini-3.6-flash`, and `gemini-3.1-flash-lite`. These dates apply to
-Google AI Studio; check the separate [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
+Google has not announced shutdown dates for the stable Gemini API models `gemini-2.5-pro`,
+`gemini-2.5-flash`, and `gemini-2.5-flash-lite`. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations)
+for updates and the separate [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
 for Vertex deployments.
 
 :::

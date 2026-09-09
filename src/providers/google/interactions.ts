@@ -7,6 +7,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
+import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
   mergeGoogleCompletionOptions,
@@ -877,11 +878,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (routeError) {
       return { error: routeError };
     }
+    // Known model overrides select their own capabilities. Gateway deployment aliases
+    // retain the capabilities of the provider's selected model.
+    const capabilityModel = GOOGLE_MODELS.some((model) => model.id === effectiveModel)
+      ? effectiveModel
+      : this.modelName;
     const isVideoModel = [
       'gemini-omni-flash-preview',
       'gemini-omni-1.1-flash',
       'gemini-omni-1.1-flash-preview',
-    ].includes(effectiveModel);
+    ].includes(capabilityModel);
     const allowSamplingControls = config.vertexai && isVideoModel;
     const {
       input: interactionInput,
@@ -1104,6 +1110,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
     );
     if (normalizedGenerationConfig.error) {
       return { error: normalizedGenerationConfig.error };
+    }
+    if (isVideoModel) {
+      // Omni does not support stop sequences, including aliases from any config layer.
+      delete normalizedGenerationConfig.config.stop_sequences;
     }
     const generationConfig = {
       ...normalizedGenerationConfig.config,

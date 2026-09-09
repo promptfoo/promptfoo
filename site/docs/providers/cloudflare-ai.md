@@ -94,13 +94,11 @@ providers:
 
 ## Current Model Examples
 
-Here are some of the models available on Cloudflare Workers AI:
+### Model Catalog {#state-of-the-art-models-2025}
 
-### State-of-the-Art Models (2025)
-
-This legacy heading is retained so existing inbound links keep working. Do not treat a dated
-documentation list as Cloudflare's current catalog; verify each exact model ID in the official
-catalog before using it.
+Verify each exact model ID and its supported endpoints and capabilities in Cloudflare's current
+catalog. Features documented for the Responses API are not automatically available through
+`cloudflare-ai:chat:`.
 
 :::tip
 

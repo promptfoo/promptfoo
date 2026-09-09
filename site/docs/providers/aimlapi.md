@@ -69,17 +69,19 @@ providers:
 
 All standard OpenAI parameters are supported:
 
-| Parameter               | Description                                   |
-| ----------------------- | --------------------------------------------- |
-| `apiKey`                | Your AI/ML API key                            |
-| `temperature`           | Controls randomness (0.0 to 2.0)              |
-| `max_tokens`            | Output cap for non-reasoning models           |
-| `max_completion_tokens` | Output cap for reasoning models such as GPT-5 |
-| `top_p`                 | Nucleus sampling parameter                    |
-| `frequency_penalty`     | Penalizes frequent tokens                     |
-| `presence_penalty`      | Penalizes new tokens based on presence        |
-| `stop`                  | Sequences where the API will stop generating  |
-| `stream`                | Enable streaming responses                    |
+| Parameter               | Description                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `apiKey`                | Your AI/ML API key                                      |
+| `temperature`           | Controls randomness (0.0 to 2.0)                        |
+| `max_tokens`            | Maximum number of output tokens                         |
+| `max_completion_tokens` | Token cap for OpenAI reasoning models (GPT-5, o-series) |
+| `top_p`                 | Nucleus sampling parameter                              |
+| `frequency_penalty`     | Penalizes frequent tokens                               |
+| `presence_penalty`      | Penalizes new tokens based on presence                  |
+| `stop`                  | Sequences where the API will stop generating            |
+| `stream`                | Enable streaming responses                              |
+
+For [DeepSeek R1](https://docs.aimlapi.com/api-references/text-models-llm/deepseek/deepseek-r1) and [Gemini 2.5 Flash](https://docs.aimlapi.com/api-references/text-models-llm/google/gemini-2.5-flash), use `max_tokens` even though these models support reasoning.
 
 ## Popular Models
 

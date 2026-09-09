@@ -188,7 +188,10 @@ export class GeminiImageProvider implements ApiProvider {
         this.config.googleAuthOptions?.credentials,
     );
     const providerScopedRegion =
-      this.config.region || this.env?.VERTEX_REGION || this.env?.GOOGLE_CLOUD_LOCATION;
+      this.config.region ||
+      this.env?.VERTEX_REGION ||
+      this.env?.GOOGLE_CLOUD_LOCATION ||
+      this.env?.GOOGLE_LOCATION;
     const hasProviderScopedOAuthConfig = Boolean(
       this.config.projectId ||
         this.config.googleAuthOptions?.projectId ||
@@ -205,7 +208,8 @@ export class GeminiImageProvider implements ApiProvider {
     const effectiveRegion =
       providerScopedRegion ||
       getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION');
+      getEnvString('GOOGLE_CLOUD_LOCATION') ||
+      getEnvString('GOOGLE_LOCATION');
     const hasProjectScopedOAuthConfig = Boolean(
       projectId ||
         this.config.googleAuthOptions?.projectId ||
@@ -219,13 +223,7 @@ export class GeminiImageProvider implements ApiProvider {
       (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
 
     if (usesVertexExpress && vertexApiKey) {
-      const region =
-        this.config.region ||
-        this.env?.VERTEX_REGION ||
-        this.env?.GOOGLE_CLOUD_LOCATION ||
-        getEnvString('VERTEX_REGION') ||
-        getEnvString('GOOGLE_CLOUD_LOCATION') ||
-        'global';
+      const region = effectiveRegion || 'global';
       if (region !== 'global') {
         return {
           error: `Vertex Express image generation supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,

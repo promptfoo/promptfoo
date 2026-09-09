@@ -430,8 +430,8 @@ export const GROK_3_MINI_MODELS = [
 ];
 
 // Models that support reasoning_effort on the chat-completions-compatible API.
-// grok-4.6 and grok-4.5 accept `low`, `medium`, and `high` but reject `none`
-// (verified live 2026-08-31 and 2026-07-09); grok-4.3 additionally accepts `none`.
+// grok-4.6 additionally supports `xhigh`; grok-4.3 accepts `none`.
+// https://docs.x.ai/developers/model-capabilities/text/reasoning
 export const GROK_REASONING_EFFORT_MODELS = [
   'grok-4.6',
   'grok-4.5',
@@ -448,8 +448,8 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Grok 4.5 *and newer* models, which accept reasoning_effort `low`/`medium`/`high`
-// but reject `none`. Kept under the original export name because it is part of the
+// Grok 4.5 *and newer* models, which require reasoning and accept model-specific
+// effort levels. Kept under the original export name because it is part of the
 // package's import surface; membership is "4.5 or later", not "exactly 4.5".
 export const GROK_45_MODELS: ReadonlySet<string> = new Set([
   'grok-4.6',
@@ -806,14 +806,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
 
     const reasoningEffort = result.body.reasoning_effort;
+    const supportedReasoningEfforts =
+      effectiveModel === 'grok-4.6'
+        ? ['low', 'medium', 'high', 'xhigh']
+        : ['low', 'medium', 'high'];
     if (
       GROK_45_MODELS.has(effectiveModel) &&
       reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort)
+      !supportedReasoningEfforts.includes(reasoningEffort)
     ) {
       throw new Error(
         `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
-          'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
+          `Use ${supportedReasoningEfforts.map((effort) => JSON.stringify(effort)).join(', ')}, ` +
+          'or omit reasoning_effort to use the default "high".',
       );
     }
 

@@ -579,8 +579,10 @@ function applyExecutionOverrides(
         const handoff = candidate as Handoff<any, any>;
         return handoff.clone({
           agent: cloneAgent(handoff.agent),
+          // Callbacks can update an already-cloned target or its descendants. Use a fresh
+          // cycle-safe graph after invocation so every transfer sees those updates.
           onInvokeHandoff: async (context, args) =>
-            cloneAgent(await handoff.onInvokeHandoff(context, args)),
+            applyExecutionOverrides(await handoff.onInvokeHandoff(context, args), overrides),
         });
       }
 

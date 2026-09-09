@@ -809,17 +809,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       config.effort,
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
-    // Mythos Preview is always-on adaptive but, unlike the Claude 5 adaptive-sampling
-    // families, still accepts explicit sampling controls. Keep the legacy extended-thinking
-    // restrictions for every other family while preserving those supported controls here.
-    const thinkingConstrainsSamplingParams =
-      thinkingEnabled && !(alwaysOnAdaptiveThinking && !samplingParamsDeprecated);
-
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning
     // below already covers the omission, and the "disable thinking" advice is
     // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
-    if (thinkingConstrainsSamplingParams && !samplingParamsDeprecated) {
+    if (thinkingEnabled && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
@@ -863,13 +857,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
     let resolvedTopP: number | undefined;
     if (config.top_p != null) {
-      resolvedTopP = thinkingConstrainsSamplingParams
-        ? Math.max(0.95, Math.min(1.0, config.top_p))
-        : config.top_p;
+      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
     }
 
     // Warn when temperature is silently omitted due to top_p (even without thinking)
-    if (config.temperature != null && resolvedTopP != null && !thinkingConstrainsSamplingParams) {
+    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
       logger.warn(
         'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
       );
@@ -915,8 +907,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
     // and on adaptive-sampling Claude models.
     // Collapse those cases into one predicate so the params spread stays readable.
-    const omitTemperature =
-      resolvedTopP != null || thinkingConstrainsSamplingParams || samplingParamsDeprecated;
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
@@ -953,7 +944,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking, and Opus
       // adaptive-sampling models reject it along with the other sampling controls.
-      ...(config.top_k == null || thinkingConstrainsSamplingParams || samplingParamsDeprecated
+      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
         ? {}
         : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),

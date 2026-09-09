@@ -371,33 +371,34 @@ describe('xAI Chat Provider', () => {
       expect(provider.supportsReasoningEffort()).toBe(true);
     });
 
-    it('preserves reasoning_effort for Grok 4.6 chat requests and strips unsupported params', async () => {
-      // Verified live 2026-08-31: grok-4.6 accepts reasoning_effort low/medium/high
-      // (not none) and rejects presence_penalty, frequency_penalty, and stop.
-      const provider = createXAIProvider('xai:grok-4.6') as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            reasoning_effort: 'medium',
-            presence_penalty: 0.5,
-            frequency_penalty: 0.7,
-            stop: ['\\n'],
-            temperature: 0.8,
+    it.each(['low', 'medium', 'high', 'xhigh'])(
+      'preserves %s reasoning effort for Grok 4.6 and strips unsupported params',
+      async (reasoningEffort) => {
+        const provider = createXAIProvider('xai:grok-4.6') as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              reasoning_effort: reasoningEffort,
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+              temperature: 0.8,
+            },
           },
-        },
-      });
+        });
 
-      expect(result.body.reasoning_effort).toBe('medium');
-      expect(result.body.presence_penalty).toBeUndefined();
-      expect(result.body.frequency_penalty).toBeUndefined();
-      expect(result.body.stop).toBeUndefined();
-      expect(result.body.temperature).toBe(0.8);
-    });
+        expect(result.body.reasoning_effort).toBe(reasoningEffort);
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+        expect(result.body.temperature).toBe(0.8);
+      },
+    );
 
     it('rejects unsupported reasoning_effort values for Grok 4.6', async () => {
       // Verified live 2026-08-31: the API returns
       // "This model does not support `reasoning_effort` value `none`."
-      for (const reasoningEffort of ['none', 'xhigh', 'minimal']) {
+      for (const reasoningEffort of ['none', 'minimal']) {
         const provider = createXAIProvider('xai:grok-4.6') as any;
 
         await expect(
@@ -807,22 +808,60 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBe(222);
     });
 
-    it('validates Grok 4.5 reasoning effort against the effective passthrough model', async () => {
-      const provider = createXAIProvider('xai:grok-2') as any;
+    it.each(['provider', 'prompt'])(
+      'accepts xhigh for an effective Grok 4.6 model from %s passthrough',
+      async (configSource) => {
+        const config = {
+          omitDefaults: true,
+          passthrough: {
+            model: 'grok-4.6',
+            reasoning_effort: 'xhigh',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+          },
+        };
+        const provider = createXAIProvider(
+          'xai:grok-4.3',
+          configSource === 'provider' ? { config } : {},
+        ) as any;
+        const result = await provider.getOpenAiBody(
+          'test prompt',
+          configSource === 'prompt' ? { prompt: { config } } : undefined,
+        );
 
-      await expect(
-        provider.getOpenAiBody('test prompt', {
-          prompt: {
-            config: {
-              passthrough: {
-                model: 'grok-4.5',
-                reasoning_effort: 'none',
+        expect(result.body.model).toBe('grok-4.6');
+        expect(result.body.reasoning_effort).toBe('xhigh');
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['grok-2', 'none'],
+      ['grok-4.6', 'xhigh'],
+    ])(
+      'validates %s effort %s against the effective Grok 4.5 model',
+      async (configuredModel, reasoningEffort) => {
+        const provider = createXAIProvider(`xai:${configuredModel}`) as any;
+
+        await expect(
+          provider.getOpenAiBody('test prompt', {
+            prompt: {
+              config: {
+                passthrough: {
+                  model: 'grok-4.5',
+                  reasoning_effort: reasoningEffort,
+                },
               },
             },
-          },
-        }),
-      ).rejects.toThrow(/xAI model grok-4\.5 does not support reasoning_effort "none"/);
-    });
+          }),
+        ).rejects.toThrow(
+          `xAI model grok-4.5 does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+        );
+      },
+    );
 
     it('filters unsupported parameters for Grok 4 Fast models', async () => {
       const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;

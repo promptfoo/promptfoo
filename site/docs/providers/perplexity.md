@@ -177,8 +177,16 @@ providers:
 
 ### Offline Creative Tasks
 
-Perplexity's current catalog focuses on online Sonar models. The former offline `r1-1776`
-model is retired, so use another provider when a task must run without web search.
+The former offline `r1-1776` model is retired. For Sonar Pro responses without web search, set
+[`disable_search`](https://docs.perplexity.ai/docs/sonar/filters#search-control) through `passthrough`:
+
+```yaml
+providers:
+  - id: perplexity:sonar-pro
+    config:
+      passthrough:
+        disable_search: true
+```
 
 ## Best Practices
 
