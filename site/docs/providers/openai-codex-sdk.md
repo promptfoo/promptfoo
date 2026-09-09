@@ -153,12 +153,12 @@ The provider creates an ephemeral thread for each eval test case.
 
 ### With Custom Model
 
-Specify a current model such as GPT-6 Astra for code generation. Astra requires account access; use `gpt-5.6-terra` for an alternative that balances capability and cost:
+Specify a model such as GPT-5.6 Terra to balance capability and cost for code generation:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:codex:gpt-6-astra
+  - openai:codex:gpt-5.6-terra
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -170,7 +170,7 @@ If you need additional Codex settings, you can still set the model via `config.m
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-astra
+      model: gpt-5.6-terra
 ```
 
 ### With Working Directory
@@ -267,7 +267,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-astra` with [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. The GPT-5.6 family remains available through its concrete tier IDs: `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`. The public [Codex model guide](https://learn.chatgpt.com/docs/models) also documents the `gpt-5.6` alias; use a concrete tier when you want an explicit selection.
+Use `gpt-6-astra` with [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. For GPT-5.6, select a concrete tier such as `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna` when you want to specify that choice. Available aliases depend on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
 
 ```yaml
 providers:
@@ -277,14 +277,14 @@ providers:
       model_reasoning_effort: max
 ```
 
-For new evals, choose from the current models in [OpenAI's model guide](https://developers.openai.com/api/docs/models):
+For new evals, choose from the current models in [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Availability depends on the sign-in method and account:
 
 - **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
 - **GPT-5.6 Sol** (`gpt-5.6-sol`) - Use for complex professional and coding workflows.
 - **GPT-5.6 Terra** (`gpt-5.6-terra`) - Start here to balance capability and cost.
 - **GPT-5.6 Luna** (`gpt-5.6-luna`) - Use for cost-sensitive, high-volume evals.
 
-Earlier supported models include `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.3-codex`, `gpt-5.2`, `gpt-5-codex-mini`, and `gpt-5`. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
+With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-5.6-terra` or `gpt-5.6-luna` in new saved configurations. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
@@ -613,7 +613,7 @@ Codex gates optional capabilities behind [feature flags](https://developers.open
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-astra
+  - id: openai:codex-sdk:gpt-5.6-terra
     config:
       cli_config:
         features:

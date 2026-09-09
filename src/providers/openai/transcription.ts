@@ -33,6 +33,8 @@ function getAbortError(signal: AbortSignal): Error {
 
 export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
+  languages?: string[];
+  keywords?: string[];
   prompt?: string;
   temperature?: number;
   timestamp_granularities?: ('word' | 'segment')[];
@@ -46,8 +48,6 @@ export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
       };
   known_speaker_names?: string[];
   known_speaker_references?: string[];
-  keywords?: string[];
-  languages?: string[];
 }
 
 export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
@@ -140,7 +140,8 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       ...this.config,
       ...promptConfig,
     } as OpenAiTranscriptionOptions;
-    if (this.modelName === 'gpt-transcribe') {
+    const isGptTranscribe = this.modelName === 'gpt-transcribe';
+    if (isGptTranscribe) {
       const hasOption = (
         options: Partial<OpenAiTranscriptionOptions> | undefined,
         key: 'language' | 'languages',
@@ -168,6 +169,39 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       } else if (promptHasLanguages) {
         config.language = undefined;
       }
+      if (config.language !== undefined) {
+        config.languages = [config.language];
+        config.language = undefined;
+      }
+    }
+
+    if (config.languages !== undefined || config.keywords !== undefined) {
+      if (!isGptTranscribe) {
+        return {
+          error: 'languages and keywords require the gpt-transcribe file transcription model.',
+        };
+      }
+      if (
+        config.languages !== undefined &&
+        (!Array.isArray(config.languages) ||
+          config.languages.some(
+            (language) =>
+              typeof language !== 'string' || !/^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(language.trim()),
+          ))
+      ) {
+        return { error: 'languages must be an array of language codes such as en, eng, or zh-cn.' };
+      }
+      if (
+        config.keywords !== undefined &&
+        (!Array.isArray(config.keywords) ||
+          config.keywords.some(
+            (keyword) => typeof keyword !== 'string' || !keyword.trim() || /[<>\r\n]/.test(keyword),
+          ))
+      ) {
+        return {
+          error: 'keywords must be an array of non-empty, single-line strings without < or >.',
+        };
+      }
     }
 
     // The prompt should be a file path to an audio file
@@ -194,8 +228,14 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       formData.append('model', this.modelName);
 
       // Add optional parameters
-      if (config.language && this.modelName !== 'gpt-transcribe') {
+      if (config.language) {
         formData.append('language', config.language);
+      }
+      for (const language of config.languages || []) {
+        formData.append('languages[]', language.trim());
+      }
+      for (const keyword of config.keywords || []) {
+        formData.append('keywords[]', keyword.trim());
       }
       if (config.prompt && !this.modelName.includes('diarize')) {
         formData.append('prompt', config.prompt);
@@ -208,20 +248,6 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           formData.append('timestamp_granularities[]', granularity);
         }
       }
-      if (this.modelName === 'gpt-transcribe') {
-        for (const keyword of config.keywords || []) {
-          formData.append('keywords[]', keyword);
-        }
-        const languages = config.languages?.length
-          ? config.languages
-          : config.language
-            ? [config.language]
-            : [];
-        for (const language of languages) {
-          formData.append('languages[]', language);
-        }
-      }
-
       const isDiarizationModel = this.modelName.includes('diarize');
       const chunkingStrategy =
         config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined);
@@ -244,13 +270,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         for (const reference of config.known_speaker_references || []) {
           formData.append('known_speaker_references[]', reference);
         }
-      } else {
-        // OpenAI's GPT transcription models use JSON. Preserve verbose_json for Whisper and
-        // unknown OpenAI-compatible models, matching the provider's historical behavior.
-        const responseFormat =
-          this.modelName.startsWith('gpt-4o-') || this.modelName === 'gpt-transcribe'
-            ? 'json'
-            : 'verbose_json';
+      } else if (!isGptTranscribe) {
+        // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
+        const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
         formData.append('response_format', responseFormat);
       }
 

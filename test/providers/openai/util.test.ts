@@ -1228,6 +1228,19 @@ describe('OpenAI model catalogs', () => {
     ...OPENAI_COMPLETION_MODELS,
   ].map((candidate) => candidate.id);
 
+  it('retains the deep-research compatibility export for historical billing only', () => {
+    expect(OPENAI_DEEP_RESEARCH_MODELS.map((model) => model.id)).toEqual([
+      'o3-deep-research',
+      'o3-deep-research-2025-06-26',
+      'o4-mini-deep-research',
+      'o4-mini-deep-research-2025-06-26',
+    ]);
+    for (const model of OPENAI_DEEP_RESEARCH_MODELS) {
+      expect(activeModels).not.toContain(model.id);
+      expect(calculateOpenAICost(model.id, {}, 1000, 500)).toBeGreaterThan(0);
+    }
+  });
+
   // Confirmed shutdowns and legacy discovery exclusions retained from the current-main catalog.
   it.each([
     'chatgpt-4o-latest',

@@ -131,14 +131,19 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
-// Preserve GPT-5.6 preview routing and default Astra to Responses, which supports its tools.
-// Each model also supports explicit openai:chat: requests.
-const OPENAI_BARE_RESPONSES_MODELS = new Set([
-  'gpt-6-astra',
-  'gpt-5.6-sol',
-  'gpt-5.6-terra',
-  'gpt-5.6-luna',
-]);
+function shouldDefaultToOpenAiResponses(modelName: string): boolean {
+  // Some compatible gateways spell the legacy GPT-3.5 family as GPT-35.
+  if (/^gpt-35(?:-|$)/.test(modelName)) {
+    return false;
+  }
+  const version = /^gpt-(\d+)(?:\.(\d+))?(?:-|$)/.exec(modelName);
+  if (!version) {
+    return false;
+  }
+  const major = Number(version[1]);
+  const minor = Number(version[2] ?? 0);
+  return major > 5 || (major === 5 && minor >= 6);
+}
 
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
 const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
@@ -1146,7 +1151,7 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (OPENAI_BARE_RESPONSES_MODELS.has(modelType)) {
+      if (shouldDefaultToOpenAiResponses(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {

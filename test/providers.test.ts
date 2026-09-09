@@ -525,14 +525,7 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should route the new bare gpt-5.6 alias to Chat Completions', async () => {
-    const provider = await loadApiProvider('openai:gpt-5.6');
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6', expect.any(Object));
-    expect(provider).toBeDefined();
-  });
-
-  it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-5.6', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route bare %s to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:${model}`);
@@ -903,7 +896,7 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini'])(
+  it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-4o-mini-realtime-preview-2024-12-17'])(
     'should auto-route bare Realtime model %s to Realtime',
     async (model) => {
       const actualChatProvider = await vi.importActual<

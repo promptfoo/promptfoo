@@ -1037,148 +1037,158 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.persistentConnection).toBeNull();
     });
 
-    it('should handle audio response in persistent connection', async () => {
-      const config = {
-        modalities: ['text', 'audio'],
-        maintainContext: true,
-        voice: 'alloy' as const,
-      };
+    it.each(['pcm16', 'g711_ulaw', 'g711_alaw'] as const)(
+      'returns the correct audio container for persistent %s output',
+      async (format) => {
+        const config = {
+          modalities: ['text', 'audio'],
+          maintainContext: true,
+          output_audio_format: format,
+          voice: 'alloy' as const,
+        };
 
-      const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', { config });
 
-      // Create mock WebSocket connection with proper type
-      provider.persistentConnection = {
-        on: vi.fn((event: string, handler: Function) => {
-          mockHandlers[event].push(handler);
-          return provider.persistentConnection;
-        }),
-        once: vi.fn((event: string, handler: Function) => {
-          mockHandlers[event].push(handler);
-          return provider.persistentConnection;
-        }),
-        send: vi.fn(),
-        close: vi.fn(),
-        removeListener: vi.fn(),
-      } as unknown as WebSocket;
-
-      // Create context with conversationId to ensure maintainContext stays true
-      const context = {
-        test: {
-          metadata: { conversationId: 'test-conv-audio' },
-        },
-      } as any;
-
-      const responsePromise = provider.callApi('Hello', context);
-
-      // Wait for microtask to process so handler is registered
-      await flushMicrotasks();
-
-      // Get the message handler
-      const messageHandlers = mockHandlers.message;
-      const lastHandler = messageHandlers[messageHandlers.length - 1];
-
-      // Simulate conversation item created
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'conversation.item.created',
-            item: { id: 'msg_1', role: 'user' },
+        // Create mock WebSocket connection with proper type
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
           }),
-        ),
-      );
-
-      // Simulate response created
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.created',
-            response: { id: 'resp_1' },
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
           }),
-        ),
-      );
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
 
-      // Simulate audio response
-      const audioData = Buffer.from('fake_audio_data');
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.audio.delta',
-            item_id: 'audio_1',
-            audio: audioData.toString('base64'),
-          }),
-        ),
-      );
+        // Create context with conversationId to ensure maintainContext stays true
+        const context = {
+          test: {
+            metadata: { conversationId: 'test-conv-audio' },
+          },
+        } as any;
 
-      // Simulate audio done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.audio.done',
-            format: 'wav',
-            item_id: 'audio_1',
-          }),
-        ),
-      );
+        const responsePromise = provider.callApi('Hello', context);
 
-      // Simulate text response
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.text.delta',
-            delta: 'Hello there',
-          }),
-        ),
-      );
+        // Wait for microtask to process so handler is registered
+        await flushMicrotasks();
 
-      // Simulate text done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.text.done',
-            text: 'Hello there',
-          }),
-        ),
-      );
+        // Get the message handler
+        const messageHandlers = mockHandlers.message;
+        const lastHandler = messageHandlers[messageHandlers.length - 1];
 
-      // Simulate response done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: {
-              usage: {
-                total_tokens: 10,
-                prompt_tokens: 5,
-                completion_tokens: 5,
+        // Simulate conversation item created
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_1', role: 'user' },
+            }),
+          ),
+        );
+
+        // Simulate response created
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.created',
+              response: { id: 'resp_1' },
+            }),
+          ),
+        );
+
+        // Simulate audio response
+        const audioData = Buffer.from('fake_audio_data');
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.audio.delta',
+              item_id: 'audio_1',
+              audio: audioData.toString('base64'),
+            }),
+          ),
+        );
+
+        // Simulate audio done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.audio.done',
+              format: 'wav',
+              item_id: 'audio_1',
+            }),
+          ),
+        );
+
+        // Simulate text response
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.delta',
+              delta: 'Hello there',
+            }),
+          ),
+        );
+
+        // Simulate text done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.done',
+              text: 'Hello there',
+            }),
+          ),
+        );
+
+        // Simulate response done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 10,
+                  prompt_tokens: 5,
+                  completion_tokens: 5,
+                },
               },
-            },
-          }),
-        ),
-      );
+            }),
+          ),
+        );
 
-      const response = await responsePromise;
+        const response = await responsePromise;
 
-      // Verify text response
-      expect(response.output).toBe('Hello there');
+        // Verify text response
+        expect(response.output).toBe('Hello there');
 
-      // First verify audio exists
-      expect(response.audio).toBeDefined();
-      expect(response.metadata).toBeDefined();
-      expect(response.metadata!.audio).toBeDefined();
+        // First verify audio exists
+        expect(response.audio).toBeDefined();
+        expect(response.metadata).toBeDefined();
+        expect(response.metadata!.audio).toBeDefined();
 
-      // Then verify audio properties
-      expect(response.audio!.format).toBe('wav');
-      // The audio data should be converted from PCM16 to WAV, so it will be different from the original
-      expect(response.audio!.data).toBeDefined();
-      expect(response.audio!.data!.length).toBeGreaterThanOrEqual(
-        audioData.toString('base64').length,
-      ); // WAV has headers
-      expect(response.audio!.transcript).toBe('Hello there');
+        // Then verify audio properties
+        expect(response.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
+        // The audio data should be converted from PCM16 to WAV, so it will be different from the original
+        expect(response.audio!.data).toBeDefined();
+        const wavData = Buffer.from(response.audio!.data!, 'base64');
+        if (format === 'pcm16') {
+          expect(wavData.subarray(0, 4).toString()).toBe('RIFF');
+          expect(wavData.subarray(8, 12).toString()).toBe('WAVE');
+          expect(wavData.readUInt32LE(24)).toBe(24000);
+          expect(wavData.subarray(44)).toEqual(audioData);
+        } else {
+          expect(wavData).toEqual(audioData);
+        }
+        expect(response.audio!.transcript).toBe('Hello there');
 
-      // Verify metadata
-      expect(response.metadata!.audio!.format).toBe('wav');
-      expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
-    });
+        // Verify metadata
+        expect(response.metadata!.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
+        expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
+      },
+    );
 
     it('should configure tools and handle function calls in persistent connections', async () => {
       const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
