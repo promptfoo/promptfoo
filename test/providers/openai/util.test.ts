@@ -8,6 +8,7 @@ import {
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
+  OPENAI_DEEP_RESEARCH_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
   OPENAI_TTS_MODELS,
@@ -563,11 +564,6 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
-    expect(
-      OPENAI_REALTIME_MODELS.some(
-        (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
-      ),
-    ).toBe(false);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
       false,
     );
@@ -1000,6 +996,19 @@ describe('OpenAI model catalogs', () => {
     ...OPENAI_COMPLETION_MODELS,
   ].map((candidate) => candidate.id);
 
+  it('retains the deep-research compatibility export for historical billing only', () => {
+    expect(OPENAI_DEEP_RESEARCH_MODELS.map((model) => model.id)).toEqual([
+      'o3-deep-research',
+      'o3-deep-research-2025-06-26',
+      'o4-mini-deep-research',
+      'o4-mini-deep-research-2025-06-26',
+    ]);
+    for (const model of OPENAI_DEEP_RESEARCH_MODELS) {
+      expect(activeModels).not.toContain(model.id);
+      expect(calculateOpenAICost(model.id, {}, 1000, 500)).toBeGreaterThan(0);
+    }
+  });
+
   // Shutdowns verified against https://developers.openai.com/api/docs/deprecations on 2026-09-04.
   it.each([
     'chatgpt-4o-latest',
@@ -1017,7 +1026,6 @@ describe('OpenAI model catalogs', () => {
     'gpt-4-32k-0613',
     'gpt-4-turbo-preview',
     'gpt-4-vision-preview',
-    'gpt-4o-mini-realtime-preview-2024-12-17',
     'gpt-4o-mini-search-preview',
     'gpt-4o-mini-search-preview-2025-03-11',
     'gpt-4o-search-preview',
