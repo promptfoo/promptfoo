@@ -186,6 +186,13 @@ export class OpenClawAgentProvider implements ApiProvider {
         );
       }
       sessionKey = `agent:${this.agentId}:${sessionKey}`;
+    } else if (
+      sessionKey.toLowerCase() === 'global' &&
+      this.agentId &&
+      this.agentId.toLowerCase() !== 'main'
+    ) {
+      // Older gateways resolve raw `global` to main before checking agentId.
+      sessionKey = `agent:${this.agentId}:${sessionKey}`;
     }
     sessionKey = buildOpenClawSessionKey(this.agentId, sessionKey);
 

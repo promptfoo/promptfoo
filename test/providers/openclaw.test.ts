@@ -2750,27 +2750,71 @@ describe('OpenClaw Provider', () => {
       },
     );
 
-    it.each(['global', 'GLOBAL'])(
-      'should forward the global session sentinel %s for explicit WS agents',
-      async (sessionKey) => {
-        const provider = new OpenClawAgentProvider('dev', {
+    it.each([
+      ['dev', 'global', 'agent:dev:global'],
+      ['dev', 'GLOBAL', 'agent:dev:GLOBAL'],
+      ['main', 'global', 'global'],
+      [undefined, 'global', 'global'],
+    ])(
+      'should route WS agent %s with session %s through protocol 3 gateway validation',
+      async (agentId, sessionKey, expectedSessionKey) => {
+        let gatewayAgentId = 'main';
+        mockWs.send.mockImplementation((data: string) => {
+          const request = JSON.parse(data);
+          const respond = (body: Record<string, unknown>) =>
+            getMessageHandler()(
+              Buffer.from(JSON.stringify({ type: 'res', id: request.id, ...body })),
+            );
+          if (request.method === 'connect') {
+            respond({ ok: true, payload: { type: 'hello-ok', protocol: 3 } });
+          } else if (request.method === 'agent') {
+            // OpenClaw v2026.3.8: src/routing/session-key.ts and server-methods/agent.ts.
+            // Raw global resolves to main; explicit agents must match the parsed session agent.
+            const parts = request.params.sessionKey.trim().toLowerCase().split(':').filter(Boolean);
+            gatewayAgentId = parts.length >= 3 && parts[0] === 'agent' ? parts[1] : 'main';
+            if (request.params.agentId && request.params.agentId !== gatewayAgentId) {
+              respond({
+                ok: false,
+                error: {
+                  code: 'INVALID_REQUEST',
+                  message: `invalid agent params: agent "${request.params.agentId}" does not match session key agent "${gatewayAgentId}"`,
+                },
+              });
+            } else {
+              respond({ ok: true, payload: { runId: 'run-1', status: 'accepted' } });
+            }
+          } else if (request.method === 'agent.wait') {
+            respond({
+              ok: true,
+              payload: { status: 'ok', output: `Reply from ${gatewayAgentId}` },
+            });
+          }
+        });
+        const provider = new OpenClawAgentProvider(agentId, {
           config: { gateway_url: 'http://test:18789', session_key: sessionKey },
         });
-
         const promise = provider.callApi('Hello');
-        const onMessage = getMessageHandler();
-        const { agentReq, waitReq } = simulateHandshake(onMessage);
-
-        expect(agentReq.params.agentId).toBe('dev');
-        expect(agentReq.params.sessionKey).toBe(sessionKey);
-
-        onMessage(
+        getMessageHandler()(
           Buffer.from(
-            JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+            JSON.stringify({
+              type: 'event',
+              event: 'connect.challenge',
+              payload: { nonce: 'abc', ts: Date.now() },
+            }),
           ),
         );
 
-        await promise;
+        const response = await promise;
+        expect(response.error, response.error).toBeUndefined();
+        expect(response.output).toBe(`Reply from ${agentId ?? 'main'}`);
+        const [connectReq, agentReq] = mockWs.send.mock.calls.map(([data]: [string]) =>
+          JSON.parse(data),
+        );
+        expect(connectReq.params.minProtocol).toBeLessThanOrEqual(3);
+        expect(connectReq.params.maxProtocol).toBeGreaterThanOrEqual(3);
+        expect(agentReq.params.agentId).toBe(agentId);
+        expect(agentReq.params.sessionKey).toBe(expectedSessionKey);
+        expect(mockWs.close).toHaveBeenCalledOnce();
       },
     );
 
