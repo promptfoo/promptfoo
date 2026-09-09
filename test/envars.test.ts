@@ -169,9 +169,9 @@ describe('envars', () => {
   });
 
   describe('dotenv loading', () => {
-    it('does not load a .env file into a test process', async () => {
-      // A developer's gitignored .env must never reach the suite: tests would pick up
-      // real credentials and diverge from CI, which has none.
+    // A developer's gitignored .env must never reach the suite: tests would pick up
+    // real credentials and diverge from CI, which has none.
+    async function reimportEnvarsBesideDotenv(): Promise<void> {
       const originalCwd = process.cwd();
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dotenv-'));
       fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=leaked\n');
@@ -180,11 +180,29 @@ describe('envars', () => {
         process.chdir(dir);
         vi.resetModules();
         await import('../src/envars');
-
-        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
       } finally {
         process.chdir(originalCwd);
         fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('does not load a .env file into a test process', async () => {
+      await reimportEnvarsBesideDotenv();
+
+      expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+    });
+
+    it('does not load a .env file after a test clears process.env', async () => {
+      // Clearing process.env drops VITEST, so the guard has to fall back to the
+      // runner-owned global. Assert before restoring: the restore would erase the leak.
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+
+      try {
+        await reimportEnvarsBesideDotenv();
+
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+      } finally {
+        restoreEnv();
       }
     });
   });

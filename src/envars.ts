@@ -5,8 +5,12 @@ import type { EnvOverrides } from './types/env';
 
 // Never load the developer's `.env` inside a test run: unit tests would silently pick up
 // real credentials and behave differently from CI, which has none. Mirrors the guard on
-// the default database path in src/database/index.ts.
-if (process.env.VITEST !== 'true') {
+// the default database path in src/database/index.ts, including its runner-owned global:
+// helpers that wipe process.env drop VITEST, but the global survives them.
+const isTestProcess =
+  process.env.VITEST === 'true' ||
+  Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__');
+if (!isTestProcess) {
   dotenv.config({ quiet: true });
 }
 
