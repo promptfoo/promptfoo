@@ -2,17 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { parseModelAuditArgs } from '../../src/util/modelAuditCliParser';
 
 describe('parseModelAuditArgs', () => {
-  it('should parse basic options and preserve the return shape', () => {
+  it('should parse basic options', () => {
     const result = parseModelAuditArgs(['model.pkl'], {
       format: 'json',
       verbose: true,
       timeout: 300,
     });
 
-    expect(result).toEqual({
-      args: ['scan', 'model.pkl', '--format', 'json', '--verbose', '--timeout', '300'],
-      unsupportedOptions: [],
-    });
+    expect(result).toEqual([
+      'scan',
+      'model.pkl',
+      '--format',
+      'json',
+      '--verbose',
+      '--timeout',
+      '300',
+    ]);
   });
 
   it('should handle multiple blacklist patterns', () => {
@@ -20,7 +25,7 @@ describe('parseModelAuditArgs', () => {
       blacklist: ['pattern1', 'pattern2', 'pattern3'],
     });
 
-    expect(result.args).toEqual([
+    expect(result).toEqual([
       'scan',
       'model.pkl',
       '--blacklist',
@@ -37,14 +42,7 @@ describe('parseModelAuditArgs', () => {
       format: 'sarif',
     });
 
-    expect(result.args).toEqual([
-      'scan',
-      'model1.pkl',
-      'model2.h5',
-      'model3.onnx',
-      '--format',
-      'sarif',
-    ]);
+    expect(result).toEqual(['scan', 'model1.pkl', 'model2.h5', 'model3.onnx', '--format', 'sarif']);
   });
 
   it('should handle all supported options', () => {
@@ -64,7 +62,7 @@ describe('parseModelAuditArgs', () => {
       stream: true,
     });
 
-    expect(result.args).toEqual([
+    expect(result).toEqual([
       'scan',
       'model.pkl',
       '--blacklist',
@@ -99,7 +97,7 @@ describe('parseModelAuditArgs', () => {
       stream: false,
     });
 
-    expect(result.args).toEqual(['scan', 'model.pkl']);
+    expect(result).toEqual(['scan', 'model.pkl']);
   });
 
   it('should reject invalid format and timeout options', () => {
@@ -128,7 +126,7 @@ describe('parseModelAuditArgs', () => {
       excludeScanner: ['weight_distribution'],
     });
 
-    expect(result.args).toEqual([
+    expect(result).toEqual([
       'scan',
       'model.pkl',
       '--scanners',
@@ -146,6 +144,6 @@ describe('parseModelAuditArgs', () => {
       format: 'json',
     });
 
-    expect(result.args).toEqual(['scan', '--format', 'json', '--list-scanners']);
+    expect(result).toEqual(['scan', '--format', 'json', '--list-scanners']);
   });
 });
