@@ -36,7 +36,7 @@ The SDK includes the Codex CLI. Promptfoo lists it as an optional dependency, bu
 
 Choose one authentication method:
 
-- **ChatGPT sign-in:** run `npx codex login` and complete the browser flow. Leave `config.apiKey`, `OPENAI_API_KEY`, and `CODEX_API_KEY` unset to reuse that login.
+- **ChatGPT sign-in:** run `npx codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
 - **API key:** set `OPENAI_API_KEY` in your shell or secret manager. `CODEX_API_KEY` is also supported. API usage is billed separately from ChatGPT subscriptions.
 
 For custom Codex homes, CI, and AWS credentials, see [authentication and environment](#authentication-and-environment). OpenAI's [authentication guide](https://learn.chatgpt.com/docs/auth) covers account access and login storage.
@@ -73,6 +73,8 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache -o results.json
 ```
 
 The assertion checks the final text. It does not execute the generated Python or verify that a file was created. For tasks that edit a repository, also check the resulting files or run the project's tests.
+
+Inspect the entries under `results.results` in `results.json`. Each row includes `success`, `score`, and the provider's `response`, including its `output`, `sessionId`, and any `error`.
 
 <Link id="provider-ids" />
 <Link id="with-custom-model" />
@@ -383,16 +385,18 @@ providers:
       enable_streaming: true
 ```
 
-Merge this into an eval config with prompts and tests. Inspect the resulting trace using [Promptfoo tracing](/docs/tracing). Assertions still receive the final answer after the turn finishes; this option does not stream partial tokens to assertions.
+Merge this into an eval config with prompts and tests. Run it with `-o results.json` to include traces in the JSON export. Match each row's `traceId` to an entry in the top-level `traces` array, then inspect its `spans`. You can also use [Promptfoo tracing](/docs/tracing). Assertions receive the final answer after the turn finishes.
 
-`gen_ai.turn` spans and `gen_ai.turn.index` attributes identify SDK turns. One SDK turn can contain multiple model requests and tool calls, so these markers do not count internal LLM round trips.
+`gen_ai.turn.index` attributes associate streamed items with `gen_ai.turn` spans. These spans do not count internal model requests. Codex can emit startup diagnostics as error items even when the turn later succeeds; read those messages alongside the row's `success` and `response.error`.
 
 <Link id="deep-tracing" />
 
 <details>
 <summary>Deep tracing and Codex logs</summary>
 
-Add `deep_tracing: true` to the provider config to propagate trace context into the Codex CLI and collect its native spans. Promptfoo configures the trace exporter for the active OTLP receiver unless you provide an exporter override. HTTP JSON, HTTP protobuf, and gRPC are supported.
+Add `deep_tracing: true` to propagate trace context into the Codex CLI and configure its native trace exporter. Promptfoo targets the active OTLP receiver unless you provide an exporter override. The provider can configure HTTP JSON, HTTP protobuf, and gRPC exporters.
+
+Verify that CLI-native spans arrive with your installed runtime. A passing eval and SDK event spans alone do not verify native export. If only SDK spans appear, inspect the CLI's telemetry diagnostics and check the exporter endpoint, protocol, and proxy settings.
 
 **Deep tracing uses a fresh client and thread on every call.** It ignores `persist_threads`, `thread_id`, and `thread_pool_size`. Use streaming traces without deep tracing when evaluating conversation continuity.
 
@@ -499,7 +503,7 @@ Set `maxRetries` on the provider itself. The scheduler reads it from the provide
 | `thread_pool_size` | `1`     | Maximum pooled threads retained when persistence is enabled                      |
 | `thread_id`        | None    | Resume a saved Codex thread                                                      |
 | `enable_streaming` | `false` | Aggregate SDK events and emit item spans                                         |
-| `deep_tracing`     | `false` | Collect CLI-native spans; disables thread reuse and resumption                   |
+| `deep_tracing`     | `false` | Configure CLI-native trace export; disables thread reuse and resumption          |
 
 <Link id="custom-binary-path" />
 <Link id="goals-and-subagents" />
@@ -550,15 +554,16 @@ If the requested model is omitted or unknown to the pricing table, `cost` is und
 
 ## Troubleshooting
 
-| Symptom                              | Check                                                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| SDK package missing or cannot load   | Install the SDK in the eval project and check the Node.js version                                    |
-| Working-directory error              | Create the directory first; use a Git checkout or set `skip_git_repo_check: true`                    |
-| Login or certificate errors          | Check the Codex home and pass required proxy or certificate variables through `cli_env`              |
-| Model or reasoning setting rejected  | Check account access, model support, and the bundled or overridden CLI version                       |
-| Later tests remember earlier answers | Disable `persist_threads` and remove `thread_id`; disabling response caching does not reset a thread |
-| Later tests see earlier file edits   | Restore the fixture or give each independent test its own working directory                          |
-| Resumed conversation starts fresh    | Disable `deep_tracing`, which ignores thread options                                                 |
+| Symptom                                  | Check                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| SDK package missing or cannot load       | Install the SDK in the eval project and check the Node.js version                                               |
+| Working-directory error                  | Create the directory first; use a Git checkout or set `skip_git_repo_check: true`                               |
+| Login or certificate errors              | Check the Codex home and pass required proxy or certificate variables through `cli_env`                         |
+| API-key error when using ChatGPT sign-in | Remove API keys from the shell, `.env`, and eval config; a configured key takes precedence over the Codex login |
+| Model or reasoning setting rejected      | Check account access, model support, and the bundled or overridden CLI version                                  |
+| Later tests remember earlier answers     | Disable `persist_threads` and remove `thread_id`; disabling response caching does not reset a thread            |
+| Later tests see earlier file edits       | Restore the fixture or give each independent test its own working directory                                     |
+| Resumed conversation starts fresh        | Disable `deep_tracing`, which ignores thread options                                                            |
 
 Retryable Codex rate limits are passed to Promptfoo's scheduler with the SDK's reset hint, or a one-minute fallback delay. `maxRetries` controls retries. Hard quota exhaustion is returned as an error without retrying; increasing retries will not resolve it.
 
