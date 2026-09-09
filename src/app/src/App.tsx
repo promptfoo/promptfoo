@@ -13,7 +13,6 @@ import {
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
 import { TooltipProvider } from './components/ui/tooltip';
-import { EvalHistoryProvider } from './contexts/EvalHistoryContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
@@ -134,11 +133,9 @@ function App() {
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
-        <EvalHistoryProvider>
-          <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
-          </QueryClientProvider>
-        </EvalHistoryProvider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
       </ToastProvider>
     </TooltipProvider>
   );
