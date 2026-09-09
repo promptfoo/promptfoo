@@ -146,14 +146,11 @@ function computeDepth(
 }
 
 export class TraceStore {
-  private db: Awaited<ReturnType<typeof getDb>> | null = null;
-
+  // This store is a process-wide singleton, so it must not cache the handle: getDb()
+  // already returns the cached connection, and re-asking is what lets a store that
+  // outlived a closed or evicted connection pick up the replacement.
   private async getDatabase() {
-    if (!this.db) {
-      logger.debug('[TraceStore] Initializing database connection');
-      this.db = await getDb();
-    }
-    return this.db;
+    return getDb();
   }
 
   async createTrace(trace: StoreTraceData): Promise<void> {

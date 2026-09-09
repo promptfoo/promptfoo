@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { Sqlite3Client } from '@libsql/client/sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -18,6 +19,7 @@ import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { mockProcessEnv } from '../util/utils';
+import type { Client } from '@libsql/client/node';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
@@ -126,6 +128,43 @@ async function runDatabaseProbe<T>(
   return JSON.parse(resultLine.slice(DATABASE_PROBE_RESULT_PREFIX.length));
 }
 
+const ORIGINAL_SQLITE3_EXECUTE = Sqlite3Client.prototype.execute;
+// Armed by injectLockFailures(); the interceptor itself has to be installed before
+// getDb() because serializeTopLevelOperations binds client.execute up front.
+const lockFailures = { sql: '', remaining: 0 };
+
+/** Fails the next `count` statements containing `sql` with a transient lock error. */
+function injectLockFailures(sql: string, count: number): void {
+  lockFailures.sql = sql;
+  lockFailures.remaining = count;
+}
+
+/**
+ * Opens the file-backed database, which is the only configuration that reconnects
+ * after a lock failure: the shared in-memory test database opts out because dropping
+ * its last connection would destroy the schema.
+ */
+async function openFileBackedDb(): Promise<{
+  db: Awaited<ReturnType<typeof getDb>>;
+  client: Client;
+}> {
+  vi.mocked(getEnvBool).mockImplementation(() => false);
+  await closeDb();
+  Sqlite3Client.prototype.execute = function (statement, args?) {
+    const text = typeof statement === 'string' ? statement : statement.sql;
+    if (lockFailures.remaining > 0 && text.includes(lockFailures.sql)) {
+      lockFailures.remaining--;
+      return Promise.reject(
+        Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' }),
+      );
+    }
+    return ORIGINAL_SQLITE3_EXECUTE.call(this, statement as string, args);
+  };
+  const db = await getDb();
+  await db.run('CREATE TABLE recovery_probe (id INTEGER PRIMARY KEY)');
+  return { db, client: (db as typeof db & { $client: Client }).$client };
+}
+
 describe('database', () => {
   let tempConfigDir: string;
 
@@ -149,6 +188,8 @@ describe('database', () => {
   });
 
   afterEach(async () => {
+    lockFailures.remaining = 0;
+    Sqlite3Client.prototype.execute = ORIGINAL_SQLITE3_EXECUTE;
     await closeDb();
     cliState.config = undefined;
     vi.unstubAllEnvs();
@@ -868,6 +909,83 @@ describe('database', () => {
         expect(result.afterCloseIds).toEqual([1, 5]);
       },
     );
+
+    it('retries the statement once the connection recovers', async () => {
+      const { db, client } = await openFileBackedDb();
+      injectLockFailures('INSERT INTO recovery_probe', 1);
+
+      await expect(db.run('INSERT INTO recovery_probe VALUES (1)')).resolves.toBeDefined();
+
+      expect(client.closed).toBe(false);
+      expect(isDbOpen()).toBe(true);
+      expect(await getDb()).toBe(db);
+      expect(await db.all('SELECT id FROM recovery_probe')).toEqual([{ id: 1 }]);
+    });
+
+    it('evicts the closed connection when recovery fails so the next getDb reopens', async () => {
+      const { db, client } = await openFileBackedDb();
+      client.reconnect = () => Promise.reject(new Error('Injected reconnect failure'));
+      injectLockFailures('INSERT INTO recovery_probe', 2);
+
+      await expect(db.run('INSERT INTO recovery_probe VALUES (1)')).rejects.toMatchObject({
+        cause: { code: 'SQLITE_BUSY' },
+      });
+
+      // Fail closed for the operation that lost the lock, but do not keep the dead
+      // client cached: every later write would reject for the rest of the process.
+      expect(client.closed).toBe(true);
+      expect(isDbOpen()).toBe(false);
+
+      lockFailures.remaining = 0;
+      const reopened = await getDb();
+      expect(reopened).not.toBe(db);
+      await reopened.run('INSERT INTO recovery_probe VALUES (2)');
+      expect(await reopened.all('SELECT id FROM recovery_probe')).toEqual([{ id: 2 }]);
+    });
+
+    it('keeps the replacement connection cached when a stale handle fails recovery', async () => {
+      const { db, client } = await openFileBackedDb();
+      client.reconnect = () => Promise.reject(new Error('Injected reconnect failure'));
+      // close() failing must not mask the lock error nor skip the cache eviction.
+      client.close = () => {
+        throw new Error('Injected close failure');
+      };
+      injectLockFailures('INSERT INTO recovery_probe', 4);
+
+      await expect(db.run('INSERT INTO recovery_probe VALUES (1)')).rejects.toMatchObject({
+        cause: { code: 'SQLITE_BUSY' },
+      });
+      expect(isDbOpen()).toBe(false);
+
+      const reopened = await getDb();
+      expect(reopened).not.toBe(db);
+
+      // The stale handle is no longer the cached client, so its next failed recovery
+      // must leave the healthy replacement alone.
+      await expect(db.run('INSERT INTO recovery_probe VALUES (2)')).rejects.toMatchObject({
+        cause: { code: 'SQLITE_BUSY' },
+      });
+      expect(isDbOpen()).toBe(true);
+      expect(await getDb()).toBe(reopened);
+
+      Reflect.deleteProperty(client, 'close');
+      client.close();
+    });
+
+    it('clears the cached handles when opening the database fails', async () => {
+      vi.mocked(getEnvBool).mockImplementation(() => false);
+      await closeDb();
+      vi.mocked(getConfigDirectoryPath).mockImplementation(() => {
+        throw new Error('Injected config directory failure');
+      });
+
+      await expect(getDb()).rejects.toThrow('Injected config directory failure');
+      expect(isDbOpen()).toBe(false);
+
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
+      await expect(getDb()).resolves.toBeDefined();
+      expect(isDbOpen()).toBe(true);
+    });
   });
 
   describe('isDbOpen', () => {
