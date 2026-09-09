@@ -23,6 +23,7 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
+const MEDIA_FILENAME_REGEX = /^([a-fA-F0-9]{12}|[a-fA-F0-9]{64})\.[a-zA-Z0-9]+$/;
 
 /**
  * Get file extension from content type
@@ -125,13 +126,37 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   /**
+   * Confirm an indexed key still represents the requested content hash.
+   */
+  private async indexedKeyMatchesContentHash(key: string, contentHash: string): Promise<boolean> {
+    const filenameMatch = MEDIA_FILENAME_REGEX.exec(path.basename(key));
+    if (!filenameMatch) {
+      return false;
+    }
+
+    const filenameHash = filenameMatch[1].toLowerCase();
+    if (filenameHash.length === 64) {
+      return filenameHash === contentHash;
+    }
+
+    try {
+      const fileHash = crypto.createHash('sha256');
+      for await (const chunk of fs.createReadStream(this.getFilePath(key))) {
+        fileHash.update(chunk);
+      }
+      return fileHash.digest('hex') === contentHash;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Generate a storage key from hash and metadata
    */
   private generateKey(hash: string, metadata: MediaMetadata): string {
     const extension = getExtensionFromContentType(metadata.contentType);
     const prefix = metadata.mediaType || 'media';
-    // Use first 12 chars of hash for shorter filenames while maintaining uniqueness
-    return `${prefix}/${hash.slice(0, 12)}.${extension}`;
+    return `${prefix}/${hash}.${extension}`;
   }
 
   async store(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {
@@ -269,9 +294,16 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async findByHash(contentHash: string): Promise<string | null> {
     const key = this.hashIndex.get(contentHash);
     if (key && (await this.exists(key))) {
-      return key;
+      if (await this.indexedKeyMatchesContentHash(key, contentHash)) {
+        return key;
+      }
+      logger.warn('[LocalStorage] Ignoring inconsistent hash index entry', {
+        contentHash,
+        key,
+      });
     }
-    // Clean up stale index entry if file doesn't exist
+
+    // Clean up stale or mismatched index entries.
     if (key) {
       this.hashIndex.delete(contentHash);
       await this.saveHashIndex();
