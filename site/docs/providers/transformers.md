@@ -67,6 +67,8 @@ providers:
 
 **Model prefixes:** Follow the model card for your embedding model. [BGE v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) uses the instruction above for retrieval queries; documents need no prefix. [E5 v2](https://huggingface.co/intfloat/e5-small-v2) uses `prefix: 'query: '` for queries and `prefix: 'passage: '` for documents. MiniLM models need no prefix.
 
+[Nomic Embed v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5#task-instruction-prefixes) requires `prefix: 'search_query: '` for retrieval queries and `prefix: 'search_document: '` for indexed documents. Use the model card's task prefix for other workloads. Keep query and document preprocessing compatible with your vector index; rebuild affected stored embeddings when changing document preprocessing, model, or dimensions.
+
 :::tip
 `transformers:embeddings:<model>` is an alias for `transformers:feature-extraction:<model>`.
 :::
