@@ -185,14 +185,20 @@ describe('eval provider configuration round trips', () => {
     );
   });
 
-  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+  it.each(['llamafile', 'vllm', 'text-generation-webui', 'bedrock-agent'])(
     'keeps a reopened %s target when an empty ID is rejected',
     async (type) => {
       const user = userEvent.setup();
       const onSave = vi.fn();
       const initialProvider = {
-        id: 'openai:chat:tenant/private-served-model:Q4_K_M',
-        config: { type, apiBaseUrl: 'http://localhost:8000/v1', stop: ['<end>'] },
+        id:
+          type === 'bedrock-agent'
+            ? 'bedrock:agents:AGENT123'
+            : 'openai:chat:tenant/private-served-model:Q4_K_M',
+        config:
+          type === 'bedrock-agent'
+            ? { agentAliasId: 'ALIAS456', region: 'eu-west-1' }
+            : { type, apiBaseUrl: 'http://localhost:8000/v1', stop: ['<end>'] },
       };
       renderWithProviders(
         <AddProviderDialog

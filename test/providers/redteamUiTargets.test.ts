@@ -294,6 +294,74 @@ describe('redteam UI initial target runtime contracts', () => {
   });
 
   it.each([
+    {
+      model: 'openai/gpt-oss-120b',
+      passthrough: { model: 'llama-3.3-70b-versatile' },
+      expected: { max_tokens: 100 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      passthrough: { model: 'openai/gpt-oss-20b', max_tokens: 500 },
+      expected: { max_completion_tokens: 500 },
+    },
+    {
+      model: 'llama-3.3-70b-versatile',
+      passthrough: { model: 'qwen/qwen3.6-27b' },
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'llama-3.3-70b-versatile',
+      maxCompletionTokens: 40,
+      passthrough: { model: 'openai/gpt-oss-120b', max_tokens: 500 },
+      expected: { max_completion_tokens: 40 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 40,
+      passthrough: {
+        model: 'qwen/qwen3.6-27b',
+        max_tokens: 500,
+        max_completion_tokens: 20,
+      },
+      expected: { max_completion_tokens: 20 },
+    },
+    {
+      model: 'llama-3.3-70b-versatile',
+      maxCompletionTokens: 0,
+      passthrough: { model: 'qwen/qwen3.6-27b', max_tokens: 500 },
+      expected: { max_completion_tokens: 0 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      passthrough: { max_tokens: 0 },
+      expected: { max_completion_tokens: 0 },
+    },
+  ])(
+    'applies Groq token precedence to the effective request model ($model, $passthrough)',
+    async ({ model, maxCompletionTokens, passthrough, expected }) => {
+      const target = initialConfig('groq');
+      target.id = `groq:${model}`;
+      target.config = {
+        ...target.config,
+        max_tokens: 100,
+        max_completion_tokens: maxCompletionTokens,
+        passthrough,
+      };
+      const provider = await loadApiProvider(target.id, { options: target });
+      expect(provider.constructor.name).toBe('GroqProvider');
+      expect(await provider.callApi('Say hello')).toMatchObject({
+        output: 'Hello from the fixture',
+        tokenUsage: { total: 8 },
+      });
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(body).toMatchObject({ model: passthrough.model ?? model, ...expected });
+      expect(body).not.toHaveProperty(
+        'max_tokens' in expected ? 'max_completion_tokens' : 'max_tokens',
+      );
+    },
+  );
+
+  it.each([
     'together',
     'huggingface',
     'cloudflare-ai',

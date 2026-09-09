@@ -480,9 +480,17 @@ function ProviderConfigEditor({
       }
     } else if (
       isLocalOpenAiProviderType(providerType) ||
-      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
-        providerType || '',
-      )
+      [
+        'a2a',
+        'bedrock-agent',
+        'javascript',
+        'python',
+        'go',
+        'custom',
+        'mcp',
+        'exec',
+        'openinterpreter',
+      ].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
