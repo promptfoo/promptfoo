@@ -65,6 +65,19 @@ describe('handleLatency', () => {
       ).toThrow('does not support cached results');
     });
 
+    it.each([500, 1500])('grades live coalesced latency of %sms', (latencyMs) => {
+      const result = handleLatency(
+        params({ latencyMs, providerResponse: { output: '', cached: true, cacheHit: false } }),
+      );
+      expect(result.pass).toBe(latencyMs <= 1000);
+    });
+
+    it('rejects an observed cache replay when the provider omits cached', () => {
+      expect(() =>
+        handleLatency(params({ latencyMs: 1, providerResponse: { output: '', cacheHit: true } })),
+      ).toThrow('does not support cached results');
+    });
+
     it('grades normally when the response is explicitly not cached', () => {
       expect(
         handleLatency(params({ latencyMs: 500, providerResponse: { output: '', cached: false } }))

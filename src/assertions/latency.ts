@@ -9,10 +9,9 @@ export const handleLatency = ({
   if (assertion.threshold === undefined) {
     throw new Error('Latency assertion must have a threshold in milliseconds');
   }
-  // A cache hit replays the latency recorded on the original request (or, for providers
-  // that don't persist it, reports the ~1ms cache lookup). Either way it isn't a
-  // measurement of this run, so grading it would silently green-light a stale number.
-  if (providerResponse?.cached || latencyMs === undefined) {
+  // Live coalesced calls can be marked cached for billing but still have current latency.
+  // Fall back to cached for providers that do not supply explicit replay provenance.
+  if ((providerResponse?.cacheHit ?? providerResponse?.cached) || latencyMs === undefined) {
     throw new Error(
       'Latency assertion does not support cached results. Rerun the eval with --no-cache',
     );
