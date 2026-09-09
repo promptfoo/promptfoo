@@ -721,7 +721,13 @@ async function main(): Promise<void> {
       if (values.profile === 'omit-optional') {
         assert.throws(() => packageRequire.resolve(optionalPackage), { code: 'MODULE_NOT_FOUND' });
       } else {
-        assert(packageRequire.resolve(optionalPackage).startsWith(`${consumerDir}${path.sep}`));
+        const relative = path.relative(
+          fs.realpathSync(consumerDir),
+          fs.realpathSync(packageRequire.resolve(optionalPackage)),
+        );
+        assert(
+          relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+        );
       }
     }
 
