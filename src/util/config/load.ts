@@ -855,9 +855,6 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
-    defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
-      : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
@@ -910,6 +907,13 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Select the current suite before loading providers so watch reloads cannot
+  // inherit environment overrides removed from the previous configuration.
+  cliState.config = config;
+  config.defaultTest = processedDefaultTest
+    ? await readTest(processedDefaultTest, basePath, true)
+    : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
@@ -1081,7 +1085,6 @@ export async function resolveConfigs(
     { promptReferenceSources },
   );
 
-  cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
