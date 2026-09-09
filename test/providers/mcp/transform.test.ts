@@ -261,14 +261,41 @@ describe('transformMCPConfigToClaudeCode', () => {
     ).resolves.toEqual({});
   });
 
-  it('uses the singular server when it shares a key with a plural server', async () => {
+  it('rejects duplicate server keys instead of silently dropping a server', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
         enabled: true,
         server: { name: 'shared', command: 'single-server' },
         servers: [{ name: 'shared', command: 'plural-server' }],
       }),
-    ).resolves.toEqual({ shared: { type: 'stdio', command: 'single-server', args: [] } });
+    ).rejects.toThrow('Duplicate Claude Agent SDK MCP server `shared`');
+  });
+
+  it('keeps unnamed path-based servers distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ path: 'first.js' }, { path: 'second.js' }],
+      }),
+    ).resolves.toEqual({
+      'first.js': { type: 'stdio', command: process.execPath, args: ['first.js'] },
+      'second.js': { type: 'stdio', command: process.execPath, args: ['second.js'] },
+    });
+  });
+
+  it('keeps unnamed servers that share a command but differ by args distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          { command: 'npx', args: ['-y', 'first-server'] },
+          { command: 'npx', args: ['-y', 'second-server'] },
+        ],
+      }),
+    ).resolves.toEqual({
+      'npx -y first-server': { type: 'stdio', command: 'npx', args: ['-y', 'first-server'] },
+      'npx -y second-server': { type: 'stdio', command: 'npx', args: ['-y', 'second-server'] },
+    });
   });
 
   it('rejects a server without a URL, command, or path', async () => {

@@ -133,6 +133,16 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
+  const seen = new Set<string>();
+  for (const [key] of servers) {
+    if (seen.has(key)) {
+      throw new Error(
+        `Duplicate Claude Agent SDK MCP server \`${key}\`; give each configured server a unique \`name\`.`,
+      );
+    }
+    seen.add(key);
+  }
+
   return Object.fromEntries(servers);
 }
 
@@ -198,8 +208,10 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
 ): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  const key = config.name ?? config.url ?? config.command ?? 'default';
-  let out: ClaudeCodeMcpServerConfig | undefined;
+  // The key identifies the server, so fall back to whatever actually distinguishes
+  // one unnamed server from another rather than to a field it may not set.
+  let key: string;
+  let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
     // Render environment variables in auth config
@@ -217,12 +229,14 @@ async function transformMCPServerConfigToClaudeCode(
     const queryParams = getAuthQueryParams(renderedConfig);
     const serverUrl = applyQueryParams(config.url, queryParams);
 
+    key = config.url;
     out = {
       type: 'http',
       url: serverUrl,
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
   } else if (config.command) {
+    key = [config.command, ...(config.args ?? [])].join(' ');
     out = {
       type: 'stdio',
       command: config.command,
@@ -232,6 +246,7 @@ async function transformMCPServerConfigToClaudeCode(
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
+    key = config.path;
     out = {
       type: 'stdio',
       command,
@@ -242,5 +257,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [key, out];
+  return [config.name ?? key, out];
 }
