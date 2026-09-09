@@ -294,19 +294,11 @@ tests:
 
 ### Audio Processing: Pipeline
 
-```yaml
-# 1. Remove noise from audio
-providers:
-  - id: elevenlabs:isolation
+Run each stage as a separate eval and pass the saved results to the next stage:
 
-# 2. Transcribe cleaned audio
-providers:
-  - id: elevenlabs:stt
-
-# 3. Generate subtitles
-providers:
-  - id: elevenlabs:alignment
-```
+1. Use `elevenlabs:isolation` with the original audio path in `vars.audioFile`. Save the returned audio to a file such as `audio/cleaned.mp3`.
+2. Use `elevenlabs:stt` with `prompts: ['{{audioFile}}']` and `vars.audioFile: audio/cleaned.mp3`. Save the transcription text from the output.
+3. Use `elevenlabs:alignment` with the cleaned audio path in `vars.audioFile` and the transcription in `vars.transcript` to generate time-aligned output.
 
 ## Advanced Features
 
@@ -396,28 +388,11 @@ providers:
 
 ## Cost Tracking
 
-ElevenLabs usage is tracked automatically:
+Promptfoo reports estimated costs when the provider has enough usage information. Estimates use built-in rates and may differ from your bill; consult [ElevenLabs pricing](https://elevenlabs.io/pricing) for current plans and rates.
 
-**TTS Costs:**
+STT estimates require a known audio duration in the API response's `duration_ms` field. Responses without duration omit `cost`; they do not report free transcription. A `cost` assertion requires a reported cost, so omit it for native Scribe responses without duration.
 
-- Flash v2.5: ~$0.015 per 1,000 characters
-- Turbo v2.5: ~$0.02 per 1,000 characters
-- Multilingual v2: ~$0.03 per 1,000 characters
-
-**STT Costs:**
-
-- ~$0.10 per minute of audio
-
-**Agent Costs:**
-
-- Based on conversation duration (~$0.10-0.50 per minute depending on LLM)
-
-**Supporting API Costs:**
-
-- Audio Isolation: ~$0.10 per minute
-- Forced Alignment: ~$0.05 per minute
-
-View costs in eval results:
+For responses that include a cost estimate, apply a budget assertion:
 
 ```yaml
 tests:
@@ -651,9 +626,18 @@ prompts:
 
 ### 6. Monitoring and Observability
 
-**Track key metrics:**
+**Check TTS latency, estimated cost, and audio metadata:**
 
 ```yaml
+prompts:
+  - 'Check the generated audio format and size.'
+
+providers:
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    config:
+      modelId: eleven_flash_v2_5
+      outputFormat: pcm_16000
+
 tests:
   - assert:
       # Latency thresholds
@@ -664,16 +648,13 @@ tests:
       - type: cost
         threshold: 0.50
 
-      # Quality metrics
+      # Audio metadata
       - type: javascript
         value: |
-          // Track custom metrics
-          const result = JSON.parse(output);
-          if (result.audio) {
-            console.log('Audio size:', result.audio.sizeBytes);
-            console.log('Format:', result.audio.format);
-          }
-          return true;
+          const response = context.providerResponse;
+          return response.audio?.format === 'pcm'
+            && Number.isFinite(response.metadata?.audioSize)
+            && response.metadata.audioSize > 0;
 ```
 
 **Use labels for organized results:**
@@ -822,7 +803,7 @@ curl -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/voices
 Solution: Cost tracking is estimated based on:
 
 - TTS: Character count × model rate
-- STT: Audio duration × per-minute rate
+- STT: Known audio duration × per-minute rate; omitted when duration is unavailable
 - Agents: Conversation duration × LLM rates
 
 For exact costs, check your [ElevenLabs billing dashboard](https://elevenlabs.io/app/usage).

@@ -11,6 +11,8 @@ export ELEVENLABS_API_KEY=your_api_key_here
 npx promptfoo@latest eval
 ```
 
+Run from the copied `provider-elevenlabs/stt` directory. The bundled config resolves its `audio/...` paths relative to that directory.
+
 ## Features
 
 - **Audio Transcription**: Convert speech to text with high accuracy
@@ -173,12 +175,7 @@ tests:
 
 ### Cost Threshold
 
-```yaml
-tests:
-  - assert:
-      - type: cost
-        threshold: 0.05 # Max $0.05 per transcription
-```
+STT cost estimates require an API response with a known audio duration (`duration_ms`). When that field is unavailable, the provider omits `cost`, and a `cost` assertion reports an unsupported-provider error. Omit cost assertions for native Scribe responses without duration; missing cost does not mean the transcription was free.
 
 ### Latency Threshold
 
@@ -245,12 +242,7 @@ config:
 
 ## Cost Information
 
-STT pricing is based on audio duration:
-
-- **Free tier**: 1 hour/month
-- **Paid tiers**: ~$0.10 per minute (~$0.00167 per second)
-
-The provider automatically tracks and reports costs in the evaluation results.
+When the API supplies audio duration, the provider reports an estimated cost using its built-in duration-based rate. This estimate is not a billing quote. Consult [ElevenLabs pricing](https://elevenlabs.io/pricing) and your account usage for actual charges. Responses without duration have no cost estimate.
 
 ## Advanced Usage
 
@@ -268,8 +260,6 @@ providers:
 # Test all files with consistent assertions
 defaultTest:
   assert:
-    - type: cost
-      threshold: 0.10
     - type: latency
       threshold: 15000
 
@@ -285,6 +275,9 @@ tests:
 ### Multi-language Testing
 
 ```yaml
+prompts:
+  - '{{audioFile}}'
+
 providers:
   - id: elevenlabs:stt:english
     config:
@@ -295,12 +288,13 @@ providers:
       language: es
 
   - id: elevenlabs:stt:autodetect
-    config:
-      # No language specified = auto-detect
+    # No language specified = auto-detect
 
-prompts:
-  - audio/english_sample.mp3
-  - audio/spanish_sample.mp3
+tests:
+  - vars:
+      audioFile: audio/english_sample.mp3
+  - vars:
+      audioFile: audio/spanish_sample.mp3
 ```
 
 ### Accuracy Comparison
