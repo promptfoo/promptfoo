@@ -165,11 +165,14 @@ export class ElevenLabsSTTProvider implements ApiProvider {
         });
       }
 
-      // Estimate cost (based on audio duration)
-      const durationSeconds = (sttResponse.duration_ms || 0) / 1000;
-      const cost = this.costTracker.trackSTT(durationSeconds, {
-        diarization: this.config.diarization,
-      });
+      // Compatible endpoints may provide duration; native responses can omit it.
+      const durationMs = sttResponse.duration_ms;
+      const cost =
+        typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+          ? this.costTracker.trackSTT(durationMs / 1000, {
+              diarization: this.config.diarization,
+            })
+          : undefined;
 
       const response: ProviderResponse = {
         output: sttResponse.text,
@@ -180,7 +183,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
           latency: Date.now() - startTime,
           model: this.config.modelId,
         },
-        cost,
+        ...(cost === undefined ? {} : { cost }),
         cached: false,
       };
 
@@ -308,12 +311,14 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
-          // Older requests used different language and diarization field names.
-          requestVersion: 2,
+          // Invalidate full responses cached with stale WER or unknown duration costs.
+          requestVersion: 3,
           modelId: this.config.modelId,
           language: this.config.language,
           diarization: this.config.diarization,
           maxSpeakers: this.config.maxSpeakers,
+          calculateWER: this.config.calculateWER,
+          referenceText: this.config.referenceText,
         }),
       )
       .digest('hex')

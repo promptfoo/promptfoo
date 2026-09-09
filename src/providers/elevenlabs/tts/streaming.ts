@@ -138,18 +138,12 @@ export async function handleStreamingTTS(
 
     // Send the text for generation
     try {
-      // Split text into smaller chunks for better streaming latency
-      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-
-      for (const sentence of sentences) {
-        client.sendText(sentence.trim(), false);
-      }
+      client.sendText(text, false);
 
       // Send flush to signal end of input
       client.flush();
 
       logger.debug('[ElevenLabs Streaming] Text sent', {
-        totalSentences: sentences.length,
         totalLength: text.length,
       });
 

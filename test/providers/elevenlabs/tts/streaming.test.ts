@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createStreamingConnection } from '../../../../src/providers/elevenlabs/tts/streaming';
+import {
+  createStreamingConnection,
+  handleStreamingTTS,
+} from '../../../../src/providers/elevenlabs/tts/streaming';
 import { ElevenLabsWebSocketClient } from '../../../../src/providers/elevenlabs/websocket-client';
 
 vi.mock('../../../../src/providers/elevenlabs/websocket-client');
@@ -37,3 +40,32 @@ it.each([42, 0, undefined])('preserves optional seed %s in the WebSocket query',
   expect(url.searchParams.get('output_format')).toBe('pcm_16000');
   expect(config).not.toHaveProperty('seed');
 });
+
+it.each(['Hello. Goodbye', ' \tHello.\n Goodbye  ', 'Hello.'])(
+  'preserves the complete generation text %j before flushing',
+  async (text) => {
+    vi.useFakeTimers();
+    try {
+      const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+      const pending = handleStreamingTTS(client, text);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      const session = await pending;
+
+      const sentText = vi
+        .mocked(client.sendText)
+        .mock.calls.map(([chunk]) => chunk)
+        .join('');
+      expect(sentText).toBe(text);
+      expect(client.sendText).toHaveBeenCalledExactlyOnceWith(text, false);
+      expect(client.flush).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(client.sendText).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(client.flush).mock.invocationCallOrder[0],
+      );
+      expect(session.errors).toEqual([]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  },
+);
