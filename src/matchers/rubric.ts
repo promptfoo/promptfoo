@@ -38,6 +38,8 @@ const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS =
   Math.ceil(DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES / 3) * 4 +
   DEFAULT_GRADING_MAX_IMAGES * DATA_URI_METADATA_MAX_CHARS;
+/** Stands in for an audio-only output, which has no text a grader could read. */
+export const ATTACHED_AUDIO_OUTPUT_PLACEHOLDER = '[Audio output]';
 const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
@@ -709,11 +711,28 @@ function appendMediaToChatPrompt(
   ]);
 }
 
+/**
+ * A grader that cannot hear the clip grades whatever text the output carries.
+ * When that text is only the placeholder — the output was the audio itself and
+ * there is no transcript — there is nothing to grade, so fail instead of
+ * returning a confident, meaningless verdict.
+ */
+export function requireAudioGradingEvidence(gradedOutput: unknown, grader: string): void {
+  if (gradedOutput === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER) {
+    throw new Error(
+      `${grader} cannot listen to audio output and the output has no transcript. Grade with an audio-capable provider such as openai:chat:gpt-audio.`,
+    );
+  }
+  logger.warn('[Grading] Grader cannot listen to audio; grading the text output instead', {
+    grader,
+  });
+}
+
 function buildAudioGradingPart(
   audio: NonNullable<ProviderResponse['audio']>,
   provider: ApiProvider,
 ): MultimodalPromptPart | undefined {
-  if (provider.getAudioInputFormat?.() !== 'openai') {
+  if (!provider.supportsAudioInput?.()) {
     return undefined;
   }
   if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
@@ -880,12 +899,17 @@ export async function runJsonGradingPrompt({
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  if (audio?.data && !audioAttached) {
+    requireAudioGradingEvidence(vars.output, `Grading provider ${finalProvider.id()}`);
+  }
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
     label,
     vars,
     providerCallContext,
+    // Native-audio graders speak their answer by default; grading needs text back.
+    audioAttached ? { modalities: ['text'] } : undefined,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

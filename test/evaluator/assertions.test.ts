@@ -26,7 +26,7 @@ describeEvaluator('evaluator assertions', () => {
     });
     const grader: ApiProvider = {
       id: () => 'audio-grader',
-      getAudioInputFormat: () => 'openai',
+      supportsAudioInput: () => true,
       callApi: vi.fn(async () => {
         callOrder.push('grader');
         return { output: '{"pass":true,"score":1}' };
@@ -60,7 +60,7 @@ describeEvaluator('evaluator assertions', () => {
       });
       const grader: ApiProvider = {
         ...mockGradingApiProviderPasses,
-        getAudioInputFormat: () => 'openai',
+        supportsAudioInput: () => true,
       };
       const testSuite: TestSuite = {
         providers: [mockApiProvider],

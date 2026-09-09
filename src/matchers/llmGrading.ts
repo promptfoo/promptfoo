@@ -21,10 +21,12 @@ import {
   shouldUseRemoteGrading,
 } from './providers';
 import {
+  ATTACHED_AUDIO_OUTPUT_PLACEHOLDER,
   LlmRubricProviderError,
   loadRubricPrompt,
   materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
+  requireAudioGradingEvidence,
   runJsonGradingPrompt,
 } from './rubric';
 import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
@@ -174,7 +176,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
     .replace(/^data:audio\/[^;,]+;base64,/i, '')
     .replace(/\s/g, '');
   return outputData === audio.data.replace(/\s/g, '')
-    ? audio.transcript || '[Audio output]'
+    ? audio.transcript || ATTACHED_AUDIO_OUTPUT_PLACEHOLDER
     : llmOutput;
 }
 
@@ -216,6 +218,9 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
+    if (audio?.data) {
+      requireAudioGradingEvidence(gradingOutput, 'Remote grading');
+    }
     try {
       return {
         ...(await doRemoteGrading({
