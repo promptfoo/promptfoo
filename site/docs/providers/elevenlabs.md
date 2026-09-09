@@ -187,18 +187,18 @@ All providers support these common parameters:
 
 ### TTS-Specific Parameters
 
-| Parameter                   | Description                                               |
-| --------------------------- | --------------------------------------------------------- |
-| `modelId`                   | TTS model (e.g., `eleven_flash_v2_5`)                     |
-| `voiceId`                   | Voice ID (e.g., `21m00Tcm4TlvDq8ikWAM`)                   |
-| `voiceSettings`             | Voice customization (stability, similarity, style, speed) |
-| `outputFormat`              | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)         |
-| `seed`                      | Seed for deterministic output                             |
-| `streaming`                 | Enable WebSocket streaming for low latency                |
-| `pronunciationRules`        | Custom pronunciation rules (creates a dictionary at init) |
-| `pronunciationDictionaryId` | Apply an existing pronunciation dictionary by ID          |
-| `voiceDesign`               | Generate voice from text description                      |
-| `voiceRemix`                | Modify voice characteristics (gender, accent, age)        |
+| Parameter                   | Description                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `modelId`                   | TTS model (e.g., `eleven_flash_v2_5`)                                                        |
+| `voiceId`                   | Voice ID (e.g., `21m00Tcm4TlvDq8ikWAM`)                                                      |
+| `voiceSettings`             | Voice customization (stability, similarity, style, speed)                                    |
+| `outputFormat`              | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)                                            |
+| `seed`                      | Best-effort repeatability for HTTP and WebSocket TTS; deterministic output is not guaranteed |
+| `streaming`                 | Enable WebSocket streaming for low latency                                                   |
+| `pronunciationRules`        | Custom pronunciation rules (creates a dictionary at init)                                    |
+| `pronunciationDictionaryId` | Apply an existing pronunciation dictionary by ID                                             |
+| `voiceDesign`               | Generate voice from text description                                                         |
+| `voiceRemix`                | Modify voice characteristics (gender, accent, age)                                           |
 
 `ulaw_8000` returns raw 8 kHz μ-law audio with media type `audio/basic`. Saved files use the `.ulaw` extension.
 
