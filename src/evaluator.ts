@@ -1440,10 +1440,14 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    // Keep generated audio available to graders after persistence replaces its
+    // inline bytes with a blob reference in the saved result.
+    ...(response.audio?.data ? { audio: response.audio } : {}),
     providerTransformedOutput,
   };
 
-  if (deferGrading) {
+  // Finish audio grading per row instead of retaining every inline clip in the queue.
+  if (deferGrading && !response.audio?.data) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
