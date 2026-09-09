@@ -2079,7 +2079,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       "apiKey: '{{env.OPENAI_API_KEY}}'",
       'options.transform',
       'openai:chat:gpt-4.1-mini',
-      'anthropic:messages:claude-sonnet-4-6',
+      'anthropic:messages:claude-sonnet-5',
       'echo',
     ]) {
       expect(`${evalsSkill}\n${evalsReference}`).toContain(phrase);
@@ -2698,7 +2698,7 @@ describe('promptfoo-evals skill', () => {
     expect(reference).toContain('constructor `options.config`');
     expect(reference).toContain('options` argument to `call_api`');
     expect(reference).toContain('openai:chat:gpt-4.1-mini');
-    expect(reference).toContain('anthropic:messages:claude-sonnet-4-6');
+    expect(reference).toContain('anthropic:messages:claude-sonnet-5');
     expect(reference).toContain('echo');
     expect(reference).toContain('promptfoo-provider-setup');
     expect(reference).toContain('File-Based Tests');
