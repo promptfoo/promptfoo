@@ -678,14 +678,27 @@ export class GoogleLiveProvider implements ApiProvider {
       let isResolved = false;
       let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
       let liveTranslateHardTimeout: ReturnType<typeof setTimeout> | undefined;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let cancelFinalStateRetrieval: ((reason: Error) => void) | undefined;
+      let statefulApiCleanupStarted = false;
       let armLiveTranslateCompletion = () => {};
       let armLiveTranslateHardTimeout = () => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
+          clearTimeout(timeout);
           clearTimeout(liveTranslateCompletionTimeout);
           clearTimeout(liveTranslateHardTimeout);
+          cancelFinalStateRetrieval?.(new Error('Final state retrieval cancelled'));
+          if (statefulApi && !statefulApiCleanupStarted) {
+            statefulApiCleanupStarted = true;
+            try {
+              statefulApi.kill('SIGTERM');
+            } catch (error) {
+              logger.error('Failed to terminate stateful API process', { error });
+            }
+          }
           resolve(response);
         }
       };
@@ -807,9 +820,11 @@ export class GoogleLiveProvider implements ApiProvider {
       // finite-input translation while still leaving enough room for a response that begins near
       // the idle limit to finish its trailing-output grace period.
       const liveTranslateHardDeadlineMs = effectiveTimeoutMs + liveTranslateCompletionGraceMs;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
         clearTimeout(timeout);
+        if (isResolved || hasFinalized) {
+          return;
+        }
         timeout = setTimeout(() => {
           logger.error(
             `WebSocket connection timed out after ${effectiveTimeoutMs}ms of inactivity`,
@@ -857,8 +872,8 @@ export class GoogleLiveProvider implements ApiProvider {
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
-        if (hasFinalized) {
-          logger.debug('finalizeResponse already called, skipping duplicate call');
+        if (hasFinalized || isResolved) {
+          logger.debug('Response already finalized or resolved, skipping finalization');
           return;
         }
         hasFinalized = true;
@@ -880,17 +895,45 @@ export class GoogleLiveProvider implements ApiProvider {
         // onclose/timeout) — the caller has moved on and won't read the
         // result.
         if (!isResolved && !toolsDisabled && config.functionToolStatefulApi) {
+          const controller = new AbortController();
+          const finalStateTimeoutMs = config.timeoutMs || 30_000;
+          let finalStateTimeout: ReturnType<typeof setTimeout> | undefined;
+          // Bound headers and JSON consumption, even if an aborted fetch wrapper settles late.
+          const cancelled = new Promise<never>((_, reject) => {
+            cancelFinalStateRetrieval = (reason) => {
+              clearTimeout(finalStateTimeout);
+              reject(reason);
+              controller.abort();
+            };
+            finalStateTimeout = setTimeout(() => {
+              cancelFinalStateRetrieval?.(
+                new Error(`Final state retrieval timed out after ${finalStateTimeoutMs}ms`),
+              );
+            }, finalStateTimeoutMs);
+          });
           try {
             const url = new URL('get_state', config.functionToolStatefulApi.url).href;
-            statefulApiState = await fetchJson(url);
+            const state = await Promise.race([
+              fetchJson(url, { signal: controller.signal }),
+              cancelled,
+            ]);
+            if (isResolved) {
+              return;
+            }
+            statefulApiState = state;
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
-            logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+            if (!isResolved) {
+              logger.error('Error retrieving final state of api', { error: err });
+            }
+          } finally {
+            clearTimeout(finalStateTimeout);
+            cancelFinalStateRetrieval = undefined;
           }
         }
 
-        if (statefulApi) {
-          statefulApi.kill();
+        if (isResolved) {
+          return;
         }
 
         // Determine final output text and thinking
@@ -1652,9 +1695,6 @@ export class GoogleLiveProvider implements ApiProvider {
         // close must leave both the result and the stateful worker to the finalizer.
         if (hasFinalized) {
           return;
-        }
-        if (statefulApi && !statefulApi.killed) {
-          statefulApi.kill('SIGTERM');
         }
         clearTimeout(timeout);
         // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.

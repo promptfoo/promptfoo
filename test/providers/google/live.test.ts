@@ -255,8 +255,350 @@ describe('GoogleLiveProvider', () => {
       text: 'Completed movement.',
       statefulApiState: { counter: 7 },
     });
-    expect(mockFetchWithProxy).toHaveBeenCalledWith('http://127.0.0.1:8765/get_state', undefined);
+    expect(mockFetchWithProxy).toHaveBeenCalledWith('http://127.0.0.1:8765/get_state', {
+      signal: expect.any(AbortSignal),
+    });
     expect(mockProcess.kill).toHaveBeenCalledTimes(1);
+  });
+
+  describe('final state retrieval deadline', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+
+    async function createStatefulTurn(stage: 'headers' | 'body') {
+      let resolveHeaders!: (response: Response) => void;
+      let rejectHeaders!: (error: Error) => void;
+      const headers = new Promise<Response>((resolve, reject) => {
+        resolveHeaders = resolve;
+        rejectHeaders = reject;
+      });
+      let resolveState!: (state: { counter: number }) => void;
+      let rejectState!: (error: Error) => void;
+      const state = new Promise<{ counter: number }>((resolve, reject) => {
+        resolveState = resolve;
+        rejectState = reject;
+      });
+      const json = vi.fn(() => state);
+      const httpResponse = { ok: true, json } as unknown as Response;
+      if (stage === 'body') {
+        resolveHeaders(httpResponse);
+      }
+      let requestStarted!: () => void;
+      const stateRequested = new Promise<void>((resolve) => {
+        requestStarted = resolve;
+      });
+      let signal: AbortSignal | null | undefined;
+      mockFetchWithProxy.mockImplementation((_url, options) => {
+        signal = options?.signal;
+        requestStarted();
+        // Deliberately ignore abort here: settlement must not depend on a cooperative fetch.
+        return headers;
+      });
+
+      const child = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        kill: vi.fn((_signal: string): boolean => {
+          child.killed = true;
+          return true;
+        }),
+        killed: false,
+      };
+      vi.mocked((await import('child_process')).spawn).mockReturnValueOnce(child as any);
+      let readyState: number = WebSocket.OPEN;
+      Object.defineProperty(mockWs, 'readyState', { get: () => readyState });
+      let socketClosed!: () => void;
+      const expectedClose = new Promise<void>((resolve) => {
+        socketClosed = resolve;
+      });
+      mockWs.close.mockImplementation(() => {
+        readyState = WebSocket.CLOSING;
+        setImmediate(() => {
+          readyState = WebSocket.CLOSED;
+          mockWs.onclose?.({ wasClean: true, code: 1000, reason: '' } as WebSocket.CloseEvent);
+          socketClosed();
+        });
+      });
+
+      const statefulProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          apiKey: 'test-key',
+          timeoutMs: 500,
+          functionToolStatefulApi: {
+            file: 'examples/google-live/counter_api.py',
+            url: 'http://127.0.0.1:8765/',
+          },
+        },
+      });
+      let settled = false;
+      const responsePromise = statefulProvider.callApi('Move the block.').then((response) => {
+        settled = true;
+        return response;
+      });
+      const emit = (message: unknown) =>
+        Promise.resolve(
+          mockWs.onmessage?.({ data: JSON.stringify(message) } as WebSocket.MessageEvent),
+        );
+      let completion: Promise<unknown> | undefined;
+      const releaseState = (counter = 7) => {
+        resolveHeaders(httpResponse);
+        resolveState({ counter });
+      };
+
+      return {
+        child,
+        json,
+        responsePromise,
+        get signal() {
+          return signal;
+        },
+        get settled() {
+          return settled;
+        },
+        async start() {
+          // Fake timers replace the suite's startup shortcut; install and advance the real delay.
+          await flushAsyncEvents();
+          await vi.advanceTimersByTimeAsync(1000);
+          await flushAsyncEvents();
+          await Promise.resolve(mockWs.onopen?.({ type: 'open' } as WebSocket.Event));
+          await emit({ setupComplete: {} });
+        },
+        async text(text: string) {
+          await emit({ serverContent: { modelTurn: { parts: [{ text }] } } });
+        },
+        async finish() {
+          await emit({
+            serverContent: { modelTurn: { parts: [{ text: 'Completed movement.' }] } },
+          });
+          await emit({
+            usageMetadata: { promptTokenCount: 2, responseTokenCount: 3, totalTokenCount: 5 },
+          });
+          // The final message handler itself waits for state; keep it available for cleanup.
+          completion = emit({ serverContent: { turnComplete: true } });
+          void completion.catch(() => {});
+          await flushAsyncEvents();
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+          await stateRequested;
+          await expectedClose;
+          await flushAsyncEvents();
+        },
+        releaseState,
+        rejectPending() {
+          if (stage === 'headers') {
+            rejectHeaders(new Error('Late state headers failure'));
+            resolveState({ counter: 7 });
+          } else {
+            rejectState(new Error('Late state JSON failure'));
+          }
+        },
+        failHttp() {
+          resolveHeaders({ ok: false, status: 500 } as Response);
+          resolveState({ counter: 7 });
+        },
+        async drain() {
+          // Also releases the unchanged implementation after an expected-red assertion fails.
+          releaseState();
+          await completion;
+          await responsePromise;
+          await flushAsyncEvents();
+        },
+      };
+    }
+
+    it.each([
+      { stage: 'headers', late: 'success' },
+      { stage: 'headers', late: 'rejection' },
+      { stage: 'body', late: 'success' },
+      { stage: 'body', late: 'rejection' },
+    ] as const)(
+      'bounds pending $stage and ignores late $late after the state deadline',
+      async ({ stage, late }) => {
+        const turn = await createStatefulTurn(stage);
+        try {
+          await turn.start();
+          await turn.finish();
+          expect(turn.json).toHaveBeenCalledTimes(stage === 'body' ? 1 : 0);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+
+          await vi.advanceTimersByTimeAsync(499);
+          expect(turn.settled).toBe(false);
+          expect(turn.child.kill).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+
+          expect(turn.settled).toBe(true);
+          expect(turn.signal?.aborted).toBe(true);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+          const response = await turn.responsePromise;
+          expect(response.error).toBeUndefined();
+          expect(response.output).toMatchObject({
+            text: 'Completed movement.',
+            toolCall: { functionCalls: [] },
+            statefulApiState: undefined,
+          });
+          expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+          const beforeLateState = JSON.stringify(response);
+          const sends = mockWs.send.mock.calls.length;
+
+          if (late === 'success') {
+            turn.releaseState(99);
+          } else {
+            turn.rejectPending();
+          }
+          await turn.drain();
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(JSON.stringify(response)).toBe(beforeLateState);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.send).toHaveBeenCalledTimes(sends);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it('preserves delayed state success after close before the state deadline', async () => {
+      const turn = await createStatefulTurn('body');
+      try {
+        await turn.start();
+        await turn.finish();
+        await vi.advanceTimersByTimeAsync(250);
+        expect(turn.settled).toBe(false);
+        expect(turn.signal?.aborted).toBe(false);
+        expect(turn.child.kill).not.toHaveBeenCalled();
+
+        turn.releaseState();
+        const response = await turn.responsePromise;
+        expect(response.error).toBeUndefined();
+        expect(response.output).toMatchObject({
+          text: 'Completed movement.',
+          toolCall: { functionCalls: [] },
+          statefulApiState: { counter: 7 },
+        });
+        expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+      } finally {
+        await turn.drain();
+      }
+    });
+
+    it.each(['network', 'HTTP', 'JSON'] as const)(
+      'keeps completed output after an ordinary state %s failure',
+      async (failure) => {
+        const turn = await createStatefulTurn(failure === 'JSON' ? 'body' : 'headers');
+        try {
+          await turn.start();
+          await turn.finish();
+          if (failure === 'HTTP') {
+            turn.failHttp();
+          } else {
+            turn.rejectPending();
+          }
+          const response = await turn.responsePromise;
+          expect(response.error).toBeUndefined();
+          expect(response.output).toMatchObject({
+            text: 'Completed movement.',
+            statefulApiState: undefined,
+          });
+          expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it.each([
+      { stage: 'headers', late: 'success' },
+      { stage: 'headers', late: 'rejection' },
+      { stage: 'body', late: 'success' },
+      { stage: 'body', late: 'rejection' },
+    ] as const)(
+      'cleans up a WebSocket error during pending $stage before late $late',
+      async ({ stage, late }) => {
+        const turn = await createStatefulTurn(stage);
+        try {
+          await turn.start();
+          await turn.finish();
+          mockWs.onerror?.({
+            type: 'error',
+            error: new Error('State-read socket failure'),
+            message: 'State-read socket failure',
+          } as WebSocket.ErrorEvent);
+          await flushAsyncEvents();
+
+          expect(turn.settled).toBe(true);
+          expect(turn.signal?.aborted).toBe(true);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+          const response = await turn.responsePromise;
+          expect(response.error).toContain('WebSocket error');
+          const beforeLateState = JSON.stringify(response);
+          const sends = mockWs.send.mock.calls.length;
+          mockWs.onclose?.({
+            wasClean: false,
+            code: 1006,
+            reason: 'Late close',
+          } as WebSocket.CloseEvent);
+          if (late === 'success') {
+            turn.releaseState(99);
+          } else {
+            turn.rejectPending();
+          }
+          await turn.drain();
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(JSON.stringify(response)).toBe(beforeLateState);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.send).toHaveBeenCalledTimes(sends);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it('starts the full state deadline only after healthy streaming finishes', async () => {
+      const turn = await createStatefulTurn('body');
+      try {
+        await turn.start();
+        for (let index = 1; index <= 3; index++) {
+          await vi.advanceTimersByTimeAsync(200);
+          await turn.text(`chunk${index} `);
+        }
+        expect(turn.settled).toBe(false);
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+        expect(turn.child.kill).not.toHaveBeenCalled();
+        await turn.finish();
+        await vi.advanceTimersByTimeAsync(499);
+        expect(turn.settled).toBe(false);
+        expect(turn.signal?.aborted).toBe(false);
+        expect(turn.child.kill).not.toHaveBeenCalled();
+
+        turn.releaseState();
+        const response = await turn.responsePromise;
+        expect(response.error).toBeUndefined();
+        expect(response.output).toMatchObject({
+          text: 'chunk1 chunk2 chunk3 Completed movement.',
+          statefulApiState: { counter: 7 },
+        });
+        expect(turn.child.kill).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+      } finally {
+        await turn.drain();
+      }
+    });
   });
 
   it.each([
