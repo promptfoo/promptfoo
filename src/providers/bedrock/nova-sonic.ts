@@ -121,11 +121,22 @@ const TOOL_EXECUTION_UNSUPPORTED_ERROR =
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
+  private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
     this.config = options.config ?? {};
+    const inference: BedrockAmazonNovaSonicGenerationOptions['interfaceConfig'] =
+      this.config?.inferenceConfiguration ??
+      this.config?.inferenceConfig ??
+      this.config?.interfaceConfig;
+    this.inferenceConfiguration = {
+      maxTokens:
+        inference?.maxTokens ?? inference?.max_new_tokens ?? DEFAULT_CONFIG.inference.maxTokens,
+      temperature: inference?.temperature ?? DEFAULT_CONFIG.inference.temperature,
+      topP: inference?.topP ?? inference?.top_p ?? DEFAULT_CONFIG.inference.topP,
+    };
   }
 
   private async getSigV4Credentials(): Promise<
@@ -393,7 +404,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       await this.sendEvent(sessionId, {
         event: {
           sessionStart: {
-            inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
+            inferenceConfiguration: this.inferenceConfiguration,
             ...(this.config?.turnDetectionConfiguration && {
               turnDetectionConfiguration: this.config.turnDetectionConfiguration,
             }),
