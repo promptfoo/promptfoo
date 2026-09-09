@@ -396,6 +396,7 @@ export default function RedTeamSetupPage() {
         applicationDefinition,
         testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',
         language: yamlConfig.redteam?.language,
+        graderLanguage: yamlConfig.redteam?.graderLanguage,
         extensions: yamlConfig.extensions,
       };
 

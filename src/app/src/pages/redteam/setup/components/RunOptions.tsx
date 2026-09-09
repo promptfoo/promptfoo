@@ -1,13 +1,90 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
+import { Popover, PopoverAnchor, PopoverContent } from '@app/components/ui/popover';
 import { Switch } from '@app/components/ui/switch';
 import { TagInput } from '@app/components/ui/tag-input';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
+
+const GRADER_LANGUAGE_DEFAULT = 'English';
+const GRADER_LANGUAGE_PRESETS = [
+  'English',
+  'Japanese',
+  'French',
+  'Chinese',
+  'Korean',
+  'Spanish',
+  'German',
+];
+
+interface GraderLanguageInputProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function GraderLanguageInput({ value, onChange }: GraderLanguageInputProps) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(
+    () =>
+      GRADER_LANGUAGE_PRESETS.filter(
+        (lang) => !value || lang.toLowerCase().includes(value.toLowerCase()),
+      ),
+    [value],
+  );
+
+  const handleSelect = useCallback(
+    (lang: string) => {
+      onChange(lang);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  return (
+    <Popover open={open && filtered.length > 0}>
+      <PopoverAnchor asChild>
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={GRADER_LANGUAGE_DEFAULT}
+          aria-label="Grader output language"
+        />
+      </PopoverAnchor>
+      <PopoverContent
+        className="w-(--radix-popover-trigger-width) p-1"
+        align="start"
+        sideOffset={4}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div className="max-h-60 overflow-y-auto" role="listbox">
+          {filtered.map((lang) => (
+            <button
+              key={lang}
+              type="button"
+              role="option"
+              aria-selected={lang === value}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(lang)}
+              className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground font-medium aria-selected:bg-accent"
+            >
+              {lang}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // Shared helper and error text constants for RunOptions inputs
 export const RUNOPTIONS_TEXT = {
@@ -35,6 +112,11 @@ export const RUNOPTIONS_TEXT = {
     label: 'Test Languages',
     placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
+  graderLanguage: {
+    label: 'Grader Output Language',
+    helper:
+      'Language used for judgment reason explanations in grading results. Defaults to English.',
+  },
 } as const;
 
 interface RunOptionsProps {
@@ -48,6 +130,7 @@ interface RunOptionsProps {
   ) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   language?: string | string[];
+  graderLanguage?: string;
 }
 
 export interface NumberOfTestCasesInputProps {
@@ -312,6 +395,7 @@ export const RunOptionsContent = ({
   updateConfig,
   updateRunOption,
   language,
+  graderLanguage,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
   const canSetDelay = !runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1;
@@ -401,6 +485,19 @@ export const RunOptionsContent = ({
           aria-label={RUNOPTIONS_TEXT.languages.label}
         />
         <span className="text-sm text-muted-foreground">{RUNOPTIONS_TEXT.languages.helper}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{RUNOPTIONS_TEXT.graderLanguage.label}</Label>
+        <GraderLanguageInput
+          value={graderLanguage ?? GRADER_LANGUAGE_DEFAULT}
+          onChange={(val) =>
+            updateConfig('graderLanguage', val && val !== GRADER_LANGUAGE_DEFAULT ? val : undefined)
+          }
+        />
+        <span className="text-sm text-muted-foreground">
+          {RUNOPTIONS_TEXT.graderLanguage.helper}
+        </span>
       </div>
     </div>
   );

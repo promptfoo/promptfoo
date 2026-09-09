@@ -1215,6 +1215,7 @@ export default function Review({
                     }
                   }}
                   language={config.language}
+                  graderLanguage={config.graderLanguage}
                 />
               </div>
             </CollapsibleContent>
