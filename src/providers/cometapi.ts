@@ -9,7 +9,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
 import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 export interface CometApiModel {
@@ -80,7 +80,7 @@ export class CometApiImageProvider extends OpenAiImageProvider {
       ...options,
       config: {
         ...options.config,
-        apiKeyEnvar: 'COMETAPI_KEY',
+        apiKeyEnvar: options.config?.apiKeyEnvar || 'COMETAPI_KEY',
         apiBaseUrl: 'https://api.cometapi.com/v1',
       },
     });
@@ -90,7 +90,8 @@ export class CometApiImageProvider extends OpenAiImageProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return this.env?.COMETAPI_KEY || getEnvString('COMETAPI_KEY');
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'COMETAPI_KEY';
+    return this.env?.[apiKeyEnvar] || getEnvString(apiKeyEnvar);
   }
 
   getApiUrlDefault(): string {
@@ -103,7 +104,7 @@ export class CometApiImageProvider extends OpenAiImageProvider {
  */
 export function createCometApiProvider(
   providerPath: string,
-  options: { config?: ProviderOptions; id?: string; env?: EnvOverrides } = {},
+  options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
   const type = splits[1];
@@ -114,8 +115,8 @@ export function createCometApiProvider(
     config: {
       ...(options.config || {}),
       apiBaseUrl: 'https://api.cometapi.com/v1',
-      apiKeyEnvar: 'COMETAPI_KEY',
-    } as OpenAiCompletionOptions,
+      apiKeyEnvar: options.config?.apiKeyEnvar || 'COMETAPI_KEY',
+    },
   };
 
   if (type === 'chat') {
