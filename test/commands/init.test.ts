@@ -115,19 +115,58 @@ describe('init command', () => {
   });
 
   describe('downloadDirectory', () => {
-    it.each(['github-models', 'provider-github-models', 'provider-github-models/nested'])(
-      'rejects unsupported example %s before fetching directory contents',
-      async (example) => {
-        mockFetchWithProxy.mockResolvedValue(
-          createMockResponse({ json: () => Promise.resolve([]) }),
-        );
+    it.each(
+      ['github-models', 'provider-github-models'].flatMap((root) => [
+        root,
+        `${root}/nested`,
+        `./${root}`,
+        `config-js/../${root}`,
+        `.\\${root}`,
+        `config-js\\..\\${root}`,
+        `./${root}/nested`,
+      ]),
+    )('rejects unsupported example %s before fetching directory contents', async (example) => {
+      mockFetchWithProxy.mockResolvedValue(createMockResponse({ json: () => Promise.resolve([]) }));
 
-        await expect(
-          init.downloadDirectory(example, '/path/to/target', ['0.122.2']),
-        ).rejects.toThrow('GitHub Models has been retired');
-        expect(mockFetchWithProxy).not.toHaveBeenCalled();
-      },
-    );
+      await expect(init.downloadDirectory(example, '/path/to/target', ['0.122.2'])).rejects.toThrow(
+        'GitHub Models has been retired',
+      );
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['config-js', 'config-js'],
+      ['./config-js', 'config-js'],
+      ['provider-http/../config-js', 'config-js'],
+      ['provider-github-models/../config-js', 'config-js'],
+      ['provider-http/basic', 'provider-http/basic'],
+      ['provider-http\\basic', 'provider-http/basic'],
+    ])('downloads supported effective path %s', async (example, effectivePath) => {
+      const contentsPath = `/repos/promptfoo/promptfoo/contents/examples/${effectivePath}`;
+      const fileUrl = 'https://example.com/promptfooconfig.yaml';
+      const config = 'description: supported example';
+      mockFetchWithProxy.mockImplementation(async (input) => {
+        const url = new URL(input.toString());
+        if (url.origin === 'https://api.github.com' && url.pathname === contentsPath) {
+          expect(url.searchParams.get('ref')).toBe('0.122.2');
+          return createMockResponse({
+            json: () =>
+              Promise.resolve([
+                { type: 'file', name: 'promptfooconfig.yaml', download_url: fileUrl },
+              ]),
+          });
+        }
+        if (url.href === fileUrl) {
+          return createMockResponse({ text: () => Promise.resolve(config) });
+        }
+        throw new Error(`Unexpected example request: ${url}`);
+      });
+
+      await init.downloadDirectory(example, '/path/to/target', ['0.122.2']);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(fs.writeFile).toHaveBeenCalledWith('/path/to/target/promptfooconfig.yaml', config);
+    });
 
     it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
       const mockResponse = createMockResponse({
@@ -633,7 +672,14 @@ describe('init command', () => {
       }
     });
 
-    it.each(['github-models', 'provider-github-models'])(
+    it.each([
+      'github-models',
+      'provider-github-models',
+      './provider-github-models',
+      'config-js/../provider-github-models',
+      '.\\provider-github-models',
+      'config-js\\..\\provider-github-models',
+    ])(
       'reports unsupported example %s as a failed init without download or retry',
       async (example) => {
         const previousExitCode = process.exitCode;
@@ -652,6 +698,8 @@ describe('init command', () => {
           expect(process.exitCode).toBe(1);
           expect(mockFetchWithProxy).not.toHaveBeenCalled();
           expect(confirm).not.toHaveBeenCalled();
+          expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('written to:'));
+          expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('promptfoo eval'));
         } finally {
           process.exitCode = previousExitCode;
         }

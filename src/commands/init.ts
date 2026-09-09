@@ -11,16 +11,13 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import {
-  EXAMPLE_ALIASES,
-  EXAMPLE_REPLACEMENTS,
-  getUnsupportedExampleReason,
-  REMOVED_EXAMPLES,
-} from './exampleAliases';
+import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './exampleAliases';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
+const GITHUB_EXAMPLES_PATH = '/repos/promptfoo/promptfoo/contents/examples/';
 const DEFAULT_EXAMPLE_REFS = [VERSION, 'main'];
+
 const EXAMPLE_CONFIG_FILENAMES = new Set([
   'promptfooconfig.yaml',
   'promptfooconfig.yml',
@@ -39,6 +36,22 @@ interface GitHubContentItem {
   name: string;
   type: 'file' | 'dir' | string;
   download_url: string | null;
+}
+
+function getExampleDirectoryUrl(dirPath: string, ref: string): URL {
+  return new URL(`${GITHUB_API_BASE}${GITHUB_EXAMPLES_PATH}${dirPath}?ref=${ref}`);
+}
+
+function getUnsupportedExampleReason(exampleName: string): string | undefined {
+  // Match the effective request path, including URL dot segments and backslashes.
+  const { pathname } = getExampleDirectoryUrl(exampleName, VERSION);
+  const root = pathname.startsWith(GITHUB_EXAMPLES_PATH)
+    ? pathname.slice(GITHUB_EXAMPLES_PATH.length).split('/')[0]
+    : undefined;
+  if (root === 'github-models' || root === 'provider-github-models') {
+    return 'GitHub Models has been retired, so this example is no longer supported.';
+  }
+  return undefined;
 }
 
 function getGitHubHeaders() {
@@ -116,7 +129,7 @@ async function fetchExampleDirectoryContents(
   const failedRefs: string[] = [];
 
   for (const ref of refs) {
-    const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${ref}`;
+    const url = getExampleDirectoryUrl(dirPath, ref).toString();
     const response = await fetchWithProxy(url, {
       headers: getGitHubHeaders(),
     });
