@@ -393,9 +393,9 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   };
 }
 
-function appendImagesToContent(
+function appendMediaToContent(
   content: unknown,
-  imageParts: MultimodalPromptPart[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
@@ -405,18 +405,18 @@ function appendImagesToContent(
         : format === 'google'
           ? content.map(toGoogleContentPart)
           : content;
-    return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
+    return [...normalizedContent, ...mediaParts] as MultimodalPromptPart[];
   }
 
   if (typeof content === 'string') {
-    return [buildTextPart(content, format), ...imageParts];
+    return [buildTextPart(content, format), ...mediaParts];
   }
 
   if (content === undefined || content === null) {
-    return imageParts;
+    return mediaParts;
   }
 
-  return [buildTextPart(stringifyContentPart(content), format), ...imageParts];
+  return [buildTextPart(stringifyContentPart(content), format), ...mediaParts];
 }
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
@@ -692,7 +692,7 @@ function appendMediaToChatPrompt(
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendImagesToContent(userMessage.content, mediaParts, format),
+        content: appendMediaToContent(userMessage.content, mediaParts, format),
       };
     } else {
       messages.push({ role: 'user', content: mediaParts });
@@ -745,14 +745,14 @@ async function buildGradingProviderPrompt(
   audio?: ProviderResponse['audio'],
 ): Promise<{ prompt: string; imageCount: number; audioAttached: boolean }> {
   const { imageData } = materializeImageOutputsForGrading(images);
-  const promptFormat = provider ? getMultimodalPromptFormat(provider) : 'openai';
+  const audioPart = audio && provider ? buildAudioGradingPart(audio, provider) : undefined;
+  const promptFormat = audioPart || !provider ? 'openai' : getMultimodalPromptFormat(provider);
   const mediaParts: MultimodalPromptPart[] = imageData.length
     ? [
         buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, promptFormat),
         ...buildImageParts(imageData, promptFormat),
       ]
     : [];
-  const audioPart = audio && provider ? buildAudioGradingPart(audio, provider) : undefined;
   if (audioPart) {
     mediaParts.push(
       buildTextPart(

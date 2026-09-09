@@ -1134,16 +1134,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               let finalAudioData = null;
               if (hasAudioContent && audioContent.length > 0) {
                 try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const encodedAudio = this.encodeAudioOutput(rawPcmData);
+                  const rawAudioData = Buffer.concat(audioContent);
+                  const encodedAudio = this.encodeAudioOutput(rawAudioData);
                   finalAudioData = encodedAudio.data;
                   audioFormat = encodedAudio.format;
                   logger.debug(
-                    `Audio output: ${rawPcmData.length} bytes encoded as ${audioFormat}`,
+                    `Audio output: ${rawAudioData.length} bytes encoded as ${audioFormat}`,
                   );
                 } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
+                  logger.error(`Error encoding audio output: ${error}`);
                   // Still set hasAudioContent to false if conversion fails
                   hasAudioContent = false;
                 }
@@ -1852,16 +1851,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               let finalAudioData = null;
               if (hasAudioContent && audioContent.length > 0) {
                 try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const encodedAudio = this.encodeAudioOutput(rawPcmData);
+                  const rawAudioData = Buffer.concat(audioContent);
+                  const encodedAudio = this.encodeAudioOutput(rawAudioData);
                   finalAudioData = encodedAudio.data;
                   audioFormat = encodedAudio.format;
                   logger.debug(
-                    `Audio output: ${rawPcmData.length} bytes encoded as ${audioFormat}`,
+                    `Audio output: ${rawAudioData.length} bytes encoded as ${audioFormat}`,
                   );
                 } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
+                  logger.error(`Error encoding audio output: ${error}`);
                   // Still set hasAudioContent to false if conversion fails
                   hasAudioContent = false;
                 }

@@ -62,27 +62,34 @@ describe('llm-rubric audio grading', () => {
     vi.unstubAllEnvs();
   });
 
-  it.each(['gpt-audio-1.5', 'gpt-4o-audio-preview', 'gpt-4o-mini-audio-preview'])(
-    'sends native audio through the Chat transport for %s, including custom provider IDs',
-    async (model) => {
-      const provider = new OpenAiChatCompletionProvider(model, {
-        id: 'voice-quality-judge',
-        config: { modalities: ['text'] },
-      });
-      const result = await grade(provider);
-      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
-      expect(body.model).toBe(model);
-      expect(body.modalities).toEqual(['text']);
-      expect(body.messages[0]).toEqual({ role: 'system', content: 'Return a JSON grade.' });
-      expect(body.messages[1].content).toContainEqual({
-        type: 'input_audio',
-        input_audio: { data: audio.data, format: 'wav' },
-      });
-      expect(result).toMatchObject({ pass: true, score: 1, tokensUsed: { total: 30 } });
-      expect(result.metadata?.renderedGradingPromptAudio).toBe(true);
-      expect(result.metadata?.renderedGradingPrompt).not.toContain(audio.data);
-    },
-  );
+  it.each([
+    ['gpt-audio-1.5', 'voice-quality-judge'],
+    ['gpt-4o-audio-preview', 'voice-quality-judge'],
+    ['gpt-4o-mini-audio-preview', 'voice-quality-judge'],
+    ['gpt-audio-1.5', 'responses:voice-quality-judge'],
+    ['gpt-audio-1.5', 'google:voice-quality-judge'],
+  ])('sends native audio through the Chat transport for %s with ID %s', async (model, id) => {
+    const provider = new OpenAiChatCompletionProvider(model, {
+      id,
+      config: { modalities: ['text'] },
+    });
+    const result = await grade(provider);
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+    expect(body.model).toBe(model);
+    expect(body.modalities).toEqual(['text']);
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'Return a JSON grade.' });
+    expect(body.messages[1].content[0]).toEqual({
+      type: 'text',
+      text: 'Grade Hello. for The speaker sounds calm.',
+    });
+    expect(body.messages[1].content).toContainEqual({
+      type: 'input_audio',
+      input_audio: { data: audio.data, format: 'wav' },
+    });
+    expect(result).toMatchObject({ pass: true, score: 1, tokensUsed: { total: 30 } });
+    expect(result.metadata?.renderedGradingPromptAudio).toBe(true);
+    expect(result.metadata?.renderedGradingPrompt).not.toContain(audio.data);
+  });
 
   it('accepts MP3 and preserves a failing grade', async () => {
     const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
