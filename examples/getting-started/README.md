@@ -30,7 +30,7 @@ promptfoo eval
 This example:
 
 - Tests a translation prompt with different inputs
-- Compares outputs between GPT-6 Astra and GPT-5.6 Luna using the OpenAI Responses API
+- Compares outputs between GPT-5.6 Sol and GPT-5.6 Luna using the OpenAI Responses API
 - Uses two test cases with different languages and inputs
 
 The config also includes commented-out alternatives for Claude Sonnet 5 and Gemini 3.8 Flash. To use them, set `ANTHROPIC_API_KEY` or `GOOGLE_API_KEY`, respectively, and uncomment the provider.
