@@ -1,10 +1,11 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
 
 const directories: string[] = [];
@@ -100,5 +101,337 @@ describe('package artifact packing', () => {
     const destination = path.join(root, 'output');
     expect(() => packPackageArtifact(root, destination)).toThrow('Expected the promptfoo package');
     expect(fs.existsSync(destination)).toBe(false);
+  });
+});
+
+describe('standalone artifact tooling', () => {
+  const script = path.resolve(__dirname, '../../scripts/preparePackageArtifactTest.mjs');
+
+  it.each([0, 2])('rejects %i archives before creating a tooling directory', (count) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-tool-prepare-'));
+    directories.push(root);
+    for (let index = 0; index < count; index++) {
+      fs.writeFileSync(path.join(root, `${index}.tgz`), 'fixture');
+    }
+    const result = spawnSync(
+      process.execPath,
+      [script, '--artifact-directory', root, '--temp-root', root],
+      { encoding: 'utf8' },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Expected exactly one downloaded package archive');
+    expect(fs.readdirSync(root)).toHaveLength(count);
+  });
+
+  it('locks the complete test-tool dependency tree and preserves a selected archive with spaces', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact tools with spaces '));
+    directories.push(root);
+    const tarball = path.join(root, 'selected archive.tgz');
+    fs.writeFileSync(tarball, 'selected bytes');
+    const output = JSON.parse(
+      execFileSync(process.execPath, [script, '--artifact-directory', root, '--temp-root', root], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_OUTPUT: '' },
+      }),
+    );
+    expect(output.tarball).toBe(tarball);
+    expect(fs.readFileSync(tarball, 'utf8')).toBe('selected bytes');
+    const manifest = JSON.parse(fs.readFileSync(path.join(output.tooling, 'package.json'), 'utf8'));
+    expect(manifest.private).toBe(true);
+    const repositoryLock = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../package-lock.json'), 'utf8'),
+    );
+    expect(manifest.dependencies).toEqual(
+      Object.fromEntries(
+        ['tsx', 'typescript', 'semver'].map((name) => [
+          name,
+          repositoryLock.packages[`node_modules/${name}`].version,
+        ]),
+      ),
+    );
+    expect(manifest).not.toHaveProperty('devDependencies');
+    expect(manifest).not.toHaveProperty('workspaces');
+    const toolingLock = JSON.parse(
+      fs.readFileSync(path.join(output.tooling, 'package-lock.json'), 'utf8'),
+    );
+    expect(toolingLock.lockfileVersion).toBe(3);
+    expect(toolingLock.packages[''].dependencies).toEqual(manifest.dependencies);
+    expect(toolingLock.packages['']).not.toHaveProperty('devDependencies');
+    expect(toolingLock.packages['']).not.toHaveProperty('workspaces');
+    const nativePackages = ['esbuild', 'typescript'].flatMap((name) =>
+      Object.keys(repositoryLock.packages[`node_modules/${name}`].optionalDependencies).map(
+        (dependency) => `node_modules/${dependency}`,
+      ),
+    );
+    const expectedPackages = [
+      'node_modules/tsx',
+      'node_modules/typescript',
+      'node_modules/semver',
+      'node_modules/esbuild',
+      'node_modules/tsx/node_modules/fsevents',
+      ...nativePackages,
+    ];
+    expect(Object.keys(toolingLock.packages).sort()).toEqual(['', ...expectedPackages].sort());
+    for (const packagePath of expectedPackages) {
+      const expected = { ...repositoryLock.packages[packagePath] };
+      delete expected.dev;
+      delete expected.devOptional;
+      expect(toolingLock.packages[packagePath]).toMatchObject(expected);
+      expect(toolingLock.packages[packagePath]).not.toHaveProperty('dev');
+      expect(toolingLock.packages[packagePath]).not.toHaveProperty('devOptional');
+    }
+    for (const excluded of ['src', 'dist', 'drizzle', 'node_modules']) {
+      expect(fs.existsSync(path.join(output.tooling, excluded))).toBe(false);
+    }
+  });
+
+  it('rejects a missing transitive tool dependency before creating an installable bootstrap', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-missing-lock-edge-'));
+    directories.push(root);
+    const scripts = path.join(root, 'scripts');
+    const temporary = path.join(root, 'temporary');
+    const artifacts = path.join(root, 'artifacts');
+    const fixtures = path.join(root, 'test', 'fixtures', 'package-artifact');
+    for (const directory of [scripts, temporary, artifacts, fixtures]) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
+    for (const filename of [
+      'preparePackageArtifactTest.mjs',
+      'testPackageArtifact.ts',
+      'packPackageArtifact.ts',
+      'postbuild.ts',
+    ]) {
+      fs.copyFileSync(
+        path.resolve(__dirname, '../../scripts', filename),
+        path.join(scripts, filename),
+      );
+    }
+    const lock = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../package-lock.json'), 'utf8'),
+    );
+    delete lock.packages['node_modules/esbuild'];
+    fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify(lock));
+    fs.writeFileSync(path.join(artifacts, 'selected.tgz'), 'selected bytes');
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(scripts, 'preparePackageArtifactTest.mjs'),
+        '--artifact-directory',
+        artifacts,
+        '--temp-root',
+        temporary,
+      ],
+      { encoding: 'utf8', timeout: 5_000, env: { ...process.env, GITHUB_OUTPUT: '' } },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('esbuild');
+    expect(fs.readdirSync(temporary)).toEqual([]);
+    expect(fs.readFileSync(path.join(artifacts, 'selected.tgz'), 'utf8')).toBe('selected bytes');
+  });
+});
+
+describe('installed migration fixture lifetime', () => {
+  function prepareConsumer(nativeSource: string) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-lifetime-'));
+    directories.push(root);
+    const temporary = path.join(root, 'temporary');
+    const packageDir = path.join(root, 'node_modules', 'promptfoo');
+    const nativeDir = path.join(root, 'node_modules', '@libsql', 'client');
+    fs.mkdirSync(temporary);
+    fs.mkdirSync(path.join(packageDir, 'dist', 'src'), { recursive: true });
+    fs.mkdirSync(nativeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({ name: 'promptfoo', exports: './dist/src/index.cjs' }),
+    );
+    fs.writeFileSync(path.join(packageDir, 'dist', 'src', 'index.cjs'), 'module.exports = {};');
+    fs.cpSync(path.resolve(__dirname, '../../drizzle'), path.join(packageDir, 'dist', 'drizzle'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(nativeDir, 'index.js'),
+      `require('node:fs').writeFileSync(__dirname + '/native-pid', String(process.pid));
+${nativeSource}`,
+    );
+    const fixture = path.join(root, 'migrations.mjs');
+    fs.copyFileSync(
+      path.resolve(__dirname, '../fixtures/package-artifact/migrations.mjs'),
+      fixture,
+    );
+    return { root, temporary, nativeDir, fixture };
+  }
+
+  function processIsRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      if (process.platform === 'linux') {
+        // A killed grandchild may await reaping by init; a zombie cannot hold the database open.
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
+      }
+      return true;
+    } catch (error) {
+      if (['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  it('loads native bindings in a child and cleans owned state when that child fails', () => {
+    const { temporary, nativeDir, fixture } = prepareConsumer(
+      "throw new Error('artifact-native-binding-sentinel');",
+    );
+    const result = spawnSync(process.execPath, [fixture], {
+      encoding: 'utf8',
+      timeout: 8_000,
+      env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('artifact-native-binding-sentinel');
+    expect(Number(fs.readFileSync(path.join(nativeDir, 'native-pid'), 'utf8'))).not.toBe(
+      result.pid,
+    );
+    expect(fs.readdirSync(temporary)).toEqual([]);
+  });
+
+  it.each([false, true])(
+    'terminates a stalled native check and cleans owned state (descendant: %s)',
+    async (withDescendant) => {
+      const timeoutMs = 1_500;
+      const descendant = `require('node:fs').writeFileSync(process.argv[1], String(process.pid));
+setInterval(() => {}, 1000);`;
+      const { root, temporary, nativeDir, fixture } = prepareConsumer(
+        withDescendant
+          ? `require('node:child_process').spawnSync(process.execPath,
+['-e', ${JSON.stringify(descendant)}, __dirname + '/descendant-pid'], { stdio: 'inherit' });`
+          : 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
+      );
+      const pidFiles = ['native-pid', ...(withDescendant ? ['descendant-pid'] : [])].map((name) =>
+        path.join(nativeDir, name),
+      );
+      const output = path.join(root, 'supervisor.log');
+      const descriptor = fs.openSync(output, 'w');
+      try {
+        // File descriptors prevent orphaned inherited pipes from hanging the outer watchdog.
+        const result = spawnSync(process.execPath, [fixture, '--timeout-ms', String(timeoutMs)], {
+          stdio: ['ignore', descriptor, descriptor],
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.status).not.toBeNull();
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(output, 'utf8')).toContain(
+          `Installed migration check timed out after ${timeoutMs}ms`,
+        );
+        const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));
+        expect(new Set([result.pid, ...pids]).size).toBe(pids.length + 1);
+        for (const pid of pids) {
+          expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid).toBe(true);
+        }
+        await vi.waitFor(() => expect(pids.filter(processIsRunning)).toEqual([]), {
+          timeout: 1_000,
+          interval: 20,
+        });
+        expect(fs.readdirSync(temporary)).toEqual([]);
+      } finally {
+        fs.closeSync(descriptor);
+        // Clean only PIDs recorded by these owned fixtures, even if the supervisor regresses.
+        for (const file of pidFiles) {
+          if (!fs.existsSync(file)) {
+            continue;
+          }
+          const pid = Number(fs.readFileSync(file, 'utf8'));
+          if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
+            try {
+              process.kill(pid, 'SIGKILL');
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+                throw error;
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it('retains owned state when best-effort kill emits a synchronous error after tree termination fails', async () => {
+    const { root, temporary, nativeDir, fixture } = prepareConsumer(
+      'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
+    );
+    const preload = path.join(root, 'kill-failure.mjs');
+    fs.writeFileSync(
+      preload,
+      `import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const failure = () => Object.assign(new Error('injected-tree-kill-failure'), { code: 'EPERM' });
+const originalProcessKill = process.kill;
+process.kill = function (pid, signal) {
+  if (pid < 0) throw failure();
+  return originalProcessKill.call(process, pid, signal);
+};
+childProcess.execFileSync = () => { throw failure(); };
+syncBuiltinESMExports();
+const originalChildKill = childProcess.ChildProcess.prototype.kill;
+childProcess.ChildProcess.prototype.kill = function (signal) {
+  const result = originalChildKill.call(this, signal);
+  console.error('injected-synchronous-child-kill-error');
+  this.emit('error', Object.assign(new Error('injected-child-kill-EPERM'), { code: 'EPERM' }));
+  return result;
+};`,
+    );
+    const output = path.join(root, 'supervisor.log');
+    const descriptor = fs.openSync(output, 'w');
+    const pidFile = path.join(nativeDir, 'native-pid');
+    try {
+      // --import applies only to this supervisor; its child receives no preload arguments.
+      const result = spawnSync(
+        process.execPath,
+        ['--import', pathToFileURL(preload).href, fixture, '--timeout-ms', '1500'],
+        {
+          stdio: ['ignore', descriptor, descriptor],
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).not.toBeNull();
+      expect(result.status).not.toBe(0);
+      const diagnostic = fs.readFileSync(output, 'utf8');
+      expect(diagnostic).toContain('injected-synchronous-child-kill-error');
+      expect(diagnostic).toContain('Could not confirm termination of migration process tree');
+      expect(diagnostic).toContain('Retained migration state after termination failure');
+      const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+      expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid && pid !== result.pid).toBe(
+        true,
+      );
+      await vi.waitFor(() => expect(processIsRunning(pid)).toBe(false), {
+        timeout: 1_000,
+        interval: 20,
+      });
+      const retained = fs.readdirSync(temporary);
+      expect(retained).toHaveLength(1);
+      expect(retained[0]).toMatch(/^promptfoo-artifact-migrations-/);
+      expect(fs.statSync(path.join(temporary, retained[0])).isDirectory()).toBe(true);
+    } finally {
+      fs.closeSync(descriptor);
+      if (fs.existsSync(pidFile)) {
+        const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+              throw error;
+            }
+          }
+        }
+      }
+    }
   });
 });

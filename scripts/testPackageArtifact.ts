@@ -78,6 +78,7 @@ function run(
   args: string[],
   cwd: string,
   envOverrides: NodeJS.ProcessEnv = {},
+  options: { shell?: string } = {},
 ): string {
   try {
     return execFileSync(command, args, {
@@ -91,6 +92,7 @@ function run(
       },
       maxBuffer: 128 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: options.shell,
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -165,6 +167,10 @@ function assertPackagedFiles(packResult: PackResult, compareSource: boolean): vo
   if (compareSource) {
     assertBuiltAssetsPackaged(ROOT, packResult.files);
   }
+  assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'TypeScript incremental build state should be excluded from the package',
+  );
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
     'Source maps should be excluded from the package',
@@ -302,12 +308,11 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   };
 
   if (process.platform === 'win32') {
-    return run(
-      process.env.ComSpec || 'cmd.exe',
-      ['/d', '/s', '/c', `"${binPath}" --version`],
-      consumerDir,
-      envOverrides,
-    );
+    // Let Node construct cmd.exe's outer quotes and verbatim arguments. The
+    // executable path is quoted here because the owned temp directory may have spaces.
+    return run(`"${binPath}"`, ['--version'], consumerDir, envOverrides, {
+      shell: process.env.ComSpec || 'cmd.exe',
+    });
   }
 
   return run(binPath, ['--version'], consumerDir, envOverrides);
@@ -616,8 +621,13 @@ async function main(): Promise<void> {
       profile: { type: 'string', default: 'default' },
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
       tarball: { type: 'string' },
+      'runtime-assets': { type: 'string', default: 'none' },
     },
   });
+  assert(
+    ['none', 'python-go', 'all'].includes(values['runtime-assets']),
+    `Unknown runtime asset profile: ${values['runtime-assets']}`,
+  );
   const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
   if (suppliedTarball) {
     assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
@@ -630,7 +640,10 @@ async function main(): Promise<void> {
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
   );
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
+  // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
+  const tempDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
+  );
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
@@ -779,7 +792,19 @@ async function main(): Promise<void> {
       }
     }
     if (values.profile === 'default') {
+      console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
       await runInstalledCompressionEval(consumerDir, configDir);
+    }
+
+    if (values['runtime-assets'] !== 'none') {
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['runtime-assets.mjs', ...(values['runtime-assets'] === 'all' ? ['--ruby'] : [])],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
     }
 
     if (suppliedTarball) {

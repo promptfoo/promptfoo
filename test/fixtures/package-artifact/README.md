@@ -50,3 +50,39 @@ to an isolated publisher. Publication cannot invoke another build.
 Historical backfills keep their tagged build. Tags with an exact-artifact harness
 use it; older tags receive an explicitly limited installed CLI/JSON echo check.
 They still publish the same archive that passed that compatibility check.
+
+## Runtime assets and platforms
+
+Default consumers migrate an isolated database from the first packaged migration,
+retain a nonempty legacy result/table/config byte-for-byte, export it through the
+installed CLI, and persist a new passing and failing evaluation. A second process
+reopens the database and verifies migration idempotency and stored results.
+
+Select interpreter checks explicitly; missing interpreters fail the selected gate:
+
+```sh
+npm run test:package-artifact -- --runtime-assets python-go
+npm run test:package-artifact -- --profile omit-optional --runtime-assets all
+```
+
+`python-go` tests Python and Go; `all` additionally requires Ruby. Each provider
+runs success, deliberate error, and recovery cases with scores 1/0/1. The Python
+fixture uses both the prompt wrapper and a persistent provider worker. The same
+gate roundtrips a nonempty trace using the installed protobuf definitions and
+rejects malformed bytes; it does not start an OTLP receiver.
+
+| CI consumer                  | Install layout                        | Additional checks                                            |
+| ---------------------------- | ------------------------------------- | ------------------------------------------------------------ |
+| Linux Node 22.22             | Shallow                               | Historical database upgrade                                  |
+| Linux Node 24                | Hoisted, default and optional-omitted | Python, Go, Ruby, protobuf; upgrade in default profile       |
+| Linux Node 26                | Hoisted                               | Historical database upgrade                                  |
+| macOS and Windows Node 22.22 | Hoisted                               | Linux-produced archive, native SQLite and historical upgrade |
+
+The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
+the acceptance scripts/fixtures into a temporary tool package. Its three tools
+and their complete dependency graph are copied from the repository lockfile,
+including integrity hashes and optional native packages, then installed with `npm ci`.
+The installed Promptfoo consumer
+resolves dependencies independently. No repository dependency install or build is
+required on those platforms. Incremental TypeScript compiler state is excluded
+from the published archive.

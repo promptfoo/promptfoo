@@ -1,0 +1,413 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+
+// Copy this fixture into an isolated installed consumer before running it. Every runtime
+// dependency and migration must resolve from that consumer's promptfoo installation.
+const consumerRequire = createRequire(import.meta.url);
+const packageEntry = consumerRequire.resolve('promptfoo');
+const packageRequire = createRequire(packageEntry);
+const installedPackageDir = path.resolve(path.dirname(packageEntry), '..', '..');
+const platformEnv = Object.fromEntries(
+  ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL']
+    .filter((key) => process.env[key] !== undefined)
+    .map((key) => [key, process.env[key]]),
+);
+
+class NativeCheckTerminationError extends Error {
+  constructor(pid, cause) {
+    super(`Could not confirm termination of migration process tree ${pid}`, { cause });
+  }
+}
+
+function killNativeTree(pid, fallback = false) {
+  const options = { stdio: 'pipe', timeout: 5_000, env: platformEnv };
+  if (process.platform === 'win32') {
+    execFileSync(
+      path.join(process.env.SystemRoot || process.env.WINDIR, 'System32', 'taskkill.exe'),
+      ['/pid', String(pid), '/t', '/f'],
+      options,
+    );
+  } else if (fallback) {
+    // Retry from a separate process if the first signal attempt failed.
+    execFileSync(
+      process.execPath,
+      ['-e', 'process.kill(-Number(process.argv[1]), "SIGKILL")', String(pid)],
+      options,
+    );
+  } else {
+    process.kill(-pid, 'SIGKILL');
+  }
+}
+
+async function runNativeCheck(tempDir, timeoutMs) {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--check', tempDir], {
+    cwd: path.dirname(fileURLToPath(import.meta.url)),
+    env: { ...platformEnv, NODE_PATH: '' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  });
+  child.stdout.pipe(process.stdout);
+  child.stderr.pipe(process.stderr);
+  let timedOut = false;
+  let timer;
+  try {
+    await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        if (timedOut) {
+          reject(new Error(`Installed migration check timed out after ${timeoutMs}ms`));
+        } else if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Installed migration check failed (${signal ?? code})`));
+        }
+      });
+      timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          // Terminate the complete owned tree, including any stalled evaluation process.
+          killNativeTree(child.pid);
+        } catch (firstError) {
+          if (firstError.code === 'ESRCH') {
+            return;
+          }
+          try {
+            killNativeTree(child.pid, true);
+          } catch (secondError) {
+            // If the OS refuses both attempts, do not unlink a database that may still
+            // be open. Report the PID and retain state for diagnosis instead of hiding it.
+            // Settle first: the best-effort kill can synchronously emit an error event.
+            reject(
+              new NativeCheckTerminationError(
+                child.pid,
+                new AggregateError([firstError, secondError], 'Migration tree termination failed'),
+              ),
+            );
+            try {
+              child.kill('SIGKILL');
+            } catch {
+              /* Best effort direct-child fallback. */
+            }
+            child.stdout.destroy();
+            child.stderr.destroy();
+            child.unref();
+          }
+        }
+      }, timeoutMs);
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runPersistedEvaluation() {
+  const { evaluate } = await import('promptfoo');
+  const outputPath = process.argv[3];
+  const summaryPath = process.argv[4];
+  assert(outputPath && summaryPath, 'Expected evaluation output and summary paths');
+  const record = await evaluate(
+    {
+      description: 'Installed artifact migration acceptance',
+      author: 'package-artifact-fixture',
+      prompts: ['Hello {{name}}'],
+      providers: ['echo'],
+      tests: [
+        {
+          vars: { name: 'migrated artifact' },
+          assert: [{ type: 'equals', value: 'Hello migrated artifact' }],
+        },
+        {
+          vars: { name: 'deliberate failure' },
+          assert: [{ type: 'equals', value: 'different output' }],
+        },
+      ],
+      writeLatestResults: true,
+      sharing: false,
+      outputPath,
+    },
+    { cache: false, maxConcurrency: 1 },
+  );
+  fs.writeFileSync(
+    summaryPath,
+    JSON.stringify({ id: record.id, summary: await record.toEvaluateSummary() }),
+  );
+}
+
+async function checkMigrations(tempDir) {
+  const configDir = path.join(tempDir, 'config');
+  const oldMigrationsDir = path.join(tempDir, 'old-migrations');
+  const outputPath = path.join(tempDir, 'evaluation.json');
+  const summaryPath = path.join(tempDir, 'summary.json');
+  let client;
+
+  try {
+    fs.mkdirSync(configDir);
+    fs.mkdirSync(path.join(oldMigrationsDir, 'meta'), { recursive: true });
+    const migrationsDir = path.join(installedPackageDir, 'dist', 'drizzle');
+    const journal = JSON.parse(
+      fs.readFileSync(path.join(migrationsDir, 'meta', '_journal.json'), 'utf8'),
+    );
+    assert(journal.entries.length > 1, 'Expected an initial schema and later migrations');
+    const firstMigration = journal.entries[0];
+    assert.equal(firstMigration.tag, '0000_lush_hellion');
+    fs.copyFileSync(
+      path.join(migrationsDir, `${firstMigration.tag}.sql`),
+      path.join(oldMigrationsDir, `${firstMigration.tag}.sql`),
+    );
+    fs.writeFileSync(
+      path.join(oldMigrationsDir, 'meta', '_journal.json'),
+      JSON.stringify({ ...journal, entries: [firstMigration] }),
+    );
+
+    const { createClient } = packageRequire('@libsql/client');
+    const { drizzle } = packageRequire('drizzle-orm/libsql');
+    const { migrate } = packageRequire('drizzle-orm/libsql/migrator');
+    const dbUrl = pathToFileURL(path.join(configDir, 'promptfoo.db')).href;
+    client = createClient({ url: dbUrl });
+    await migrate(drizzle(client), { migrationsFolder: oldMigrationsDir });
+    const historicalValue = 'café / 日本語 / 🚀\n"quoted" \\ unchanged';
+    const historicalOutput = `Legacy ${historicalValue}`;
+    const historicalPrompt = {
+      id: 'prompt-package-artifact-historical',
+      raw: 'Legacy {{value}}',
+      label: 'Historical echo',
+      provider: 'echo',
+    };
+    const historicalTest = {
+      vars: { value: historicalValue },
+      assert: [{ type: 'equals', value: historicalOutput }],
+    };
+    const historicalTokens = { total: 7, prompt: 3, completion: 4, cached: 0, numRequests: 1 };
+    const historicalResult = {
+      id: 'result-package-artifact-historical',
+      promptIdx: 0,
+      testIdx: 0,
+      promptId: historicalPrompt.id,
+      prompt: { raw: historicalOutput, label: historicalPrompt.label },
+      provider: { id: 'echo' },
+      testCase: historicalTest,
+      vars: historicalTest.vars,
+      response: { output: historicalOutput, tokenUsage: historicalTokens },
+      success: true,
+      score: 1,
+      failureReason: 0,
+      latencyMs: 17,
+      cost: 0.125,
+      namedScores: { historical: 1 },
+      gradingResult: { pass: true, score: 1, reason: 'Historical exact match' },
+    };
+    const historicalSummary = {
+      version: 2,
+      timestamp: new Date(1710348564000).toISOString(),
+      results: [historicalResult],
+      table: {
+        head: { prompts: [historicalPrompt], vars: ['value'] },
+        body: [
+          {
+            test: historicalTest,
+            testIdx: 0,
+            vars: [historicalValue],
+            outputs: [
+              {
+                ...historicalResult,
+                pass: historicalResult.success,
+                text: historicalOutput,
+                prompt: historicalOutput,
+                provider: 'echo',
+                tokenUsage: historicalTokens,
+              },
+            ],
+          },
+        ],
+      },
+      stats: { successes: 1, failures: 0, errors: 0, tokenUsage: historicalTokens },
+    };
+    const historical = {
+      id: 'eval-package-artifact-historical',
+      created_at: 1710348564000,
+      description: 'Preserve café / 日本語 / 🚀',
+      results: JSON.stringify(historicalSummary),
+      config: JSON.stringify({
+        description: 'Historical configuration',
+        prompts: ['Legacy {{value}}'],
+        providers: ['echo'],
+        tests: [historicalTest],
+      }),
+    };
+    await client.execute({
+      sql: 'INSERT INTO evals (id, created_at, description, results, config) VALUES (?, ?, ?, ?, ?)',
+      args: Object.values(historical),
+    });
+    const before = await client.execute('SELECT count(*) AS count FROM __drizzle_migrations');
+    assert.equal(Number(before.rows[0].count), 1, 'Fixture must start on the original schema');
+    client.close();
+    client = undefined;
+
+    // Each evaluation process releases its native handles before the checking process
+    // inspects the database. The outer supervisor owns cleanup after all of them exit.
+    const runNode = (args) =>
+      execFileSync(process.execPath, args, {
+        cwd: path.dirname(fileURLToPath(import.meta.url)),
+        env: {
+          ...platformEnv,
+          NODE_PATH: '',
+          IS_TESTING: 'false',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+          PROMPTFOO_TRACING_ENABLED: 'false',
+          PROMPTFOO_ENABLE_OTEL: 'false',
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000,
+      });
+    const runEvaluation = () =>
+      runNode([fileURLToPath(import.meta.url), '--evaluate', outputPath, summaryPath]);
+    runEvaluation();
+    const firstId = JSON.parse(fs.readFileSync(summaryPath, 'utf8')).id;
+    // A fresh process reopening the upgraded database must not rerun migrations.
+    runEvaluation();
+    const { id, summary } = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+    assert.notEqual(id, firstId, 'The second evaluation must create its own persisted row');
+    const exported = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    for (const results of [summary.results, exported.results.results]) {
+      assert.equal(results.length, 2);
+      assert.equal(results[0].success, true);
+      assert.equal(results[0].score, 1);
+      assert.equal(results[0].error, undefined);
+      assert.equal(results[0].response.error, undefined);
+      assert.equal(results[0].response.output, 'Hello migrated artifact');
+      assert.equal(results[0].provider.id, 'echo');
+      assert.equal(results[1].success, false);
+      assert.equal(results[1].score, 0);
+      assert.match(results[1].error, /different output/);
+      assert.equal(results[1].response.error, undefined);
+      assert.equal(results[1].response.output, 'Hello deliberate failure');
+      assert.equal(results[1].provider.id, 'echo');
+    }
+    assert.equal(summary.stats.successes, 1);
+    assert.equal(summary.stats.failures, 1);
+    assert.equal(summary.stats.errors, 0);
+
+    // The package root does not export a persisted-eval lookup API. Exercise the
+    // supported CLI reader instead of reaching into a private bundled module.
+    const manifest = JSON.parse(fs.readFileSync(path.join(installedPackageDir, 'package.json')));
+    const historicalExportPath = path.join(tempDir, 'historical-export.json');
+    runNode([
+      path.join(installedPackageDir, manifest.bin.promptfoo),
+      'export',
+      'eval',
+      historical.id,
+      '--output',
+      historicalExportPath,
+    ]);
+    const historicalExport = JSON.parse(fs.readFileSync(historicalExportPath, 'utf8'));
+    assert.equal(historicalExport.evalId, historical.id);
+    assert.deepEqual(
+      historicalExport.results,
+      historicalSummary,
+      'The public CLI must read the complete historical result and table after migration',
+    );
+    assert.deepEqual(historicalExport.config, JSON.parse(historical.config));
+
+    client = createClient({ url: dbUrl });
+    const preserved = await client.execute({
+      sql: 'SELECT id, created_at, description, results, config FROM evals WHERE id = ?',
+      args: [historical.id],
+    });
+    assert.equal(preserved.rows.length, 1, 'Historical eval must survive the upgrade');
+    for (const [key, value] of Object.entries(historical)) {
+      assert.equal(preserved.rows[0][key], value, `Migration changed historical ${key}`);
+    }
+    const saved = await client.execute({
+      sql: 'SELECT success, score, error, response FROM eval_results WHERE eval_id = ? ORDER BY test_idx',
+      args: [id],
+    });
+    assert.equal(saved.rows.length, 2, 'The installed API must persist both new results');
+    assert.equal(saved.rows[0].success, 1);
+    assert.equal(saved.rows[0].score, 1);
+    assert.equal(saved.rows[0].error, null);
+    assert.equal(JSON.parse(saved.rows[0].response).output, 'Hello migrated artifact');
+    assert.equal(saved.rows[1].success, 0);
+    assert.equal(saved.rows[1].score, 0);
+    assert.match(saved.rows[1].error, /different output/);
+    assert.equal(JSON.parse(saved.rows[1].response).output, 'Hello deliberate failure');
+    const previousResults = await client.execute({
+      sql: 'SELECT count(*) AS count FROM eval_results WHERE eval_id = ?',
+      args: [firstId],
+    });
+    assert.equal(
+      Number(previousResults.rows[0].count),
+      2,
+      'Reopening must preserve previous results',
+    );
+
+    const applied = await client.execute(
+      'SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at',
+    );
+    assert.deepEqual(
+      applied.rows.map((row) => ({ hash: row.hash, when: Number(row.created_at) })),
+      journal.entries.map((entry) => ({
+        hash: createHash('sha256')
+          .update(fs.readFileSync(path.join(migrationsDir, `${entry.tag}.sql`)))
+          .digest('hex'),
+        when: entry.when,
+      })),
+      'The installed API must apply each packaged migration exactly once',
+    );
+    console.log(
+      `Verified installed migrations: 1 -> ${applied.rows.length}, stable after reopening; nonempty historical result/table retained exactly and read by CLI; pass=1 failure=1 scores=1/0 errors=0`,
+    );
+  } finally {
+    client?.close();
+  }
+}
+
+if (process.argv[2] === '--evaluate') {
+  await runPersistedEvaluation();
+} else if (process.argv[2] === '--check') {
+  assert.equal(process.argv.length, 4, 'Expected the owned migration directory');
+  await checkMigrations(process.argv[3]);
+} else {
+  const { values } = parseArgs({
+    options: { 'timeout-ms': { type: 'string', default: '45000' } },
+  });
+  const timeoutMs = Number(values['timeout-ms']);
+  assert(
+    Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 45_000,
+    'Migration timeout must be an integer from 1 to 45000ms',
+  );
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-artifact-migrations-'));
+  const startedAt = performance.now();
+  let safeToRemove = true;
+  try {
+    // libSQL transactions can retain native connections after client.close(). Keep every
+    // database handle in a child so Windows permits deletion when that process exits.
+    // Leave time to terminate descendants, wait for exit, and remove state before the
+    // harness's 60 second deadline. Tests may select a smaller deadline with --timeout-ms.
+    await runNativeCheck(tempDir, timeoutMs);
+  } catch (error) {
+    if (error instanceof NativeCheckTerminationError) {
+      safeToRemove = false;
+      console.error(`Retained migration state after termination failure: ${tempDir}`);
+    }
+    throw error;
+  } finally {
+    if (safeToRemove) {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  }
+  console.log(
+    `Verified installed migration cleanup after child exit (${Math.round(performance.now() - startedAt)}ms)`,
+  );
+}
