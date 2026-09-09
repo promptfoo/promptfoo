@@ -25,6 +25,19 @@ const provider = () =>
     config: { apiBaseUrl: 'https://chat.fixture.test/v1', apiKey: 'fixture-key', maxRetries: 0 },
   });
 
+function mockPendingFetch(fetch: MockInstance<typeof globalThis.fetch>): Promise<AbortSignal> {
+  const started = createDeferred<AbortSignal>();
+  fetch.mockImplementationOnce(
+    (_url, options) =>
+      new Promise((_resolve, reject) => {
+        const signal = options!.signal!;
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        started.resolve(signal);
+      }),
+  );
+  return started.promise;
+}
+
 function withCompletedCache(run: () => Promise<void>) {
   return cache.withCacheNamespace(randomUUID(), () => cache.withCacheEnabled(true, run));
 }
@@ -231,22 +244,14 @@ describe('OpenAI-compatible chat cancellation', () => {
   });
 
   it('aborts a pending fetch and preserves a custom cancellation reason', async () => {
-    const started = createDeferred<AbortSignal>();
-    fetch.mockImplementationOnce(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
-          const signal = options!.signal!;
-          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          started.resolve(signal);
-        }),
-    );
+    const started = mockPendingFetch(fetch);
     const controller = new AbortController();
     const pending = provider().callApi('fixture', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({
       name: 'AbortError',
       message: 'cancel fetch',
     });
-    const transportSignal = await started.promise;
+    const transportSignal = await started;
     controller.abort(new Error('cancel fetch'));
     await rejected;
     expect(transportSignal.aborted).toBe(true);
@@ -478,15 +483,7 @@ describe('OpenAI-compatible chat cancellation', () => {
   it.each([undefined, new Error('cancel xAI fetch'), 'cancel xAI fetch'])(
     'propagates cancellation through the inherited xAI request (%s)',
     async (reason) => {
-      const started = createDeferred<AbortSignal>();
-      fetch.mockImplementationOnce(
-        (_url, options) =>
-          new Promise((_resolve, reject) => {
-            const signal = options!.signal!;
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-            started.resolve(signal);
-          }),
-      );
+      const started = mockPendingFetch(fetch);
       const target = await loadApiProvider('xai:grok-4', {
         options: { config: { apiKey: 'xai-fixture-key', maxRetries: 0 } },
       });
@@ -496,7 +493,7 @@ describe('OpenAI-compatible chat cancellation', () => {
         name: 'AbortError',
         ...(reason instanceof Error ? { message: reason.message } : {}),
       });
-      const signal = await started.promise;
+      const signal = await started;
       controller.abort(reason);
       await rejected;
       if (reason === undefined) {
@@ -590,22 +587,14 @@ describe('OpenAI-compatible chat cancellation', () => {
       CHAT_FIXTURE_KEY: 'named-fixture-key',
       OPENAI_API_KEY: 'unrelated-key',
     });
-    const started = createDeferred<AbortSignal>();
-    fetch.mockImplementationOnce(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
-          const signal = options!.signal!;
-          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          started.resolve(signal);
-        }),
-    );
+    const started = mockPendingFetch(fetch);
     const target = await loadApiProvider('envoy:team/served-model:revision-1', {
       options: { config: { apiKeyEnvar: 'CHAT_FIXTURE_KEY', maxRetries: 0 } },
     });
     const controller = new AbortController();
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    const signal = await started.promise;
+    const signal = await started;
     controller.abort();
     await rejected;
     const [url, options] = fetch.mock.calls[0];
