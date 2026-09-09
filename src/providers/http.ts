@@ -355,17 +355,20 @@ export function diagnosePrivateKeyMaterial(material: unknown): string | undefine
   if (!text) {
     return 'it is empty';
   }
-  if (text.includes('BEGIN CERTIFICATE')) {
-    return 'it is a certificate, not a private key';
-  }
-  if (text.includes('PUBLIC KEY-----')) {
-    return 'it is a public key, not a private key';
+  // A private key block anywhere wins: bundles that also carry the certificate or public
+  // key -- what `openssl pkcs12 -nodes` emits, in either order -- sign fine, so only
+  // material with no private key at all gets the "wrong kind of file" diagnoses.
+  if (!text.includes('PRIVATE KEY-----')) {
+    if (text.includes('BEGIN CERTIFICATE')) {
+      return 'it is a certificate, not a private key';
+    }
+    if (text.includes('PUBLIC KEY-----')) {
+      return 'it is a public key, not a private key';
+    }
+    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
   if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
     return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
-  }
-  if (!text.includes('PRIVATE KEY-----')) {
-    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
   if (!text.includes('-----END')) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
