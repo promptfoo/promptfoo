@@ -722,12 +722,6 @@ function getPerImageCost(model: string, size: string, quality?: string): number 
   }
 
   // GPT Image 2.5 is billed from token usage, and an unrecognized model has no rate at all.
-  // Report no cost instead of guessing one.
-  logger.debug('[OpenAI Image] No per-image rate for model, reporting no cost', {
-    model,
-    size,
-    quality,
-  });
   return undefined;
 }
 
@@ -738,7 +732,12 @@ export function calculateImageCost(
   n: number = 1,
 ): number | undefined {
   const costPerImage = getPerImageCost(model, size, quality);
-  return costPerImage === undefined ? undefined : costPerImage * n;
+  if (costPerImage === undefined) {
+    // Report no cost instead of guessing one.
+    logger.debug('[OpenAI Image] No per-image rate, reporting no cost', { model, size, quality });
+    return undefined;
+  }
+  return costPerImage * n;
 }
 
 function getImageTokenUsage(data: any, cached: boolean): TokenUsage | undefined {
