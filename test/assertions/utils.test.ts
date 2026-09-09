@@ -15,12 +15,15 @@ import { createMockProvider as createFactoryProvider } from '../factories/provid
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 vi.mock('fs');
-vi.mock('path');
 vi.mock('../../src/cliState');
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
 
+// `path` is intentionally NOT mocked here: `processFileReference` now routes
+// through `resolveCallbackPath`, whose path-traversal guard depends on real
+// `path.relative`/`path.isAbsolute` semantics (see resolveCallbackPath.test.ts
+// and loadCallbackFromFileUrl.test.ts for guard-specific coverage).
 describe('processFileReference', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -31,19 +34,15 @@ describe('processFileReference', () => {
     cliState.basePath = undefined;
     const jsonContent = JSON.stringify({ key: 'value' });
     vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    vi.mocked(path.resolve).mockReturnValue('/test.json');
-    vi.mocked(path.extname).mockReturnValue('.json');
 
     const result = processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/test.json', 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(process.cwd(), 'test.json'), 'utf8');
   });
 
   it('should process JSON files correctly', () => {
     const jsonContent = JSON.stringify({ key: 'value' });
     vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    vi.mocked(path.resolve).mockReturnValue('/base/path/test.json');
-    vi.mocked(path.extname).mockReturnValue('.json');
 
     const result = processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
@@ -53,8 +52,6 @@ describe('processFileReference', () => {
   it('should process YAML files correctly', () => {
     const yamlContent = 'key: value';
     vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    vi.mocked(path.resolve).mockReturnValue('/base/path/test.yaml');
-    vi.mocked(path.extname).mockReturnValue('.yaml');
 
     const result = processFileReference('file://test.yaml');
     expect(result).toEqual({ key: 'value' });
@@ -64,8 +61,6 @@ describe('processFileReference', () => {
   it('should process YML files correctly', () => {
     const yamlContent = 'key: value';
     vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    vi.mocked(path.resolve).mockReturnValue('/base/path/test.yml');
-    vi.mocked(path.extname).mockReturnValue('.yml');
 
     const result = processFileReference('file://test.yml');
     expect(result).toEqual({ key: 'value' });
@@ -75,8 +70,6 @@ describe('processFileReference', () => {
   it('should process TXT files correctly', () => {
     const txtContent = 'plain text content\n';
     vi.mocked(fs.readFileSync).mockReturnValue(txtContent);
-    vi.mocked(path.resolve).mockReturnValue('/base/path/test.txt');
-    vi.mocked(path.extname).mockReturnValue('.txt');
 
     const result = processFileReference('file://test.txt');
     expect(result).toBe('plain text content');
@@ -84,10 +77,14 @@ describe('processFileReference', () => {
   });
 
   it('should throw an error for unsupported file types', () => {
-    vi.mocked(path.resolve).mockReturnValue('/base/path/test.unsupported');
-    vi.mocked(path.extname).mockReturnValue('.unsupported');
-
     expect(() => processFileReference('file://test.unsupported')).toThrow('Unsupported file type');
+  });
+
+  it('should reject a file:// reference that escapes basePath', () => {
+    expect(() => processFileReference('file://../../../etc/passwd')).toThrow(
+      /Path traversal rejected/,
+    );
+    expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
 
 import async from 'async';
 import cliState from '../cliState';
@@ -38,6 +37,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { CallbackPathTraversalError, resolveCallbackPath } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -490,7 +490,19 @@ async function runAssertionInternal({
         functionName = fileRef.slice(colonIndex + 1);
       }
 
-      filePath = path.resolve(basePath, filePath);
+      try {
+        filePath = resolveCallbackPath(filePath, basePath);
+      } catch (error) {
+        if (error instanceof CallbackPathTraversalError) {
+          return {
+            pass: false,
+            score: 0,
+            reason: error.message,
+            assertion,
+          };
+        }
+        throw error;
+      }
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);

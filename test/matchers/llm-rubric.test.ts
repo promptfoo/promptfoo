@@ -2347,6 +2347,29 @@ Evaluate the response
     expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
 
+  // REGRESSION TEST: a rubricPrompt file:// reference must not be able to
+  // escape cliState.basePath via `../` traversal.
+  it('should reject a rubricPrompt file:// value that escapes basePath', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: 'file://../../../../../../../etc/passwd',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
+      /Path traversal rejected/,
+    );
+
+    expect(mockReadFileSync).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should not call remote when rubric prompt is overridden, even if redteam is enabled', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';

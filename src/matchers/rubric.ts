@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
@@ -8,7 +7,7 @@ import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { parseFileUrl } from '../util/functions/loadFunction';
+import { parseFileUrl, resolveCallbackPath } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
@@ -79,7 +78,7 @@ export async function loadRubricPrompt(
     // Parse the file URL to extract file path and function name
     // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
     const { filePath, functionName } = parseFileUrl(renderedFilePath);
-    const resolvedPath = path.resolve(basePath, filePath);
+    const resolvedPath = resolveCallbackPath(filePath, basePath);
 
     if (isJavascriptFile(filePath)) {
       rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);

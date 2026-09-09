@@ -462,4 +462,64 @@ describe('Script value resolution', () => {
       expect(result.reason).toContain('Ruby execution error');
     });
   });
+
+  // REGRESSION TEST: `file://` assertion values must not be able to escape
+  // cliState.basePath via `../` traversal to load or read an arbitrary file.
+  describe('path traversal protection', () => {
+    it('should reject a javascript file:// value that escapes basePath', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file://../../../../../../../etc/passwd:handler',
+        },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toMatch(/Path traversal rejected/);
+      expect(vi.mocked(importModule)).not.toHaveBeenCalled();
+    });
+
+    it('should reject a python file:// value that escapes basePath', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'python',
+          value: 'file://../../../../../../../etc/passwd:handler',
+        },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toMatch(/Path traversal rejected/);
+    });
+
+    it('should reject a non-script (JSON/YAML/txt) file:// value that escapes basePath', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://../../../../../../../etc/passwd',
+        },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toMatch(/Path traversal rejected/);
+    });
+
+    it('should reject a traversing file:// value inside an array assertion value', async () => {
+      await expect(
+        runAssertion({
+          assertion: {
+            type: 'contains-all',
+            value: ['file://../../../../../../../etc/passwd'],
+          },
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow(/Path traversal rejected/);
+    });
+  });
 });
