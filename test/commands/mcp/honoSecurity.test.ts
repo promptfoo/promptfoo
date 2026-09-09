@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { NONCE, secureHeaders } from 'hono/secure-headers';
-import { describe, expect, it } from 'vitest';
+import { ssgParams, toSSG } from 'hono/ssg';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('MCP Hono dependency security', () => {
   it('ignores query-looking parameters after a URL fragment', async () => {
@@ -14,6 +15,69 @@ describe('MCP Hono dependency security', () => {
 
     expect(await fragmentResponse.json()).toEqual({ role: null });
     expect(await queryResponse.json()).toEqual({ role: 'reader' });
+  });
+
+  it('rejects dot-notation form fields deeper than the nesting limit', async () => {
+    const app = new Hono();
+    app.onError((error, context) => context.text(error.message, 400));
+    app.post('/form', async (context) => context.json(await context.req.parseBody({ dot: true })));
+
+    const allowedForm = new FormData();
+    allowedForm.append('user.profile.name', 'reader');
+    const allowedResponse = await app.request('http://localhost/form', {
+      method: 'POST',
+      body: allowedForm,
+    });
+
+    const deepForm = new FormData();
+    deepForm.append(Array(34).fill('a').join('.'), 'value');
+    const deepResponse = await app.request('http://localhost/form', {
+      method: 'POST',
+      body: deepForm,
+    });
+
+    expect(allowedResponse.status).toBe(200);
+    expect(await allowedResponse.json()).toEqual({ user: { profile: { name: 'reader' } } });
+    expect(deepResponse.status).toBe(400);
+    expect(await deepResponse.text()).toContain('Nesting limit exceeded');
+  });
+
+  it('rejects too many nested objects across form fields', async () => {
+    const app = new Hono();
+    app.onError((error, context) => context.text(error.message, 400));
+    app.post('/form', async (context) => context.json(await context.req.parseBody({ dot: true })));
+
+    const fields = new URLSearchParams();
+    for (let i = 0; i <= 10_000; i++) {
+      fields.append(`field${i}.value`, 'value');
+    }
+
+    const response = await app.request('http://localhost/form', {
+      method: 'POST',
+      body: fields,
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('Nesting limit exceeded');
+  });
+
+  it('does not write outside the SSG directory for consecutive parent segments', async () => {
+    const app = new Hono();
+    app.get('/:id', ssgParams([{ id: 'a/b/../../../pwned' }]), (context) =>
+      context.text('attacker-controlled-body'),
+    );
+    const fs = {
+      writeFile: vi.fn(() => Promise.resolve()),
+      mkdir: vi.fn(() => Promise.resolve()),
+    };
+
+    const result = await toSSG(app, fs, { dir: './static' });
+
+    expect(result.success).toBe(false);
+    expect(result.files).toEqual([]);
+    expect(result.error?.message).toContain('Path traversal detected');
+    expect(fs.mkdir).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
   });
 
   // CVE-2026-69207 / GHSA-8j4g-w8fx-2239: with the default (unset) `allowHeaders`,
