@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import path from 'path';
 
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
@@ -115,19 +116,104 @@ describe('init command', () => {
   });
 
   describe('downloadDirectory', () => {
-    it.each(['github-models', 'provider-github-models', 'provider-github-models/nested'])(
-      'rejects unsupported example %s before fetching directory contents',
-      async (example) => {
-        mockFetchWithProxy.mockResolvedValue(
-          createMockResponse({ json: () => Promise.resolve([]) }),
+    it.each(
+      ['github-models', 'provider-github-models'].flatMap((root) => [
+        root,
+        `${root}/nested`,
+        `./${root}`,
+        `config-js/../${root}`,
+        `.\\${root}`,
+        `config-js\\..\\${root}`,
+        `./${root}/nested`,
+      ]),
+    )('rejects unsupported example %s before fetching directory contents', async (example) => {
+      mockFetchWithProxy.mockResolvedValue(createMockResponse({ json: () => Promise.resolve([]) }));
+
+      await expect(init.downloadDirectory(example, '/path/to/target', ['0.122.2'])).rejects.toThrow(
+        'GitHub Models has been retired',
+      );
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['config-js', 'config-js'],
+      ['./config-js', 'config-js'],
+      ['provider-http/../config-js', 'config-js'],
+      ['provider-github-models/../config-js', 'config-js'],
+      ['provider-http/basic', 'provider-http/basic'],
+      ['provider-http\\basic', 'provider-http/basic'],
+    ])('downloads supported effective path %s', async (example, effectivePath) => {
+      const contentsPath = `/repos/promptfoo/promptfoo/contents/examples/${effectivePath}`;
+      const fileUrl = 'https://example.com/promptfooconfig.yaml';
+      const config = 'description: supported example';
+      mockFetchWithProxy.mockImplementation(async (input) => {
+        const url = new URL(input.toString());
+        if (url.origin === 'https://api.github.com' && url.pathname === contentsPath) {
+          expect(url.searchParams.get('ref')).toBe('0.122.2');
+          return createMockResponse({
+            json: () =>
+              Promise.resolve([
+                { type: 'file', name: 'promptfooconfig.yaml', download_url: fileUrl },
+              ]),
+          });
+        }
+        if (url.href === fileUrl) {
+          return createMockResponse({ text: () => Promise.resolve(config) });
+        }
+        throw new Error(`Unexpected example request: ${url}`);
+      });
+
+      await init.downloadDirectory(example, '/path/to/target', ['0.122.2']);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        path.join('/path/to/target', 'promptfooconfig.yaml'),
+        config,
+      );
+    });
+
+    it.each([
+      '%70rovider-github-models',
+      '%67ithub-models',
+      '%70rovider-github-models%2FREADME.md',
+      '%67ithub-models%2Fnested',
+    ])('rejects encoded retired example %s before requesting contents', async (example) => {
+      mockFetchWithProxy.mockResolvedValue(createMockResponse({ json: () => Promise.resolve([]) }));
+
+      await expect(init.downloadDirectory(example, '/path/to/target', ['0.122.2'])).rejects.toThrow(
+        'GitHub Models has been retired',
+      );
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('downloads a supported encoded example without rewriting its request path', async () => {
+      const fileUrl = 'https://example.com/promptfooconfig.yaml';
+      mockFetchWithProxy
+        .mockResolvedValueOnce(
+          createMockResponse({
+            json: () =>
+              Promise.resolve([
+                { type: 'file', name: 'promptfooconfig.yaml', download_url: fileUrl },
+              ]),
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({ text: () => Promise.resolve('description: encoded example') }),
         );
 
-        await expect(
-          init.downloadDirectory(example, '/path/to/target', ['0.122.2']),
-        ).rejects.toThrow('GitHub Models has been retired');
-        expect(mockFetchWithProxy).not.toHaveBeenCalled();
-      },
-    );
+      await init.downloadDirectory('%63onfig-js', '/path/to/target', ['0.122.2']);
+
+      expect(mockFetchWithProxy).toHaveBeenNthCalledWith(
+        1,
+        'https://api.github.com/repos/promptfoo/promptfoo/contents/examples/%63onfig-js?ref=0.122.2',
+        expect.any(Object),
+      );
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        path.join('/path/to/target', 'promptfooconfig.yaml'),
+        'description: encoded example',
+      );
+    });
 
     it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
       const mockResponse = createMockResponse({
@@ -308,6 +394,85 @@ describe('init command', () => {
   });
 
   describe('handleExampleDownload', () => {
+    it.each([
+      [false, true],
+      [false, false],
+      [true, true],
+      [true, false],
+    ])(
+      'preserves literal backslashes in advice (runnable=%s, README=%s)',
+      async (runnable, readme) => {
+        const directory = 'workspace\\branch';
+        const example = 'provider-http\\basic';
+        const examplePath = path.join(directory, example);
+        const readmePath = path.join(examplePath, 'README.md');
+        const entries = [
+          ...(runnable ? ['promptfooconfig.yaml'] : []),
+          ...(readme ? ['README.md'] : []),
+        ];
+        mockFetchWithProxy.mockImplementation(async (input) =>
+          input.toString().startsWith('https://api.github.com/')
+            ? createMockResponse({
+                json: () =>
+                  Promise.resolve(
+                    entries.map((name) => ({
+                      type: 'file',
+                      name,
+                      download_url: `https://example.com/${name}`,
+                    })),
+                  ),
+              })
+            : createMockResponse({ text: () => Promise.resolve('harmless example content') }),
+        );
+        vi.mocked(fs.readdir).mockResolvedValue(
+          entries as unknown as Awaited<ReturnType<typeof fs.readdir>>,
+        );
+        vi.mocked(fs.access).mockImplementation(async (target) => {
+          if (target.toString() === readmePath && !readme) {
+            throw new Error('ENOENT');
+          }
+        });
+
+        expect(await init.handleExampleDownload(directory, example)).toBe(example);
+
+        const advice = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => String(message))
+          .find((message) => message.includes('to get started'));
+        expect(advice).toBeDefined();
+        if (readme) {
+          expect(advice).toContain(readmePath);
+        } else {
+          expect(advice).toContain(
+            `https://github.com/promptfoo/promptfoo/tree/main/examples/${example}`,
+          );
+        }
+        if (runnable) {
+          expect(advice).toContain(`cd ${examplePath} && promptfoo eval`);
+        }
+        expect(advice).not.toContain('\u0008');
+        expect(fs.writeFile).toHaveBeenCalledTimes(entries.length);
+      },
+    );
+
+    it('preserves ordinary retry behavior for a malformed percent escape', async () => {
+      mockFetchWithProxy.mockResolvedValue(
+        createMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
+      );
+      vi.mocked(confirm).mockResolvedValue(false);
+
+      expect(await init.handleExampleDownload('.', 'config-%ZZ')).toBe('config-%ZZ');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      for (const [url] of mockFetchWithProxy.mock.calls) {
+        expect(url.toString()).toContain('/contents/examples/config-%ZZ?ref=');
+      }
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch directory contents for refs:'),
+      );
+    });
+
     describe('alias resolution', () => {
       it('should resolve old example name to new name via EXAMPLE_ALIASES', async () => {
         // Download will fail, but we're testing alias resolution, not download
@@ -633,7 +798,18 @@ describe('init command', () => {
       }
     });
 
-    it.each(['github-models', 'provider-github-models'])(
+    it.each([
+      'github-models',
+      'provider-github-models',
+      './provider-github-models',
+      'config-js/../provider-github-models',
+      '.\\provider-github-models',
+      'config-js\\..\\provider-github-models',
+      '%70rovider-github-models',
+      '%67ithub-models',
+      '%70rovider-github-models%2FREADME.md',
+      '%67ithub-models%2Fnested',
+    ])(
       'reports unsupported example %s as a failed init without download or retry',
       async (example) => {
         const previousExitCode = process.exitCode;
@@ -652,6 +828,8 @@ describe('init command', () => {
           expect(process.exitCode).toBe(1);
           expect(mockFetchWithProxy).not.toHaveBeenCalled();
           expect(confirm).not.toHaveBeenCalled();
+          expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('written to:'));
+          expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('promptfoo eval'));
         } finally {
           process.exitCode = previousExitCode;
         }
