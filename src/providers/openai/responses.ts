@@ -668,6 +668,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
+  private chatOnlyOptionsWarningShown = false;
+
+  // Chat Completions options with no Responses equivalent. They are dropped rather than
+  // translated, so warn once per provider instead of silently ignoring them.
+  private static readonly CHAT_ONLY_OPTIONS = [
+    'frequency_penalty',
+    'presence_penalty',
+    'seed',
+    'stop',
+  ] as const;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
@@ -850,6 +860,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  private warnOnceForChatOnlyOptions(config: OpenAiCompletionOptions): void {
+    if (this.chatOnlyOptionsWarningShown) {
+      return;
+    }
+    const dropped = OpenAiResponsesProvider.CHAT_ONLY_OPTIONS.filter(
+      (option) => config[option] !== undefined,
+    );
+    if (dropped.length === 0) {
+      return;
+    }
+    this.chatOnlyOptionsWarningShown = true;
+    logger.warn(
+      `[OpenAI Responses] Ignoring Chat Completions-only option(s) ${dropped.join(', ')}: the Responses API has no equivalent. Use openai:chat:${this.modelName} to keep them.`,
+    );
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -859,6 +885,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    this.warnOnceForChatOnlyOptions(config);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
     // prompts authored for the chat API work here too (the Responses API rejects
@@ -888,8 +915,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const reasoningMaxOutputTokensDefault =
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+    // `max_completion_tokens` is the Chat Completions spelling of `max_output_tokens`; honor it
+    // so bare GPT-5.6+ configs routed here keep their output cap.
     const maxOutputTokens =
       config.max_output_tokens ??
+      config.max_completion_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const renderedReasoning = renderVarsInObject(
@@ -945,7 +975,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            // Chat Completions forwards the caller's flag and defaults it off. Forcing strict
+            // here rejects any schema missing `additionalProperties: false` or a full `required`.
+            strict: responseFormat.json_schema?.strict ?? responseFormat.strict ?? false,
           },
         };
       } else {
