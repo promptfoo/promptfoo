@@ -240,7 +240,7 @@ function createWatsonXAuthCacheHash(authSelection: WatsonXAuthSelection): string
 // in memory per client so different regions/accounts never share model prices.
 let modelSpecsCache = new WeakMap<
   WatsonXAIClient,
-  Map<string, { expiresAt: number; cost: WatsonXModelCost }>
+  Map<string, { expiresAt: number; cost: WatsonXModelCost | undefined }>
 >();
 const MODEL_SPECS_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -275,6 +275,7 @@ async function getModelCost(
       reject(new Error('WatsonX model pricing metadata request timed out'));
     }, getRequestTimeoutMs());
   });
+  let cost: WatsonXModelCost | undefined;
   try {
     const response = await Promise.race([
       client.listFoundationModelSpecs({
@@ -284,31 +285,31 @@ async function getModelCost(
       deadline,
     ]);
     const resources = response.result?.resources;
-    if (!Array.isArray(resources)) {
-      return undefined;
+    const spec = Array.isArray(resources)
+      ? resources.find((resource) => resource.model_id === modelId)
+      : undefined;
+    if (spec) {
+      cost = {
+        input: getPricingTierCost(spec.input_tier),
+        output: getPricingTierCost(spec.output_tier),
+      };
     }
-    const spec = resources.find((resource) => resource.model_id === modelId);
-    if (!spec) {
-      return undefined;
-    }
-    const cost = {
-      input: getPricingTierCost(spec.input_tier),
-      output: getPricingTierCost(spec.output_tier),
-    };
-    let clientCache = modelSpecsCache.get(client);
-    if (!clientCache) {
-      clientCache = new Map();
-      modelSpecsCache.set(client, clientCache);
-    }
-    clientCache.set(modelId, { expiresAt: Date.now() + MODEL_SPECS_CACHE_TTL_MS, cost });
-    return cost;
   } catch (error) {
     logger.debug('[WatsonX] Model pricing metadata is unavailable', { error });
-    // Do not cache failures: a later response can retry after recovery.
-    return undefined;
   } finally {
     clearTimeout(timeout);
   }
+
+  // Cache an unknown price too: a model missing from the catalog is a permanent
+  // answer, and a failing endpoint would otherwise cost one timeout-bounded
+  // request per eval row. The TTL still lets both recover.
+  let clientCache = modelSpecsCache.get(client);
+  if (!clientCache) {
+    clientCache = new Map();
+    modelSpecsCache.set(client, clientCache);
+  }
+  clientCache.set(modelId, { expiresAt: Date.now() + MODEL_SPECS_CACHE_TTL_MS, cost });
+  return cost;
 }
 
 async function calculateWatsonXCost(

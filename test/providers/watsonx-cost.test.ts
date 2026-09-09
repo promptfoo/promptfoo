@@ -121,7 +121,8 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     },
   );
 
-  it('keeps a metadata failure out of the generation error and retries after recovery', async () => {
+  it('keeps a metadata failure out of the generation error and caches it until the TTL', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
     const regionalClient = client();
     regionalClient.listFoundationModelSpecs.mockRejectedValueOnce(
       new Error('Metadata unavailable'),
@@ -133,11 +134,16 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(first).toMatchObject({ output: 'Hello' });
     expect(first.error).toBeUndefined();
     expect(first.cost).toBeUndefined();
-    expect(second.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+    expect(second.cost).toBeUndefined();
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+
+    now.mockReturnValue(1000 + 5 * 60 * 1000);
+    const recovered = await instance.callApi('Hello once more');
+    expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
     expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
   });
 
-  it('aborts stalled metadata at the request deadline and retries after recovery', async () => {
+  it('aborts stalled metadata at the request deadline and caches it until the TTL', async () => {
     vi.useFakeTimers();
     vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
     const regionalClient = client();
@@ -173,7 +179,11 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(result.cost).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
 
-    const recovered = await instance.callApi('Hello again');
+    expect((await instance.callApi('Hello again')).cost).toBeUndefined();
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    const recovered = await instance.callApi('Hello once more');
     expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
     expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
@@ -213,7 +223,11 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
 
       // Late SDK success must not populate the cache; rejection must remain handled.
       settleMetadata();
-      const recovered = await instance.callApi('Hello again');
+      expect((await instance.callApi('Hello again')).cost).toBeUndefined();
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      const recovered = await instance.callApi('Hello once more');
       expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
       expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
       expect(vi.getTimerCount()).toBe(0);
@@ -326,13 +340,18 @@ describe('WatsonX metadata cache boundaries', () => {
         ],
       },
     },
-  ])('does not cache missing or malformed model metadata: %j', async (unavailable) => {
+  ])('caches missing or malformed model metadata: %j', async (unavailable) => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
     const regionalClient = client();
     regionalClient.listFoundationModelSpecs.mockResolvedValueOnce(unavailable as any);
     vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
     const instance = provider();
     expect((await instance.callApi('First')).cost).toBeUndefined();
-    expect((await instance.callApi('Second')).cost).toBeDefined();
+    expect((await instance.callApi('Second')).cost).toBeUndefined();
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+
+    now.mockReturnValue(1000 + 5 * 60 * 1000);
+    expect((await instance.callApi('Third')).cost).toBeDefined();
     expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
   });
 });
