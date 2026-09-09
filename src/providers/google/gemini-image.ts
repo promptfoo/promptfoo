@@ -183,12 +183,15 @@ export class GeminiImageProvider implements ApiProvider {
       this.config.credentials ||
         this.config.keyFilename ||
         this.config.googleAuthOptions?.keyFilename ||
+        this.config.googleAuthOptions?.keyFile ||
+        this.config.googleAuthOptions?.authClient ||
         this.config.googleAuthOptions?.credentials,
     );
     const providerScopedRegion =
       this.config.region || this.env?.VERTEX_REGION || this.env?.GOOGLE_CLOUD_LOCATION;
     const hasProviderScopedOAuthConfig = Boolean(
       this.config.projectId ||
+        this.config.googleAuthOptions?.projectId ||
         this.env?.VERTEX_PROJECT_ID ||
         this.env?.GOOGLE_PROJECT_ID ||
         this.env?.GOOGLE_CLOUD_PROJECT ||
@@ -204,7 +207,9 @@ export class GeminiImageProvider implements ApiProvider {
       getEnvString('VERTEX_REGION') ||
       getEnvString('GOOGLE_CLOUD_LOCATION');
     const hasProjectScopedOAuthConfig = Boolean(
-      projectId || (effectiveRegion && effectiveRegion !== 'global'),
+      projectId ||
+        this.config.googleAuthOptions?.projectId ||
+        (effectiveRegion && effectiveRegion !== 'global'),
     );
     const usesVertexExpress =
       this.config.vertexai === true &&

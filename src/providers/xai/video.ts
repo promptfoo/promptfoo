@@ -233,16 +233,23 @@ function buildVideoInputReference(
   modelName: XaiVideoModel,
   config: XaiVideoOptions,
 ): string | null {
+  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
+  const referenceAudios =
+    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
   if (config.image?.url) {
     const imageUrl = isGrokImagineVideo15Model(modelName)
       ? sanitizeVideoCacheReferenceUrl(config.image.url)
       : config.image.url;
-    return `image:${imageUrl}`;
+    return referenceImages.length || referenceAudios.length
+      ? JSON.stringify({
+          type: 'xai-reference-media',
+          image: imageUrl,
+          reference_images: referenceImages.map(sanitizeVideoCacheReferenceUrl),
+          reference_audios: referenceAudios,
+        })
+      : `image:${imageUrl}`;
   }
 
-  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
-  const referenceAudios =
-    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
   if (!referenceImages.length && !referenceAudios.length) {
     return null;
   }
@@ -376,7 +383,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     const body: Record<string, unknown> = {
       model: this.modelName,
-      prompt,
+      ...(isGrokImagineVideo15Model(this.modelName) && !prompt.trim() ? {} : { prompt }),
     };
 
     // Add generation-specific parameters (not for edits)
@@ -464,10 +471,13 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     if (!hasReferenceMedia) {
+      if (isVideo15 && !config.image?.url && !prompt.trim()) {
+        return 'Video generation requires a non-empty prompt.';
+      }
       return undefined;
     }
 
-    if (config.image?.url) {
+    if (config.image?.url && !isVideo15) {
       return hasReferenceAudios
         ? 'reference media cannot be combined with image input. Use one video generation mode per request.'
         : 'reference_images cannot be combined with image input. Use one video generation mode per request.';
@@ -477,7 +487,7 @@ export class XAIVideoProvider implements ApiProvider {
       return 'reference media cannot be combined with video edits. Use one video generation mode per request.';
     }
 
-    if (!prompt.trim()) {
+    if (!prompt.trim() && !(isVideo15 && (config.image?.url || hasReferenceImages))) {
       return 'Reference-to-video requires a non-empty prompt.';
     }
 
@@ -804,7 +814,7 @@ export class XAIVideoProvider implements ApiProvider {
       ? calculateVideoCost(actualDuration, false, {
           modelName: this.modelName,
           resolution: outputResolution,
-          imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
+          imageInputCount: (config.reference_images?.length ?? 0) + (config.image?.url ? 1 : 0),
         })
       : undefined;
     const cost = reportedCost ?? estimatedCost;
