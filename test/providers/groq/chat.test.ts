@@ -4,6 +4,7 @@ import { GroqProvider } from '../../../src/providers/groq/index';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { CallApiContextParams } from '../../../src/types/index';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
@@ -144,6 +145,67 @@ describe('GroqProvider', () => {
   });
 
   describe('getOpenAiBody', () => {
+    describe.each([
+      { model: 'qwen/qwen3.6-27b', reasoningEffort: 'none', reasoning: true },
+      { model: 'openai/gpt-oss-120b', reasoningEffort: 'high', reasoning: true },
+      { model: 'llama-3.3-70b-versatile', reasoningEffort: 'high', reasoning: false },
+    ] as const)('effective model $model', ({ model, reasoningEffort, reasoning }) => {
+      it.each(['direct', 'provider passthrough', 'prompt passthrough', 'unchanged passthrough'])(
+        'preserves the model request contract with %s selection',
+        async (selection) => {
+          const configuredModel =
+            selection === 'direct' || selection === 'unchanged passthrough'
+              ? model
+              : model === 'openai/gpt-oss-120b'
+                ? 'qwen/qwen3.6-27b'
+                : 'openai/gpt-oss-120b';
+          const provider = new GroqProvider(configuredModel, {
+            config: {
+              reasoning_effort: reasoningEffort,
+              max_completion_tokens: 4096,
+              max_tokens: 2048,
+              temperature: 0.6,
+              ...(selection === 'direct'
+                ? {}
+                : {
+                    passthrough: {
+                      model: selection === 'prompt passthrough' ? configuredModel : model,
+                    },
+                  }),
+            },
+          });
+          const context: CallApiContextParams | undefined =
+            selection === 'prompt passthrough'
+              ? {
+                  vars: {},
+                  prompt: {
+                    raw: 'Test prompt',
+                    label: 'Test prompt',
+                    config: { passthrough: { model } },
+                  },
+                }
+              : undefined;
+
+          const { body } = await provider.getOpenAiBody('Test prompt', context);
+
+          expect(body.model).toBe(model);
+          expect(body.messages).toEqual([{ role: 'user', content: 'Test prompt' }]);
+          expect(body.temperature).toBe(0.6);
+          expect(provider.modelName).toBe(configuredModel);
+          expect(provider.getApiUrl()).toBe(GROQ_API_BASE);
+          if (reasoning) {
+            expect(body.reasoning_effort).toBe(reasoningEffort);
+            expect(body.max_completion_tokens).toBe(4096);
+            expect(body).not.toHaveProperty('max_tokens');
+          } else {
+            expect(body.max_tokens).toBe(2048);
+            expect(body).not.toHaveProperty('max_completion_tokens');
+            expect(body).not.toHaveProperty('reasoning_effort');
+          }
+        },
+      );
+    });
+
     it('accepts Groq Chat service tiers and rejects non-Chat tiers', async () => {
       for (const service_tier of ['auto', 'on_demand', 'flex', 'performance'] as const) {
         const provider = new GroqProvider('openai/gpt-oss-120b', {

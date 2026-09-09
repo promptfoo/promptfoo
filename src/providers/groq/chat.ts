@@ -33,12 +33,22 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
+  protected override isReasoningCapabilityModel(modelName: string): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningCapabilityModel(modelName);
+  }
+
   protected supportsTemperature(): boolean {
     // Groq's reasoning models support temperature, unlike OpenAI's o1 models
     if (groqSupportsTemperature(this.modelName)) {
       return true;
     }
     return super.supportsTemperature();
+  }
+
+  protected override supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return groqSupportsTemperature(modelName)
+      ? true
+      : super.supportsTemperatureForCapabilityModel(modelName);
   }
 
   constructor(modelName: string, providerOptions: GroqProviderOptions) {

@@ -148,6 +148,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    return super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return !this.isReasoningCapabilityModel(modelName);
+  }
+
   /**
    * Loads a function from an external file
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
@@ -211,7 +219,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()
-      : super.isReasoningModel(capabilityModelName);
+      : this.isReasoningCapabilityModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -230,7 +238,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const supportsTemperature = usesConfiguredCapabilities
       ? this.supportsTemperature()
-      : !isReasoningModel;
+      : this.supportsTemperatureForCapabilityModel(capabilityModelName);
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;

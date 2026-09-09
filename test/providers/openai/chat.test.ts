@@ -2219,6 +2219,40 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       enableCache();
     });
 
+    it.each([
+      { configuredModel: 'gpt-4.1', effectiveModel: 'o3', reasoning: true },
+      { configuredModel: 'o3', effectiveModel: 'gpt-4.1', reasoning: false },
+    ])(
+      'uses $effectiveModel capabilities when overriding $configuredModel',
+      async ({ configuredModel, effectiveModel, reasoning }) => {
+        const provider = new OpenAiChatCompletionProvider(configuredModel, {
+          config: {
+            passthrough: { model: effectiveModel },
+            reasoning_effort: 'high',
+            max_completion_tokens: 4096,
+            max_tokens: 2048,
+            temperature: 0.6,
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody('Test prompt');
+
+        expect(body.model).toBe(effectiveModel);
+        expect(provider.modelName).toBe(configuredModel);
+        if (reasoning) {
+          expect(body.reasoning_effort).toBe('high');
+          expect(body.max_completion_tokens).toBe(4096);
+          expect(body).not.toHaveProperty('max_tokens');
+          expect(body).not.toHaveProperty('temperature');
+        } else {
+          expect(body.max_tokens).toBe(2048);
+          expect(body.temperature).toBe(0.6);
+          expect(body).not.toHaveProperty('max_completion_tokens');
+          expect(body).not.toHaveProperty('reasoning_effort');
+        }
+      },
+    );
+
     it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1');
