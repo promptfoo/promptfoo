@@ -99,7 +99,7 @@ The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -192,7 +192,7 @@ The app-server provider starts the `codex` binary on your PATH, or `codex_path_o
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       approval_policy:
         granular:
@@ -207,12 +207,12 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       collaboration_mode:
         mode: plan
         settings:
-          model: gpt-5.5
+          model: gpt-5.6-sol
           reasoning_effort: none
           developer_instructions: null
 ```
@@ -225,7 +225,7 @@ Codex gates optional capabilities behind [feature flags](https://developers.open
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       cli_config:
         features:
@@ -241,7 +241,7 @@ Configure deterministic responses when you intentionally want app-server approva
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       sandbox_mode: workspace-write
       approval_policy: on-request
@@ -292,7 +292,7 @@ Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     config:
       sandbox_mode: read-only
       output_schema:

@@ -302,6 +302,16 @@ describe('Provider Registry', () => {
 
     describe('OpenAI endpoint defaults', () => {
       it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}`);
+
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+      });
+
+      it.each([
         'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
