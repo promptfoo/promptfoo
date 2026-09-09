@@ -115,6 +115,20 @@ describe('init command', () => {
   });
 
   describe('downloadDirectory', () => {
+    it.each(['github-models', 'provider-github-models', 'provider-github-models/nested'])(
+      'rejects unsupported example %s before fetching directory contents',
+      async (example) => {
+        mockFetchWithProxy.mockResolvedValue(
+          createMockResponse({ json: () => Promise.resolve([]) }),
+        );
+
+        await expect(
+          init.downloadDirectory(example, '/path/to/target', ['0.122.2']),
+        ).rejects.toThrow('GitHub Models has been retired');
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      },
+    );
+
     it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
       const mockResponse = createMockResponse({
         ok: false,
@@ -184,6 +198,37 @@ describe('init command', () => {
   });
 
   describe('getExamplesList', () => {
+    it.each([false, true])(
+      'excludes unsupported examples from discovery (VERSION unavailable=%s)',
+      async (versionUnavailable) => {
+        if (versionUnavailable) {
+          mockFetchWithProxy.mockResolvedValueOnce(
+            createMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
+          );
+        }
+        mockFetchWithProxy.mockResolvedValueOnce(
+          createMockResponse({
+            json: () =>
+              Promise.resolve({
+                tree: [
+                  { path: 'examples/provider-github-models/promptfooconfig.yaml', type: 'blob' },
+                  { path: 'examples/github-models/promptfooconfig.yaml', type: 'blob' },
+                  {
+                    path: 'examples/provider-github-models/nested/promptfooconfig.yaml',
+                    type: 'blob',
+                  },
+                  { path: 'examples/config-js/promptfooconfig.js', type: 'blob' },
+                  { path: 'examples/provider-http/basic/promptfooconfig.yaml', type: 'blob' },
+                ],
+              }),
+          }),
+        );
+
+        expect(await init.getExamplesList()).toEqual(['config-js', 'provider-http/basic']);
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(versionUnavailable ? 2 : 1);
+      },
+    );
+
     it('should return a list of examples', async () => {
       const mockResponse = createMockResponse({
         ok: true,
@@ -394,28 +439,6 @@ describe('init command', () => {
         },
       );
 
-      it.each([
-        { example: 'github-models', ref: '0.120.26' },
-        { example: 'provider-github-models', ref: '31b566872971532e6d428c0cbad4487d22d936c5' },
-      ])(
-        'pins the retired GitHub Models example $example and explains the retirement',
-        async ({ example, ref }) => {
-          mockFetchWithProxy.mockResolvedValue(
-            createMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
-          );
-          vi.mocked(confirm).mockResolvedValue(false);
-
-          expect(await init.handleExampleDownload('.', example)).toBe(example);
-          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
-          expect(mockFetchWithProxy.mock.calls[0][0]).toContain(
-            `/repos/promptfoo/promptfoo/contents/examples/${example}?ref=${ref}`,
-          );
-          expect(logger.warn).toHaveBeenCalledWith(
-            expect.stringContaining('GitHub retired GitHub Models'),
-          );
-        },
-      );
-
       it('should reset to default refs when retrying after legacy example failure', async () => {
         const mockLegacyFailure = createMockResponse({
           ok: false,
@@ -609,6 +632,31 @@ describe('init command', () => {
         throw new Error('initCmd not found');
       }
     });
+
+    it.each(['github-models', 'provider-github-models'])(
+      'reports unsupported example %s as a failed init without download or retry',
+      async (example) => {
+        const previousExitCode = process.exitCode;
+        mockFetchWithProxy.mockResolvedValue(
+          createMockResponse({ json: () => Promise.resolve([]) }),
+        );
+
+        try {
+          await program.parseAsync(['init', '--example', example, '--no-interactive'], {
+            from: 'user',
+          });
+
+          expect(logger.error).toHaveBeenCalledWith(
+            expect.stringContaining('GitHub Models has been retired'),
+          );
+          expect(process.exitCode).toBe(1);
+          expect(mockFetchWithProxy).not.toHaveBeenCalled();
+          expect(confirm).not.toHaveBeenCalled();
+        } finally {
+          process.exitCode = previousExitCode;
+        }
+      },
+    );
 
     it('should set up the init command correctly', () => {
       const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
