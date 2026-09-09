@@ -332,10 +332,11 @@ model is selected only inside OpenClaw's own agent config.
 ### WebSocket Agent
 
 Promptfoo uses an isolated session key per call unless you set `session_key` explicitly.
-Unscoped session keys are scoped to an explicitly selected agent. The `global` sentinel stays
-unscoped; HTTP endpoints also preserve `unknown`. For WS, `unknown` requires an explicit agent
-and becomes `agent:<agent-id>:unknown`, because older gateways can otherwise select the wrong
-agent. With bare `openclaw:agent`, use another session key or omit `session_key`.
+Unscoped session keys are scoped to an explicitly selected agent. For WS, `global` is scoped
+to explicit non-main agents so older gateways select that agent; bare and explicit-main
+providers keep `global` unscoped. HTTP endpoints preserve the `global` and `unknown` sentinels.
+For WS, `unknown` requires an explicit agent and becomes `agent:<agent-id>:unknown`.
+With bare `openclaw:agent`, use another key or omit `session_key` instead of using `unknown`.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
