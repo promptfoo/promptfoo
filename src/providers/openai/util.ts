@@ -979,12 +979,14 @@ export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
 export function getOpenAICompletionTokenDetails(
   usage: any,
 ): TokenUsage['completionDetails'] | undefined {
-  // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at
-  // the top level of usage instead of inside prompt_tokens_details.
+  // Some OpenAI-compatible APIs report cached prompt tokens at the top level of
+  // usage instead of inside prompt_tokens_details: Moonshot uses `cached_tokens`
+  // and DeepSeek uses `prompt_cache_hit_tokens`.
   const cachedInputTokens =
     usage.prompt_tokens_details?.cached_tokens ??
     usage.input_tokens_details?.cached_tokens ??
     usage.cached_tokens ??
+    usage.prompt_cache_hit_tokens ??
     0;
   const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
   const completionDetails = usage.completion_tokens_details ?? usage.output_tokens_details;

@@ -161,7 +161,10 @@ describe('DeepSeekProvider cost reporting', () => {
           prompt_tokens: 100,
           completion_tokens: 50,
           total_tokens: 150,
-          prompt_tokens_details: { cached_tokens: cached },
+          // DeepSeek's wire format: cache hits are reported at the top level of
+          // usage, not inside prompt_tokens_details.
+          prompt_cache_hit_tokens: cached,
+          prompt_cache_miss_tokens: 100 - cached,
         },
       },
       cached: false,
