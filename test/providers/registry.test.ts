@@ -60,6 +60,26 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 
 describe('Provider Registry', () => {
   it.each([
+    'openai:gpt-4o-mini-realtime-preview-2024-12-17',
+    'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',
+  ])('keeps the documented Realtime snapshot on its endpoint for %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    const provider = await factory!.create(
+      providerPath,
+      {
+        id: 'realtime-fixture',
+        config: { apiKey: 'fixture-key', apiBaseUrl: 'http://localhost:1234/v1' },
+      },
+      { basePath: '.', options: {} },
+    );
+    expect(provider.constructor.name).toBe('OpenAiRealtimeProvider');
+    expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
+    expect(provider.id()).toBe('realtime-fixture');
+    expect(provider).toHaveProperty('config.apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
+  it.each([
     ['cohere-main/embed-english-v3.0', 'embedding', 'TrueFoundryEmbeddingProvider'],
     ['tenant/vector-index:stable', 'embedding', 'TrueFoundryEmbeddingProvider'],
     ['embedding-team/chat-alias:stable', 'chat', 'TrueFoundryProvider'],

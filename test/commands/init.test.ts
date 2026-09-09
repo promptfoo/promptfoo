@@ -375,6 +375,25 @@ describe('init command', () => {
         );
       });
 
+      it.each(['openai-deep-research', 'redteam-dalle'])(
+        'pins the historical OpenAI example %s and warns it cannot run on the current API',
+        async (example) => {
+          mockFetchWithProxy.mockResolvedValue(
+            createMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
+          );
+          vi.mocked(confirm).mockResolvedValue(false);
+
+          expect(await init.handleExampleDownload('.', example)).toBe(example);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockFetchWithProxy.mock.calls[0][0]).toContain(
+            `/repos/promptfoo/promptfoo/contents/examples/${example}?ref=31b566872971532e6d428c0cbad4487d22d936c5`,
+          );
+          expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('cannot run against the current OpenAI API'),
+          );
+        },
+      );
+
       it('should reset to default refs when retrying after legacy example failure', async () => {
         const mockLegacyFailure = createMockResponse({
           ok: false,
