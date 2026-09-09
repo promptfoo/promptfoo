@@ -1400,11 +1400,21 @@ export default class Eval {
   }
 
   getStats(): EvaluateStats {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      return {
+        ...this.oldResults.stats,
+        cachedRows: this.oldResults.results.filter((result) => result.response?.cached === true)
+          .length,
+      };
+    }
+
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      cachedRows: 0,
       durationMs: this.durationMs,
       generationDurationMs: this.generationDurationMs,
       evaluationDurationMs: this.evaluationDurationMs,
@@ -1414,6 +1424,7 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
+      stats.cachedRows = (stats.cachedRows ?? 0) + (prompt.metrics?.cachedRows ?? 0);
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
@@ -1434,7 +1445,7 @@ export default class Eval {
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
         table: this.oldResults.table,
-        stats: this.oldResults.stats,
+        stats: this.getStats(),
       };
     }
     if (this.results.length === 0) {

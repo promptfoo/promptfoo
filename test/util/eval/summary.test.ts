@@ -556,6 +556,30 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Provider: 1,000 (cached)');
     });
 
+    it('should show the number of cached result rows', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-cached-rows',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 1000, cached: 1000 },
+        successes: 2,
+        failures: 0,
+        errors: 0,
+        cachedRows: 2,
+        duration: 5000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      };
+
+      const output = stripAnsi(generateEvalSummary(params).join('\n'));
+
+      expect(output).toContain('2 cached rows');
+    });
+
     it('should show partial cached tokens', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-partial-cache',

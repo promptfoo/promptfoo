@@ -1033,7 +1033,9 @@ export async function doEval(
       }
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
+    const evalStats = evalRecord.getStats();
+    const generationTokenUsage = evalStats.tokenUsage.generation;
+    const cachedRows = evalStats.cachedRows ?? 0;
     if (generationTokenUsage) {
       tokenUsage.generation = generationTokenUsage;
     }
@@ -1096,6 +1098,7 @@ export async function doEval(
       successes,
       failures,
       errors,
+      cachedRows,
       duration,
       maxConcurrency,
       tracker,
