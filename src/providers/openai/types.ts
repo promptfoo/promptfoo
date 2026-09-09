@@ -156,12 +156,14 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict: boolean;
+          // Both optional: an unset `strict` is non-strict, and only a strict schema has to
+          // pin `additionalProperties: false`.
+          strict?: boolean;
           schema: {
             type: 'object';
             properties: Record<string, any>;
             required?: string[];
-            additionalProperties: false;
+            additionalProperties?: false;
           };
         };
       };

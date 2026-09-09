@@ -423,7 +423,7 @@ config:
   response_format: file://./response-format.json
 ```
 
-Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Both endpoints forward `strict` as you set it and leave it off when unset; strict schemas must set `additionalProperties: false` and list every property in `required`. Responses also accepts the flattened shape below:
+Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Chat Completions forwards `strict` as you set it and leaves it off when unset. The Responses API validates strictly unless told otherwise, so Promptfoo always sends `strict` there, using `false` when you leave it unset. Either way, a strict schema must set `additionalProperties: false` and list every property in `required`. Responses also accepts the flattened shape below:
 
 ```json title="response-format.json"
 {

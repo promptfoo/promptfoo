@@ -5,6 +5,7 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import logger from '../../../../src/logger';
+import { GroqResponsesProvider } from '../../../../src/providers/groq/responses';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
@@ -3679,5 +3680,29 @@ describe('OpenAiResponsesProvider request building', () => {
     await provider.getOpenAiBody('Test prompt');
 
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should warn about penalties that only come from the environment', async () => {
+    setOpenAiEnv({ OPENAI_PRESENCE_PENALTY: '0.5' });
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain('presence_penalty');
+  });
+
+  it('should not suggest openai:chat for a non-OpenAI Responses provider', async () => {
+    const provider = new GroqResponsesProvider('llama-3.3-70b-versatile', {
+      config: { apiKey: 'test-key', seed: 42 },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain('seed');
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).not.toContain('openai:chat:');
   });
 });

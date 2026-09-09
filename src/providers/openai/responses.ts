@@ -865,14 +865,23 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       return;
     }
     const dropped = OpenAiResponsesProvider.CHAT_ONLY_OPTIONS.filter(
-      (option) => config[option] !== undefined,
+      (option) =>
+        config[option] !== undefined ||
+        // The chat provider falls back to these env vars, so an env-only value is dropped here too.
+        (option === 'frequency_penalty' && getEnvString('OPENAI_FREQUENCY_PENALTY')) ||
+        (option === 'presence_penalty' && getEnvString('OPENAI_PRESENCE_PENALTY')),
     );
     if (dropped.length === 0) {
       return;
     }
     this.chatOnlyOptionsWarningShown = true;
+    // Only the OpenAI provider itself has an `openai:chat:` counterpart. Subclasses (Groq, Meta,
+    // Bedrock, OpenClaw) inherit this builder but point at other services and credentials.
+    const chatFallback = this.id().startsWith('openai:')
+      ? ` Use openai:chat:${this.modelName} to keep them.`
+      : '';
     logger.warn(
-      `[OpenAI Responses] Ignoring Chat Completions-only option(s) ${dropped.join(', ')}: the Responses API has no equivalent. Use openai:chat:${this.modelName} to keep them.`,
+      `[OpenAI Responses] Ignoring Chat Completions-only option(s) ${dropped.join(', ')}: the Responses API has no equivalent.${chatFallback}`,
     );
   }
 

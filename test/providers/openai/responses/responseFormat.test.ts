@@ -387,7 +387,7 @@ describe('OpenAiResponsesProvider response formats', () => {
               schema: { type: 'object' as const, properties: { name: { type: 'string' } } },
             },
           },
-        } as any,
+        },
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
