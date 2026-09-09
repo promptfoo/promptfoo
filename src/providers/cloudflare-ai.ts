@@ -3,6 +3,7 @@ import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/util';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -70,28 +71,18 @@ function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string 
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
 }
 
-function getPassthroughConfig(config?: CloudflareAiConfig) {
-  // Extract Cloudflare-specific config keys that shouldn't be passed through
-  const {
-    accountId: _accountId,
-    accountIdEnvar: _accountIdEnvar,
-    apiKey: _apiKey,
-    apiKeyEnvar: _apiKeyEnvar,
-    apiBaseUrl: _apiBaseUrl,
-    ...passthrough
-  } = config || {};
-  return passthrough;
-}
-
 function getOpenAiConfig(providerOptions: CloudflareAiProviderOptions): OpenAiCompletionOptions {
-  const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
-  const passthrough = getPassthroughConfig(providerOptions.config);
+  const config = providerOptions.config || {};
+  const apiBaseUrl = getApiBaseUrl(config, providerOptions.env);
+  // Only genuine model parameters belong in the request body; promptfoo's own settings
+  // (credentials, headers, cost overrides, basePath) stay local.
+  const { modelParameters } = splitLocalOptions(config, ['accountId', 'accountIdEnvar']);
 
   return {
-    ...providerOptions.config,
+    ...config,
     apiKeyEnvar: 'CLOUDFLARE_API_KEY',
     apiBaseUrl,
-    passthrough,
+    passthrough: { ...modelParameters, ...config.passthrough },
   };
 }
 

@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { splitLocalOptions } from './openai/util';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -22,8 +23,10 @@ export function createCerebrasProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
+  const config = options.config?.config || {};
+  // Only genuine model parameters belong in the request body; promptfoo's own settings
+  // (credentials, headers, cost overrides, basePath) stay local.
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
   // Create a custom provider class that overrides the getOpenAiBody method
   class CerebrasProvider extends OpenAiChatCompletionProvider {
@@ -48,11 +51,10 @@ export function createCerebrasProvider(
   const cerebrasConfig = {
     ...options,
     config: {
-      apiBaseUrl: 'https://api.cerebras.ai/v1',
-      apiKeyEnvar: 'CEREBRAS_API_KEY',
-      passthrough: {
-        ...configWithoutBasePath,
-      },
+      ...localOptions,
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://api.cerebras.ai/v1',
+      apiKeyEnvar: localOptions.apiKeyEnvar || 'CEREBRAS_API_KEY',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 
