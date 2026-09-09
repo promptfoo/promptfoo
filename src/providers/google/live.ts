@@ -973,43 +973,49 @@ export class GoogleLiveProvider implements ApiProvider {
 
             return total + responseTokenCount + (thoughtsIncluded ? 0 : thoughtsTokenCount);
           }, 0);
-          const audioPromptTokens = usageMetadata.reduce(
-            (total, usage) =>
+          const audioPromptTokens = usageMetadata.reduce((total, usage) => {
+            const details = usage.promptTokensDetails ?? usage.prompt_tokens_details;
+            if (
+              this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
+              (!Array.isArray(details) || details.length === 0)
+            ) {
+              return (
+                total +
+                getTokenCount(usage.promptTokenCount, usage.prompt_token_count) +
+                getTokenCount(usage.toolUsePromptTokenCount, usage.tool_use_prompt_token_count)
+              );
+            }
+            return (
               total +
-              getModalityTokenCount(
-                usage.promptTokensDetails ?? usage.prompt_tokens_details,
-                'AUDIO',
-              ) +
+              getModalityTokenCount(details, 'AUDIO') +
               getModalityTokenCount(
                 usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
                 'AUDIO',
-              ),
-            0,
-          );
-          const audioCompletionTokens = usageMetadata.reduce(
-            (total, usage) =>
-              total +
-              getModalityTokenCount(
-                usage.responseTokensDetails ??
-                  usage.candidatesTokensDetails ??
-                  usage.response_tokens_details ??
-                  usage.candidates_tokens_details,
-                'AUDIO',
-              ),
-            0,
-          );
-          const hasPromptModalityDetails = usageMetadata.some((usage) => {
-            const details = usage.promptTokensDetails ?? usage.prompt_tokens_details;
-            return Array.isArray(details) && details.length > 0;
-          });
-          const hasResponseModalityDetails = usageMetadata.some((usage) => {
+              )
+            );
+          }, 0);
+          const audioCompletionTokens = usageMetadata.reduce((total, usage) => {
             const details =
               usage.responseTokensDetails ??
               usage.candidatesTokensDetails ??
               usage.response_tokens_details ??
               usage.candidates_tokens_details;
-            return Array.isArray(details) && details.length > 0;
-          });
+            if (
+              this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
+              (!Array.isArray(details) || details.length === 0)
+            ) {
+              return (
+                total +
+                getTokenCount(
+                  usage.responseTokenCount,
+                  usage.candidatesTokenCount,
+                  usage.response_token_count,
+                  usage.candidates_token_count,
+                )
+              );
+            }
+            return total + getModalityTokenCount(details, 'AUDIO');
+          }, 0);
           const imagePromptTokens = usageMetadata.reduce(
             (total, usage) =>
               total +
@@ -1106,13 +1112,14 @@ export class GoogleLiveProvider implements ApiProvider {
           };
           // Live Translate is billed only for input and output audio tokens. Its
           // usage payload may also include internal text context, which remains
-          // visible in tokenUsage but must not contribute to cost.
+          // visible in tokenUsage but must not contribute to cost. Audio-only
+          // fallback is applied per turn when optional modality details are absent.
           const costPromptTokens =
-            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && hasPromptModalityDetails
+            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL
               ? audioPromptTokens
               : Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0);
           const costCompletionTokens =
-            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && hasResponseModalityDetails
+            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL
               ? audioCompletionTokens
               : billableCompletionTokens;
           const tokenCost = calculateGoogleCost(

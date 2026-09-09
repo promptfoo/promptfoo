@@ -1066,6 +1066,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
       ...(this.config.generationConfig || {}),
     };
+    const promptToolMode = resolveGoogleToolConfig(promptConfig || {}).toolConfig
+      ?.functionCallingConfig?.mode;
     const promptGenerationConfigValue = {
       ...(promptConfig?.maxOutputTokens === undefined
         ? {}
@@ -1080,6 +1082,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? {}
         : { stop_sequences: promptConfig.stopSequences }),
       ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
+      // An explicit prompt AUTO policy replaces inherited native tool choices.
+      // Native options on this prompt retain their normal layer precedence.
+      ...(!isVideoModel && promptToolMode === 'AUTO' ? { tool_choice: 'auto' } : {}),
       ...(promptConfig?.generationConfig || {}),
     };
     const normalizedGenerationConfig = normalizeInteractionGenerationLayers(

@@ -100,7 +100,10 @@ export const googleProviderFactories: ProviderFactory[] = [
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,
-          id: providerPath,
+          id:
+            explicitServiceType === 'interactions'
+              ? (providerOptions.id ?? providerPath)
+              : providerPath,
           env: providerOptions.env ?? context.env,
           config: {
             ...(context.basePath && { basePath: context.basePath }),
@@ -165,7 +168,7 @@ export const googleProviderFactories: ProviderFactory[] = [
           const { GoogleInteractionsProvider } = await import('../google/interactions');
           return new GoogleInteractionsProvider(modelName, {
             ...providerOptions,
-            id: providerPath,
+            id: providerOptions.id ?? providerPath,
             env: providerOptions.env ?? context.env,
             config: {
               ...(context.basePath && { basePath: context.basePath }),

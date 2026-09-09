@@ -1568,7 +1568,8 @@ export function parseConfigSystemInstruction(
   if (typeof configSystemInstruction === 'string') {
     const renderedInstruction = renderVarsInObject(configSystemInstruction, contextVars);
     const instructionReference = resolveGoogleConfigFileReference(renderedInstruction, basePath);
-    configInstruction = loadFile(instructionReference, contextVars);
+    // The reference is already rendered; do not expand inline text again while loading.
+    configInstruction = loadFile(instructionReference, undefined);
   }
 
   // Convert string to Content structure
@@ -1602,7 +1603,7 @@ export function parseConfigSystemInstruction(
  * @returns The parsed and rendered response schema
  */
 export function parseConfigResponseSchema(
-  configResponseSchema: string,
+  configResponseSchema: string | object,
   contextVars?: Record<string, VarValue>,
   basePath?: string,
 ): unknown {
@@ -1619,7 +1620,10 @@ export function parseConfigResponseSchema(
       throw new Error(`Invalid JSON in responseSchema: ${error}`);
     }
   }
-  return renderVarsInObject(responseSchema, contextVars);
+  // Inline schemas were rendered before loading. Only external contents still need rendering.
+  return typeof schemaReference === 'string' && schemaReference.startsWith('file://')
+    ? renderVarsInObject(responseSchema, contextVars)
+    : responseSchema;
 }
 
 /** Resolve only relative Google config file references against their owning base path. */

@@ -2635,6 +2635,110 @@ describe('GoogleLiveProvider', () => {
     expect(response.cost).toBeCloseTo((10 * 3.5 + 20 * 21) / 1e6, 12);
   });
 
+  it.each([
+    { name: 'first turn', detailedTurn: 1, snakeCase: false, modality: 'AUDIO', empty: false },
+    {
+      name: 'last turn with snake-case usage',
+      detailedTurn: 2,
+      snakeCase: true,
+      modality: 'AUDIO',
+      empty: false,
+    },
+    {
+      name: 'an audio rate override',
+      detailedTurn: 1,
+      snakeCase: false,
+      modality: 'AUDIO',
+      empty: false,
+      audioCost: 0.001,
+    },
+    {
+      name: 'text-only details',
+      detailedTurn: 1,
+      snakeCase: false,
+      modality: 'TEXT',
+      empty: false,
+    },
+    { name: 'empty details', detailedTurn: 1, snakeCase: false, modality: 'AUDIO', empty: true },
+  ])(
+    'should apply Live Translate audio fallback per turn with $name',
+    async ({ detailedTurn, snakeCase, modality, empty, audioCost }) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            outputAudioTranscription: {},
+            translationConfig: { targetLanguageCode: 'pl' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          ...(audioCost === undefined ? {} : { audioCost }),
+        },
+      });
+      let completedInputs = 0;
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+        });
+        mockWs.send.mockImplementation((raw) => {
+          if (!JSON.parse(raw as string).realtimeInput?.audioStreamEnd) {
+            return;
+          }
+          completedInputs += 1;
+          const promptDetails = empty ? [] : [{ modality, tokenCount: 100 }];
+          const responseDetails = empty ? [] : [{ modality, tokenCount: 20 }];
+          const usage = snakeCase
+            ? {
+                prompt_token_count: 100,
+                response_token_count: 20,
+                total_token_count: 120,
+                ...(completedInputs === detailedTurn && {
+                  prompt_tokens_details: promptDetails,
+                  response_tokens_details: responseDetails,
+                }),
+              }
+            : {
+                promptTokenCount: 100,
+                responseTokenCount: 20,
+                totalTokenCount: 120,
+                ...(completedInputs === detailedTurn && {
+                  promptTokensDetails: promptDetails,
+                  responseTokensDetails: responseDetails,
+                }),
+              };
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: { text: 'Dzien dobry.' },
+              turnComplete: true,
+            },
+            [snakeCase ? 'usage_metadata' : 'usageMetadata']: usage,
+          });
+        });
+        return mockWs;
+      });
+      const input = {
+        role: 'user',
+        parts: [{ inline_data: { mime_type: 'audio/pcm;rate=16000', data: 'YXVkaW8=' } }],
+      };
+
+      const response = await provider.callApi(JSON.stringify([input, input]));
+
+      expect(completedInputs).toBe(2);
+      expect(response.error).toBeUndefined();
+      expect(response.tokenUsage).toMatchObject({
+        prompt: 200,
+        completion: 40,
+        total: 240,
+        numRequests: 2,
+      });
+      const audioTurns = modality === 'TEXT' ? 1 : 2;
+      expect(response.cost).toBeCloseTo(
+        audioTurns * (100 * (audioCost ?? 3.5 / 1e6) + 20 * (audioCost ?? 21 / 1e6)),
+        12,
+      );
+    },
+  );
+
   it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: {

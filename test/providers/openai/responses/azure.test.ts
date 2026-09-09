@@ -39,6 +39,63 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
       return JSON.parse(reqOptions.body);
     }
 
+    it.each(['provider', 'prompt'] as const)(
+      'uses the %s passthrough model capabilities instead of inherited Azure deployment hints',
+      async (owner) => {
+        const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: AZURE_BASE_URL,
+            reasoning_effort: 'high',
+            reasoning: { summary: 'concise' },
+            verbosity: 'low',
+            temperature: 0.7,
+            ...(owner === 'provider' && { passthrough: { model: 'gpt-4.1' } }),
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          owner === 'prompt'
+            ? {
+                vars: {},
+                prompt: {
+                  raw: 'Test prompt',
+                  label: 'override',
+                  config: { passthrough: { model: 'gpt-4.1' } },
+                },
+              }
+            : undefined,
+        );
+
+        expect(body.model).toBe('gpt-4.1');
+        expect(body).not.toHaveProperty('reasoning');
+        expect(body.text).not.toHaveProperty('verbosity');
+        expect(body.temperature).toBe(0.7);
+        expect(body.max_output_tokens).toBe(1024);
+      },
+    );
+
+    it('retains reasoning capabilities for an explicit reasoning model on Azure', async () => {
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          passthrough: { model: 'gpt-5' },
+          reasoning_effort: 'high',
+          verbosity: 'low',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe('gpt-5');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.text).toHaveProperty('verbosity', 'low');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('max_output_tokens');
+    });
+
     it('should include explicit reasoning and verbosity for Azure custom deployment names', async () => {
       mockAzureSuccessResponse();
 

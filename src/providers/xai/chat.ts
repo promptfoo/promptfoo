@@ -619,7 +619,7 @@ export function calculateXAICost(
      * reasoning), so it must NOT set this flag or reasoning is double-counted.
      */
     reasoningBilledSeparately?: boolean;
-    /** The response-confirmed processing tier. Priority processing doubles all token rates. */
+    /** The response-confirmed processing tier. Priority processing doubles catalog token rates. */
     serviceTier?: XAIServiceTier;
   },
 ): number | undefined {
@@ -652,10 +652,14 @@ export function calculateXAICost(
     model.cost.longContext && promptTokens >= model.cost.longContext.threshold
       ? model.cost.longContext
       : model.cost;
-  const inputCost = inputCostOverride ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  // Configured rates are final per-token overrides, including any tier premium.
+  const serviceTierMultiplier = options?.serviceTier === 'priority' ? 2 : 1;
+  const inputCost = inputCostOverride ?? modelCost.input * serviceTierMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * serviceTierMultiplier;
   const cacheReadCost =
-    config.cacheReadCost ?? inputCostOverride ?? modelCost.cache_read ?? inputCost;
+    config.cacheReadCost ??
+    inputCostOverride ??
+    (modelCost.cache_read ?? modelCost.input) * serviceTierMultiplier;
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
@@ -673,8 +677,7 @@ export function calculateXAICost(
       `inputCost=${inputCostTotal}, outputCost=${outputCostTotal}`,
   );
 
-  const serviceTierMultiplier = options?.serviceTier === 'priority' ? 2 : 1;
-  return serviceTierMultiplier * (inputCostTotal + outputCostTotal);
+  return inputCostTotal + outputCostTotal;
 }
 
 export function getXAICostInUsd(usage?: { cost_in_usd_ticks?: number }): number | undefined {

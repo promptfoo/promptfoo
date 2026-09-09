@@ -2195,6 +2195,37 @@ describe('Provider Registry', () => {
     );
 
     it.each([
+      'google:interactions:gemini-robotics-er-2-preview',
+      'palm:interactions:gemini-robotics-er-2-preview',
+      'google:interactions:gemini-omni-flash-preview',
+      'palm:interactions:gemini-omni-flash-preview',
+      'google:interactions:gemini-omni-1.1-flash',
+      'palm:interactions:gemini-omni-1.1-flash',
+      'vertex:interactions:gemini-omni-flash-preview',
+      'vertex:interactions:gemini-omni-1.1-flash-preview',
+    ])(
+      'preserves distinct configured IDs for explicit Interactions selector %s',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const providers = await Promise.all(
+          ['first-provider', 'second-provider'].map((id) =>
+            factory!.create(providerPath, { id, config: { apiKey: 'test-key' } }, bareContext),
+          ),
+        );
+
+        expect(providers.map((provider) => provider.id())).toEqual([
+          'first-provider',
+          'second-provider',
+        ]);
+        for (const provider of providers) {
+          expect(provider).toHaveProperty('modelName', providerPath.split(':').slice(2).join(':'));
+        }
+      },
+    );
+
+    it.each([
       'google:interactions:gemini-3.5-flash',
       'palm:interactions:gemini-3.5-flash',
       'vertex:interactions:gemini-robotics-er-2-preview',
