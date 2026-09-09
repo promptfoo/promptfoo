@@ -13,6 +13,8 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -123,6 +125,34 @@ describe('Gemini image rubric grading', () => {
     });
     expectGoogleImageRequest();
   });
+
+  it.each(['image-grader', `palm:${model}`, 'openai:responses:custom'])(
+    'preserves Google image requests through rate limiting with ID %s',
+    async (id) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const execute = vi.spyOn(registry, 'execute');
+      const loaded = await loadApiProvider(`palm:${model}`, { options: { id, config } });
+      const provider = wrapProviderWithRateLimiting(loaded, registry);
+
+      try {
+        const result = await matchesLlmRubric(
+          'Inspect the attached image',
+          '',
+          { provider },
+          undefined,
+          undefined,
+          { providerResponse: { output: '', images: [image] } },
+        );
+        expect(result).toMatchObject({ pass: true, score: 1, reason: 'Visible image' });
+        expect(provider.id()).toBe(id);
+        expect(execute).toHaveBeenCalledTimes(1);
+        expectGoogleImageRequest();
+      } finally {
+        execute.mockRestore();
+        registry.dispose();
+      }
+    },
+  );
 });
 
 describe('getRemoteGradingContext', () => {

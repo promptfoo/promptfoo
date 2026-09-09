@@ -6,7 +6,11 @@ import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { loadApiProvider } from '../../../src/providers';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -182,6 +186,107 @@ describe('GoogleLiveProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
+  });
+
+  describe.each([false, true])('image rubric grading, rate limited=%s', (rateLimited) => {
+    const model = 'gemini-3.1-flash-live-preview';
+
+    it.each([
+      undefined,
+      'live-grader',
+      `palm:live:${model}`,
+      'openai:responses:custom',
+      'anthropic:custom',
+    ])('sends native image input with grader ID %s', async (id) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const execute = vi.spyOn(registry, 'execute');
+      const loaded = await loadApiProvider(`google:live:${model}`, {
+        options: {
+          id,
+          config: {
+            apiKey: 'fixture-live-key',
+            maxRetries: 0,
+            timeoutMs: 500,
+            generationConfig: { response_modalities: ['text'] },
+          },
+        },
+      });
+      const grader = rateLimited ? wrapProviderWithRateLimiting(loaded, registry) : loaded;
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'Fixture image response');
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      try {
+        const result = await matchesLlmRubric(
+          'Inspect the attached image',
+          '',
+          { provider: grader },
+          undefined,
+          undefined,
+          { providerResponse: { images: [{ data: 'aW1hZ2U=', mimeType: 'image/png' }] } },
+        );
+
+        expect(result.pass).toBe(true);
+        expect(grader.id()).toBe(id || `google:live:${model}`);
+        const messages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+        expect(messages.slice(1)).toEqual([
+          { realtimeInput: { video: { mimeType: 'image/png', data: 'aW1hZ2U=' } } },
+          { realtimeInput: { text: expect.stringContaining('Inspect the attached image') } },
+        ]);
+        expect(execute).toHaveBeenCalledTimes(rateLimited ? 1 : 0);
+      } finally {
+        execute.mockRestore();
+        registry.dispose();
+      }
+    });
+
+    it('preserves Live API errors after sending the image', async () => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const loaded = await loadApiProvider(`palm:live:${model}`, {
+        options: {
+          id: 'live-grader',
+          config: { apiKey: 'fixture-live-key', maxRetries: 0, timeoutMs: 500 },
+        },
+      });
+      const grader = rateLimited ? wrapProviderWithRateLimiting(loaded, registry) : loaded;
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateMessage(mockWs, { error: { message: 'Fixture Live grading failure' } });
+        });
+        return mockWs;
+      });
+
+      try {
+        const result = await matchesLlmRubric(
+          'Inspect the attached image',
+          '',
+          { provider: grader },
+          undefined,
+          undefined,
+          { providerResponse: { images: [{ data: 'aW1hZ2U=', mimeType: 'image/png' }] } },
+        );
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('Fixture Live grading failure'),
+        });
+        expect(
+          mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string)),
+        ).toContainEqual({
+          realtimeInput: { video: { mimeType: 'image/png', data: 'aW1hZ2U=' } },
+        });
+      } finally {
+        registry.dispose();
+      }
+    });
   });
 
   it('should send client_content for older Live models', async () => {
