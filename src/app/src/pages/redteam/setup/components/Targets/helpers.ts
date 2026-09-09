@@ -21,7 +21,7 @@ export function withLocalProviderType(
   // The runtime ID identifies the protocol; retain the local editor choice in
   // the config, as we already do for WebSocket targets. It is not a model option.
   return providerId?.startsWith('openai:chat:') && isLocalOpenAiProviderType(providerType)
-    ? { ...config, type: providerType }
+    ? { apiKeyRequired: false, useDefaultApiKey: false, ...config, type: providerType }
     : config;
 }
 

@@ -51,9 +51,14 @@ beforeAll(() => {
     'groq',
     'cerebras',
   ];
+  const editorHelperUrl = new URL(
+    '../../src/app/src/pages/redteam/setup/components/Targets/helpers.ts',
+    import.meta.url,
+  );
   const storeUrl = new URL('../../src/app/src/stores/evalConfig.ts', import.meta.url);
   const script = `
     const { getProviderInitialConfig } = await import(${JSON.stringify(helperUrl.href)});
+    const { withLocalProviderType } = await import(${JSON.stringify(editorHelperUrl.href)});
     const initialConfigs = Object.fromEntries(
       ${JSON.stringify(providerTypes)}.map(type => [type, getProviderInitialConfig(type)])
     );
@@ -74,7 +79,10 @@ beforeAll(() => {
       })) {
         const target = structuredClone(initialConfigs[type]);
         target.id = 'openai:chat:tenant/private-served-model:Q4_K_M';
-        target.config = { ...target.config, ...config, stop: ['<end>'] };
+        // Replace the complete JSON just as the target editor does, then persist it.
+        target.config = withLocalProviderType(target.id, {
+          apiBaseUrl: target.config.apiBaseUrl, ...config, stop: ['<end>'],
+        }, type);
         useStore.getState().setConfig({ providers: [target] });
         const saved = localStorage.getItem('promptfoo');
         useStore.setState({ config: {} });

@@ -115,6 +115,11 @@ describe('generated target configuration round trips', () => {
         JSON.stringify(localConfig),
       );
       const savedConfig = JSON.parse(JSON.stringify(useRedTeamConfig.getState().config));
+      expect(savedConfig.target.config).toMatchObject({
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+        type,
+      });
       if (format === 'YAML') {
         const exported = yaml.load(generateOrderedYaml(savedConfig)) as {
           targets: ProviderOptions[];
@@ -159,7 +164,12 @@ describe('generated target configuration round trips', () => {
         JSON.stringify(editedConfig),
       );
       await user.click(screen.getByRole('button', { name: 'Format' }));
-      expect(useRedTeamConfig.getState().config.target.config).toMatchObject(editedConfig);
+      expect(useRedTeamConfig.getState().config.target.config).toMatchObject({
+        ...editedConfig,
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+        type,
+      });
       expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
       act(() =>
         useRedTeamConfig
@@ -169,6 +179,24 @@ describe('generated target configuration round trips', () => {
       expect(useRedTeamConfig.getState().providerType).toBe(type);
     },
   );
+
+  it('preserves an explicit local credential fallback opt-in after replacing and formatting JSON', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TargetEditor />);
+    await user.click(screen.getByText('vLLM', { selector: 'p' }).closest('[role="button"]')!);
+    const explicitAuthConfig = {
+      ...localConfig,
+      apiKeyRequired: true,
+      useDefaultApiKey: true,
+    };
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+      JSON.stringify(explicitAuthConfig),
+    );
+    await user.click(screen.getByRole('button', { name: 'Format' }));
+    expect(useRedTeamConfig.getState().config.target.config).toMatchObject(explicitAuthConfig);
+  });
 
   it.each(localTargets)(
     'keeps an untyped compatible import editable and preserves it when selecting $label',
@@ -230,6 +258,7 @@ describe('generated target configuration round trips', () => {
         JSON.stringify(config),
       );
       const savedConfig = JSON.parse(JSON.stringify(useRedTeamConfig.getState().config));
+
       expect(savedConfig.target).toEqual({ id, label: 'Saved target', config });
       view.unmount();
 

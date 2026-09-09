@@ -62,7 +62,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
         config.passthrough?.max_completion_tokens ??
         config.max_completion_tokens ??
         config.passthrough?.max_tokens ??
-        config.max_tokens;
+        config.max_tokens ??
+        body.max_tokens;
       if (maxCompletionTokens !== undefined) {
         body.max_completion_tokens = maxCompletionTokens;
       }

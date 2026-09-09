@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -15,6 +15,7 @@ describe('GroqProvider', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     restoreEnv();
     await clearCache();
   });
@@ -144,6 +145,28 @@ describe('GroqProvider', () => {
       if ('max_completion_tokens' in expected) {
         expect(body).not.toHaveProperty('max_tokens');
       }
+    },
+  );
+
+  it.each(
+    ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b'].flatMap((model) => [
+      { model, envCap: undefined, omitDefaults: false, expected: 1024 },
+      { model, envCap: '321', omitDefaults: false, expected: 321 },
+      { model, envCap: '0', omitDefaults: false, expected: 0 },
+      { model, envCap: '321', omitDefaults: true, expected: 321 },
+      { model, envCap: undefined, omitDefaults: true, expected: undefined },
+    ]),
+  )(
+    'retains inherited token limits for passthrough $model (env=$envCap, omitDefaults=$omitDefaults)',
+    async ({ model, envCap, omitDefaults, expected }) => {
+      vi.stubEnv('OPENAI_MAX_TOKENS', envCap);
+      const provider = new GroqProvider('llama-3.3-70b-versatile', {
+        config: { omitDefaults, passthrough: { model } },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body.model).toBe(model);
+      expect(body.max_completion_tokens).toBe(expected);
+      expect(body).not.toHaveProperty('max_tokens');
     },
   );
 
