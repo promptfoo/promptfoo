@@ -71,9 +71,9 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
 
-Bare `openclaw` targets OpenClaw's configured default agent through the stable upstream
-`openclaw/default` alias. Use `openclaw:main` or `openclaw:<agent-id>` when you want an explicit
-agent.
+Bare `openclaw` sends the HTTP model `openclaw` without an agent header. Current gateways use
+the configured default agent; older HTTP gateways such as v2026.3.8 fall back to `main`. Use
+`openclaw:main` or `openclaw:<agent-id>` to select an agent explicitly.
 
 For `openclaw:agent:*`, promptfoo generates an isolated session key per call by default so evals do
 not reuse your persistent OpenClaw session. Set `session_key` explicitly if you want continuity. The
