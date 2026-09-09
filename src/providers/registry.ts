@@ -75,6 +75,7 @@ import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { usesCustomModelProvider } from './openai/codexApiKeyGating';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
@@ -86,6 +87,7 @@ import {
   assertOpenAiApiModel,
   assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
+  isOpenAiFirstPartyApiUrl,
 } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
@@ -1045,10 +1047,19 @@ export const providerMap: ProviderFactory[] = [
       );
       const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
 
+      const codexBaseUrl =
+        providerOptions.config?.base_url ?? providerOptions.config?.cli_config?.openai_base_url;
+      if (
+        ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex'].includes(modelType) &&
+        !usesCustomModelProvider(providerOptions.config ?? {}) &&
+        isOpenAiFirstPartyApiUrl(typeof codexBaseUrl === 'string' ? codexBaseUrl : undefined)
+      ) {
+        assertOpenAiModelEndpointCompatibility(modelName || configuredModel);
+      }
+
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
         const codexModel = modelName || configuredModel;
-        assertOpenAiModelEndpointCompatibility(codexModel);
         const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexAppServerProvider({
@@ -1070,7 +1081,6 @@ export const providerMap: ProviderFactory[] = [
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
         const codexModel = modelName || configuredModel;
-        assertOpenAiModelEndpointCompatibility(codexModel);
         const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({

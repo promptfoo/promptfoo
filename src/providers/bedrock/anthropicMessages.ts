@@ -19,6 +19,24 @@ const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set([
   'x-api-key',
   'anthropic-version',
 ]);
+const BEDROCK_NATIVE_HOSTNAME =
+  /^(?:[a-z0-9-]+\.)?bedrock(?:-mantle|-runtime)?(?:-fips)?\.[a-z0-9-]+(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/;
+
+function isConfiguredBedrockProxy(apiBaseUrl: string | undefined): boolean {
+  if (!apiBaseUrl) {
+    return false;
+  }
+  try {
+    const { protocol, hostname } = new URL(apiBaseUrl);
+    return (
+      (protocol === 'https:' || protocol === 'http:') &&
+      !BEDROCK_NATIVE_HOSTNAME.test(hostname.replace(/\.+$/, ''))
+    );
+  } catch {
+    return false;
+  }
+}
+
 const RUNTIME_MESSAGES_MODELS = new Set([
   'us.anthropic.claude-fable-5-1',
   'global.anthropic.claude-fable-5-1',
@@ -111,9 +129,14 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   protected override sanitizeRequestHeaders(
     headers: Record<string, string>,
   ): Record<string, string> {
+    // A configured proxy may require its own explicit bearer credential.
+    // Native AWS credentials and Anthropic-scoped defaults stay isolated.
+    const allowProxyAuthorization = isConfiguredBedrockProxy(this.config.apiBaseUrl);
     return Object.fromEntries(
       Object.entries(headers).filter(
-        ([name]) => !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+        ([name]) =>
+          (allowProxyAuthorization && name.toLowerCase() === 'authorization') ||
+          !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
       ),
     );
   }

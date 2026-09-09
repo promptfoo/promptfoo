@@ -1174,6 +1174,77 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe(mockProviderOptions.id);
     });
 
+    const codexRoutes = ['codex-sdk', 'codex', 'codex-app-server', 'codex-desktop'];
+    const customCodexBackends = [
+      { backend: 'base_url', config: { base_url: 'https://gateway.example/v1' } },
+      { backend: 'model_provider', config: { model_provider: 'tenant' } },
+      { backend: 'raw provider', config: { cli_config: { model_provider: 'tenant' } } },
+      {
+        backend: 'raw OpenAI base URL',
+        config: { cli_config: { openai_base_url: 'https://gateway.example/v1' } },
+      },
+      {
+        backend: 'first-class custom provider',
+        config: { model_provider: 'tenant', cli_config: { model_provider: 'openai' } },
+      },
+    ];
+
+    it.each(
+      codexRoutes.flatMap((route) =>
+        customCodexBackends.flatMap((backend) =>
+          ['vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'].map((model) => ({
+            route,
+            ...backend,
+            model,
+          })),
+        ),
+      ),
+    )('preserves opaque $model on $route with $backend', async ({ route, config, model }) => {
+      const factory = providerMap.find((candidate) => candidate.test(`openai:${route}`));
+      for (const inline of [true, false]) {
+        const provider = await factory!.create(
+          `openai:${route}${inline ? `:${model}` : ''}`,
+          {
+            ...mockProviderOptions,
+            config: { ...mockProviderOptions.config, ...config, ...(!inline && { model }) },
+          },
+          mockContext,
+        );
+
+        expect(provider).toHaveProperty('config.model', model);
+        expect(provider.id()).toBe(mockProviderOptions.id);
+      }
+    });
+
+    it.each(
+      codexRoutes.flatMap((route) =>
+        [
+          { backend: 'explicit OpenAI host', config: { base_url: 'https://api.openai.com/v1' } },
+          { backend: 'explicit OpenAI provider', config: { model_provider: 'OpenAI' } },
+          {
+            backend: 'first-class native provider',
+            config: { model_provider: 'openai', cli_config: { model_provider: 'tenant' } },
+          },
+          {
+            backend: 'first-class native URL',
+            config: {
+              base_url: 'https://api.openai.com/v1',
+              cli_config: { openai_base_url: 'https://gateway.example/v1' },
+            },
+          },
+        ].map((backend) => ({ route, ...backend })),
+      ),
+    )('keeps native model rejection on $route with $backend', async ({ route, config }) => {
+      const factory = providerMap.find((candidate) => candidate.test(`openai:${route}`));
+      await expect(
+        factory!.create(
+          `openai:${route}:gpt-transcribe`,
+          { ...mockProviderOptions, config: { ...mockProviderOptions.config, ...config } },
+          mockContext,
+        ),
+      ).rejects.toThrow(/transcription-only/);
+    });
+
     it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'])(
       'allows custom OpenAI-compatible endpoints to route their own %s model',
       async (customModel) => {
