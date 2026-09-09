@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { isAbortError } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
@@ -822,6 +823,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);
 

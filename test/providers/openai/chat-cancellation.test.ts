@@ -395,6 +395,65 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it.each([undefined, new Error('cancel xAI fetch'), 'cancel xAI fetch'])(
+    'propagates cancellation through the inherited xAI request (%s)',
+    async (reason) => {
+      const started = createDeferred<AbortSignal>();
+      fetch.mockImplementationOnce(
+        (_url, options) =>
+          new Promise((_resolve, reject) => {
+            const signal = options!.signal!;
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            started.resolve(signal);
+          }),
+      );
+      const target = await loadApiProvider('xai:grok-4', {
+        options: { config: { apiKey: 'xai-fixture-key', maxRetries: 0 } },
+      });
+      const controller = new AbortController();
+      const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        ...(reason instanceof Error ? { message: reason.message } : {}),
+      });
+      const signal = await started.promise;
+      controller.abort(reason);
+      await rejected;
+      if (reason === undefined) {
+        await expect(pending).rejects.toBe(controller.signal.reason);
+      }
+      expect(signal.aborted).toBe(true);
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(logger.error).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves xAI handling for an unrelated preparation error after cancellation', async () => {
+    const target = (await loadApiProvider('xai:grok-4', {
+      options: { config: { apiKey: 'xai-fixture-key', maxRetries: 0 } },
+    })) as OpenAiChatCompletionProvider;
+    const controller = new AbortController();
+    const reason = new Error('xAI preparation failed');
+    vi.spyOn(target, 'getOpenAiBody').mockImplementationOnce(async () => {
+      controller.abort(reason);
+      throw new Error(reason.message);
+    });
+    expect(await target.callApi('fixture', undefined, { abortSignal: controller.signal })).toEqual({
+      error:
+        'x.ai API error: xAI preparation failed\n\nIf this persists, verify your API key at https://x.ai/',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('retains successful inherited xAI responses', async () => {
+    fetch.mockResolvedValueOnce(response());
+    const target = await loadApiProvider('xai:grok-4', {
+      options: { config: { apiKey: 'xai-fixture-key', maxRetries: 0 } },
+    });
+    expect(await target.callApi('fixture')).toMatchObject({ output: 'fixture output' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('cancels an inherited Envoy request while retaining its model, normalized URL and named key', async () => {
     mockProcessEnv({
       ENVOY_API_BASE_URL: 'https://gateway.fixture.test',
