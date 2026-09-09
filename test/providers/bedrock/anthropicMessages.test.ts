@@ -565,31 +565,51 @@ describe('Bedrock Anthropic Messages provider', () => {
       name: 'provider Authorization',
       apiBaseUrl: 'https://proxy.example/anthropic',
       headerName: 'Authorization',
+      apiKeyHeaderName: undefined,
       promptHeaders: false,
     },
     {
       name: 'prompt mixed-case authorization',
       apiBaseUrl: 'https://proxy.example/anthropic',
       headerName: 'aUtHoRiZaTiOn',
+      apiKeyHeaderName: 'x-ApI-kEy',
       promptHeaders: true,
     },
     {
       name: 'an AWS API Gateway proxy',
       apiBaseUrl: 'https://gateway.execute-api.us-east-1.amazonaws.com/anthropic',
       headerName: 'Authorization',
+      apiKeyHeaderName: 'X-API-Key',
+      promptHeaders: false,
+    },
+    {
+      name: 'a proxy with a lowercase API key header',
+      apiBaseUrl: 'https://proxy.example/anthropic',
+      headerName: 'Authorization',
+      apiKeyHeaderName: 'x-api-key',
       promptHeaders: false,
     },
   ])(
-    'preserves explicit proxy authorization from $name while isolating Anthropic credentials',
-    async ({ apiBaseUrl, headerName, promptHeaders }) => {
+    'preserves explicit proxy credentials from $name while isolating Anthropic defaults',
+    async ({ apiBaseUrl, headerName, apiKeyHeaderName, promptHeaders }) => {
       disableCache();
       restoreEnv = mockProcessEnv({
         ANTHROPIC_AUTH_TOKEN: 'ambient-anthropic-token',
         ANTHROPIC_CUSTOM_HEADERS:
-          'Authorization: Bearer ambient-token\nX-Ambient-Secret: ambient-only',
+          'Authorization: Bearer ambient-token\nX-API-Key: ambient-key\nX-Ambient-Secret: ambient-only',
       });
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(
+      const expectedApiKey = apiKeyHeaderName ? 'explicit-proxy-key' : 'bedrock-key';
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+        if (new Headers(init?.headers).get('x-api-key') !== expectedApiKey) {
+          return new Response(
+            JSON.stringify({
+              type: 'error',
+              error: { type: 'permission_error', message: 'Incorrect gateway X-API-Key' },
+            }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response(
           JSON.stringify({
             content: [{ type: 'text', text: 'ok' }],
             model: 'anthropic.claude-fable-5',
@@ -601,11 +621,11 @@ describe('Bedrock Anthropic Messages provider', () => {
             usage: { input_tokens: 1, output_tokens: 1 },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
-      );
+        );
+      });
       const explicitHeaders = {
         [headerName]: 'Bearer explicit-proxy-token',
-        'X-Api-Key': 'wrong-api-key',
+        ...(apiKeyHeaderName ? { [apiKeyHeaderName]: 'explicit-proxy-key' } : {}),
         'Anthropic-Version': 'wrong-version',
         'X-Tenant': 'configured-tenant',
       };
@@ -618,7 +638,7 @@ describe('Bedrock Anthropic Messages provider', () => {
         },
         env: {
           ANTHROPIC_CUSTOM_HEADERS:
-            'Authorization: Bearer scoped-token\nX-Scoped-Secret: scoped-only',
+            'Authorization: Bearer scoped-token\nx-api-key: scoped-key\nX-Scoped-Secret: scoped-only',
         },
       });
 
@@ -630,11 +650,12 @@ describe('Bedrock Anthropic Messages provider', () => {
       );
 
       expect(result.error).toBeUndefined();
+      expect(result.output).toBe('ok');
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       expect(String(fetchSpy.mock.calls[0][0])).toBe(`${apiBaseUrl}/v1/messages`);
       const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
       expect(headers.get('authorization')).toBe('Bearer explicit-proxy-token');
-      expect(headers.get('x-api-key')).toBe('bedrock-key');
+      expect(headers.get('x-api-key')).toBe(expectedApiKey);
       expect(headers.get('anthropic-version')).toBe('2023-06-01');
       expect(headers.get('x-tenant')).toBe('configured-tenant');
       expect(headers.get('x-ambient-secret')).toBeNull();
