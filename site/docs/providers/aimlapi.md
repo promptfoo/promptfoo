@@ -96,7 +96,7 @@ AI/ML API offers models from multiple providers. Here are some of the most popul
 - **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
 - **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
 - **Claude Sonnet 5**: `anthropic/claude-sonnet-5` - Balanced speed and capability
-- **Claude Opus 5**: `anthropic/claude-opus-5` - Anthropic's most capable model
+- **Claude Opus 5**: `anthropic/claude-opus-5` - Anthropic's flagship Opus-tier model
 - **Gemini 2.5 Pro**: `google/gemini-2.5-pro-preview` - Google's versatile multimodal model
 - **Gemini 2.5 Flash**: `google/gemini-2.5-flash` - Ultra-fast streaming responses
 - **Grok 3 Beta**: `x-ai/grok-3-beta` - xAI's most advanced model
