@@ -44,7 +44,12 @@ function getExampleDirectoryUrl(dirPath: string, ref: string): URL {
 
 function getUnsupportedExampleReason(exampleName: string): string | undefined {
   // Match the effective request path, including URL dot segments and backslashes.
-  const { pathname } = getExampleDirectoryUrl(exampleName, VERSION);
+  let { pathname } = getExampleDirectoryUrl(exampleName, VERSION);
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    // Preserve the original request behavior for malformed percent escapes.
+  }
   const root = pathname.startsWith(GITHUB_EXAMPLES_PATH)
     ? pathname.slice(GITHUB_EXAMPLES_PATH.length).split('/')[0]
     : undefined;
@@ -281,19 +286,9 @@ async function logExampleInstructions(
 
   if (exampleName.includes('redteam') || !isRunnableFromRoot) {
     if (readmeExists) {
-      logger.info(
-        dedent`
-
-        View the README file at ${chalk.bold(readmePath)} to get started!
-        `,
-      );
+      logger.info(`View the README file at ${chalk.bold(readmePath)} to get started!`);
     } else {
-      logger.info(
-        dedent`
-
-        View the example at ${chalk.bold(docsUrl)} to get started!
-        `,
-      );
+      logger.info(`View the example at ${chalk.bold(docsUrl)} to get started!`);
     }
     return;
   }
@@ -301,18 +296,18 @@ async function logExampleInstructions(
   const runCommand = promptfooCommand('eval');
   if (readmeExists) {
     logger.info(
-      dedent`
+      dedent(`
 
       View the README at ${chalk.bold(readmePath)} or run:
 
       \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
 
       to get started!
-      `,
+      `),
     );
   } else {
     logger.info(
-      dedent`
+      dedent(`
 
       Run:
 
@@ -320,7 +315,7 @@ async function logExampleInstructions(
 
       to get started.
       Example docs: ${chalk.bold(docsUrl)}
-      `,
+      `),
     );
   }
 }
