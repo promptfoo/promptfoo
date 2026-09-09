@@ -90,7 +90,7 @@ These IDs select the same provider:
 | `openai:codex-sdk:gpt-5.6-terra` | Model in the ID                               |
 | `openai:codex:gpt-5.6-terra`     | Short alias for the same provider and model   |
 
-A model in the ID takes precedence over `config.model`. To compare models, add one provider entry per model.
+A model in the ID takes precedence over the provider's `config.model`. To compare models, add one provider entry per model.
 
 Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-5.6-terra` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Astra requires Codex 0.153.1 or later; the installation above includes a compatible runtime.
 
@@ -469,7 +469,9 @@ The [Bedrock example](https://github.com/promptfoo/promptfoo/tree/main/examples/
 
 ## Configuration reference
 
-All fields below go under the provider's `config`. Unknown provider config keys are rejected. Prompt-level configuration takes precedence over provider configuration; unrelated prompt-level keys are ignored, while invalid values for known fields still fail validation.
+All fields below go under the provider's `config`. Unknown provider config keys are rejected. Prompt-level configuration overrides provider settings for a Codex turn; unrelated prompt-level keys are ignored, while invalid values for known fields still fail validation.
+
+Set `maxRetries` on the provider itself. The scheduler reads it from the provider configuration, so a prompt-level override does not change the retry count.
 
 ### Model and execution
 
