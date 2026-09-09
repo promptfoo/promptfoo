@@ -360,7 +360,8 @@ export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
  */
 export function buildOpenClawModelName(agentId?: string): string {
   const normalizedAgentId = normalizeOpenClawAgentId(agentId);
-  return normalizedAgentId ? `openclaw/${normalizedAgentId}` : 'openclaw/default';
+  // Older HTTP gateways interpret `openclaw/default` as a literal agent named `default`.
+  return normalizedAgentId ? `openclaw/${normalizedAgentId}` : 'openclaw';
 }
 
 function normalizeHeaderValue(value: string | undefined): string | undefined {

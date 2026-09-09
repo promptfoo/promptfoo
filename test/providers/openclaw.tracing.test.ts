@@ -42,7 +42,7 @@ describe('OpenClaw provider tracing', () => {
   });
 
   it.each([
-    { agentId: undefined, providerId: 'openclaw', model: 'openclaw/default' },
+    { agentId: undefined, providerId: 'openclaw', model: 'openclaw' },
     { agentId: 'main', providerId: 'openclaw:main', model: 'openclaw/main' },
     {
       agentId: 'coding-agent',
@@ -53,7 +53,7 @@ describe('OpenClaw provider tracing', () => {
       agentId: undefined,
       id: 'customer-gateway',
       providerId: 'customer-gateway',
-      model: 'openclaw/default',
+      model: 'openclaw',
     },
   ])(
     'attributes $providerId Chat calls to OpenClaw',
@@ -130,14 +130,14 @@ describe('OpenClaw provider tracing', () => {
     expect(fetchWithCache).toHaveBeenCalledTimes(1);
     const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
     expect(url).toBe('http://127.0.0.1:18789/v1/responses');
-    expect(JSON.parse(request?.body as string).model).toBe('openclaw/default');
+    expect(JSON.parse(request?.body as string).model).toBe('openclaw');
 
     const spans = exporter.getFinishedSpans();
     expect(spans).toHaveLength(1);
     expect(spans[0].attributes).toMatchObject({
       'gen_ai.provider.name': 'openclaw',
       'gen_ai.operation.name': 'chat',
-      'gen_ai.request.model': 'openclaw/default',
+      'gen_ai.request.model': 'openclaw',
       'promptfoo.provider.id': 'openclaw:responses',
     });
     expect(spans[0].attributes).not.toHaveProperty('openai.api.type');

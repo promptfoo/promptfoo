@@ -548,12 +548,12 @@ describe('OpenClaw Provider', () => {
 
   describe('buildOpenClawModelName', () => {
     it('should build slash-style OpenClaw agent target model names', () => {
-      expect(buildOpenClawModelName()).toBe('openclaw/default');
+      expect(buildOpenClawModelName()).toBe('openclaw');
       expect(buildOpenClawModelName('main')).toBe('openclaw/main');
       expect(buildOpenClawModelName('default')).toBe('openclaw/default');
       expect(buildOpenClawModelName('openclaw')).toBe('openclaw/openclaw');
-      expect(buildOpenClawModelName('openclaw/default')).toBe('openclaw/default');
-      expect(buildOpenClawModelName('OPENCLAW/DEFAULT')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('openclaw/default')).toBe('openclaw');
+      expect(buildOpenClawModelName('OPENCLAW/DEFAULT')).toBe('openclaw');
       expect(buildOpenClawModelName('openclaw:default')).toBe('openclaw/default');
       expect(buildOpenClawModelName('agent:default')).toBe('openclaw/default');
       expect(buildOpenClawModelName('openclaw:beta')).toBe('openclaw/beta');
@@ -561,9 +561,9 @@ describe('OpenClaw Provider', () => {
       expect(buildOpenClawModelName('openclaw/beta')).toBe('openclaw/beta');
       expect(buildOpenClawModelName('openclaw: beta ')).toBe('openclaw/beta');
       expect(buildOpenClawModelName('agent: beta ')).toBe('openclaw/beta');
-      expect(buildOpenClawModelName('openclaw:')).not.toBe('openclaw/default');
-      expect(buildOpenClawModelName('openclaw/')).not.toBe('openclaw/default');
-      expect(buildOpenClawModelName('agent:')).not.toBe('openclaw/default');
+      expect(buildOpenClawModelName('openclaw:')).not.toBe('openclaw');
+      expect(buildOpenClawModelName('openclaw/')).not.toBe('openclaw');
+      expect(buildOpenClawModelName('agent:')).not.toBe('openclaw');
     });
   });
 
@@ -694,6 +694,95 @@ describe('OpenClaw Provider', () => {
   describe.each([
     { name: 'chat', Provider: OpenClawChatProvider },
     { name: 'responses', Provider: OpenClawResponsesProvider },
+  ])('$name HTTP default routing', ({ name, Provider }) => {
+    it.each([
+      { gateway: 'v2026.3.8', configuredDefault: 'main' },
+      { gateway: 'current', configuredDefault: 'dev' },
+    ])(
+      'routes omitted and named-default agents through $gateway HTTP parsing',
+      async ({ gateway, configuredDefault }) => {
+        vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+        const gatewayAgents = [
+          { id: 'main', default: configuredDefault === 'main' },
+          { id: 'dev', default: configuredDefault === 'dev' },
+          { id: 'default', default: false },
+        ];
+        const routes: { model: string; agent: string; sessionKey: string }[] = [];
+        mockFetchWithCache.mockImplementation(async (_url, options) => {
+          const body = JSON.parse(options.body);
+          const headers = new Headers(options.headers);
+          // OpenClaw v2026.3.8 http-utils.ts:37-63 parses the suffix literally,
+          // then falls back to main. Current gateways also recognize plain openclaw.
+          const model = body.model.trim();
+          const match =
+            model.match(/^openclaw[:/]([a-z0-9][a-z0-9_-]{0,63})$/i) ??
+            model.match(/^agent:([a-z0-9][a-z0-9_-]{0,63})$/i);
+          const fromModel =
+            gateway === 'current' && ['openclaw', 'openclaw/default'].includes(model.toLowerCase())
+              ? gatewayAgents.find((agent) => agent.default)?.id
+              : match?.[1]?.toLowerCase();
+          const agent =
+            headers.get('x-openclaw-agent-id')?.trim().toLowerCase() ||
+            headers.get('x-openclaw-agent')?.trim().toLowerCase() ||
+            fromModel ||
+            'main';
+          expect(gatewayAgents.some((candidate) => candidate.id === agent)).toBe(true);
+          const sessionKey =
+            headers.get('x-openclaw-session-key') || `agent:${agent}:${name}:fixture`;
+          routes.push({ model, agent, sessionKey });
+          const output = `route:${agent}`;
+          return {
+            data:
+              name === 'chat'
+                ? {
+                    choices: [
+                      { message: { role: 'assistant', content: output }, finish_reason: 'stop' },
+                    ],
+                  }
+                : {
+                    output: [
+                      {
+                        type: 'message',
+                        role: 'assistant',
+                        content: [{ type: 'output_text', text: output }],
+                      },
+                    ],
+                  },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+          };
+        });
+
+        for (const agentId of [undefined, 'default']) {
+          const provider = new Provider(agentId, {
+            config: { gateway_url: 'http://test:18789' },
+          });
+          const expectedAgent = agentId ?? configuredDefault;
+          const response = await provider.callApi('Harmless routing fixture');
+          expect(response.error, response.error).toBeUndefined();
+          expect(response.output).toBe(`route:${expectedAgent}`);
+        }
+        expect(routes).toEqual([
+          {
+            model: 'openclaw',
+            agent: configuredDefault,
+            sessionKey: `agent:${configuredDefault}:${name}:fixture`,
+          },
+          {
+            model: 'openclaw/default',
+            agent: 'default',
+            sessionKey: `agent:default:${name}:fixture`,
+          },
+        ]);
+      },
+    );
+  });
+
+  describe.each([
+    { name: 'chat', Provider: OpenClawChatProvider },
+    { name: 'responses', Provider: OpenClawResponsesProvider },
   ])('$name prompt model isolation', ({ name, Provider }) => {
     beforeEach(() => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -732,7 +821,7 @@ describe('OpenClaw Provider', () => {
 
       expect(result).toEqual(baseline);
       expect(result.body).toMatchObject({
-        model: 'openclaw/default',
+        model: 'openclaw',
         temperature: 0.25,
         user: 'prompt-user',
         [name === 'chat' ? 'max_tokens' : 'max_output_tokens']: 73,
@@ -821,7 +910,7 @@ describe('OpenClaw Provider', () => {
     it('should target the configured default agent when no agent ID is provided', () => {
       const provider = new OpenClawChatProvider(undefined, {});
       expect(provider.id()).toBe('openclaw');
-      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.modelName).toBe('openclaw');
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
     });
 
@@ -835,7 +924,7 @@ describe('OpenClaw Provider', () => {
     it('should normalize the canonical default alias without an explicit agent header', () => {
       const provider = new OpenClawChatProvider('OPENCLAW/DEFAULT', {});
       expect(provider.id()).toBe('openclaw');
-      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.modelName).toBe('openclaw');
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
     });
 
@@ -866,7 +955,7 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt');
 
-      expect(result.body.model).toBe('openclaw/default');
+      expect(result.body.model).toBe('openclaw');
       expect(result.config.passthrough).toEqual({});
     });
 
@@ -1202,7 +1291,7 @@ describe('OpenClaw Provider', () => {
     it('should target the configured default agent when no agent ID is provided', () => {
       const provider = new OpenClawResponsesProvider(undefined, {});
       expect(provider.id()).toBe('openclaw:responses');
-      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.modelName).toBe('openclaw');
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
     });
 
@@ -1285,7 +1374,7 @@ describe('OpenClaw Provider', () => {
         },
       });
 
-      expect(result.body.model).toBe('openclaw/default');
+      expect(result.body.model).toBe('openclaw');
     });
 
     it('should strip text field from request body in getOpenAiBody', async () => {
@@ -1613,7 +1702,7 @@ describe('OpenClaw Provider', () => {
     it('should target the configured default agent when no agent ID is provided', () => {
       const provider = new OpenClawEmbeddingProvider(undefined, {});
       expect(provider.id()).toBe('openclaw:embedding');
-      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.modelName).toBe('openclaw');
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
     });
 
@@ -1684,7 +1773,7 @@ describe('OpenClaw Provider', () => {
 
       await provider.callEmbeddingApi('embed this');
 
-      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe('openclaw/default');
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe('openclaw');
     });
 
     it('should send backend embedding model override as an OpenClaw header', async () => {
