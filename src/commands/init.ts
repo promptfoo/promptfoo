@@ -11,7 +11,12 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './exampleAliases';
+import {
+  EXAMPLE_ALIASES,
+  EXAMPLE_REPLACEMENTS,
+  getUnsupportedExampleReason,
+  REMOVED_EXAMPLES,
+} from './exampleAliases';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -73,7 +78,7 @@ function extractRunnableExamples(tree: GitHubTreeItem[]): string[] {
     }
 
     const exampleDir = path.posix.dirname(item.path).replace(/^examples\//, '');
-    if (exampleDir && exampleDir !== '.') {
+    if (exampleDir && exampleDir !== '.' && !getUnsupportedExampleReason(exampleDir)) {
       examples.add(exampleDir);
     }
   }
@@ -140,6 +145,10 @@ export async function downloadDirectory(
   targetDir: string,
   refs: string[] = DEFAULT_EXAMPLE_REFS,
 ): Promise<void> {
+  const unsupportedReason = getUnsupportedExampleReason(dirPath);
+  if (unsupportedReason) {
+    throw new Error(`Example '${dirPath}' is unavailable. ${unsupportedReason}`);
+  }
   const contents = await fetchExampleDirectoryContents(dirPath, refs);
 
   for (const item of contents) {
@@ -346,6 +355,10 @@ export async function handleExampleDownload(
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      if (getUnsupportedExampleReason(exampleName)) {
+        process.exitCode = 1;
+        return exampleName;
+      }
       attemptDownload = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
