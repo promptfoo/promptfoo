@@ -782,7 +782,7 @@ const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     },
   })),
 ];
-// Historical billing compatibility export; these IDs are excluded from current discovery.
+/** @deprecated Historical billing metadata only; these native models retired July 23, 2026. */
 export const OPENAI_DEEP_RESEARCH_MODELS = OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS;
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility

@@ -276,7 +276,9 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex').
+   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */

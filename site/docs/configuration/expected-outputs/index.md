@@ -175,7 +175,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
@@ -439,12 +439,12 @@ For more advanced test cases, we recommend using a testing framework like [Jest 
 If you have a set of common assertions that you want to apply to multiple test cases, you can create assertion templates and reuse them across your configuration.
 
 ```yaml
-// highlight-start
+# highlight-start
 assertionTemplates:
   containsMentalHealth:
     type: javascript
     value: output.toLowerCase().includes('mental health')
-// highlight-end
+# highlight-end
 
 prompts:
   - file://prompt1.txt
@@ -456,13 +456,13 @@ tests:
   - vars:
       input: Tell me about the benefits of exercise.
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
   - vars:
       input: How can I improve my well-being?
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.
