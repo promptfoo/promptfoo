@@ -24,6 +24,8 @@ providers:
   - id: truefoundry:anthropic-main/claude-sonnet-5
     label: 'Claude Sonnet 5 via TrueFoundry'
     config:
+      # The gateway wrapper sends `temperature: 0` by default; Claude 5 rejects it.
+      omitDefaults: true
       max_tokens: 500
       metadata:
         user_id: 'example-user'

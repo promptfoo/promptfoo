@@ -9,7 +9,9 @@ providers:
   - id: anthropic:messages:claude-sonnet-5
     config:
       # Sonnet 5 rejects temperature/top_p/top_k at the model level.
-      max_tokens: 2500
+      # Server-tool results are large and thinking shares this budget, so a tight
+      # max_tokens gets spent on the transcript before the model writes its answer.
+      max_tokens: 8000
       tools:
         # Current server-tool versions (dynamic filtering, no beta header required).
         - type: web_search_20260209
@@ -68,7 +70,7 @@ tests:
         value: ['Claude', 'Opus', 'capabilities', 'model']
         reason: 'Should discuss the Claude model family specifically'
       - type: llm-rubric
-        value: 'Provides a comprehensive research-based analysis with multiple information sources'
+        value: 'Provides a focused, research-based report that cites the source it fetched'
       - type: contains-any
         value: ['search', 'found', 'according', 'research', 'sources']
         reason: 'Should indicate research methodology was used'

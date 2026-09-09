@@ -121,7 +121,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --max-concurrency 5
 
 ## Key Findings
 
-1. **Universal Left Bias**: All major AI models (GPT-4.1, Gemini 2.5 Pro, Claude Opus 5, Grok 4) lean left of center
+1. **Universal Left Bias**: All major AI models (GPT-4.1, Gemini 2.5 Pro, Claude Opus 4, Grok 4) lean left of center
 2. **Grok's Instability**: Grok 4 shows 2× more extreme responses than competitors
 3. **Corporate Overcorrection**: Grok is 14.1% harsher on Musk companies than other corporations
 4. **Judge Bias**: Models score themselves 0.09 points more favorably on average
