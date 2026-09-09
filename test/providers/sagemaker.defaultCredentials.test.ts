@@ -67,6 +67,7 @@ describe('SageMaker default SDK credentials across idle cleanup', () => {
   let destroyedHandlers: Set<HttpHandler>;
   let providers: SageMakerCompletionProvider[];
   let ssoReply: (generation: number) => Promise<ReturnType<typeof response>>;
+  let sageReply: (call: TransportCall) => Promise<ReturnType<typeof response>>;
   let originalProcessInterceptor: unknown;
 
   function renewToken(expiresAt = Date.now() + hour) {
@@ -132,6 +133,7 @@ sso_role_name = TestRole
         throw new Error('Unexpected network request in offline default credential test');
       });
     }
+    sageReply = async () => response({ output: 'offline response' });
     ssoCalls = [];
     stsCalls = [];
     sageCalls = [];
@@ -190,7 +192,7 @@ sso_role_name = TestRole
       }
       expect(request.hostname).toMatch(/^runtime\.sagemaker\./);
       sageCalls.push(call);
-      return response({ output: 'offline response' });
+      return sageReply(call);
     });
   });
 
@@ -215,6 +217,270 @@ sso_role_name = TestRole
     vi.unstubAllEnvs();
     vi.useRealTimers();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  it('retains adaptive retry quota and throttle state across sequential rows', async () => {
+    await configure('', null);
+    vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
+    const provider = createProvider({
+      accessKeyId: 'EXPLICIT',
+      secretAccessKey: 'explicit-secret',
+    });
+    const clients: SageMakerRuntimeClient[] = [];
+    const initialize = provider.getSageMakerRuntimeInstance.bind(provider);
+    vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockImplementation(async (...args) => {
+      const client: SageMakerRuntimeClient = await initialize(...args);
+      clients.push(client);
+      return client;
+    });
+    await expectSignedRow(provider, 'EXPLICIT');
+    const strategy = await clients[0].config.retryStrategy();
+    if (!('acquireInitialRetryToken' in strategy)) {
+      throw new Error('Expected the SDK adaptive retry strategy');
+    }
+    const adaptive = strategy as typeof strategy & {
+      standardRetryStrategy: { getCapacity(): number };
+      rateLimiter: {
+        updateClientSendingRate(error: { errorType: string }): void;
+        getSendToken(): Promise<void>;
+      };
+    };
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const initial = await strategy.acquireInitialRetryToken('');
+    await strategy.refreshRetryTokenForRetry(initial, { errorType: 'TRANSIENT' });
+    const capacity = adaptive.standardRetryStrategy.getCapacity();
+    expect(capacity).toBeLessThan(500);
+    adaptive.rateLimiter.updateClientSendingRate({ errorType: 'THROTTLING' });
+    const throttleGate = vi.spyOn(adaptive.rateLimiter, 'getSendToken').mockResolvedValue();
+    await expectSignedRow(provider, 'EXPLICIT');
+    const nextStrategy = await clients[1].config.retryStrategy();
+    expect(clients[1]).not.toBe(clients[0]);
+    expect(nextStrategy).toBe(strategy);
+    expect(throttleGate).toHaveBeenCalledOnce();
+    expect(adaptive.standardRetryStrategy.getCapacity()).toBe(capacity + 1);
+
+    vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '1');
+    await expectSignedRow(provider, 'EXPLICIT');
+    expect(await clients[2].config.retryStrategy()).not.toBe(strategy);
+    expect(await clients[2].config.maxAttempts()).toBe(1);
+  });
+
+  it('resets retry state when retry settings change during overlapping rows', async () => {
+    await configure('', null);
+    vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
+    const provider = createProvider({
+      accessKeyId: 'EXPLICIT',
+      secretAccessKey: 'explicit-secret',
+    });
+    const clients: SageMakerRuntimeClient[] = [];
+    const initialize = provider.getSageMakerRuntimeInstance.bind(provider);
+    vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockImplementation(async (...args) => {
+      const client: SageMakerRuntimeClient = await initialize(...args);
+      clients.push(client);
+      return client;
+    });
+    const firstSigned = deferred<void>();
+    const releaseFirst = deferred<ReturnType<typeof response>>();
+    sageReply = async () => {
+      if (sageCalls.length === 1) {
+        firstSigned.resolve();
+        return releaseFirst.promise;
+      }
+      return response({ output: 'offline response' });
+    };
+    const first = provider.callApi('three attempts');
+    await firstSigned.promise;
+    try {
+      vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '1');
+      expect(await provider.callApi('one attempt')).toMatchObject({ output: 'offline response' });
+      vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
+      expect(await provider.callApi('three attempts again')).toMatchObject({
+        output: 'offline response',
+      });
+      expect(new Set(clients).size).toBe(3);
+      expect(await clients[2].config.retryStrategy()).not.toBe(
+        await clients[0].config.retryStrategy(),
+      );
+      expect(await Promise.all(clients.map((client) => client.config.maxAttempts()))).toEqual([
+        3, 1, 3,
+      ]);
+    } finally {
+      releaseFirst.resolve(response({ output: 'offline response' }));
+      await first;
+    }
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+  });
+
+  it.each(['credentials file', 'config file'] as const)(
+    'resolves an explicit standard profile from the %s',
+    async (source) => {
+      await configure('', 'ignored');
+      const fields = 'aws_access_key_id = FILE_STATIC\naws_secret_access_key = file-secret\n';
+      if (source === 'credentials file') {
+        await writeFile(path.join(directory, 'credentials'), `[configured]\n${fields}`);
+      } else {
+        await configure(`[profile configured]\n${fields}`, 'ignored');
+      }
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'SHADOWED');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'shadowed-secret');
+      await expectSignedRow(createProvider({ profile: 'configured' }), 'FILE_STATIC');
+      expect(ssoCalls).toHaveLength(0);
+      expect(stsCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(['static', 'SSO', 'environment'] as const)(
+    'resolves an explicit role with a %s source and keeps its helper transport separate',
+    async (source) => {
+      const role =
+        '[profile configured]\nrole_arn = arn:aws:iam::123456789012:role/Target\nregion = ap-southeast-2\n';
+      await configure(
+        role +
+          (source === 'environment'
+            ? 'credential_source = Environment\n'
+            : 'source_profile = source\n' +
+              (source === 'SSO'
+                ? ssoProfile('source')
+                : '[profile source]\naws_access_key_id = STATIC_SOURCE\naws_secret_access_key = static-secret\n')),
+        'ignored',
+      );
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'ENV_SOURCE_A');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'env-source-a-secret');
+      const provider = createProvider({ profile: 'configured' });
+      await expectSignedRow(provider, 'STS_1');
+      expect(stsCalls[0].request.headers.authorization).toContain(
+        `Credential=${source === 'environment' ? 'ENV_SOURCE_A' : source === 'SSO' ? 'SSO_1' : 'STATIC_SOURCE'}/`,
+      );
+      expect(stsCalls[0].request.headers.authorization).toContain('/ap-southeast-2/sts/');
+      expect(stsCalls[0].handler).not.toBe(sageCalls[0].handler);
+      expect(destroyedHandlers.has(stsCalls[0].handler)).toBe(false);
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'ENV_SOURCE_B');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'env-source-b-secret');
+      await expectSignedRow(provider, source === 'environment' ? 'STS_2' : 'STS_1');
+      expect(stsCalls).toHaveLength(source === 'environment' ? 2 : 1);
+      if (source === 'environment') {
+        expect(stsCalls[1].request.headers.authorization).toContain('Credential=ENV_SOURCE_B/');
+      }
+      expect(stsCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+    },
+  );
+
+  it('preserves the SDK error for an unresolved explicit profile', async () => {
+    await configure('', null);
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'SHADOWED');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'shadowed-secret');
+    const result = await createProvider({ profile: 'missing' }).callApi('missing profile');
+    expect(result.error).toContain('Could not resolve credentials using profile: [missing]');
+    expect(result.error).not.toContain('Please install');
+    expect(sageCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ['AWS_ACCESS_KEY_ID', 'SHADOWED'],
+    ['AWS_SECRET_ACCESS_KEY', 'shadowed-secret'],
+    ['AWS_SESSION_TOKEN', 'shadowed-token'],
+    ['AWS_PROFILE', 'ignored-profile'],
+    ['AWS_ROLE_ARN', 'arn:aws:iam::123456789012:role/Unused'],
+    ['AWS_WEB_IDENTITY_TOKEN_FILE', '/offline/unused-token'],
+    ['AWS_CONTAINER_CREDENTIALS_FULL_URI', 'http://127.0.0.1:1/unused'],
+    ['AWS_EC2_METADATA_SERVICE_ENDPOINT', 'http://127.0.0.1:1/unused'],
+    ['AWS_ENDPOINT_URL_STS', 'http://127.0.0.1:1/unused'],
+    ['AWS_ENDPOINT_URL_SSO_OIDC', 'http://127.0.0.1:1/unused'],
+    ['AWS_ENDPOINT_URL_SIGNIN', 'http://127.0.0.1:1/unused'],
+  ] as const)('retains explicit SSO credentials when shadowed %s changes', async (name, value) => {
+    await configure(ssoProfile('configured'));
+    const provider = createProvider({ profile: 'configured' });
+    await expectSignedRow(provider, 'SSO_1');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv(name, value);
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls).toHaveLength(1);
+  });
+
+  it('replaces explicit SSO credentials when its effective helper endpoint changes', async () => {
+    await configure(ssoProfile('configured'));
+    const provider = createProvider({ profile: 'configured' });
+    await expectSignedRow(provider, 'SSO_1');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'http://127.0.0.1:1/changed');
+    expect(await provider.callApi('changed helper')).toMatchObject({
+      error: expect.stringContaining('The SSO session associated with this profile has expired'),
+    });
+    expect(sageCalls).toHaveLength(1);
+    expect(ssoCalls).toHaveLength(1);
+  });
+
+  it('signs a reused region with rotated environment credentials while an older row is active', async () => {
+    await configure('', null);
+    vi.stubEnv('AWS_REGION', 'us-east-1');
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'ACCOUNT_A');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'account-a-secret');
+    const provider = createProvider({ region: undefined });
+    const firstSigned = deferred<void>();
+    const releaseFirst = deferred<ReturnType<typeof response>>();
+    sageReply = async () => {
+      if (sageCalls.length === 1) {
+        firstSigned.resolve();
+        return releaseFirst.promise;
+      }
+      return response({ output: 'offline response' });
+    };
+    const first = provider.callApi('east A');
+    await firstSigned.promise;
+    try {
+      vi.stubEnv('AWS_REGION', 'us-west-2');
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'ACCOUNT_B');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'account-b-secret');
+      expect(await provider.callApi('west B')).toMatchObject({ output: 'offline response' });
+      vi.stubEnv('AWS_REGION', 'us-east-1');
+      expect(await provider.callApi('east B')).toMatchObject({ output: 'offline response' });
+      expect(sageCalls.map(({ request }) => request.headers.authorization)).toEqual([
+        expect.stringContaining('Credential=ACCOUNT_A/'),
+        expect.stringContaining('Credential=ACCOUNT_B/'),
+        expect.stringContaining('Credential=ACCOUNT_B/'),
+      ]);
+      expect(destroyedHandlers.has(sageCalls[0].handler)).toBe(false);
+    } finally {
+      releaseFirst.resolve(response({ output: 'offline response' }));
+      await first;
+    }
+    expect(new Set(sageCalls.map(({ handler }) => handler)).size).toBe(3);
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+  });
+
+  it('does not share pending clients after explicit credentials change', async () => {
+    await configure('', null);
+    const provider = createProvider({ accessKeyId: 'ACCOUNT_A', secretAccessKey: 'a-secret' });
+    const firstStarted = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const resolveCredentials = provider.getCredentials.bind(provider);
+    vi.spyOn(provider, 'getCredentials').mockImplementation(async (config) => {
+      const credentials = await resolveCredentials(config);
+      if (config?.accessKeyId === 'ACCOUNT_A') {
+        firstStarted.resolve();
+        await releaseFirst.promise;
+      }
+      return credentials;
+    });
+    const first = provider.callApi('pending A');
+    await firstStarted.promise;
+    provider.config.accessKeyId = 'ACCOUNT_B';
+    provider.config.secretAccessKey = 'b-secret';
+    const second = provider.callApi('pending B');
+    releaseFirst.resolve();
+    expect(await Promise.all([first, second])).toEqual([
+      expect.objectContaining({ output: 'offline response' }),
+      expect.objectContaining({ output: 'offline response' }),
+    ]);
+    expect(sageCalls.map(({ request }) => request.headers.authorization)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Credential=ACCOUNT_A/'),
+        expect.stringContaining('Credential=ACCOUNT_B/'),
+      ]),
+    );
+    expect(new Set(sageCalls.map(({ handler }) => handler)).size).toBe(2);
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
   });
 
   it.each(['AWS_PROFILE', 'default', 'assume-role', 'explicit profile'] as const)(

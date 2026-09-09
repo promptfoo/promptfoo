@@ -530,6 +530,29 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   describe('payload formatting', () => {
+    it('reports invalid configuration without logging configured credential values', () => {
+      const warn = vi.spyOn(logger, 'warn');
+      new SageMakerCompletionProvider('endpoint', {
+        config: {
+          modelType: 'custom',
+          accessKeyId: 'SENTINEL_ACCESS_KEY',
+          secretAccessKey: 'SENTINEL_SECRET_KEY',
+          sessionToken: 'SENTINEL_SESSION_TOKEN',
+          maxTokens: 'invalid-number' as unknown as number,
+        },
+      });
+      const warnings = JSON.stringify(warn.mock.calls);
+      expect(warnings).toContain('maxTokens');
+      expect(warnings).toContain('number');
+      for (const sentinel of [
+        'SENTINEL_ACCESS_KEY',
+        'SENTINEL_SECRET_KEY',
+        'SENTINEL_SESSION_TOKEN',
+      ]) {
+        expect(warnings).not.toContain(sentinel);
+      }
+    });
+
     it('accepts function transforms in config without validation warnings', () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const transformFn = (output: unknown) => String(output).trim();

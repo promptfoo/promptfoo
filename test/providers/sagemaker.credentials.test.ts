@@ -7,9 +7,16 @@ import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type { HttpRequest } from '@smithy/core/transport';
 
-const { fromSSO } = vi.hoisted(() => ({ fromSSO: vi.fn() }));
+const { fromIni, parseKnownFiles } = vi.hoisted(() => ({
+  fromIni: vi.fn(),
+  parseKnownFiles: vi.fn(),
+}));
 
-vi.mock('@aws-sdk/credential-provider-sso', () => ({ fromSSO }));
+vi.mock('@aws-sdk/credential-provider-ini', () => ({ fromIni }));
+vi.mock('@smithy/core/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smithy/core/config')>()),
+  parseKnownFiles,
+}));
 vi.mock('../../src/cache', () => ({
   isCacheEnabled: () => false,
   getCache: () => ({ get: vi.fn(), set: vi.fn() }),
@@ -59,7 +66,11 @@ function createProvider() {
 
 describe('SageMaker profile credentials across idle cleanup', () => {
   beforeEach(() => {
-    fromSSO.mockReset();
+    fromIni.mockReset();
+    parseKnownFiles.mockReset().mockResolvedValue({
+      'first-profile': { sso_start_url: 'https://offline.example/first' },
+      'second-profile': { sso_start_url: 'https://offline.example/second' },
+    });
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(startTime);
     vi.stubEnv('AWS_DEFAULTS_MODE', 'legacy');
@@ -93,7 +104,7 @@ describe('SageMaker profile credentials across idle cleanup', () => {
         }
         return roleCredentials;
       });
-      fromSSO.mockReturnValue(resolveSSO);
+      fromIni.mockReturnValue(resolveSSO);
       const { provider, clients, requests } = createProvider();
 
       expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
@@ -114,7 +125,7 @@ describe('SageMaker profile credentials across idle cleanup', () => {
           request.headers.authorization.includes('Credential=FIRST_ROLE/'),
         ),
       ).toBe(true);
-      expect(fromSSO).toHaveBeenCalledOnce();
+      expect(fromIni).toHaveBeenCalledOnce();
       expect(resolveSSO).toHaveBeenCalledOnce();
       const [first, second] = [...clients];
       expect(second.config.credentials).toBe(first.config.credentials);
@@ -123,7 +134,7 @@ describe('SageMaker profile credentials across idle cleanup', () => {
 
   it('coalesces refreshes and retries after a refresh failure', async () => {
     const resolveSSO = vi.fn().mockResolvedValueOnce(credentials('FIRST_ROLE'));
-    fromSSO.mockReturnValue(resolveSSO);
+    fromIni.mockReturnValue(resolveSSO);
     const { provider, requests } = createProvider();
     expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
 
@@ -144,7 +155,7 @@ describe('SageMaker profile credentials across idle cleanup', () => {
       expect.objectContaining({ output: 'offline response' }),
       expect.objectContaining({ output: 'offline response' }),
     ]);
-    expect(fromSSO).toHaveBeenCalledOnce();
+    expect(fromIni).toHaveBeenCalledOnce();
     expect(resolveSSO).toHaveBeenCalledTimes(3);
     expect(requests).toHaveLength(3);
     expect(
@@ -162,28 +173,141 @@ describe('SageMaker profile credentials across idle cleanup', () => {
   it.each([
     ['profile', 'second-profile'],
     ['region', 'us-west-2'],
-    ['sessionToken', 'changed-token'],
-    ['accessKeyId', 'incomplete-explicit-key'],
-    ['secretAccessKey', 'incomplete-explicit-secret'],
   ] as const)('replaces the retained provider when %s changes', async (key, value) => {
-    fromSSO.mockImplementation(
+    fromIni.mockImplementation(
       ({ profile }) =>
         async () =>
-          credentials(`${profile}_${fromSSO.mock.calls.length}`),
+          credentials(`${profile}_${fromIni.mock.calls.length}`),
     );
     const { provider, requests } = createProvider();
     expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
     provider.config[key] = value;
     expect(await provider.callApi('second row')).toMatchObject({ output: 'offline response' });
-    expect(fromSSO).toHaveBeenCalledTimes(2);
-    expect(fromSSO).toHaveBeenLastCalledWith({ profile: provider.config.profile });
+    expect(fromIni).toHaveBeenCalledTimes(2);
+    expect(fromIni).toHaveBeenLastCalledWith(
+      expect.objectContaining({ profile: provider.config.profile }),
+    );
     expect(requests[1].headers.authorization).toContain(`Credential=${provider.config.profile}_2/`);
     expect(requests[1].headers.authorization).toContain(`/${provider.config.region}/sagemaker/`);
   });
 
+  it.each([
+    ['sessionToken', 'changed-token'],
+    ['accessKeyId', 'incomplete-explicit-key'],
+    ['secretAccessKey', 'incomplete-explicit-secret'],
+  ] as const)('keeps profile credentials when the unused %s changes', async (key, value) => {
+    const resolveProfile = vi.fn(async () => credentials('PROFILE_ROLE'));
+    fromIni.mockReturnValue(resolveProfile);
+    const { provider, requests } = createProvider();
+    expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
+    provider.config[key] = value;
+    expect(await provider.callApi('second row')).toMatchObject({ output: 'offline response' });
+    expect(fromIni).toHaveBeenCalledOnce();
+    expect(resolveProfile).toHaveBeenCalledOnce();
+    expect(requests[1].headers.authorization).toContain('Credential=PROFILE_ROLE/');
+  });
+
+  it.each([
+    {
+      name: 'role source before credential_process',
+      profiles: {
+        'first-profile': {
+          role_arn: 'role',
+          source_profile: 'source',
+          credential_process: 'unused',
+        },
+        source: { aws_access_key_id: 'STATIC', aws_secret_access_key: 'static-secret' },
+      },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: false,
+    },
+    {
+      name: 'recursive static source before stale credential_source',
+      profiles: {
+        'first-profile': { role_arn: 'role', source_profile: 'source' },
+        source: {
+          aws_access_key_id: 'STATIC',
+          aws_secret_access_key: 'static-secret',
+          credential_source: 'Environment',
+        },
+      },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: false,
+    },
+    {
+      name: 'recursive environment source without a second role',
+      profiles: {
+        'first-profile': { role_arn: 'role', source_profile: 'source' },
+        source: { credential_source: 'Environment' },
+      },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: true,
+    },
+    {
+      name: 'ECS role ignoring static keys',
+      profiles: { 'first-profile': { role_arn: 'role', credential_source: 'EcsContainer' } },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: false,
+    },
+    {
+      name: 'IMDS role ignoring static keys',
+      profiles: { 'first-profile': { role_arn: 'role', credential_source: 'Ec2InstanceMetadata' } },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: false,
+    },
+    {
+      name: 'static keys before an incomplete role and process',
+      profiles: {
+        'first-profile': {
+          aws_access_key_id: 'STATIC',
+          aws_secret_access_key: 'static-secret',
+          role_arn: 'unused',
+          credential_process: 'unused',
+        },
+      },
+      variable: 'AWS_ACCESS_KEY_ID',
+      replaces: false,
+    },
+    {
+      name: 'web identity with an environment role session',
+      profiles: {
+        'first-profile': { role_arn: 'role', web_identity_token_file: '/offline/token' },
+      },
+      variable: 'AWS_ROLE_SESSION_NAME',
+      replaces: true,
+    },
+    {
+      name: 'web identity with an explicit blank role session',
+      profiles: {
+        'first-profile': {
+          role_arn: 'role',
+          web_identity_token_file: '/offline/token',
+          role_session_name: '',
+        },
+      },
+      variable: 'AWS_ROLE_SESSION_NAME',
+      replaces: false,
+    },
+    {
+      name: 'process inheriting the environment profile',
+      profiles: { 'first-profile': { credential_process: 'offline-command' } },
+      variable: 'AWS_PROFILE',
+      replaces: true,
+    },
+  ])('matches SDK source precedence for $name', async ({ profiles, variable, replaces }) => {
+    parseKnownFiles.mockResolvedValue(profiles);
+    fromIni.mockImplementation(() => async () => credentials(`ROLE_${fromIni.mock.calls.length}`));
+    const { provider, requests } = createProvider();
+    expect(await provider.callApi('first row')).toMatchObject({ output: 'offline response' });
+    vi.stubEnv(variable, 'changed-synthetic-value');
+    expect(await provider.callApi('second row')).toMatchObject({ output: 'offline response' });
+    expect(fromIni).toHaveBeenCalledTimes(replaces ? 2 : 1);
+    expect(requests[1].headers.authorization).toContain(`Credential=ROLE_${replaces ? 2 : 1}/`);
+  });
+
   it('gives complete explicit credentials priority and clears the retained profile', async () => {
     const resolveSSO = vi.fn(async () => credentials('PROFILE_ROLE'));
-    fromSSO.mockReturnValue(resolveSSO);
+    fromIni.mockReturnValue(resolveSSO);
     const { provider, requests } = createProvider();
     expect(await provider.callApi('profile row')).toMatchObject({ output: 'offline response' });
     provider.config.accessKeyId = 'EXPLICIT_KEY';
@@ -192,17 +316,17 @@ describe('SageMaker profile credentials across idle cleanup', () => {
     expect(await provider.callApi('explicit row')).toMatchObject({ output: 'offline response' });
     expect(requests[1].headers.authorization).toContain('Credential=EXPLICIT_KEY/');
     expect(requests[1].headers['x-amz-security-token']).toBe('explicit-token');
-    expect(fromSSO).toHaveBeenCalledOnce();
+    expect(fromIni).toHaveBeenCalledOnce();
     provider.config.accessKeyId = undefined;
     provider.config.secretAccessKey = undefined;
     provider.config.sessionToken = undefined;
     expect(await provider.callApi('profile again')).toMatchObject({ output: 'offline response' });
-    expect(fromSSO).toHaveBeenCalledTimes(2);
+    expect(fromIni).toHaveBeenCalledTimes(2);
     expect(resolveSSO).toHaveBeenCalledTimes(2);
   });
 
   it('clears retained profile credentials when returning to the default chain', async () => {
-    fromSSO.mockReturnValue(async () => credentials('PROFILE_ROLE'));
+    fromIni.mockReturnValue(async () => credentials('PROFILE_ROLE'));
     const { provider, requests } = createProvider();
     expect(await provider.callApi('profile row')).toMatchObject({ output: 'offline response' });
     vi.stubEnv('AWS_PROFILE', undefined);
@@ -215,16 +339,16 @@ describe('SageMaker profile credentials across idle cleanup', () => {
     expect(requests[1].headers['x-amz-security-token']).toBe('environment-token');
     provider.config.profile = 'first-profile';
     expect(await provider.callApi('profile again')).toMatchObject({ output: 'offline response' });
-    expect(fromSSO).toHaveBeenCalledTimes(2);
+    expect(fromIni).toHaveBeenCalledTimes(2);
   });
 
   it('captures the profile before the credential package loads', async () => {
-    fromSSO.mockReturnValue(async () => credentials('PROFILE_ROLE'));
+    fromIni.mockReturnValue(async () => credentials('PROFILE_ROLE'));
     const { provider } = createProvider();
     const pending = provider.getCredentials();
     provider.config.profile = 'second-profile';
     await pending;
-    expect(fromSSO).toHaveBeenCalledWith({ profile: 'first-profile' });
+    expect(fromIni).toHaveBeenCalledWith(expect.objectContaining({ profile: 'first-profile' }));
   });
 
   it('never reads credentials from a borrowed client', async () => {
@@ -243,7 +367,7 @@ describe('SageMaker profile credentials across idle cleanup', () => {
     provider.sagemakerRuntime = borrowed;
     expect(await provider.getSageMakerRuntimeInstance()).toBe(borrowed);
     provider.cleanup();
-    expect(fromSSO).not.toHaveBeenCalled();
+    expect(fromIni).not.toHaveBeenCalled();
     expect(readConfig).not.toHaveBeenCalled();
     expect(borrowed.destroy).not.toHaveBeenCalled();
   });
