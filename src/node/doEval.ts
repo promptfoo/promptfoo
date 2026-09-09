@@ -69,6 +69,7 @@ import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
 import type {
+  ApiProvider,
   CommandLineOptions,
   EvalRuntimeOptions,
   Scenario,
@@ -300,6 +301,7 @@ export async function doEval(
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  const activeProviderRuns = new Map<ApiProvider, number>();
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -939,6 +941,10 @@ export async function doEval(
 
     // Run the evaluation!!!!!!
     let ret;
+    const runProviders = new Set(testSuite.providers.filter(isApiProvider));
+    for (const provider of runProviders) {
+      activeProviderRuns.set(provider, (activeProviderRuns.get(provider) ?? 0) + 1);
+    }
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
@@ -972,6 +978,22 @@ export async function doEval(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      const providersToCleanup: ApiProvider[] = [];
+      for (const provider of runProviders) {
+        const remainingRuns = (activeProviderRuns.get(provider) ?? 1) - 1;
+        if (remainingRuns > 0) {
+          activeProviderRuns.set(provider, remainingRuns);
+        } else {
+          activeProviderRuns.delete(provider);
+          providersToCleanup.push(provider);
+        }
+      }
+      for (const provider of providersToCleanup) {
+        // Another watch run may start while an earlier provider's cleanup awaits.
+        if (!activeProviderRuns.has(provider)) {
+          await provider.cleanup?.();
+        }
+      }
     }
 
     // Clear resume flag after run completes
@@ -1307,18 +1329,6 @@ export async function doEval(
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
-    }
-
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
     }
 
     return ret;

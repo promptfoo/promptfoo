@@ -270,6 +270,7 @@ interface RuntimeRetryState {
 
 interface RuntimeInitialization {
   scope: CredentialScope;
+  endpoint: string | undefined;
   retry: RuntimeRetryState;
   defaults: RuntimeDefaultsState;
   promise: Promise<SageMakerRuntimeClient>;
@@ -450,6 +451,57 @@ abstract class SageMakerGenericProvider {
     return { region, profile, environment };
   }
 
+  private async getRuntimeEndpoint(): Promise<string | undefined> {
+    const { booleanSelector, CONFIG_PREFIX_SEPARATOR, loadConfig, SelectorType } = await import(
+      '@smithy/core/config'
+    );
+    // Match the runtime SDK's configured HTTP endpoint precedence. This is separate
+    // from both the SageMaker deployment name and the credential helpers' endpoints.
+    const ignored = await loadConfig({
+      environmentVariableSelector: (env) =>
+        booleanSelector(env, 'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', SelectorType.ENV),
+      configFileSelector: (profile) =>
+        booleanSelector(profile, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
+      default: false,
+    })();
+    if (ignored) {
+      return undefined;
+    }
+    return loadConfig({
+      environmentVariableSelector: (env) =>
+        env.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME || env.AWS_ENDPOINT_URL || undefined,
+      configFileSelector: (profile, config) => {
+        if (profile.services) {
+          const services = config?.[`services${CONFIG_PREFIX_SEPARATOR}${profile.services}`];
+          if (!services) {
+            throw new Error(
+              `The services section "${profile.services}" specified in the profile is not present in the shared configuration file.`,
+            );
+          }
+          const endpoint = services[`sagemaker_runtime${CONFIG_PREFIX_SEPARATOR}endpoint_url`];
+          if (endpoint) {
+            return endpoint;
+          }
+        }
+        return profile.endpoint_url || undefined;
+      },
+      default: undefined,
+    })();
+  }
+
+  private getRuntimeClockOffset(region: string): number | undefined {
+    let offset = this.runtimeClockOffsets.get(region);
+    // Live clients can learn a correction before the pool becomes idle. The newest
+    // transport for this region inherits it, including a correction back to zero.
+    for (const [client, clientRegion] of this.runtimeClients) {
+      const current = client.config?.systemClockOffset;
+      if (clientRegion === region && typeof current === 'number' && Number.isFinite(current)) {
+        offset = current;
+      }
+    }
+    return offset;
+  }
+
   /**
    * Initialize and return the SageMaker runtime client
    */
@@ -462,6 +514,7 @@ abstract class SageMakerGenericProvider {
 
     const runtimeRegion = region ?? this.getRegion();
     const scope = await this.getCredentialScope(runtimeRegion);
+    const endpoint = await this.getRuntimeEndpoint();
     this.assertRuntimeGeneration(generation);
     const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
     let retry = this.runtimeRetryStates.get(runtimeRegion);
@@ -479,6 +532,7 @@ abstract class SageMakerGenericProvider {
     const defaultsState = defaults;
     let entry = this.runtimeInitializations.find(
       (candidate) =>
+        candidate.endpoint === endpoint &&
         candidate.retry === retryState &&
         candidate.defaults === defaultsState &&
         sameCredentialScope(candidate.scope, scope),
@@ -486,6 +540,7 @@ abstract class SageMakerGenericProvider {
     if (!entry) {
       const initialization: RuntimeInitialization = {
         scope,
+        endpoint,
         retry: retryState,
         defaults: defaultsState,
         promise: (async () => {
@@ -541,7 +596,7 @@ abstract class SageMakerGenericProvider {
           this.assertRuntimeGeneration(generation);
           const client = new SageMakerRuntimeClient({
             region: runtimeRegion,
-            systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
+            systemClockOffset: this.getRuntimeClockOffset(runtimeRegion),
             defaultsMode,
             maxAttempts,
             retryMode: 'adaptive',

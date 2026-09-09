@@ -25,7 +25,10 @@ function signingDate(time: number): string {
   return new Date(time).toISOString().replace(/[:-]|\.\d{3}/g, '');
 }
 
-function createProvider(serverOffset: (request: HttpRequest) => number) {
+function createProvider(
+  serverOffset: (request: HttpRequest) => number,
+  beforeResponse?: (request: HttpRequest) => Promise<void>,
+) {
   const provider = new SageMakerCompletionProvider('endpoint', {
     config: {
       region: 'us-east-1',
@@ -46,6 +49,7 @@ function createProvider(serverOffset: (request: HttpRequest) => number) {
       // Keep the SDK serializer, signer and retry middleware; replace only HTTP handling.
       vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
         requests.push(request);
+        await beforeResponse?.(request);
         const serverTime = Date.now() + serverOffset(request);
         const signatureMatches = request.headers['x-amz-date'] === signingDate(serverTime);
         return {
@@ -139,6 +143,105 @@ describe('SageMaker clock correction across idle cleanup', () => {
       expect(requests[1].headers['x-amz-date']).toBe(signingDate(startTime.getTime() + offset));
     },
   );
+
+  it.each([
+    ['defaults', clockSkew],
+    ['defaults', -clockSkew],
+    ['retries', clockSkew],
+    ['retries', -clockSkew],
+  ] as const)('carries a live %s replacement correction of %i ms', async (replacement, offset) => {
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holding = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const { provider, clients, requests } = createProvider(
+      () => offset,
+      async (request) => {
+        if (JSON.parse(String(request.body)).prompt === 'held') {
+          started();
+          await held;
+        }
+      },
+    );
+    const pending = provider.callApi('held');
+    try {
+      await holding;
+      expect(await provider.callApi('learn live correction')).toMatchObject({
+        error: expect.stringContaining('Clock skew fixture'),
+      });
+      const [first] = [...clients];
+      expect(first.config.systemClockOffset).toBe(offset);
+      expect(first.destroy).not.toHaveBeenCalled();
+      vi.stubEnv(
+        replacement === 'defaults' ? 'AWS_DEFAULTS_MODE' : 'AWS_SAGEMAKER_MAX_RETRIES',
+        replacement === 'defaults' ? 'standard' : '2',
+      );
+      const nextIndex = requests.length;
+      expect(await provider.callApi('replacement')).toMatchObject({ output: 'offline response' });
+      expect(requests).toHaveLength(nextIndex + 1);
+      expect(requests[nextIndex].headers['x-amz-date']).toBe(signingDate(Date.now() + offset));
+      expect(clients.size).toBe(2);
+      expect(first.destroy).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await pending;
+    }
+    for (const client of clients) {
+      expect(client.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('carries a newly learned live zero instead of a stale idle correction', async () => {
+    let offset = clockSkew;
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holding = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const { provider, clients, requests } = createProvider(
+      () => offset,
+      async (request) => {
+        if (JSON.parse(String(request.body)).prompt === 'held') {
+          started();
+          await held;
+        }
+      },
+    );
+    expect(await provider.callApi('seed idle offset')).toMatchObject({
+      error: expect.stringContaining('Clock skew fixture'),
+    });
+    const pending = provider.callApi('held');
+    try {
+      await holding;
+      offset = 0;
+      vi.setSystemTime(startTime.getTime() + clockSkew);
+      expect(await provider.callApi('learn zero')).toMatchObject({
+        error: expect.stringContaining('Clock skew fixture'),
+      });
+      expect([...clients][1].config.systemClockOffset).toBe(0);
+      vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+      const nextIndex = requests.length;
+      expect(await provider.callApi('replacement with zero')).toMatchObject({
+        output: 'offline response',
+      });
+      expect(requests).toHaveLength(nextIndex + 1);
+      expect(requests[nextIndex].headers['x-amz-date']).toBe(signingDate(Date.now()));
+    } finally {
+      release();
+      await pending;
+    }
+    expect(await provider.callApi('zero after final cleanup')).toMatchObject({
+      output: 'offline response',
+    });
+    expect(requests.at(-1)?.headers['x-amz-date']).toBe(signingDate(Date.now()));
+  });
 
   it('replaces a retained correction with zero when the host clock is corrected', async () => {
     let serverOffset = clockSkew;

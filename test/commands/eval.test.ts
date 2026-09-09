@@ -2103,6 +2103,75 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['success', 'error'])(
+    'awaits supplied-provider cleanup after evaluation %s',
+    async (outcome) => {
+      let startCleanup!: () => void;
+      let finishCleanup!: () => void;
+      const cleanupStarted = new Promise<void>((resolve) => {
+        startCleanup = resolve;
+      });
+      const cleanupFinished = new Promise<void>((resolve) => {
+        finishCleanup = resolve;
+      });
+      const provider = {
+        id: () => 'supplied-cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn(async () => {
+          startCleanup();
+          await cleanupFinished;
+        }),
+      } satisfies ApiProvider;
+      const config = { prompts: [], providers: [provider] } as UnifiedConfig;
+      vi.mocked(resolveConfigs)
+        .mockReset()
+        .mockResolvedValue({
+          config,
+          // Repeated references still represent one provider owned by this run.
+          testSuite: { prompts: [], providers: [provider, provider] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      const failure = new Error('evaluation failed');
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementation(async (_suite, evalRecord) => {
+          if (outcome === 'error') {
+            throw failure;
+          }
+          return evalRecord as Eval;
+        });
+      let settled = false;
+      const evaluation = doEval({ write: false }, config, undefined, {});
+      void evaluation.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+
+      try {
+        await cleanupStarted;
+        expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        expect(settled).toBe(false);
+        finishCleanup();
+        if (outcome === 'error') {
+          await expect(evaluation).rejects.toBe(failure);
+        } else {
+          await expect(evaluation).resolves.toBeInstanceOf(Eval);
+        }
+        expect(provider.cleanup).toHaveBeenCalledTimes(1);
+      } finally {
+        finishCleanup();
+        await Promise.allSettled([evaluation]);
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(resolveConfigs).mockReset();
+      }
+    },
+  );
+
   it('cleans up only its own providers when watch evaluations overlap', async () => {
     const makeRun = (name: string) => {
       const controller = new AbortController();
@@ -2179,6 +2248,107 @@ describe('evalCommand', () => {
     } finally {
       runA.finish();
       runB.finish();
+      await Promise.allSettled(pending);
+      loadDefaultConfigSpy.mockRestore();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(resolveConfigs).mockReset();
+    }
+  });
+
+  it('does not shut down a supplied provider used by overlapping watch evaluations', async () => {
+    const makeRequest = () => {
+      const controller = new AbortController();
+      let start!: () => void;
+      let finish!: () => void;
+      const started = new Promise<void>((resolve) => {
+        start = resolve;
+      });
+      const response = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { controller, start, started, response, finish };
+    };
+    const requestA = makeRequest();
+    const requestB = makeRequest();
+    const active = new Set<AbortController>();
+    const provider = {
+      id: () => 'shared-watch-provider',
+      callApi: vi.fn(async (prompt: string) => {
+        if (prompt === 'initial') {
+          return { output: prompt };
+        }
+        const request = prompt === 'A' ? requestA : requestB;
+        active.add(request.controller);
+        request.start();
+        try {
+          await request.response;
+          request.controller.signal.throwIfAborted();
+          return { output: prompt };
+        } finally {
+          active.delete(request.controller);
+        }
+      }),
+      cleanup: vi.fn(async () => {
+        for (const controller of active) {
+          controller.abort();
+        }
+      }),
+    } satisfies ApiProvider;
+    const config = { prompts: [], providers: [provider], tests: [] } as UnifiedConfig;
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValue({ defaultConfig: config, defaultConfigPath: undefined });
+    vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockImplementation(async () => ({
+        config,
+        // Each reload makes a new suite but preserves the supplied instance.
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.dirname(defaultConfigPath),
+      }));
+    const prompts = ['initial', 'A', 'B'];
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (suite, evalRecord) => {
+        expect(suite.providers[0]).toBe(provider);
+        await suite.providers[0].callApi(prompts.shift()!);
+        return evalRecord as Eval;
+      });
+    const pending: Promise<unknown>[] = [];
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+      // The regression oracle is A completing while B is active; initial idle
+      // cleanup on the old implementation does not abort an active request.
+      expect(provider.cleanup).toHaveBeenCalledTimes(1);
+      provider.cleanup.mockClear();
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+      const evaluationA = Promise.resolve(onChange!(defaultConfigPath));
+      pending.push(evaluationA);
+      await requestA.started;
+      const evaluationB = Promise.resolve(onChange!('prompt.txt'));
+      pending.push(evaluationB);
+      await requestB.started;
+
+      requestA.finish();
+      await evaluationA;
+      expect(requestB.controller.signal.aborted).toBe(false);
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      expect(active.size).toBe(1);
+
+      requestB.finish();
+      await evaluationB;
+      await expect(provider.callApi.mock.results[2].value).resolves.toEqual({ output: 'B' });
+      expect(provider.cleanup).toHaveBeenCalledTimes(1);
+      expect(active.size).toBe(0);
+      // Provider-wide shutdown remains available to its owner.
+      await provider.cleanup();
+      expect(provider.cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      requestA.finish();
+      requestB.finish();
       await Promise.allSettled(pending);
       loadDefaultConfigSpy.mockRestore();
       vi.mocked(evaluate).mockReset();
