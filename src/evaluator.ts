@@ -1446,8 +1446,7 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
-  // Finish audio grading per row instead of retaining every inline clip in the queue.
-  if (deferGrading && !response.audio?.data) {
+  if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
@@ -3946,8 +3945,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices.add(index);
       await flushPromptMetrics();
     };
-    const flushGroupedRows = () =>
-      runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+    const flushGroupedRows = async () => {
+      await runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+      groupedRows.length = 0;
+    };
 
     try {
       for (const evalStep of groupedRunEvalOptions) {
@@ -3980,6 +3981,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           })
         ) {
           break;
+        }
+
+        // Finish audio grading before collecting another inline clip.
+        if (rows.some((row) => row.response?.audio && deferredGradingPromises.has(row))) {
+          await flushGroupedRows();
         }
       }
     } catch (error) {
