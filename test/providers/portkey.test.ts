@@ -269,6 +269,11 @@ describe('PortkeyChatCompletionProvider', () => {
       ['bare model name', 'claude-sonnet-4-6', {}],
       ['slug-shaped model name', 'anthropic-slug/claude-sonnet-4-6', {}],
       [
+        'model catalog slug in the model name alongside a declared upstream',
+        '@openai-slug/gpt-4o',
+        { portkeyProvider: 'openai' },
+      ],
+      [
         'virtual key alongside an openai passthrough',
         'gpt-4o',
         {
@@ -310,16 +315,6 @@ describe('PortkeyChatCompletionProvider', () => {
         env: { OPENAI_API_KEY: 'sk-override' },
       });
       expect(provider.getApiKey()).toBe('sk-override');
-    });
-
-    it('should not put an inherited OPENAI_API_KEY on the wire for a bare model name', () => {
-      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
-      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
-        config: { portkeyApiKey: 'pk-config-key' },
-      });
-      const headers = provider.getOpenAiRequestHeaders();
-      expect(headers).toMatchObject({ 'x-portkey-api-key': 'pk-config-key' });
-      expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('authorization');
     });
   });
 

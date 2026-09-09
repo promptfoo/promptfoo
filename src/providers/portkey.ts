@@ -171,19 +171,28 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   /**
    * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
    *
-   * Only a direct passthrough sends one. A model catalog slug (`@provider/model`), a legacy
-   * virtual key, and a bare model name all leave the provider credential with Portkey, so
-   * nothing is forwarded there — including an apiKey inherited from a shared provider config.
-   * `OPENAI_API_KEY` names one specific vendor's credential, so it is inherited only when the
-   * config routes to that vendor; otherwise a `portkey:claude-sonnet-4-6` target would ship
-   * the user's OpenAI key to a different provider. Callers that need another bearer can set
-   * one explicitly through `config.apiKey` or `config.headers`.
+   * Only a direct passthrough sends one. A model catalog slug (`@provider/model`, in the model
+   * name or in `portkeyProvider`), a legacy virtual key, and a bare model name all leave the
+   * provider credential with Portkey, so nothing is forwarded there — including an apiKey
+   * inherited from a shared provider config. `OPENAI_API_KEY` names one specific vendor's
+   * credential, so it is inherited only when the config routes to that vendor; otherwise a
+   * `portkey:claude-sonnet-4-6` target would ship the user's OpenAI key to a different
+   * provider. Callers that need another bearer can set one explicitly through `config.apiKey`
+   * or `config.headers`.
    */
   getApiKey(): string | undefined {
     const upstream = this.config.portkeyProvider;
-    if (!upstream || upstream.startsWith('@') || this.config.portkeyVirtualKey) {
+    if (
+      !upstream ||
+      upstream.startsWith('@') ||
+      this.modelName.startsWith('@') ||
+      this.config.portkeyVirtualKey
+    ) {
       return undefined;
     }
+    // Only `apiKey` is passed through: the constructor sets `apiKeyEnvar` to PORTKEY_API_KEY
+    // for the missing-key diagnostics, and honouring it here would put Portkey's own key in
+    // the bearer.
     return resolveProviderApiKey(
       { apiKey: this.config.apiKey },
       this.env,
