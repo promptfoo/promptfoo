@@ -149,6 +149,17 @@ describe('evaluator', () => {
       expect(evalRecord.hasLegacyCachedRowsMetrics()).toBe(true);
       expect(await evalRecord.getCachedResponseRowsCount()).toBe(1);
     });
+
+    it('uses persisted rows when imported evals omit prompts entirely', async () => {
+      const evalRecord = await Eval.create({}, [], { id: 'missing-imported-prompts' });
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(1);
+    });
   });
 
   describe('addPrompts', () => {
