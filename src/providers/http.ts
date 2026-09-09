@@ -370,7 +370,10 @@ export function diagnosePrivateKeyMaterial(material: unknown): string | undefine
   if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
     return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
   }
-  if (!text.includes('-----END')) {
+  // Judge truncation on the private key's own block: in a bundle the certificate's
+  // `-----END` line would otherwise stand in for the key's missing one.
+  const keyBlock = text.slice(text.indexOf('PRIVATE KEY-----')).split('-----BEGIN')[0];
+  if (!keyBlock.includes('-----END')) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
   }
   return undefined;

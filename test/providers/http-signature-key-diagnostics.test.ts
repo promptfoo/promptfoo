@@ -118,6 +118,16 @@ describe('diagnosePrivateKeyMaterial', () => {
   });
 
   it.each([
+    ['key first', () => rsaPrivate.slice(0, 120) + '\n' + cert],
+    ['certificate first', () => cert + rsaPrivate.slice(0, 120)],
+  ])('reports a truncated key even when a certificate follows it (%s)', (_label, get) => {
+    // The certificate carries its own `-----END`, which must not pass for the key's.
+    expect(diagnosePrivateKeyMaterial(get())).toBe(
+      'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
+    );
+  });
+
+  it.each([
     ['RSA', () => rsaPrivate],
     ['EC', () => ecPrivate],
   ])('passes a valid %s key through untouched', (_label, get) => {
