@@ -137,7 +137,27 @@ describe('API schema red-team coverage', () => {
       ).toBe(false);
     });
 
-    it('preserves nullable URLs for providers that cannot generate direct links', () => {
+    it('preserves nullable provider URLs alongside API access URLs', () => {
+      expect(
+        MediaSchemas.Info.Response.parse({
+          success: true,
+          data: {
+            key: 'audio/abcdef123456.mp3',
+            exists: true,
+            url: null,
+            apiUrl: '/api/media/audio/abcdef123456.mp3',
+          },
+        }),
+      ).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: null,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
+        },
+      });
+
       expect(
         MediaSchemas.Info.Response.parse({
           success: true,

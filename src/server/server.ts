@@ -366,6 +366,17 @@ export function createApp() {
   app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
+
+  app.use((error: unknown, _req: Request, res: Response, next: express.NextFunction): void => {
+    if (!(error instanceof URIError) || res.headersSent) {
+      next(error);
+      return;
+    }
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(400).json({ error: 'Invalid request path' });
+  });
+
   return app;
 }
 
