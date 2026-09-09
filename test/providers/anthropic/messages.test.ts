@@ -3198,6 +3198,25 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    // A gateway can map an arbitrary alias onto a model that still accepts prefill, so the
+    // generation fallback must not fire off the native endpoint.
+    it('does not warn for an unlisted Claude 5+ alias behind a compatible gateway', async () => {
+      const provider = createProvider('claude-prod-5', {
+        config: { apiBaseUrl: 'https://gateway.example.com/v1' },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(makeResp('claude-prod-5'));
+      const warnSpy = vi.spyOn(logger, 'warn');
+      await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'I will' },
+        ]),
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Assistant message prefilling is not supported'),
+      );
+    });
+
     // A Claude 5+ family with no capability row yet still gets the diagnostic, via the
     // generation fallback — the alternative is the opaque 400 this warning exists to explain.
     it.each(['claude-haiku-5', 'claude-some-future-model-9'])(

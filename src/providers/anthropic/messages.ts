@@ -845,7 +845,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // every family since (Opus/Sonnet 4.6, Opus 4.7/4.8, Opus 5, Sonnet 5, Fable/Mythos 5).
     // The request still goes out — Anthropic is the authority on which models accept it —
     // but the 400 it returns says nothing about the trailing assistant turn being the cause.
-    if (isPrefillUnsupportedClaudeModel(this.modelName) && extractedMessages.length > 0) {
+    // Gated on the native endpoint like the sampling fallback above: a compatible gateway
+    // can map an arbitrary alias (`claude-prod-5`) onto a model that still accepts prefill,
+    // and the generation fallback cannot see through the alias.
+    const prefillUnsupported = isPrefillUnsupportedClaudeModel(this.modelName, {
+      allowGenerationFallback: this.allowsClaudeGenerationFallback(),
+    });
+    if (prefillUnsupported && extractedMessages.length > 0) {
       const lastMessage = extractedMessages[extractedMessages.length - 1];
       if (lastMessage.role === 'assistant') {
         logger.warn(
