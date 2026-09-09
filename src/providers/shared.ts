@@ -36,8 +36,11 @@ export function getAbortError(signal: AbortSignal): Error {
       : typeof reason === 'string' && reason
         ? reason
         : 'Request was aborted';
-  const error = new Error(message, { cause: reason });
+  // `cause` is assigned rather than passed to `new Error(msg, { cause })`: src/app
+  // typechecks this file against lib ES2020, which has no `ErrorOptions` overload.
+  const error = new Error(message) as Error & { cause?: unknown };
   error.name = 'AbortError';
+  error.cause = reason;
   return error;
 }
 
