@@ -1042,7 +1042,14 @@ describe('Provider Registry', () => {
           await expect(
             factory!.create(
               `openai:${modelType}:${transcriptionModel}`,
-              mockProviderOptions,
+              {
+                ...mockProviderOptions,
+                config: {
+                  ...mockProviderOptions.config,
+                  model_provider: 'openai',
+                  base_url: 'https://api.openai.com/v1',
+                },
+              },
               mockContext,
             ),
           ).rejects.toThrow(expectedError);
@@ -1051,7 +1058,12 @@ describe('Provider Registry', () => {
               `openai:${modelType}`,
               {
                 ...mockProviderOptions,
-                config: { ...mockProviderOptions.config, model: transcriptionModel },
+                config: {
+                  ...mockProviderOptions.config,
+                  model: transcriptionModel,
+                  model_provider: 'openai',
+                  base_url: 'https://api.openai.com/v1',
+                },
               },
               mockContext,
             ),
@@ -1219,15 +1231,71 @@ describe('Provider Registry', () => {
     it.each(
       codexRoutes.flatMap((route) =>
         [
-          { backend: 'explicit OpenAI host', config: { base_url: 'https://api.openai.com/v1' } },
-          { backend: 'explicit OpenAI provider', config: { model_provider: 'OpenAI' } },
+          { backend: 'implicit Codex configuration', config: {} },
+          { backend: 'only native URL', config: { base_url: 'https://api.openai.com/v1' } },
+          { backend: 'only native provider', config: { model_provider: 'openai' } },
+          {
+            backend: 'only raw native URL',
+            config: { cli_config: { openai_base_url: 'https://api.openai.com/v1' } },
+          },
+          {
+            backend: 'only raw native provider',
+            config: { cli_config: { model_provider: 'openai' } },
+          },
+        ].flatMap((backend) =>
+          ['gpt-transcribe', 'vendor/gpt-live-transcribe'].map((model) => ({
+            route,
+            ...backend,
+            model,
+          })),
+        ),
+      ),
+    )(
+      'defers $model on $route with $backend to Codex configuration',
+      async ({ route, config, model }) => {
+        const factory = providerMap.find((candidate) => candidate.test(`openai:${route}`));
+        for (const inline of [true, false]) {
+          const provider = await factory!.create(
+            `openai:${route}${inline ? `:${model}` : ''}`,
+            {
+              ...mockProviderOptions,
+              config: { ...mockProviderOptions.config, ...config, ...(!inline && { model }) },
+            },
+            mockContext,
+          );
+          expect(provider).toHaveProperty('config.model', model);
+        }
+      },
+    );
+
+    it.each(
+      codexRoutes.flatMap((route) =>
+        [
+          {
+            backend: 'explicit OpenAI host and provider',
+            config: { base_url: 'https://api.openai.com/v1', model_provider: 'openai' },
+          },
+          {
+            backend: 'raw OpenAI host and provider',
+            config: {
+              cli_config: {
+                openai_base_url: 'https://api.openai.com/v1',
+                model_provider: 'openai',
+              },
+            },
+          },
           {
             backend: 'first-class native provider',
-            config: { model_provider: 'openai', cli_config: { model_provider: 'tenant' } },
+            config: {
+              model_provider: 'openai',
+              base_url: 'https://api.openai.com/v1',
+              cli_config: { model_provider: 'tenant' },
+            },
           },
           {
             backend: 'first-class native URL',
             config: {
+              model_provider: 'openai',
               base_url: 'https://api.openai.com/v1',
               cli_config: { openai_base_url: 'https://gateway.example/v1' },
             },

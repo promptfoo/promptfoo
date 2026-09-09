@@ -75,7 +75,6 @@ import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { usesCustomModelProvider } from './openai/codexApiKeyGating';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
@@ -1049,10 +1048,17 @@ export const providerMap: ProviderFactory[] = [
 
       const codexBaseUrl =
         providerOptions.config?.base_url ?? providerOptions.config?.cli_config?.openai_base_url;
+      const codexModelProvider =
+        providerOptions.config?.model_provider ??
+        providerOptions.config?.cli_config?.model_provider;
+      // Codex can load either backend selector from its own configuration files.
+      // Apply OpenAI model restrictions only when both native selectors are explicit.
       if (
         ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex'].includes(modelType) &&
-        !usesCustomModelProvider(providerOptions.config ?? {}) &&
-        isOpenAiFirstPartyApiUrl(typeof codexBaseUrl === 'string' ? codexBaseUrl : undefined)
+        codexModelProvider === 'openai' &&
+        typeof codexBaseUrl === 'string' &&
+        codexBaseUrl.length > 0 &&
+        isOpenAiFirstPartyApiUrl(codexBaseUrl)
       ) {
         assertOpenAiModelEndpointCompatibility(modelName || configuredModel);
       }
