@@ -692,13 +692,17 @@ describe('CloudflareGateway Provider', () => {
       'replicate',
     ];
 
+    // Matching an Error instance compares the message exactly, which also pins the
+    // supported-provider list in the error to the one exercised above.
     it.each(unsupportedProviders)('should reject %s provider', (providerName) => {
       expect(() =>
         createCloudflareGatewayProvider(`cloudflare-gateway:${providerName}:test-model`, {
           config: minimumConfig,
         }),
       ).toThrow(
-        `Unsupported Cloudflare AI Gateway provider: "${providerName}". Supported providers: ${supportedProviders.join(', ')}`,
+        new Error(
+          `Unsupported Cloudflare AI Gateway provider: "${providerName}". Supported providers: ${supportedProviders.join(', ')}`,
+        ),
       );
     });
   });
