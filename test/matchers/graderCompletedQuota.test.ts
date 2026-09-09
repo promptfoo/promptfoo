@@ -102,6 +102,7 @@ function runGrade(
 describe('completed quota from a configured local Chat grader', () => {
   const registries: RateLimitRegistry[] = [];
   const providers: OpenAiChatCompletionProvider[] = [];
+  const pendingCleanups: Array<() => Promise<void>> = [];
   let restoreEnvironment: () => void;
 
   function createRegistry() {
@@ -136,6 +137,9 @@ describe('completed quota from a configured local Chat grader', () => {
   });
 
   afterEach(async () => {
+    for (const cleanup of pendingCleanups.splice(0)) {
+      await cleanup();
+    }
     for (const registry of registries.splice(0)) {
       registry.dispose();
     }
@@ -216,13 +220,18 @@ describe('completed quota from a configured local Chat grader', () => {
           });
         });
 
-      const first = runGrade(
-        provider,
-        'A answer',
-        firstController.signal,
-        contextRegistry,
-        tracing,
-      ).catch((error: unknown) => error);
+      let firstSettled = false;
+      const first = runGrade(provider, 'A answer', firstController.signal, contextRegistry, tracing)
+        .catch((error: unknown) => error)
+        .then((result) => {
+          firstSettled = true;
+          return result;
+        });
+      pendingCleanups.push(async () => {
+        firstController.abort(reason);
+        callbackResult.resolve(JSON.stringify({ pass: true, score: 1, reason: 'cleanup' }));
+        await first;
+      });
       setTimeout(() => {
         events.push('A timeout');
         firstController.abort(reason);
@@ -232,6 +241,8 @@ describe('completed quota from a configured local Chat grader', () => {
       expect(response.bodyUsed).toBe(true);
       await vi.advanceTimersByTimeAsync(1000);
       expect(firstController.signal.reason).toBe(reason);
+      expect(firstSettled).toBe(true);
+      expect(await first).toBe(reason);
 
       const second = runGrade(
         provider,
@@ -246,26 +257,20 @@ describe('completed quota from a configured local Chat grader', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(Object.values(registry.getMetrics())).toHaveLength(1);
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        activeRequests: 1,
+        activeRequests: 0,
         queueDepth: 1,
         totalRequests: 2,
       });
       events.push('B queued');
       expect(secondController.signal.aborted).toBe(false);
-      expect(release).not.toHaveBeenCalled();
+      expect(release).toHaveBeenCalledOnce();
 
-      await vi.advanceTimersByTimeAsync(100);
-      events.push('A callback settled');
-      callbackResult.resolve(JSON.stringify({ pass: true, score: 1, reason: 'A settled' }));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(await first).toBe(reason);
       expect(events).toEqual([
         'A dispatched',
         'A body complete',
         'A callback started',
         'A timeout',
         'B queued',
-        'A callback settled',
       ]);
       expect(globalThis.fetch).toHaveBeenCalledOnce();
       expect(callback).toHaveBeenCalledOnce();
@@ -279,10 +284,10 @@ describe('completed quota from a configured local Chat grader', () => {
         failedRequests: 1,
         retriedRequests: 0,
         rateLimitHits: 0,
-        avgLatencyMs: 1100,
+        avgLatencyMs: 1000,
       });
 
-      await vi.advanceTimersByTimeAsync(399);
+      await vi.advanceTimersByTimeAsync(499);
       expect(globalThis.fetch).toHaveBeenCalledOnce();
       await vi.advanceTimersByTimeAsync(1);
       await expect(second).resolves.toMatchObject({
@@ -296,6 +301,11 @@ describe('completed quota from a configured local Chat grader', () => {
         },
       });
       expect(secondDispatchAt).toBe(resetAt);
+      expect(events).not.toContain('A callback settled');
+      events.push('A callback settled');
+      callbackResult.resolve(JSON.stringify({ pass: true, score: 1, reason: 'A settled' }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await first).toBe(reason);
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledTimes(2);
       expect(updateQuota).toHaveBeenCalledTimes(2);
@@ -308,7 +318,7 @@ describe('completed quota from a configured local Chat grader', () => {
         completedRequests: 1,
         failedRequests: 1,
         retriedRequests: 0,
-        avgLatencyMs: 550,
+        avgLatencyMs: 500,
       });
       if (wrapped) {
         expect(contextRegistry.getMetrics()).toEqual({});

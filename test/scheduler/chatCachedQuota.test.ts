@@ -197,11 +197,17 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
         secondDispatchAt = Date.now();
         return secondTransport.promise;
       });
+      let firstSettled = false;
       const first = withEnabledCache(() =>
         wrapped.callApi(fresh ? 'fresh A prompt' : 'cached A prompt', undefined, {
           abortSignal: firstController.signal,
         }),
-      ).catch((error: unknown) => error);
+      )
+        .catch((error: unknown) => error)
+        .then((result) => {
+          firstSettled = true;
+          return result;
+        });
       let second: Promise<unknown> | undefined;
       try {
         await callbackStarted.promise;
@@ -218,19 +224,17 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
           }),
         ).catch((error: unknown) => error);
         events.push('B queued');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(firstSettled).toBe(true);
         expect(Object.values(registry.getMetrics())).toHaveLength(1);
         expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-          activeRequests: 1,
-          queueDepth: 1,
+          activeRequests: fresh ? 0 : 1,
+          queueDepth: fresh ? 1 : 0,
           totalRequests: 2,
         });
-        expect(release).not.toHaveBeenCalled();
+        expect(release).toHaveBeenCalledOnce();
         expect(secondController.signal.aborted).toBe(false);
 
-        await vi.advanceTimersByTimeAsync(100);
-        events.push('A callback settled');
-        callbackResult.resolve('held callback output');
-        await vi.advanceTimersByTimeAsync(0);
         const firstResult = await first;
         if (reasonName === 'Error') {
           expect(firstResult).toMatchObject({
@@ -258,12 +262,14 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
           expect(secondDispatchAt).toBe(freshResetAt);
         } else {
           // Do not advance through a replayed window to make this assertion pass.
-          expect(secondDispatchAt).toBe(firstStartedAt + 1100);
+          expect(secondDispatchAt).toBe(firstStartedAt + 1000);
           expect(learned).not.toHaveBeenCalled();
         }
-        expect(events.indexOf('B dispatched')).toBeGreaterThan(
-          events.indexOf('A callback settled'),
-        );
+        expect(events).not.toContain('A callback settled');
+        events.push('A callback settled');
+        callbackResult.resolve('held callback output');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(events.indexOf('B dispatched')).toBeLessThan(events.indexOf('A callback settled'));
         expect(secondController.signal.aborted).toBe(false);
         expect(Object.values(registry.getMetrics())[0]).toMatchObject({
           activeRequests: 1,

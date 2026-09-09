@@ -5,7 +5,7 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
-import { isCallerAbortError, throwIfAborted } from './shared';
+import { isCallerAbortError, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -66,7 +66,7 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
-  /** Checked before invocation and after settlement; does not stop running callback code. */
+  /** Stops this caller's wait without stopping callback code that has already started. */
   abortSignal?: AbortSignal;
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
@@ -78,10 +78,19 @@ export async function executeProviderFunctionCallback({
       const callbackRef = callbacks?.[functionName];
 
       if (callbackRef && typeof callbackRef === 'string') {
-        callback = callbackRef.startsWith('file://')
-          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
-          : new Function('return ' + callbackRef)();
-        cache[functionName] = callback;
+        if (callbackRef.startsWith('file://')) {
+          const loading = loadProviderCallbackFromFileUrl(callbackRef, logPrefix).then(
+            (loadedCallback) => {
+              // The import owns cache publication even if this caller stops waiting.
+              cache[functionName] = loadedCallback;
+              return loadedCallback;
+            },
+          );
+          callback = await waitForPromiseWithAbort(loading, abortSignal);
+        } else {
+          callback = new Function('return ' + callbackRef)();
+          cache[functionName] = callback;
+        }
       } else if (typeof callbackRef === 'function') {
         callback = callbackRef;
         cache[functionName] = callback;
@@ -94,10 +103,13 @@ export async function executeProviderFunctionCallback({
     }
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
-      throwIfAborted(abortSignal);
-      return callback(args);
-    });
+    const result = await waitForPromiseWithAbort(
+      withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+        throwIfAborted(abortSignal);
+        return callback(args);
+      }),
+      abortSignal,
+    );
     throwIfAborted(abortSignal);
 
     if (result === undefined || result === null) {

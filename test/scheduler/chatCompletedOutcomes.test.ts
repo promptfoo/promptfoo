@@ -82,7 +82,7 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
     'AbortException',
     'custom reason',
     'successful callback',
-    'independent callback error',
+    'completed-first callback fallback',
   ] as const)(
     'learns completed quota before releasing a held callback with %s',
     async (outcome) => {
@@ -139,103 +139,155 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
           return new Response(JSON.stringify(successPayload), { headers: responseHeaders });
         });
 
+      let firstSettled = false;
       const first = withCacheEnabled(false, () =>
         wrapped.callApi('first', undefined, { abortSignal: firstController.signal }),
-      ).catch((error: unknown) => error);
+      )
+        .catch((error: unknown) => error)
+        .then((result) => {
+          firstSettled = true;
+          return result;
+        });
       await started.promise;
       expect(events).toEqual(['A dispatched', 'A body complete', 'A callback started']);
       expect(response.bodyUsed).toBe(true);
       await vi.advanceTimersByTimeAsync(1000);
-      if (outcome !== 'successful callback') {
-        firstController.abort(outcome === 'custom reason' ? customReason : reason);
-        events.push('A aborted');
-      }
 
-      // The same wrapper and provider key put B behind A's still-owned slot.
+      // B queues while A still owns its slot and the callback remains pending.
       const second = withCacheEnabled(false, () =>
         wrapped.callApi('second', undefined, { abortSignal: secondController.signal }),
       );
       events.push('B queued');
-      expect(Object.values(registry.getMetrics())).toHaveLength(1);
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        activeRequests: 1,
-        queueDepth: 1,
-        totalRequests: 2,
-      });
-      expect(release).not.toHaveBeenCalled();
-      expect(secondController.signal.aborted).toBe(false);
-
-      await vi.advanceTimersByTimeAsync(100);
-      events.push('A callback settled');
-      if (outcome === 'independent callback error') {
-        callbackResult.reject(new Error('independent callback failure'));
-      } else {
-        callbackResult.resolve('completed callback output');
-      }
-      await vi.advanceTimersByTimeAsync(0);
-      const firstResult = await first;
-      if (outcome === 'successful callback') {
-        expect(firstResult).toMatchObject({ output: 'completed callback output' });
-      } else if (outcome === 'independent callback error') {
-        expect(firstResult).toEqual({
-          error: `API error: Error: independent callback failure: ${JSON.stringify(toolPayload)}`,
-          metadata: { http: { status: 200, statusText: 'OK', headers: quotaHeaders } },
+      const cancelsWhileHeld =
+        outcome !== 'successful callback' && outcome !== 'completed-first callback fallback';
+      try {
+        expect(Object.values(registry.getMetrics())).toHaveLength(1);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 1,
+          queueDepth: 1,
+          totalRequests: 2,
         });
-      } else if (outcome === 'custom reason') {
-        expect(firstResult).toMatchObject({
-          name: 'AbortError',
-          message: customReason,
-          cause: customReason,
-        });
-      } else {
-        expect(firstResult).toBe(reason);
-      }
-      expect(callback).toHaveBeenCalledOnce();
-      expect(globalThis.fetch).toHaveBeenCalledOnce();
-      expect(release).toHaveBeenCalledOnce();
-      expect(learned).toHaveBeenCalledOnce();
-      // A normal result also returns these headers; that must not double-apply them.
-      expect(updateQuota).toHaveBeenCalledOnce();
-      expect(updateQuota).toHaveBeenCalledWith({
-        remainingRequests: 0,
-        remainingTokens: undefined,
-        limitRequests: 10,
-        limitTokens: undefined,
-        resetAt,
-      });
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        activeRequests: 0,
-        queueDepth: 1,
-        completedRequests: outcome === 'successful callback' ? 1 : 0,
-        failedRequests: outcome === 'successful callback' ? 0 : 1,
-        retriedRequests: 0,
-        rateLimitHits: 0,
-        avgLatencyMs: 1100,
-      });
+        expect(release).not.toHaveBeenCalled();
+        expect(secondController.signal.aborted).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(399);
-      expect(globalThis.fetch).toHaveBeenCalledOnce();
-      expect(events).not.toContain('B dispatched');
-      await vi.advanceTimersByTimeAsync(1);
-      await expect(second).resolves.toMatchObject({ output: 'second output' });
-      expect(events.at(-1)).toBe('B dispatched');
-      expect(secondDispatchAt).toBeGreaterThanOrEqual(resetAt);
-      expect(Date.now()).toBe(resetAt);
-      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
-      expect(release).toHaveBeenCalledTimes(2);
-      expect(learned).toHaveBeenCalledOnce();
-      expect(retrying).not.toHaveBeenCalled();
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        activeRequests: 0,
-        queueDepth: 0,
-        totalRequests: 2,
-        completedRequests: outcome === 'successful callback' ? 2 : 1,
-        failedRequests: outcome === 'successful callback' ? 0 : 1,
-        retriedRequests: 0,
-        rateLimitHits: 0,
-        avgLatencyMs: 550,
-      });
-      expect(vi.getTimerCount()).toBe(0);
+        if (cancelsWhileHeld) {
+          firstController.abort(outcome === 'custom reason' ? customReason : reason);
+          events.push('A aborted');
+          await vi.advanceTimersByTimeAsync(0);
+          // This assertion must pass while the actual callback is still held.
+          expect(firstSettled).toBe(true);
+          expect(events).not.toContain('A callback settled');
+        } else {
+          await vi.advanceTimersByTimeAsync(100);
+          events.push('A callback settled');
+          if (outcome === 'completed-first callback fallback') {
+            callbackResult.reject(new Error('independent callback failure'));
+          } else {
+            callbackResult.resolve('completed callback output');
+          }
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        const firstResult = await first;
+        if (outcome === 'successful callback') {
+          expect(firstResult).toMatchObject({ output: 'completed callback output' });
+        } else if (outcome === 'completed-first callback fallback') {
+          expect(firstResult).toMatchObject({
+            output: toolPayload.choices[0].message.tool_calls,
+            tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+            cached: false,
+            cost: 0.05,
+            guardrails: { flagged: false },
+            metadata: { http: { status: 200, statusText: 'OK', headers: quotaHeaders } },
+          });
+          expect(firstResult).not.toHaveProperty('error');
+          // An ordinary callback failure falls back to the original tool calls.
+          // This outcome completes before cancellation; it is not an abort-first
+          // independent-error envelope (covered separately at the tool boundary).
+          firstController.abort(reason);
+          expect(await first).toBe(firstResult);
+        } else if (outcome === 'custom reason') {
+          expect(firstResult).toMatchObject({
+            name: 'AbortError',
+            message: customReason,
+            cause: customReason,
+          });
+        } else {
+          expect(firstResult).toBe(reason);
+        }
+        expect(callback).toHaveBeenCalledOnce();
+        expect(globalThis.fetch).toHaveBeenCalledOnce();
+        expect(release).toHaveBeenCalledOnce();
+        expect(learned).toHaveBeenCalledOnce();
+        // A normal result also returns these headers; that must not double-apply them.
+        expect(updateQuota).toHaveBeenCalledOnce();
+        expect(updateQuota.mock.invocationCallOrder[0]).toBeLessThan(
+          release.mock.invocationCallOrder[0],
+        );
+        expect(updateQuota).toHaveBeenNthCalledWith(1, {
+          remainingRequests: 0,
+          remainingTokens: undefined,
+          limitRequests: 10,
+          limitTokens: undefined,
+          resetAt,
+        });
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 1,
+          completedRequests: cancelsWhileHeld ? 0 : 1,
+          failedRequests: cancelsWhileHeld ? 1 : 0,
+          retriedRequests: 0,
+          rateLimitHits: 0,
+          avgLatencyMs: cancelsWhileHeld ? 1000 : 1100,
+        });
+
+        await vi.advanceTimersByTimeAsync(resetAt - Date.now() - 1);
+        expect(globalThis.fetch).toHaveBeenCalledOnce();
+        expect(events).not.toContain('B dispatched');
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(second).resolves.toMatchObject({ output: 'second output' });
+        expect(events.at(-1)).toBe('B dispatched');
+        expect(secondDispatchAt).toBeGreaterThanOrEqual(resetAt);
+        expect(Date.now()).toBe(resetAt);
+        expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+        expect(release).toHaveBeenCalledTimes(2);
+        expect(learned).toHaveBeenCalledOnce();
+        expect(updateQuota).toHaveBeenCalledTimes(2);
+        expect(updateQuota).toHaveBeenNthCalledWith(2, {
+          remainingRequests: undefined,
+          remainingTokens: undefined,
+          limitRequests: undefined,
+          limitTokens: undefined,
+        });
+        expect(retrying).not.toHaveBeenCalled();
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 0,
+          totalRequests: 2,
+          completedRequests: cancelsWhileHeld ? 1 : 2,
+          failedRequests: cancelsWhileHeld ? 1 : 0,
+          retriedRequests: 0,
+          rateLimitHits: 0,
+          avgLatencyMs: cancelsWhileHeld ? 500 : 550,
+        });
+        if (cancelsWhileHeld) {
+          expect(events).not.toContain('A callback settled');
+          events.push('A callback settled');
+          callbackResult.resolve('late callback output');
+          await vi.advanceTimersByTimeAsync(0);
+          expect(await first).toBe(firstResult);
+          expect(release).toHaveBeenCalledTimes(2);
+          expect(updateQuota).toHaveBeenCalledTimes(2);
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        // Also drain held work on the expected pre-fix assertion failure.
+        callbackResult.resolve('callback cleanup');
+        firstController.abort(reason);
+        secondController.abort(reason);
+        const drained = Promise.allSettled([first, second]);
+        await vi.advanceTimersByTimeAsync(0);
+        await drained;
+      }
     },
   );
 

@@ -506,10 +506,13 @@ export class MCPClient {
         while (true) {
           try {
             throwIfAborted(abortSignal);
-            const result = await currentClient.callTool(
-              { name, arguments: args },
-              undefined, // use default result schema
-              requestOptions,
+            const result = await waitForPromiseWithAbort(
+              currentClient.callTool(
+                { name, arguments: args },
+                undefined, // use default result schema
+                requestOptions,
+              ),
+              abortSignal,
             );
             if (!result.isError) {
               throwIfAborted(abortSignal);

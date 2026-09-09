@@ -242,7 +242,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools = config.tools
-      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
+      ? (await waitForPromiseWithAbort(
+          maybeLoadToolsFromExternalFile(config.tools, context?.vars, callApiOptions?.abortSignal),
+          callApiOptions?.abortSignal,
+        )) || []
       : [];
     // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
