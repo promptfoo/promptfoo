@@ -81,6 +81,70 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('observes a late MCP initialization failure after a pre-aborted first call', async () => {
+    const initialization = createDeferred<void>();
+    vi.spyOn(MCPClient.prototype, 'initialize').mockReturnValue(initialization.promise);
+    const unhandledRejection = vi.fn();
+    process.on('unhandledRejection', unhandledRejection);
+    try {
+      const target = new OpenAiChatCompletionProvider('fixture', {
+        config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+      });
+      const controller = new AbortController();
+      controller.abort(new Error('cancel before MCP initialization'));
+      await expect(
+        target.callApi('fixture', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'cancel before MCP initialization' });
+
+      const failure = new Error('MCP initialization failed');
+      initialization.reject(failure);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandledRejection).not.toHaveBeenCalled();
+      await expect(target.callApi('fixture')).rejects.toBe(failure);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandledRejection);
+    }
+  });
+
+  it('preserves an uncancelled call waiting on a failed MCP initialization', async () => {
+    const initialization = createDeferred<void>();
+    vi.spyOn(MCPClient.prototype, 'initialize').mockReturnValue(initialization.promise);
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+    });
+    const failure = new Error('MCP connection failed');
+    const pending = target.callApi('fixture');
+    const rejected = expect(pending).rejects.toBe(failure);
+    initialization.reject(failure);
+    await rejected;
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('reuses successful MCP initialization after a pre-aborted first call', async () => {
+    const initialization = createDeferred<void>();
+    const initialize = vi
+      .spyOn(MCPClient.prototype, 'initialize')
+      .mockReturnValue(initialization.promise);
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      target.callApi('fixture', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    initialization.resolve();
+    fetch.mockResolvedValueOnce(response());
+    await expect(target.callApi('fixture')).resolves.toMatchObject({
+      output: 'fixture output',
+      tokenUsage: { total: 5 },
+    });
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('does not dispatch after cancellation during asynchronous body preparation', async () => {
     const target = provider();
     const body = await target.getOpenAiBody('fixture');

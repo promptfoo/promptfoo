@@ -139,6 +139,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
+      // A canceled call may return before awaiting this shared initialization.
+      void this.initializationPromise.catch(() => undefined);
     }
   }
 
