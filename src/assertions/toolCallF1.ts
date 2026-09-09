@@ -2,13 +2,21 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function findJsonEnd(text: string, start: number): number {
-  const closing: string[] = [text[start] === '{' ? '}' : ']'];
+/**
+ * Outermost balanced `{...}` / `[...]` fragments of a string, found in a single pass.
+ * Fragments inside an opener that never closes are returned too, so a stray brace in
+ * prose cannot hide a tool call that follows it.
+ */
+function jsonFragments(text: string): string[] {
+  // Each open delimiter collects the spans that completed directly inside it. They are
+  // dropped when it closes, because the enclosing fragment already covers them.
+  const open: { start: number; nested: [number, number][] }[] = [];
+  const spans: [number, number][] = [];
   let inString = false;
   let escaped = false;
 
-  for (let end = start + 1; end < text.length; end++) {
-    const char = text[end];
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
     if (inString) {
       if (escaped) {
         escaped = false;
@@ -17,185 +25,128 @@ function findJsonEnd(text: string, start: number): number {
       } else if (char === '"') {
         inString = false;
       }
-      continue;
-    }
-
-    if (char === '"') {
+    } else if (char === '"') {
       inString = true;
     } else if (char === '{' || char === '[') {
-      closing.push(char === '{' ? '}' : ']');
+      open.push({ start: i, nested: [] });
     } else if (char === '}' || char === ']') {
-      if (closing.pop() !== char) {
-        return -1;
-      }
-      if (closing.length === 0) {
-        return end;
+      const frame = open.pop();
+      if (frame) {
+        (open[open.length - 1]?.nested ?? spans).push([frame.start, i + 1]);
       }
     }
   }
-  return -1;
+
+  for (const frame of open) {
+    for (const span of frame.nested) {
+      spans.push(span);
+    }
+  }
+  return spans.map(([start, end]) => text.slice(start, end));
 }
 
 /**
- * Extracts tool names from various output formats.
- *
- * Supports:
- * - OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
- * - OpenAI Responses format: { type: 'function_call', name: '...' }
- * - OpenAI direct array: [{ function: { name: "..." } }]
- * - Simple format: [{ name: "..." }]
- * - Anthropic format: { type: 'tool_use', name: '...' } or arrays of content blocks
- * - Google/Vertex format: { functionCall: { name: '...' } } or arrays
- * - Google Live format: { toolCall: { functionCalls: [...] } }
- * - String output: JSON-stringified versions of the above, including mixed text/JSON
+ * The name of a single tool call, for shapes that identify themselves as one:
+ * - Anthropic content block: { type: 'tool_use', name: '...' }
+ * - OpenAI Responses item: { type: 'function_call', name: '...' }
+ * - OpenAI tool call: { function: { name: '...' } }
+ * - Google/Vertex: { functionCall: { name: '...' } }
+ */
+function toolCallName(obj: Record<string, unknown>): string | undefined {
+  if ((obj.type === 'tool_use' || obj.type === 'function_call') && typeof obj.name === 'string') {
+    return obj.name;
+  }
+  for (const key of ['function', 'functionCall'] as const) {
+    const call = obj[key];
+    if (call && typeof call === 'object') {
+      const { name } = call as Record<string, unknown>;
+      if (typeof name === 'string') {
+        return name;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Adds names from a list whose entries are known to be tool calls, where a bare `{ name }` counts. */
+function addCallListNames(list: unknown, names: Set<string>): void {
+  if (!Array.isArray(list)) {
+    return;
+  }
+  for (const item of list) {
+    if (item && typeof item === 'object') {
+      const call = item as Record<string, unknown>;
+      const name = toolCallName(call) ?? call.name;
+      if (typeof name === 'string') {
+        names.add(name);
+      }
+    }
+  }
+}
+
+/**
+ * Walks a parsed value and collects names from recognised tool-call shapes only.
+ * Wrappers are traversed, so `{ result: { tool_calls: [...] } }` is found, but an
+ * arbitrary `{ name: '...' }` object is never mistaken for a tool call.
+ */
+function collectToolNames(value: unknown, names: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectToolNames(item, names);
+    }
+    return;
+  }
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  const obj = value as Record<string, unknown>;
+  const name = toolCallName(obj);
+  if (name !== undefined) {
+    names.add(name);
+    return;
+  }
+
+  // OpenAI envelope: { tool_calls: [...] }, Google Live: { toolCall: { functionCalls: [...] } }
+  addCallListNames(obj.tool_calls, names);
+  addCallListNames((obj.toolCall as Record<string, unknown> | undefined)?.functionCalls, names);
+
+  for (const nested of Object.values(obj)) {
+    collectToolNames(nested, names);
+  }
+}
+
+/**
+ * Extracts tool names from provider output, which may be an object, an array of
+ * content blocks, JSON text, or JSON embedded in a prose response.
  */
 function extractToolNames(output: unknown): Set<string> {
   const names = new Set<string>();
 
-  if (output === null || output === undefined) {
-    return names;
-  }
-
-  // Handle string output - try to parse as JSON and recursively extract
   if (typeof output === 'string') {
-    // First, try parsing the entire string as JSON
     try {
-      const parsed = JSON.parse(output);
-      const parsedNames = extractToolNames(parsed);
-      for (const name of parsedNames) {
-        names.add(name);
-      }
-      return names;
+      return extractToolNames(JSON.parse(output));
     } catch {
-      // Not valid JSON as a whole; look for embedded JSON values.
+      // Not valid JSON as a whole; harvest embedded tool-call JSON instead.
     }
-
-    // Mixed text and JSON may include pretty-printed blocks and nested values.
-    // Balance delimiters outside strings before parsing each complete candidate.
-    for (let start = 0; start < output.length; start++) {
-      const opening = output[start];
-      if (opening !== '{' && opening !== '[') {
-        continue;
-      }
-
-      const end = findJsonEnd(output, start);
-      if (end >= 0) {
-        try {
-          for (const name of extractToolNames(JSON.parse(output.slice(start, end + 1)))) {
-            names.add(name);
-          }
-          start = end;
-        } catch {
-          // A balanced fragment may still be invalid JSON.
-        }
+    for (const fragment of jsonFragments(output)) {
+      try {
+        collectToolNames(JSON.parse(fragment), names);
+      } catch {
+        // A balanced fragment may still be invalid JSON.
       }
     }
     return names;
   }
 
-  if (typeof output !== 'object') {
-    return names;
-  }
+  collectToolNames(output, names);
 
-  const obj = output as Record<string, unknown>;
-
-  // Handle OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
-  if ('tool_calls' in obj && Array.isArray(obj.tool_calls)) {
-    for (const tc of obj.tool_calls) {
-      if (tc && typeof tc === 'object') {
-        const toolCall = tc as Record<string, unknown>;
-        // OpenAI: { function: { name: "..." } }
-        if (toolCall.function && typeof toolCall.function === 'object') {
-          const fn = toolCall.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-        }
-        // Simple: { name: "..." }
-        if (typeof toolCall.name === 'string') {
-          names.add(toolCall.name);
-        }
-      }
-    }
-    return names;
-  }
-
-  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
-  if (obj.type === 'tool_use' && typeof obj.name === 'string') {
-    names.add(obj.name);
-    return names;
-  }
-
-  // OpenAI Responses API single item: { type: 'function_call', name: '...' }
-  if (obj.type === 'function_call' && typeof obj.name === 'string') {
-    names.add(obj.name);
-    return names;
-  }
-
-  // Handle Google/Vertex single functionCall: { functionCall: { name: '...' } }
-  if ('functionCall' in obj && obj.functionCall && typeof obj.functionCall === 'object') {
-    const fc = obj.functionCall as Record<string, unknown>;
-    if (typeof fc.name === 'string') {
-      names.add(fc.name);
-    }
-    return names;
-  }
-
-  // Handle Google Live format: { toolCall: { functionCalls: [...] } }
-  if ('toolCall' in obj && obj.toolCall && typeof obj.toolCall === 'object') {
-    const toolCall = obj.toolCall as Record<string, unknown>;
-    if ('functionCalls' in toolCall && Array.isArray(toolCall.functionCalls)) {
-      for (const fc of toolCall.functionCalls) {
-        if (
-          fc &&
-          typeof fc === 'object' &&
-          typeof (fc as Record<string, unknown>).name === 'string'
-        ) {
-          names.add((fc as Record<string, unknown>).name as string);
-        }
-      }
-    }
-    return names;
-  }
-
-  // Handle arrays (Anthropic content blocks, Google arrays, OpenAI arrays)
+  // Simple format: the whole output is a list of calls, e.g. [{ name: '...' }].
   if (Array.isArray(output)) {
     for (const item of output) {
-      if (item && typeof item === 'object') {
-        const block = item as Record<string, unknown>;
-
-        // Anthropic content block: { type: 'tool_use', name: '...' }
-        if (block.type === 'tool_use' && typeof block.name === 'string') {
-          names.add(block.name);
-          continue;
-        }
-
-        // Google/Vertex array item: { functionCall: { name: '...' } }
-        if (
-          'functionCall' in block &&
-          block.functionCall &&
-          typeof block.functionCall === 'object'
-        ) {
-          const fc = block.functionCall as Record<string, unknown>;
-          if (typeof fc.name === 'string') {
-            names.add(fc.name);
-          }
-          continue;
-        }
-
-        // OpenAI format: { function: { name: "..." } }
-        if (block.function && typeof block.function === 'object') {
-          const fn = block.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-          continue;
-        }
-
-        // Simple format: { name: "..." }
-        if (typeof block.name === 'string') {
-          names.add(block.name);
-        }
+      const name = (item as Record<string, unknown> | null | undefined)?.name;
+      if (typeof name === 'string') {
+        names.add(name);
       }
     }
   }

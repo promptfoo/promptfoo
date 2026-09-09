@@ -400,6 +400,49 @@ describe('handleToolCallF1', () => {
     });
   });
 
+  describe('embedded JSON in prose', () => {
+    it.each([
+      ['a list of named records', 'Users: [{"name": "Alice"}, {"name": "Bob"}].'],
+      ['a named config entry', 'Config [{"name":"retries","value":3}] applied.'],
+      ['an unrelated named object', 'Metadata {"name":"session-1"} attached.'],
+    ])('does not treat %s as tool calls', (_name, prose) => {
+      const output = `${prose}\n{"tool_calls":[{"function":{"name":"get_weather"}}]}`;
+
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.reason).toContain('Called: [get_weather]');
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+    });
+
+    it('finds a tool call that follows an unbalanced brace', () => {
+      const output = 'Use {braces here\n{"type":"tool_use","name":"get_weather"}';
+
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.score).toBe(1);
+    });
+
+    it('scans brace-heavy output in linear time', () => {
+      const start = Date.now();
+      handleToolCallF1(createParams('{'.repeat(60_000), ['get_weather']));
+
+      // The previous scanner restarted at every brace, taking seconds for this input.
+      expect(Date.now() - start).toBeLessThan(1000);
+    });
+  });
+
+  describe('tool calls nested in a wrapper', () => {
+    it.each([
+      ['an OpenAI envelope', { result: { tool_calls: [{ function: { name: 'get_weather' } }] } }],
+      ['a Responses item', { output: [{ type: 'function_call', name: 'get_weather' }] }],
+      ['an Anthropic block', { message: { content: [{ type: 'tool_use', name: 'get_weather' }] } }],
+    ])('finds %s inside an outer object', (_name, output) => {
+      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
+      expect(handleToolCallF1(createParams(JSON.stringify(output), ['get_weather'])).score).toBe(1);
+    });
+  });
+
   describe('expected tools input format', () => {
     it('should accept array of tool names', () => {
       const output = { tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }] };
