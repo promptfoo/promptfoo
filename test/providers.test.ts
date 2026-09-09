@@ -747,7 +747,7 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini'])(
+  it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-4o-mini-realtime-preview-2024-12-17'])(
     'should auto-route bare Realtime model %s to Realtime',
     async (model) => {
       const actualChatProvider = await vi.importActual<
