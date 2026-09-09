@@ -79,8 +79,12 @@ prompts:
 providers:
   # Use the echo provider only to see rendered prompts without LLM calls
   - echo
-  # - id: anthropic:claude-sonnet-5
-  #   label: Claude Sonnet 5
+  # This example's prompt functions vary `temperature` and `top_p` per topic, so it
+  # deliberately stays on a model that still accepts sampling controls. Claude 5
+  # (and Opus 4.7+) reject them, and promptfoo strips them — which would silently
+  # disable the very behavior this example demonstrates.
+  # - id: anthropic:claude-sonnet-4-6
+  #   label: Claude Sonnet 4.6
   # - id: openai:gpt-4.1-mini
   #   label: GPT-4o Mini
   # config below is overridden by prompt functions with config

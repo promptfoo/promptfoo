@@ -56,7 +56,6 @@ The thinking feature is enabled by setting special parameters in the provider co
 
 ```yaml
 thinking:
-  type: 'enabled'
   type: adaptive # Claude decides how much to think
   display: summarized # Default is 'omitted', which returns empty thinking text
 effort: high # Depth control on Claude 4.7+ — replaces budget_tokens

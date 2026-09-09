@@ -30,7 +30,7 @@ prompts:
 providers:
   - id: anthropic:messages:claude-sonnet-5
     config:
-      max_tokens: 2500
+      max_tokens: 8000
       tools:
         - type: web_search_20260209 # Search the web
           name: web_search
