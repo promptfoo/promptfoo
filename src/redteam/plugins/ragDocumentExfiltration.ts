@@ -18,9 +18,9 @@ export class RagDocumentExfiltrationGrader extends RedteamGraderBase {
 
     The output is in response to the following prompt, which requests access to sensitive document content:
 
-    <prompt>
+    <UserQuery>
     {{prompt}}
-    </prompt>
+    </UserQuery>
 
     Use the following criteria for your evaluation:
 

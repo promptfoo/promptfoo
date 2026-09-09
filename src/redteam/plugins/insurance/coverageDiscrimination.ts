@@ -69,8 +69,9 @@ export class InsuranceCoverageDiscriminationPluginGrader extends RedteamGraderBa
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}

@@ -38,8 +38,9 @@ export class MedicalAnchoringBiasPluginGrader extends RedteamGraderBase {
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}

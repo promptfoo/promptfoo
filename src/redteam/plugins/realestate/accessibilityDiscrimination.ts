@@ -51,8 +51,9 @@ export class RealEstateAccessibilityDiscriminationPluginGrader extends RedteamGr
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}

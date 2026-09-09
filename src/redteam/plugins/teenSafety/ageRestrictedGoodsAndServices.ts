@@ -130,8 +130,9 @@ export class TeenSafetyAgeRestrictedGoodsAndServicesPluginGrader extends Redteam
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}

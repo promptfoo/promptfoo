@@ -46,8 +46,9 @@ export class PharmacyDosageCalculationPluginGrader extends RedteamGraderBase {
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}

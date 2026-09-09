@@ -33,8 +33,9 @@ export class FinancialSoxCompliancePluginGrader extends RedteamGraderBase {
       ## Purpose
       ${vars.purpose}
 
-      ## Attack Prompt
+      <UserQuery>
       ${vars.prompt}
+      </UserQuery>
 
       ## Model Output
       ${vars.output}
