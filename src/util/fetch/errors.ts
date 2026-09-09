@@ -76,6 +76,12 @@ export interface HttpRateLimitErrorInit {
   resetAt?: number;
   /** Body-level error code (e.g. `insufficient_quota`, `rate_limit_exceeded`). */
   code?: string;
+  /**
+   * Body-level error class sent alongside `code` (e.g. OpenAI's
+   * `type: "insufficient_quota"` next to `code: "credit_balance_exhausted"`).
+   * Only consulted for the quota classification; `code` stays the reported code.
+   */
+  type?: string;
   /** Response headers as a plain object (lowercased keys preferred). */
   headers?: Record<string, string>;
   /** Parsed body — JSON object if parseable, else raw string. */
@@ -115,6 +121,7 @@ export class HttpRateLimitError extends Error {
   readonly retryAfterMs?: number;
   readonly resetAt?: number;
   readonly code?: string;
+  readonly type?: string;
   readonly kind: RateLimitKind;
   readonly headers?: Record<string, string>;
   readonly body?: unknown;
@@ -127,12 +134,14 @@ export class HttpRateLimitError extends Error {
     const retryAfterMs = normalizeNonNegativeMs(init.retryAfterMs);
     const resetAt = normalizeNonNegativeMs(init.resetAt);
 
-    // A hard-quota body code normally implies `kind: 'quota'`. But Azure
-    // OpenAI is known to return `insufficient_quota` for per-minute
-    // deployment saturation too; in that case the server hints at recovery
-    // via `Retry-After`. Trust that hint: if the wait is short, this is
-    // recoverable rate_limit, not billing exhaustion.
-    let kind: RateLimitKind = isHardQuotaCode(init.code) ? 'quota' : 'rate_limit';
+    // A hard-quota body code (or a hard-quota `type` next to an unrecognized
+    // code) normally implies `kind: 'quota'`. But Azure OpenAI is known to
+    // return `insufficient_quota` for per-minute deployment saturation too; in
+    // that case the server hints at recovery via `Retry-After`. Trust that
+    // hint: if the wait is short, this is recoverable rate_limit, not billing
+    // exhaustion.
+    let kind: RateLimitKind =
+      isHardQuotaCode(init.code) || isHardQuotaCode(init.type) ? 'quota' : 'rate_limit';
     if (
       kind === 'quota' &&
       retryAfterMs !== undefined &&
@@ -150,6 +159,7 @@ export class HttpRateLimitError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.resetAt = resetAt;
     this.code = init.code;
+    this.type = init.type;
     this.kind = kind;
     // Shallow-copy reference fields so post-construction mutations on the
     // caller's object don't bleed into the captured error.
@@ -211,27 +221,6 @@ export function isHttpRateLimitError(err: unknown): err is HttpRateLimitError {
   return err instanceof HttpRateLimitError;
 }
 
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-/**
- * Pick the code to classify on from a `{ code, type }` pair. The specific
- * `code` wins, unless only the broader `type` names a hard quota (OpenAI pairs
- * `type: 'insufficient_quota'` with billing-specific codes such as
- * `credit_balance_exhausted`); otherwise an unrecognized code would hide the
- * quota classification and the request would be retried.
- */
-function pickRateLimitErrorCode(
-  code: string | undefined,
-  type: string | undefined,
-): string | undefined {
-  if (code !== undefined && (isHardQuotaCode(code) || !isHardQuotaCode(type))) {
-    return code;
-  }
-  return type ?? code;
-}
-
 /**
  * Best-effort extraction of an error code from a parsed response body across
  * provider variants (OpenAI / Azure / Anthropic / generic JSON-RPC style).
@@ -245,13 +234,40 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
   // OpenAI / Azure OpenAI: { error: { code, type, message } }
   if (typeof root.error === 'object' && root.error !== null) {
     const err = root.error as Record<string, unknown>;
-    const code = pickRateLimitErrorCode(nonEmptyString(err.code), nonEmptyString(err.type));
-    if (code !== undefined) {
-      return code;
+    if (typeof err.code === 'string' && err.code.length > 0) {
+      return err.code;
+    }
+    if (typeof err.type === 'string' && err.type.length > 0) {
+      return err.type;
     }
   }
 
-  return pickRateLimitErrorCode(nonEmptyString(root.code), nonEmptyString(root.type));
+  if (typeof root.code === 'string' && root.code.length > 0) {
+    return root.code;
+  }
+  if (typeof root.type === 'string' && root.type.length > 0) {
+    return root.type;
+  }
+  return undefined;
+}
+
+/**
+ * Best-effort extraction of the broad error class (`error.type` / top-level
+ * `type`) from a parsed response body. OpenAI pairs `type: "insufficient_quota"`
+ * with billing-specific codes such as `credit_balance_exhausted`, so the type
+ * still carries the quota classification when the code is not recognized.
+ * Returns `undefined` when the body has no separate `type` field.
+ */
+export function extractRateLimitErrorType(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const root = body as Record<string, unknown>;
+  const err =
+    typeof root.error === 'object' && root.error !== null
+      ? (root.error as Record<string, unknown>)
+      : root;
+  return typeof err.type === 'string' && err.type.length > 0 ? err.type : undefined;
 }
 
 /**

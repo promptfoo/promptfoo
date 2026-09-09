@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   findTargetErrorStatus,
   formatRateLimitDetail,
   formatRateLimitErrorMessage,
@@ -262,23 +263,12 @@ describe('extractRateLimitErrorCode', () => {
     ).toBe('credit_balance_exhausted');
   });
 
-  it('prefers a hard-quota error.type over an unrecognized error.code', () => {
+  it('keeps error.code when error.type is also present', () => {
     expect(
       extractRateLimitErrorCode({
         error: { code: 'some_new_billing_code', type: 'insufficient_quota' },
       }),
-    ).toBe('insufficient_quota');
-    expect(
-      extractRateLimitErrorCode({ code: 'some_new_billing_code', type: 'quota_exceeded' }),
-    ).toBe('quota_exceeded');
-  });
-
-  it('keeps error.code when error.type is not a hard quota', () => {
-    expect(
-      extractRateLimitErrorCode({
-        error: { code: 'rate_limit_exceeded', type: 'rate_limit_error' },
-      }),
-    ).toBe('rate_limit_exceeded');
+    ).toBe('some_new_billing_code');
   });
 
   it('reads top-level code', () => {
@@ -303,6 +293,72 @@ describe('extractRateLimitErrorCode', () => {
 
   it('ignores empty string code', () => {
     expect(extractRateLimitErrorCode({ error: { code: '' } })).toBeUndefined();
+  });
+});
+
+describe('extractRateLimitErrorType', () => {
+  it('reads error.type from the OpenAI shape', () => {
+    expect(
+      extractRateLimitErrorType({
+        error: { code: 'credit_balance_exhausted', type: 'insufficient_quota' },
+      }),
+    ).toBe('insufficient_quota');
+  });
+
+  it('reads top-level type', () => {
+    expect(extractRateLimitErrorType({ code: 'x', type: 'quota_exceeded' })).toBe('quota_exceeded');
+  });
+
+  it('returns undefined when no type is present', () => {
+    expect(extractRateLimitErrorType({ error: { code: 'insufficient_quota' } })).toBeUndefined();
+    expect(extractRateLimitErrorType({ error: { type: '' } })).toBeUndefined();
+    expect(extractRateLimitErrorType('plain text')).toBeUndefined();
+    expect(extractRateLimitErrorType(null)).toBeUndefined();
+  });
+});
+
+describe('HttpRateLimitError: quota classification via type', () => {
+  it('classifies credit_balance_exhausted as quota', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'credit_balance_exhausted',
+      type: 'insufficient_quota',
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('credit_balance_exhausted');
+    expect(err.type).toBe('insufficient_quota');
+    expect(err.message).toContain('Quota exceeded');
+    expect(err.message).toContain('(code: credit_balance_exhausted)');
+  });
+
+  it('uses a hard-quota type when the code is not recognized, keeping the code', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'some_new_billing_code',
+      type: 'insufficient_quota',
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('some_new_billing_code');
+  });
+
+  it('keeps rate_limit when neither code nor type is a hard quota', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'rate_limit_error',
+    });
+    expect(err.kind).toBe('rate_limit');
+  });
+
+  it('still downgrades a hard-quota type to rate_limit on a short Retry-After', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'quota_exceeded',
+      retryAfterMs: 1000,
+    });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.code).toBe('rate_limit_exceeded');
   });
 });
 

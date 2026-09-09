@@ -1847,9 +1847,41 @@ describe('fetchWithRetries', () => {
 
       const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
       expect(err).toBeInstanceOf(HttpRateLimitError);
-      expect((err as HttpRateLimitError).kind).toBe('quota');
-      expect((err as HttpRateLimitError).code).toBe('insufficient_quota');
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('quota');
+      expect(rl.code).toBe('new_billing_code');
+      expect(rl.type).toBe('insufficient_quota');
       expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a transient code paired with a hard-quota type when Retry-After is short', async () => {
+      const throttled = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '1' }),
+        body: { error: { code: 'rate_limit_exceeded', type: 'quota_exceeded' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(throttled);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 1).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBe('rate_limit_exceeded');
+      // Retry-After downgraded the quota classification, so the retry budget is used.
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries insufficient_quota with a short Retry-After (Azure per-minute saturation)', async () => {
+      const throttled = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '1' }),
+        body: { error: { code: 'insufficient_quota', message: 'deployment saturated' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(throttled);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 1).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('rate_limit');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
     it('fails fast on billing_hard_limit_reached', async () => {
