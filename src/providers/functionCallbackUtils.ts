@@ -237,9 +237,16 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
+    // The calls run concurrently, so give each its own bucket and drain them in order:
+    // a shared sink would record MCP calls by latency instead of by the model's call order.
+    const sink = options?.toolCalls;
+    const buckets = sink ? callsArray.map((): McpToolCallEntry[] => []) : undefined;
     const results = await Promise.all(
-      callsArray.map((call) => this.processCall(call, callbacks, context, options)),
+      callsArray.map((call, index) =>
+        this.processCall(call, callbacks, context, buckets && { toolCalls: buckets[index] }),
+      ),
     );
+    sink?.push(...(buckets?.flat() ?? []));
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
