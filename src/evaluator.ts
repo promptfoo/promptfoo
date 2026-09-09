@@ -2000,13 +2000,43 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
   }
 }
 
-async function updateDerivedMetrics(
+// Module-scope cache: `updateDerivedMetrics` must be able to call into mathjs
+// without ever `await`-ing, even on the first call. It mutates a `PromptMetrics`
+// object that multiple concurrent test cases sharing a prompt write into
+// (see `preloadMathjsModule`'s doc comment for why that requires zero internal
+// await points), so the module has to already be resolved before the
+// concurrent eval loop starts.
+let mathjsModulePromise: Promise<typeof import('mathjs')> | undefined;
+
+/**
+ * Preloads mathjs before the concurrent eval loop starts, so `updateDerivedMetrics`
+ * can stay fully synchronous.
+ *
+ * `updateDerivedMetrics` mutates `context.prompts[promptIdx].metrics` — one shared
+ * object that every test case sharing that prompt writes into, often concurrently
+ * (default concurrency is 4). Every other mutation in `updatePromptMetricsForRow`
+ * is a synchronous `+=`, which is safe under concurrency only because JS never
+ * interrupts a synchronous statement — but an `await` inside a read-modify-write
+ * on shared state reopens that window: a sibling test case's own read can land in
+ * between this call's snapshot and its write, corrupting the derived-metric result.
+ * `await`-ing a promise always defers to the microtask queue, even one that's
+ * already resolved, so merely caching the *promise* here isn't enough — every
+ * caller must be able to use the already-*resolved* module with no `await` at all.
+ */
+function preloadMathjsModule(): Promise<typeof import('mathjs')> {
+  if (!mathjsModulePromise) {
+    mathjsModulePromise = import('mathjs');
+  }
+  return mathjsModulePromise;
+}
+
+function updateDerivedMetrics(
   metrics: PromptMetrics,
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
+  math: typeof import('mathjs'),
 ) {
-  const math = await import('mathjs');
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
   }
@@ -3043,6 +3073,7 @@ interface GroupedRows {
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
+  mathjsModule: typeof import('mathjs') | null;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -3488,12 +3519,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private async updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
+    mathjsModule,
     metrics,
     promptEvalCount,
     row,
   }: {
     derivedMetrics: TestSuite['derivedMetrics'];
     evalStep: RunEvalOptions;
+    mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
@@ -3509,7 +3542,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      await updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
+      invariant(
+        mathjsModule,
+        'Expected mathjs to be preloaded before processing rows for a testSuite with derivedMetrics',
+      );
+      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
     }
 
     updatePromptResultCounts(metrics, row);
@@ -3665,6 +3702,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       await this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
+        mathjsModule: context.mathjsModule,
         metrics,
         promptEvalCount,
         row,
@@ -4852,9 +4890,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
+    // Preload before any concurrent row processing starts (see preloadMathjsModule's
+    // doc comment) so updateDerivedMetrics never has to await mid-mutation.
+    const mathjsModule = testSuite.derivedMetrics ? await preloadMathjsModule() : null;
+
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
+      mathjsModule,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),
