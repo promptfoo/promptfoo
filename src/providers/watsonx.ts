@@ -1,13 +1,13 @@
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -59,6 +59,11 @@ const ConfigSchema = z.object({
   version: z.string().optional(),
   projectId: z.string().optional(),
   modelId: z.string().optional(),
+
+  // Optional per-token prices for deployments with account-specific pricing.
+  cost: z.number().nonnegative().optional(),
+  inputCost: z.number().nonnegative().optional(),
+  outputCost: z.number().nonnegative().optional(),
 
   // Text generation parameters
   maxNewTokens: z.number().optional(),
@@ -166,7 +171,8 @@ function sortObject(obj: any): any {
 
 const WATSONX_SECRET_FIELD_NAMES = new Set(['apiKey', 'apiBearerToken']);
 const WATSONX_CACHE_HASH_KEY = 'promptfoo:watsonx:cache-key:v1';
-const WATSONX_TEXT_GENERATION_CACHE_VERSION = 'v2';
+// Older responses may contain a cost from another region or an unknown tier priced as zero.
+const WATSONX_RESPONSE_CACHE_VERSION = 'v3';
 
 function hashWatsonXCacheValue(value: unknown): string {
   return crypto
@@ -205,18 +211,9 @@ function getWatsonXCredentialFingerprint(type: string, credential: string): stri
     .digest('hex');
 }
 
-interface ModelSpec {
-  model_id: string;
-  input_tier: string;
-  output_tier: string;
-}
-
-interface WatsonXModel {
-  id: string;
-  cost: {
-    input: number;
-    output: number;
-  };
+interface WatsonXModelCost {
+  input?: number;
+  output?: number;
 }
 
 type WatsonXAuthSelection =
@@ -239,77 +236,118 @@ function createWatsonXAuthCacheHash(authSelection: WatsonXAuthSelection): string
   });
 }
 
-async function fetchModelSpecs(): Promise<ModelSpec[]> {
-  try {
-    const {
-      data,
-      cached: _cached,
-      latencyMs: _latencyMs,
-    } = await fetchWithCache(
-      'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-05-01',
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-      getRequestTimeoutMs(),
-    );
+// A client binds the service URL, API version and authenticator. Keep metadata
+// in memory per client so different regions/accounts never share model prices.
+let modelSpecsCache = new WeakMap<
+  WatsonXAIClient,
+  Map<string, { expiresAt: number; cost: WatsonXModelCost }>
+>();
+const MODEL_SPECS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-    // Handle string response that needs to be parsed
-    const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-    return parsedData?.resources || [];
-  } catch (error) {
-    logger.error(`Failed to fetch model specs: ${error}`);
-    return [];
+function getPricingTierCost(tier: unknown): number | undefined {
+  if (typeof tier !== 'string') {
+    return undefined;
   }
-}
-
-let modelSpecsCache: WatsonXModel[] | null = null;
-
-function normalizePricingTier(tier: string): string {
-  return tier.trim().toLowerCase().replace(/\s+/g, '_');
+  const key = tier.trim().toLowerCase().replace(/\s+/g, '_');
+  const price = TIER_PRICING[key as keyof typeof TIER_PRICING];
+  return typeof price === 'number' ? price / 1e6 : undefined;
 }
 
 export function clearModelSpecsCache() {
-  modelSpecsCache = null;
+  modelSpecsCache = new WeakMap();
 }
 
-async function getModelSpecs(): Promise<WatsonXModel[]> {
-  if (!modelSpecsCache) {
-    const specs = await fetchModelSpecs();
-    modelSpecsCache = specs.map((spec) => ({
-      id: spec.model_id,
-      cost: {
-        input:
-          TIER_PRICING[normalizePricingTier(spec.input_tier) as keyof typeof TIER_PRICING] / 1e6 ||
-          0,
-        output:
-          TIER_PRICING[normalizePricingTier(spec.output_tier) as keyof typeof TIER_PRICING] / 1e6 ||
-          0,
-      },
-    }));
+async function getModelCost(
+  client: WatsonXAIClient,
+  modelId: string,
+): Promise<WatsonXModelCost | undefined> {
+  const cached = modelSpecsCache.get(client)?.get(modelId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.cost;
   }
-  return modelSpecsCache;
+
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      // Cancel transport as well as bounding SDK auth/retry waits that may ignore the signal.
+      controller.abort();
+      reject(new Error('WatsonX model pricing metadata request timed out'));
+    }, getRequestTimeoutMs());
+  });
+  try {
+    const response = await Promise.race([
+      client.listFoundationModelSpecs({
+        filters: `modelid_${modelId}`,
+        signal: controller.signal,
+      }),
+      deadline,
+    ]);
+    const resources = response.result?.resources;
+    if (!Array.isArray(resources)) {
+      return undefined;
+    }
+    const spec = resources.find((resource) => resource.model_id === modelId);
+    if (!spec) {
+      return undefined;
+    }
+    const cost = {
+      input: getPricingTierCost(spec.input_tier),
+      output: getPricingTierCost(spec.output_tier),
+    };
+    let clientCache = modelSpecsCache.get(client);
+    if (!clientCache) {
+      clientCache = new Map();
+      modelSpecsCache.set(client, clientCache);
+    }
+    clientCache.set(modelId, { expiresAt: Date.now() + MODEL_SPECS_CACHE_TTL_MS, cost });
+    return cost;
+  } catch (error) {
+    logger.debug('[WatsonX] Model pricing metadata is unavailable', { error });
+    // Do not cache failures: a later response can retry after recovery.
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function calculateWatsonXCost(
-  modelName: string,
-  config: any,
+  client: WatsonXAIClient,
+  modelId: string,
+  config: z.infer<typeof ConfigSchema>,
   promptTokens?: number,
   completionTokens?: number,
 ): Promise<number | undefined> {
-  if (promptTokens == null || completionTokens == null) {
+  if (
+    promptTokens == null ||
+    completionTokens == null ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens) ||
+    promptTokens < 0 ||
+    completionTokens < 0
+  ) {
     return undefined;
   }
 
-  const models = await getModelSpecs();
-  const model = models.find((m) => m.id === modelName);
-  if (!model) {
+  const inputOverride = config.inputCost ?? config.cost;
+  const outputOverride = config.outputCost ?? config.cost;
+  const modelCost =
+    inputOverride == null || outputOverride == null
+      ? await getModelCost(client, modelId)
+      : undefined;
+  const inputCost = inputOverride ?? modelCost?.input;
+  const outputCost = outputOverride ?? modelCost?.output;
+  if (
+    inputCost == null ||
+    outputCost == null ||
+    !Number.isFinite(inputCost) ||
+    !Number.isFinite(outputCost) ||
+    inputCost < 0 ||
+    outputCost < 0
+  ) {
     return undefined;
   }
-
-  const cost = calculateCost(modelName, config, promptTokens, completionTokens, models);
-  return cost;
+  return inputCost * promptTokens + outputCost * completionTokens;
 }
 
 export class WatsonXProvider implements ApiProvider {
@@ -342,6 +380,11 @@ export class WatsonXProvider implements ApiProvider {
 
   toString(): string {
     return `[Watsonx Provider ${this.modelName}]`;
+  }
+
+  requiresApiKey(): boolean {
+    // Bearer authentication is already resolved by the same precedence used by getAuth().
+    return this.getAuthSelection().type !== 'bearertoken';
   }
 
   private getApiKey(): string | undefined {
@@ -541,7 +584,7 @@ export class WatsonXProvider implements ApiProvider {
     const cache = getCache();
     const configHash = generateConfigHash(config);
     const authHash = this.getAuthCacheHash();
-    const cacheKey = `watsonx:${WATSONX_TEXT_GENERATION_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
+    const cacheKey = `watsonx:${WATSONX_RESPONSE_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
       const cachedResponse = await cache.get(cacheKey);
@@ -619,7 +662,8 @@ export class WatsonXProvider implements ApiProvider {
       const textGenResult = textGenResponse.results[0];
 
       providerResponse.cost = await calculateWatsonXCost(
-        this.modelName,
+        client,
+        modelId,
         config,
         textGenResult.input_token_count,
         textGenResult.generated_token_count,
@@ -661,7 +705,7 @@ export class WatsonXChatProvider extends WatsonXProvider {
     const cache = getCache();
     const configHash = generateConfigHash(config);
     const authHash = this.getAuthCacheHash();
-    const cacheKey = `watsonx:chat:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
+    const cacheKey = `watsonx:chat:${WATSONX_RESPONSE_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
       const cachedResponse = await cache.get(cacheKey);
@@ -697,7 +741,8 @@ export class WatsonXChatProvider extends WatsonXProvider {
       const providerResponse = this.convertChatResponse(result);
 
       providerResponse.cost = await calculateWatsonXCost(
-        this.modelName,
+        client,
+        modelId,
         config,
         providerResponse.tokenUsage?.prompt,
         providerResponse.tokenUsage?.completion,

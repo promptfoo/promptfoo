@@ -42,6 +42,7 @@ describe.each(['chat', 'completion', 'embedding'])('TogetherAI %s connection pol
         config: {
           apiBaseUrl: 'http://fixture.invalid/v1',
           apiKey: 'configured-key',
+          useDefaultApiKey: false,
           headers: { 'X-Fixture': 'header-value' },
           cost: 0.01,
           basePath: '/fixture/config',
@@ -78,6 +79,7 @@ describe.each(['chat', 'completion', 'embedding'])('TogetherAI %s connection pol
     });
     for (const key of [
       'apiKey',
+      'useDefaultApiKey',
       'basePath',
       'linkedTargetId',
       'apiBaseUrl',
