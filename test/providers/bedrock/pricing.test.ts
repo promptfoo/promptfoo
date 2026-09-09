@@ -146,6 +146,13 @@ describe('calculateBedrockCost', () => {
       calculateBedrockCost('global.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
     ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
     expect(
+      calculateBedrockCost(
+        'arn:aws:bedrock:us-east-2::inference-profile/global.amazon.nova-2-lite-v1:0',
+        INPUT_TOKENS,
+        OUTPUT_TOKENS,
+      ),
+    ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
+    expect(
       calculateBedrockCost('us.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
     ).toBeCloseTo(costAtRates(0.33, 2.75), 6);
   });

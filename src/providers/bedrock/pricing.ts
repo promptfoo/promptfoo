@@ -20,8 +20,6 @@ type BedrockPricing = {
    * `-cache-read/-cache-write-...-long-context-...` meters.
    */
   longContext?: { threshold: number; input: number; output: number };
-  /** Rates that replace `input`/`output` on the cross-region `global.` inference profile. */
-  global?: { input: number; output: number };
 };
 
 /**
@@ -44,8 +42,9 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  *
  * Rates are the plain us-east-1 on-demand meters from the AWS Price List API
  * (`aws pricing get-products --service-code AmazonBedrock`), which is the authority — the
- * `-batch`, `-custom-model`, `-flex`, `-priority` and `-cross-region-global` meters carry
- * different rates and must not be used here. Last reconciled 2026-09-01.
+ * `-batch`, `-custom-model`, `-flex` and `-priority` meters carry different rates and must not
+ * be used here; a `-cross-region-global` meter belongs only on a key that spells out the
+ * `global.` profile. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
@@ -95,9 +94,10 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 12.5 },
-  // Amazon Nova 2 (reasoning models). `input`/`output` are the plain us-east-1 on-demand
-  // rates; the cross-region global profile has its own cheaper meter.
-  'amazon.nova-2-lite': { input: 0.33, output: 2.75, global: { input: 0.3, output: 2.5 } },
+  // Amazon Nova 2 (reasoning models). The cross-region global profile bills at its own cheaper
+  // meter, so its key must stay ahead of the plain us-east-1 one.
+  'global.amazon.nova-2-lite': { input: 0.3, output: 2.5 },
+  'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
   'amazon.titan-text-express': { input: 0.2, output: 0.6 },
@@ -466,7 +466,7 @@ export function calculateBedrockCost(
   const tier =
     pricing.longContext && totalInputTokens > pricing.longContext.threshold
       ? pricing.longContext
-      : (isGlobalEndpoint && pricing.global) || pricing;
+      : pricing;
 
   const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
