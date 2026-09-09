@@ -19,7 +19,7 @@ OpenRouter's catalog changes quickly. These are current popular and recent model
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
 | [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Highest-quality general evaluation |
-| [anthropic/claude-opus-4.7](https://openrouter.ai/anthropic/claude-opus-4.7)                               |        1,000,000 | Long-running agentic workflows     |
+| [anthropic/claude-opus-5](https://openrouter.ai/anthropic/claude-opus-5)                                   |        1,000,000 | Long-running agentic workflows     |
 | [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Fast, lower-cost GPT-5 workflows   |
 | [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             |          200,000 | Lower-latency Claude runs          |
 | [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       |        1,048,576 | Reasoning-heavy tasks              |
@@ -41,7 +41,7 @@ providers:
       temperature: 0.7
       max_tokens: 1000
 
-  - id: openrouter:anthropic/claude-opus-4.7
+  - id: openrouter:anthropic/claude-opus-5
     config:
       max_tokens: 2000
 

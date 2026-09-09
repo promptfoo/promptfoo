@@ -319,7 +319,7 @@ Test multiple models or configurations in parallel:
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
+    model: [gpt-5.6, claude-opus-5, gemini-3.1-pro-preview]
 steps:
   - name: Test ${{ matrix.model }}
     run: |

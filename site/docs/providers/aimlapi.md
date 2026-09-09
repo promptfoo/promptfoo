@@ -95,8 +95,8 @@ AI/ML API offers models from multiple providers. Here are some of the most popul
 
 - **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
 - **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
-- **Claude 4 Sonnet**: `anthropic/claude-4-sonnet` - Balanced speed and capability
-- **Claude 4 Opus**: `anthropic/claude-4-opus` - Claude 4 Opus model
+- **Claude Sonnet 5**: `anthropic/claude-sonnet-5` - Balanced speed and capability
+- **Claude Opus 5**: `anthropic/claude-opus-5` - Anthropic's most capable model
 - **Gemini 2.5 Pro**: `google/gemini-2.5-pro-preview` - Google's versatile multimodal model
 - **Gemini 2.5 Flash**: `google/gemini-2.5-flash` - Ultra-fast streaming responses
 - **Grok 3 Beta**: `x-ai/grok-3-beta` - xAI's most advanced model
@@ -125,7 +125,7 @@ For a complete list of all 300+ available models, visit the [AI/ML API Models pa
 providers:
   - aimlapi:chat:deepseek-r1
   - aimlapi:chat:gpt-5-mini
-  - aimlapi:chat:claude-4-sonnet
+  - aimlapi:chat:claude-sonnet-5
 
 prompts:
   - 'Explain {{concept}} in simple terms'

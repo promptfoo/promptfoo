@@ -63,15 +63,15 @@ The search-rubric assertion requires a grading provider with web search capabili
 
 ### 1. Anthropic Claude
 
-Anthropic Claude models support web search through the `web_search_20250305` tool:
+Anthropic Claude models support web search through the `web_search_20260209` tool:
 
 ```yaml
 grading:
-  provider: anthropic:messages:claude-opus-4-6
+  provider: anthropic:messages:claude-opus-5
   providerOptions:
     config:
       tools:
-        - type: web_search_20250305
+        - type: web_search_20260209
           name: web_search
           max_uses: 5
 ```

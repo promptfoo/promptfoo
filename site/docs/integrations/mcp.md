@@ -125,7 +125,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-5
     config:
       mcp:
         enabled: true
@@ -170,7 +170,7 @@ providers:
           headers:
             X-API-Key: openai-server-api-key
 
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-5
     config:
       mcp:
         enabled: true

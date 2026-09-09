@@ -31,7 +31,7 @@ If you already have an active Claude Code session (for example as a Claude Pro o
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       apiKeyRequired: false
 ```
@@ -81,14 +81,14 @@ lifecycle dates, and cost attribution for historical evals needs the rates — b
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
-| `claude-opus-4-1-20250805`   | Claude 4.1 Opus        | `claude-opus-4-8`     |
-| `claude-opus-4-20250514`     | Claude 4 Opus          | `claude-opus-4-8`     |
-| `claude-sonnet-4-20250514`   | Claude 4 Sonnet        | `claude-sonnet-4-6`   |
-| `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet      | `claude-sonnet-4-6`   |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet (v2) | `claude-sonnet-4-6`   |
-| `claude-3-5-sonnet-20240620` | Claude 3.5 Sonnet (v1) | `claude-sonnet-4-6`   |
+| `claude-opus-4-1-20250805`   | Claude 4.1 Opus        | `claude-opus-5`       |
+| `claude-opus-4-20250514`     | Claude 4 Opus          | `claude-opus-5`       |
+| `claude-sonnet-4-20250514`   | Claude 4 Sonnet        | `claude-sonnet-5`     |
+| `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet      | `claude-sonnet-5`     |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet (v2) | `claude-sonnet-5`     |
+| `claude-3-5-sonnet-20240620` | Claude 3.5 Sonnet (v1) | `claude-sonnet-5`     |
 | `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku       | `claude-haiku-4-5`    |
-| `claude-3-opus-20240229`     | Claude 3 Opus          | `claude-opus-4-8`     |
+| `claude-3-opus-20240229`     | Claude 3 Opus          | `claude-opus-5`       |
 | `claude-3-haiku-20240307`    | Claude 3 Haiku         | `claude-haiku-4-5`    |
 
 :::note Model aliases
@@ -157,6 +157,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                               |
 | metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                          |
 | service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                |
+| beta            | -                     | Array of `anthropic-beta` feature flags to send with the request                                  |
 | headers         | -                     | Additional headers to be sent with the API request                                                |
 | extra_body      | -                     | Additional parameters to be included in the API request body                                      |
 
@@ -183,6 +184,19 @@ Currently, only type `text` is supported.
 
 The `system_message` and `question` are example variables that can be set with the `var` directive.
 
+:::warning Assistant prefill is not supported on current models
+
+Ending a prompt with an `assistant` message ("prefilling" Claude's reply) returns a 400 —
+`This model does not support assistant message prefill` — on Opus 4.6, Sonnet 4.6, Opus 4.7,
+Opus 4.8, Opus 5, Sonnet 5, and the Fable/Mythos 5 families. Only the 4.5 generation
+(Opus 4.5, Sonnet 4.5, Haiku 4.5) and older still accept it.
+
+Promptfoo warns when it sees a trailing assistant turn on an affected model. Use
+[structured outputs](#structured-outputs) or a system-prompt instruction to constrain the
+response format instead.
+
+:::
+
 ### Options
 
 The Anthropic provider supports several options to customize the behavior of the model. These include:
@@ -203,9 +217,11 @@ Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      temperature: 0.0
+      # Sonnet 5 rejects temperature/top_p/top_k — use `effort` for the
+      # quality/cost tradeoff instead. See Supported Parameters above.
+      effort: medium
       max_tokens: 512
       extra_body:
         custom_param: 'test_value'
@@ -219,7 +235,7 @@ Use `stop_sequences` to halt generation when Claude encounters specific strings:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       stop_sequences:
         - "\n\nHuman:"
@@ -250,7 +266,7 @@ Pass request metadata to the API for tracking or auditing purposes:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       metadata:
         user_id: 'user-123'
@@ -262,7 +278,7 @@ The Anthropic provider supports tool calling (function calling). Here's an examp
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - name: get_weather
@@ -292,7 +308,7 @@ The web fetch tool allows Claude to retrieve full content from web pages and PDF
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - type: web_fetch_20250910
@@ -310,7 +326,7 @@ Promptfoo also supports the stable `web_fetch_20260209` variant. A newer version
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - type: web_fetch_20260209
@@ -346,7 +362,7 @@ The web search tool allows Claude to search the internet for information:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - type: web_search_20260209
@@ -375,7 +391,7 @@ You can use both tools together for comprehensive web information gathering:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - type: web_search_20260209
@@ -396,7 +412,7 @@ Anthropic's `memory_20250818` tool can be included in `tools`. Promptfoo passes 
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - type: memory_20250818
@@ -432,7 +448,7 @@ The Anthropic Messages provider can connect to any [MCP server](https://modelcon
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       mcp:
         enabled: true
@@ -462,16 +478,16 @@ The disk response cache is skipped while `mcp.enabled` is `true`, because tool r
 
 See the [MCP integration guide](/docs/integrations/mcp/) for full server configuration options (auth, timeouts, multiple servers, etc.) and the [Anthropic MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp).
 
-See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
+See the [Anthropic Tool Use Guide](https://platform.claude.com/docs/en/docs/build-with-claude/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
 
 ### Images / Vision
 
-You can include images in the prompts in Claude 3 models.
+All current Claude models accept images in the prompt.
 
 See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision).
 
-One important note: The Claude API only supports base64 representations of images.
-This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities, you will need to have separate prompts for each.
+One important note: the Claude API only supports base64 representations of images.
+This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are comparing Claude and OpenAI vision capabilities, you will need separate prompts for each.
 
 See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
 
@@ -479,11 +495,11 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 Claude supports prompt caching to optimize API usage and reduce costs for repetitive tasks. This feature caches portions of your prompts to avoid reprocessing identical content in subsequent requests.
 
-Supported on all Claude 3, 3.5, and 4 models. Basic example:
+Supported on every current Claude model, including the Claude 5 family. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
 prompts:
   - file://prompts.yaml
 ```
@@ -507,7 +523,7 @@ As a simpler alternative, use the top-level `cache_control` parameter to automat
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       cache_control:
         type: ephemeral
@@ -522,7 +538,7 @@ Common use cases for caching:
 
 Cache read and creation token counts are tracked in the response's token usage details.
 
-See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/prompt-caching) for more details on requirements, pricing, and best practices.
+See [Anthropic's Prompt Caching Guide](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
 
 ### Citations
 
@@ -530,7 +546,7 @@ Claude can provide detailed citations when answering questions about documents. 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
 prompts:
   - file://prompts.yaml
 ```
@@ -549,7 +565,7 @@ prompts:
       text: 'Your question here'
 ```
 
-See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
+See [Anthropic's Citations Guide](https://platform.claude.com/docs/en/docs/build-with-claude/citations) for more details.
 
 ### PDF Documents
 
@@ -702,15 +718,17 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  # Adaptive thinking (recommended for Claude Opus 4.7)
-  - id: anthropic:messages:claude-opus-4-7
+  # Adaptive thinking — the current mechanism on every Claude 4.6+ model
+  - id: anthropic:messages:claude-opus-5
     config:
       max_tokens: 20000
       thinking:
         type: 'adaptive'
+        display: 'summarized' # Opt in to readable reasoning; default is 'omitted'
+      effort: xhigh # Controls reasoning depth instead of a token budget
 
-  # Enabled thinking with explicit budget
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  # Manual thinking budget — only on Haiku 4.5 and older models
+  - id: anthropic:messages:claude-haiku-4-5
     config:
       max_tokens: 20000
       thinking:
@@ -720,22 +738,27 @@ providers:
 
 The thinking configuration has three possible values:
 
-1. Adaptive thinking (recommended for Claude Opus 4.7):
+1. Adaptive thinking (recommended — the only supported on-mode for Claude 4.6 and newer):
 
 ```yaml
 thinking:
   type: 'adaptive'
 ```
 
-In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-7`.
+In adaptive mode, Claude decides when and how much to think based on the complexity of the request. Control depth with [`effort`](#effort-level) rather than a token budget.
 
-2. Enabled thinking:
+2. Enabled thinking (**legacy** — Haiku 4.5 and older only):
 
 ```yaml
 thinking:
   type: 'enabled'
   budget_tokens: number # Must be ≥1024 and less than max_tokens
 ```
+
+Fable 5/5.1, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
+(`"thinking.type.enabled" is not supported for this model`), and it is deprecated on
+Opus 4.6 / Sonnet 4.6. Promptfoo converts an `enabled` budget to `{ type: 'adaptive' }`
+on those models and warns once — but write new configs against `adaptive` + `effort`.
 
 3. Disabled thinking:
 
@@ -744,16 +767,26 @@ thinking:
   type: 'disabled'
 ```
 
-The `display` field controls how thinking content is returned:
+Not accepted on Fable 5 / Mythos 5 / Fable 5.1 / Mythos 5.1, where thinking is always on,
+nor on Opus 5 above `effort: high`. Promptfoo omits it in both cases and warns.
 
-- `'summarized'` (default) - thinking content is included in the response
-- `'omitted'` - thinking content is redacted but a signature is returned for multi-turn continuity (saves tokens)
+#### Thinking `display`
+
+The `display` field controls whether the reasoning text is returned. Thinking happens — and
+is billed — identically under every setting:
+
+| Value          | Behavior                                                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'omitted'`    | **Default** on Fable 5/5.1, Mythos 5/5.1, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
+| `'summarized'` | Returns a readable summary of the reasoning. Default on Opus 4.6 and Sonnet 4.6 only.                                                                                      |
+
+Because `'omitted'` is the default on current models, set `display` explicitly when you want
+to assert against Claude's reasoning:
 
 ```yaml
 thinking:
-  type: enabled
-  budget_tokens: 10000
-  display: omitted
+  type: adaptive
+  display: summarized
 ```
 
 When thinking is enabled or adaptive:
@@ -792,11 +825,11 @@ By default, thinking content is included in the response output. You can control
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+        display: 'summarized'
       showThinking: false # Exclude thinking content from the output
 ```
 
@@ -829,42 +862,58 @@ Claude 4 models provide enhanced output capabilities and extended thinking suppo
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
+      max_tokens: 64000 # Sonnet 5 supports up to 128K output tokens
+      stream: true # Required above 21,333 output tokens
       thinking:
-        type: 'enabled'
-        budget_tokens: 32000
+        type: 'adaptive'
+      effort: high
 ```
 
-Note: The `output-128k-2025-02-19` beta feature is specific to Claude 3.7 Sonnet and is not needed for Claude 4 models, which have improved output capabilities built-in.
+Fable 5/5.1, Opus 5, Opus 4.6–4.8, Sonnet 5, and Sonnet 4.6 all support up to **128K** output
+tokens; the 4.5 generation caps at 64K. The `output-128k-2025-02-19` beta feature is specific to
+Claude 3.7 Sonnet and is not needed on any current model.
 
 When using extended output:
 
-- Streaming is required when max_tokens is greater than 21,333
-- For thinking budgets above 32K, batch processing is recommended
-- The model may not use the entire allocated thinking budget
+- Streaming is required when `max_tokens` is greater than 21,333
+- Thinking shares the `max_tokens` budget with the answer, so leave headroom for both
+- The model may not use the entire allocated budget
 
-See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+See [Anthropic's Extended Thinking Guide](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
 ### Effort Level
 
-The `effort` parameter controls the output quality/speed tradeoff. Higher effort levels may produce more thorough responses but take longer:
+The `effort` parameter controls the reasoning-depth/cost tradeoff and replaces manual thinking
+budgets on current models. Higher effort produces more thorough responses but costs more and takes
+longer. It defaults to `high`, so setting `effort: high` is the same as omitting it.
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-7
+  - id: anthropic:messages:claude-opus-5
     config:
       effort: xhigh # Options: low, medium, high, xhigh, max
 ```
 
-Claude Opus 4.7 introduces the `xhigh` level between `high` and `max`, giving finer control over reasoning/latency on hard problems. For coding and agentic use cases, Anthropic recommends starting with `high` or `xhigh`.
+Support varies by model — sending an unsupported level returns a 400:
+
+| Model                                                    | Supported levels                            |
+| -------------------------------------------------------- | ------------------------------------------- |
+| Fable 5, Fable 5.1, Opus 5, Sonnet 5, Opus 4.7, Opus 4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
+| Opus 4.6, Sonnet 4.6                                     | `low`, `medium`, `high`, `max` (no `xhigh`) |
+| Opus 4.5                                                 | `low`, `medium`, `high`                     |
+| Sonnet 4.5, Haiku 4.5                                    | Not supported — omit `effort`               |
+
+`xhigh` sits between `high` and `max` and was introduced with Claude Opus 4.7. For coding and
+agentic use cases, Anthropic recommends starting at `high` or `xhigh`, then sweeping downward —
+`low` and `medium` are the main cost and latency lever on Opus 5 and Sonnet 5.
 
 This can be combined with other features like structured outputs:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-7
+  - id: anthropic:messages:claude-opus-5
     config:
       effort: high
       output_format:
@@ -881,7 +930,13 @@ providers:
 
 ### Structured Outputs
 
-Structured outputs constrain Claude's responses to a JSON schema. Supported on Claude Opus 4.7, Opus 4.6, Sonnet 4.6, and Sonnet 4.5+ / Opus 4.1+.
+Structured outputs constrain Claude's responses to a JSON schema. Supported on every current
+Claude model — Fable 5/5.1, Opus 5, Sonnet 5, Opus 4.6–4.8, Sonnet 4.6, and the 4.5 generation
+(Opus 4.5, Sonnet 4.5, Haiku 4.5).
+
+Promptfoo's `output_format` config key maps to the API's `output_config.format` and adds the
+`structured-outputs-2025-11-13` beta header for you — you do not set the deprecated top-level
+`output_format` request parameter yourself.
 
 #### JSON Outputs
 
@@ -889,7 +944,7 @@ Add `output_format` to get structured responses:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       output_format:
         type: json_schema
@@ -935,7 +990,7 @@ Add `strict: true` to tool definitions for schema-validated parameters:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - name: get_weather
@@ -958,7 +1013,7 @@ providers:
 
 **Incompatible with:** citations, message prefilling
 
-See [Anthropic's guide](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
+See [Anthropic's guide](https://platform.claude.com/docs/en/docs/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
 
 ## Model-Graded Tests
 
@@ -972,7 +1027,7 @@ Claude Pro/Max subscribers without a separate Anthropic Console key can wire up 
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-sonnet-4-6
+      id: anthropic:messages:claude-sonnet-5
       config:
         apiKeyRequired: false
 ```
@@ -988,7 +1043,7 @@ You can override the grading provider in several ways:
 ```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
-    provider: anthropic:messages:claude-sonnet-4-5-20250929
+    provider: anthropic:messages:claude-sonnet-5
 ```
 
 2. For individual assertions:
@@ -998,9 +1053,9 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-sonnet-4-5-20250929
+      id: anthropic:messages:claude-sonnet-5
       config:
-        temperature: 0.0
+        effort: low
 ```
 
 3. For specific tests:
@@ -1011,7 +1066,7 @@ tests:
       question: What is the capital of France?
     options:
       provider:
-        id: anthropic:messages:claude-sonnet-4-5-20250929
+        id: anthropic:messages:claude-sonnet-5
     assert:
       - type: llm-rubric
         value: Answer should mention Paris
@@ -1027,11 +1082,11 @@ When using the Anthropic disk response cache across runs, assign each provider a
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: tenant-a
     config:
       apiKey: '{{env.ANTHROPIC_API_KEY_A}}'
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: tenant-b
     config:
       apiKey: '{{env.ANTHROPIC_API_KEY_B}}'

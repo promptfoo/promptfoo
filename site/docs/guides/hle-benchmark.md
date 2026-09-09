@@ -43,7 +43,7 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 - Questions resist simple web search solutions
 - Focuses on verifiable, closed-ended problems
 
-**Current model performance (from the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam)):**
+**Model performance as of early 2026 (from the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam)). Newer releases such as Claude Opus 5 and Claude Sonnet 5 are not in this snapshot — check the leaderboard for current numbers:**
 
 | Model                          | Accuracy | Notes                  |
 | ------------------------------ | -------- | ---------------------- |
@@ -190,7 +190,7 @@ This automated approach scales well for large evaluations while maintaining accu
 
 **Key settings:**
 
-- **3K thinking tokens (Claude)**: Tradeoff between cost and reasoning capability - more tokens may improve accuracy
+- **Reasoning effort (Claude)**: `effort` trades cost against reasoning depth on adaptive-thinking models - higher levels may improve accuracy
 - **4K max tokens**: Allows detailed explanations without truncation
 - **50 questions**: Sample size chosen for this demonstration - scale up for production evals
 - **Custom prompts**: Can be further optimized for specific models and question types
@@ -206,19 +206,20 @@ tests:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-6
+  - anthropic:claude-sonnet-5
   - openai:o4-mini
   - deepseek:deepseek-reasoner
 ```
 
-**Increase reasoning budget:**
+**Increase reasoning depth:**
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     config:
       thinking:
-        budget_tokens: 8000 # For complex proofs
+        type: adaptive
+      effort: xhigh # For complex proofs
       max_tokens: 12000
 ```
 

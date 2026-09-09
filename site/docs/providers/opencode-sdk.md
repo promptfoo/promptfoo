@@ -90,7 +90,7 @@ providers:
   - id: opencode:sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
 
 prompts:
   - 'Write a Python function that validates email addresses'
@@ -243,7 +243,7 @@ Configure your preferred default model in OpenCode's global configuration:
 ```json title="~/.config/opencode/opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-6"
+  "model": "anthropic/claude-sonnet-5"
 }
 ```
 
@@ -503,9 +503,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: anthropic/claude-sonnet-4-6
-        temperature: 0.3
-        top_p: 0.9 # Nucleus sampling parameter
+        model: anthropic/claude-sonnet-5 # Claude 5 rejects temperature/top_p/top_k
         steps: 10 # Max iterations before text-only response
         color: '#ff5500' # Visual identification
         tools:
@@ -523,7 +521,7 @@ providers:
 
 `custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
 
-`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-4-6` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
+`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-5` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
 
 | Parameter     | Type    | Description                               |
 | ------------- | ------- | ----------------------------------------- |
