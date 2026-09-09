@@ -520,7 +520,6 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
 
 async function prepareCombinedConfig(
   configPaths: string[],
-  deferTests: boolean = false,
 ): Promise<{ config: UnifiedConfig; loadTests: () => Promise<void> }> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
@@ -582,9 +581,6 @@ async function prepareCombinedConfig(
       }
     }
   };
-  if (!deferTests) {
-    await loadTests();
-  }
 
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
@@ -770,7 +766,8 @@ async function prepareCombinedConfig(
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
-  const { config } = await prepareCombinedConfig(configPaths);
+  const { config, loadTests } = await prepareCombinedConfig(configPaths);
+  await loadTests();
   return config;
 }
 
@@ -795,7 +792,7 @@ export async function resolveConfigs(
   let promptReferenceSources: PromptReferenceSource[] = [];
   let loadFileTests: (() => Promise<void>) | undefined;
   if (configPaths) {
-    const prepared = await prepareCombinedConfig(configPaths, true);
+    const prepared = await prepareCombinedConfig(configPaths);
     fileConfig = prepared.config;
     loadFileTests = prepared.loadTests;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
