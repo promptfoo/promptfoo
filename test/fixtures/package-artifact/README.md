@@ -6,7 +6,9 @@ The consumer uses the public npm registry and is isolated from the repository's
 workspaces, lockfile, overrides, and development dependencies. To select a trusted
 local mirror explicitly, pass `--registry https://your-registry.example/`.
 
-After `npm run build`, run from the repository root:
+Use npm 11 as required by the repository. Older npm 10 pack implementations can
+run `prepare` despite `--ignore-scripts`. After `npm run build`, run from the
+repository root:
 
 ```sh
 npm run test:package-artifact
@@ -30,3 +32,21 @@ checking enabled for consumer code. Contracts also check dependency declarations
 root API consumers use `skipLibCheck` because the public `Eval` surface currently
 exposes Drizzle declarations with upstream errors and unrelated optional driver
 imports. This does not claim a clean root declaration closure.
+
+## Validate an existing artifact
+
+```sh
+npm run package:pack -- --destination /tmp/promptfoo-artifacts
+npm run test:package-artifact -- --tarball /tmp/promptfoo-artifacts/promptfoo-VERSION.tgz
+npm run test:package-artifact -- --tarball /tmp/promptfoo-artifacts/promptfoo-VERSION.tgz --profile omit-optional
+```
+
+The supplied archive is inspected and installed without repacking. Validation
+checks its own migration journal and UI references, works without a local `dist`,
+and verifies that its bytes remain unchanged. Current release jobs run
+`prepublishOnly` first, then pack, validate both profiles, and upload that archive
+to an isolated publisher. Publication cannot invoke another build.
+
+Historical backfills keep their tagged build. Tags with an exact-artifact harness
+use it; older tags receive an explicitly limited installed CLI/JSON echo check.
+They still publish the same archive that passed that compatibility check.

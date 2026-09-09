@@ -83,6 +83,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -112,17 +113,20 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
+      - name: Use npm 11
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+
       - name: Install Dependencies (Node 26)
         if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node == '26.x'
         # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
         # Install the tree without scripts, then rebuild the native addon tests need.
         run: |
-          npm ci --ignore-scripts
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org/
           npm rebuild better-sqlite3
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node != '26.x'
-        run: npx -y npm@11.11.0 ci
+        run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Test
         # Treat a post-run forks-worker crash (all tests already passed, then the
@@ -176,14 +180,17 @@ jobs:
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
+      - name: Use npm 11
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+
       - name: Install Dependencies
         # The build does not need native dependency lifecycle scripts. Skipping them
         # keeps the Node 26 build lane out of the install stall seen on hosted runners.
         run: |
           if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci --ignore-scripts
+            npm ci --ignore-scripts --registry=https://registry.npmjs.org/
           else
-            npx -y npm@11.11.0 ci
+            npm ci --registry=https://registry.npmjs.org/
           fi
 
       - name: Build
@@ -212,17 +219,25 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Pack Package Artifact
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
       - name: Test Package Artifact
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
           npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
-        run: npm run test:package-artifact
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
 
       - name: Test Package Artifact Without Optional Dependencies
         if: matrix.node == '24.x'
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact -- --profile omit-optional
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional
 
   style-check:
     name: Style Check

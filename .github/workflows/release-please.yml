@@ -67,61 +67,130 @@ jobs:
         )
       }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     needs: release-please
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
       - run: npm test
 
-  publish-npm:
+  build-npm:
     if: >-
       ${{
-        always() &&
-        !cancelled() &&
+        always() && !cancelled() &&
         needs.release-please.outputs.release_created == 'true' &&
         needs.build.result == 'success'
       }}
     needs: [build, release-please]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
+      # Publishing a tarball does not run prepublishOnly. Run its clean build and
+      # required telemetry-key guard here, before packing and validating the bytes.
+      - name: Build npm package
+        run: npm run prepublishOnly
+        env:
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - name: Pack npm package
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Validate npm package
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: |
+          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
+          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional
+      - name: Upload verified npm package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-npm:
+    # Keep trusted publishing in this workflow. This job executes no repository
+    # code or dependency install scripts; it only publishes the verified archive.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build-npm.result == 'success'
+      }}
+    needs: [build-npm, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          # Includes npm 11 with trusted publishing support; no tool installation here.
+          node-version: '24.20.0'
           registry-url: 'https://registry.npmjs.org'
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
-      # Empty NODE_AUTH_TOKEN so npm uses OIDC trusted publishing instead of the
-      # placeholder token actions/setup-node writes into .npmrc (actions/setup-node#1440).
-      - run: npm publish --provenance --access public
+      - name: Download verified npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-npm-package
+          path: ${{ runner.temp }}/promptfoo-package
+      - name: Publish verified npm package
         env:
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          # Neutralize setup-node's token placeholder so npm uses OIDC.
           NODE_AUTH_TOKEN: ''
-          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          REGISTRY_URL: https://registry.npmjs.org/
+        run: |
+          shopt -s nullglob
+          tarballs=("$PACKAGE_DIR"/*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one verified npm tarball"
+            exit 1
+          fi
+          manifest_path="$RUNNER_TEMP/promptfoo-publish-manifest.json"
+          tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
+          node - "$manifest_path" "$EXPECTED_VERSION" <<'NODE'
+          const fs = require('node:fs');
+          const [manifestPath, expectedVersion] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          if (manifest.name !== 'promptfoo' || manifest.version !== expectedVersion || manifest.publishConfig !== undefined) {
+            throw new Error('Downloaded artifact has unexpected publish metadata');
+          }
+          NODE
+          npm publish "${tarballs[0]}" --ignore-scripts --provenance --access public --registry="$REGISTRY_URL"
 
-  publish-npm-backfill:
-    # npm trusted publishing is bound to this workflow filename on npmjs.com,
-    # so manual backfills must stay inside release-please.yml.
+  build-npm-backfill:
     if: github.event_name == 'workflow_dispatch' && inputs.tag_name != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write
     env:
       TAG_NAME: ${{ inputs.tag_name }}
     steps:
@@ -131,11 +200,14 @@ jobs:
             echo "::error::TAG_NAME '$TAG_NAME' is empty or invalid"
             exit 1
           fi
-
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: refs/tags/${{ inputs.tag_name }}
-
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
       - name: Verify package version matches tag
         run: |
           package_version="$(node -p "require('./package.json').version")"
@@ -143,21 +215,128 @@ jobs:
             echo "::error::package.json version '$package_version' does not match tag '$TAG_NAME'"
             exit 1
           fi
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
+      - name: Build npm package
+        run: npm run prepublishOnly
+        env:
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - name: Pack npm package
+        id: package-artifact
+        # Preserve inventory checks on capable tags; older tags pack prebuilt output directly.
+        run: |
+          artifact_dir="$RUNNER_TEMP/promptfoo-package"
+          mkdir -p "$artifact_dir"
+          if node -e "process.exit(require('./package.json').scripts?.['package:pack'] ? 0 : 1)"; then
+            tarball="$(npm run --silent package:pack -- --destination "$artifact_dir")"
+          else
+            npm pack --ignore-scripts --json --pack-destination "$artifact_dir" > "$RUNNER_TEMP/npm-pack.json"
+            filename="$(node -p "const r = require(process.env.RUNNER_TEMP + '/npm-pack.json'); if (r.length !== 1 || r[0].name !== 'promptfoo' || r[0].version !== process.env.TAG_NAME) throw new Error('Unexpected packed metadata'); r[0].filename")"
+            tarball="$artifact_dir/$filename"
+          fi
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Validate historical npm package
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: |
+          if [[ -f scripts/testPackageArtifact.ts ]] && grep -q -- '--tarball' scripts/testPackageArtifact.ts; then
+            npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
+          else
+            # Compatibility gate for tags predating exact-artifact acceptance. This tests
+            # the selected archive's CLI and JSON output, without rebuilding or repacking it.
+            consumer_dir="$(mktemp -d "$RUNNER_TEMP/promptfoo-backfill-consumer.XXXXXX")"
+            trap 'rm -rf "$consumer_dir"' EXIT
+            export PROMPTFOO_CONFIG_DIR="$consumer_dir/config"
+            export PROMPTFOO_CACHE_PATH="$consumer_dir/cache"
+            export PROMPTFOO_DISABLE_UPDATE=true
+            export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
+            export npm_config_userconfig="$consumer_dir/.npmrc"
+            export npm_config_cache="$consumer_dir/npm-cache"
+            export npm_config_devdir="$consumer_dir/node-gyp"
+            touch "$npm_config_userconfig"
+            printf '{"private":true}' > "$consumer_dir/package.json"
+            npm install --prefix "$consumer_dir" --ignore-scripts --no-audit --no-fund --no-package-lock --registry=https://registry.npmjs.org/ "$PACKAGE_TARBALL"
+            # Before libSQL, the CLI needs better-sqlite3's native binding even for
+            # --version. Build only that dependency, in this tokenless consumer job.
+            if node -e "process.exit(require(process.argv[1]).dependencies?.['better-sqlite3'] ? 0 : 1)" "$consumer_dir/node_modules/promptfoo/package.json"; then
+              npm rebuild --prefix "$consumer_dir" --ignore-scripts=false --registry=https://registry.npmjs.org/ better-sqlite3
+            fi
+            printf '{"prompts":["artifact"],"providers":["echo"],"tests":[{"assert":[{"type":"equals","value":"artifact"}]}]}' > "$consumer_dir/config.json"
+            "$consumer_dir/node_modules/.bin/promptfoo" --version
+            "$consumer_dir/node_modules/.bin/promptfoo" eval --config "$consumer_dir/config.json" --output "$consumer_dir/results.json" --no-cache
+            node - "$consumer_dir/results.json" <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const output = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const results = output.results.results;
+          assert.equal(results.length, 1);
+          assert.equal(results[0].success, true);
+          assert.equal(results[0].score, 1);
+          assert.equal(results[0].error, undefined);
+          assert.equal(results[0].response.error, undefined);
+          assert.equal(results[0].response.output, 'artifact');
+          NODE
+          fi
+      - name: Upload verified npm package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
 
+  publish-npm-backfill:
+    # Keep trusted publishing in this workflow. This job executes no repository
+    # code or dependency install scripts; it only publishes the verified archive.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        github.event_name == 'workflow_dispatch' && inputs.tag_name != '' &&
+        needs.build-npm-backfill.result == 'success'
+      }}
+    needs: build-npm-backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          # Includes npm 11 with trusted publishing support; no tool installation here.
+          node-version: '24.20.0'
           registry-url: 'https://registry.npmjs.org'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
-      - name: Publish package
-        run: npm publish --provenance --access public
+      - name: Download verified npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ runner.temp }}/promptfoo-package
+      - name: Publish verified npm package
         env:
+          EXPECTED_VERSION: ${{ inputs.tag_name }}
+          # Neutralize setup-node's token placeholder so npm uses OIDC.
           NODE_AUTH_TOKEN: ''
-          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          REGISTRY_URL: https://registry.npmjs.org/
+        run: |
+          shopt -s nullglob
+          tarballs=("$PACKAGE_DIR"/*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one verified npm tarball"
+            exit 1
+          fi
+          manifest_path="$RUNNER_TEMP/promptfoo-publish-manifest.json"
+          tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
+          node - "$manifest_path" "$EXPECTED_VERSION" <<'NODE'
+          const fs = require('node:fs');
+          const [manifestPath, expectedVersion] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          if (manifest.name !== 'promptfoo' || manifest.version !== expectedVersion || manifest.publishConfig !== undefined) {
+            throw new Error('Downloaded artifact has unexpected publish metadata');
+          }
+          NODE
+          npm publish "${tarballs[0]}" --ignore-scripts --provenance --access public --registry="$REGISTRY_URL"
 
   docker:
     if: >-
@@ -224,7 +403,7 @@ jobs:
           cache: 'npm'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
 
       # The action's runtime install is pinned to this commit's root package.json
       # version, inlined into dist/ at build time. Refuse to mirror a release whose
