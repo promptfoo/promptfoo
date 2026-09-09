@@ -322,7 +322,7 @@ providers:
           max_content_tokens: 50000
 ```
 
-Promptfoo also supports the stable `web_fetch_20260209` variant. A newer version `web_fetch_20260309` adds `use_cache` support for controlling whether cached content is used:
+Promptfoo also supports the stable `web_fetch_20260209` variant, `web_fetch_20260309` (adds `use_cache` for controlling whether cached content is used), and the newest `web_fetch_20260318` (adds `response_inclusion`):
 
 ```yaml
 providers:
@@ -337,24 +337,31 @@ providers:
           name: web_fetch
           max_uses: 3
           use_cache: false # Bypass cache for fresh content
+        - type: web_fetch_20260318
+          name: web_fetch
+          max_uses: 3
+          # 'excluded' drops the fetched page from the response transcript, keeping
+          # large documents out of the output. 'full' (the default) keeps them.
+          response_inclusion: excluded
 ```
 
 **Web Fetch Tool Configuration Options:**
 
-| Parameter            | Type     | Description                                                                                   |
-| -------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `type`               | string   | `web_fetch_20250910` (beta), `web_fetch_20260209`, or `web_fetch_20260309` (adds `use_cache`) |
-| `name`               | string   | Must be `web_fetch`                                                                           |
-| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                          |
-| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                             |
-| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`)  |
-| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`)  |
-| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)          |
-| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                          |
-| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                     |
-| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                               |
-| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                          |
-| `use_cache`          | boolean  | Whether to use cached content (`web_fetch_20260309` only, optional)                           |
+| Parameter            | Type     | Description                                                                                                                                                                           |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`               | string   | `web_fetch_20250910` (beta), `web_fetch_20260209`, `web_fetch_20260309` (adds `use_cache`), or `web_fetch_20260318` (adds `response_inclusion`)                                       |
+| `name`               | string   | Must be `web_fetch`                                                                                                                                                                   |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                                                                                                                  |
+| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                                                                                                     |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`)                                                                                          |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`)                                                                                          |
+| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                                                                                                  |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                                                                                                                  |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                                                                                                             |
+| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                                                                                                       |
+| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                                                                                                  |
+| `use_cache`          | boolean  | Whether to use cached content (`web_fetch_20260309` and `web_fetch_20260318`, optional)                                                                                               |
+| `response_inclusion` | string   | `full` (default) or `excluded` — `excluded` drops the tool-use/result pair from the response, keeping large fetched pages out of the transcript (`web_fetch_20260318` only, optional) |
 
 ##### Web Search Tool
 
@@ -372,18 +379,19 @@ providers:
 
 **Web Search Tool Configuration Options:**
 
-| Parameter         | Type     | Description                                                                                |
-| ----------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `type`            | string   | `web_search_20250305` (beta) or `web_search_20260209`                                      |
-| `name`            | string   | Must be `web_search`                                                                       |
-| `max_uses`        | number   | Maximum number of searches per request (optional)                                          |
-| `allowed_callers` | string[] | Restrict which tool callers may invoke the server tool (optional)                          |
-| `allowed_domains` | string[] | Restrict results to specific domains (optional, mutually exclusive with `blocked_domains`) |
-| `blocked_domains` | string[] | Exclude domains from results (optional, mutually exclusive with `allowed_domains`)         |
-| `cache_control`   | object   | Apply Anthropic cache control to the tool definition (optional)                            |
-| `defer_loading`   | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)       |
-| `strict`          | boolean  | Enable strict schema validation for tool names and inputs (optional)                       |
-| `user_location`   | object   | Approximate user location to improve search relevance (optional)                           |
+| Parameter            | Type     | Description                                                                                               |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `type`               | string   | `web_search_20250305` (beta), `web_search_20260209`, or `web_search_20260318` (adds `response_inclusion`) |
+| `name`               | string   | Must be `web_search`                                                                                      |
+| `max_uses`           | number   | Maximum number of searches per request (optional)                                                         |
+| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                         |
+| `allowed_domains`    | string[] | Restrict results to specific domains (optional, mutually exclusive with `blocked_domains`)                |
+| `blocked_domains`    | string[] | Exclude domains from results (optional, mutually exclusive with `allowed_domains`)                        |
+| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                           |
+| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                      |
+| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                      |
+| `response_inclusion` | string   | `full` (default) or `excluded` — see the web fetch table above (`web_search_20260318` only, optional)     |
+| `user_location`      | object   | Approximate user location to improve search relevance (optional)                                          |
 
 ##### Combined Web Search and Web Fetch
 
