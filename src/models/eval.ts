@@ -1470,10 +1470,9 @@ export default class Eval {
     );
 
     if (
-      stats.cachedRows === 0 &&
       this._resultsLoaded &&
       this.results.length > 0 &&
-      this.prompts.every((prompt) => prompt.metrics?.cachedRows === undefined)
+      this.prompts.some((prompt) => prompt.metrics?.cachedRows === undefined)
     ) {
       stats.cachedRows = countCachedRows(this.results);
     }

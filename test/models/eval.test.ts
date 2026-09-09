@@ -22,7 +22,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -108,6 +108,27 @@ describe('evaluator', () => {
       const summary = await evalRecord.toEvaluateSummary();
 
       expect(summary.stats.cachedRows).toBe(1);
+    });
+
+    it('uses persisted rows when only some prompts have cached-row metrics', async () => {
+      const prompts = [
+        { raw: 'prompt one', label: 'prompt one' },
+        { raw: 'prompt two', label: 'prompt two' },
+      ];
+      const evalRecord = await Eval.create({}, prompts, { id: 'mixed-legacy-cached-stats' });
+      const promptWithCachedMetric = createCompletedPrompt('prompt one');
+      promptWithCachedMetric.metrics!.cachedRows = 1;
+      await evalRecord.addPrompts([promptWithCachedMetric, createCompletedPrompt('prompt two')]);
+      await evalRecord.addResult(
+        createEvaluateResult({ promptIdx: 0, testIdx: 0, response: { cached: true } }),
+      );
+      await evalRecord.addResult(
+        createEvaluateResult({ promptIdx: 1, testIdx: 0, response: { cached: true } }),
+      );
+
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(2);
     });
   });
 

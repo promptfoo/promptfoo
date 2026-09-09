@@ -466,7 +466,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   const stats = eval_.getStats();
-  if (eval_.prompts.every((prompt) => prompt.metrics?.cachedRows === undefined)) {
+  if (eval_.prompts.some((prompt) => prompt.metrics?.cachedRows === undefined)) {
     stats.cachedRows = await eval_.getCachedResponseRowsCount();
   }
 
