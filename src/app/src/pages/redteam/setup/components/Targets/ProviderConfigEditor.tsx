@@ -16,7 +16,7 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
-import { isLocalOpenAiProviderType } from './helpers';
+import { isLocalOpenAiProviderType, withLocalProviderType } from './helpers';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -306,6 +306,11 @@ function ProviderConfigEditor({
       updatedTarget.config[field] = value;
     }
 
+    updatedTarget.config = withLocalProviderType(
+      updatedTarget.id,
+      updatedTarget.config,
+      providerType,
+    );
     providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };

@@ -314,6 +314,25 @@ describe('redteam UI initial target runtime contracts', () => {
     },
   );
 
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'loads a persisted %s target without any OpenAI key',
+    async (type) => {
+      const restoreKeys = mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const target = persistedTargets[`${type}:none`];
+        const provider = await loadApiProvider(target.id, { options: target });
+        expect(await provider.callApi('Use the local server without an API key')).toMatchObject({
+          output: 'Hello from the fixture',
+        });
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe(`${target.config.apiBaseUrl}/chat/completions`);
+        expect(request!.headers).not.toHaveProperty('Authorization');
+      } finally {
+        restoreKeys();
+      }
+    },
+  );
+
   it.each(
     ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
       ['omitted', 'empty', 'whitespace', 'null', 'custom', 'host'].map((endpoint) => ({

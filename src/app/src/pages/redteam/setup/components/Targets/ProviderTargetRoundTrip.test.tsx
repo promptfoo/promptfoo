@@ -99,6 +99,63 @@ describe('generated target configuration round trips', () => {
 
   it.each(
     localTargets.flatMap((target) =>
+      [false, true].map((selectedKey) => ({ ...target, selectedKey })),
+    ),
+  )(
+    'retains $label credentials when JSON changes while the ID is blank (selected key: $selectedKey)',
+    async ({ label, type, selectedKey }) => {
+      const user = userEvent.setup();
+      renderWithProviders(<TargetEditor />);
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      await user.clear(screen.getByRole('textbox', { name: /Target ID/ }));
+      const replacement = {
+        apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+        ...(selectedKey ? { apiKeyEnvar: 'LOCAL_MODEL_KEY' } : {}),
+      };
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+        JSON.stringify(replacement),
+      );
+      const id = 'openai:chat:tenant/model.py:Q4_K_M';
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+
+      const saved = JSON.parse(JSON.stringify(useRedTeamConfig.getState().config));
+      expect(saved.target).toMatchObject({
+        id,
+        config: { ...replacement, type, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      act(() => useRedTeamConfig.getState().setFullConfig(saved));
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+      expect(useRedTeamConfig.getState().config.target).toEqual(saved.target);
+    },
+  );
+
+  it('keeps native provider config literal when changing an ID in the local editor', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TargetEditor />);
+    await user.click(screen.getByText('vLLM', { selector: 'p' }).closest('[role="button"]')!);
+    await user.clear(screen.getByRole('textbox', { name: /Target ID/ }));
+    const replacement = { num_predict: 100 };
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+      JSON.stringify(replacement),
+    );
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: /Target ID/ }),
+      'ollama:tenant/model.py',
+    );
+    expect(useRedTeamConfig.getState().config.target).toMatchObject({
+      id: 'ollama:tenant/model.py',
+      config: replacement,
+    });
+    expect(useRedTeamConfig.getState().config.target.config).toEqual(replacement);
+  });
+
+  it.each(
+    localTargets.flatMap((target) =>
       ['saved JSON', 'YAML'].map((format) => ({ ...target, format })),
     ),
   )(

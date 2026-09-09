@@ -185,6 +185,42 @@ describe('eval provider configuration round trips', () => {
     );
   });
 
+  it.each(
+    [
+      { label: 'Llamafile', type: 'llamafile' },
+      { label: 'vLLM', type: 'vllm' },
+      { label: 'Text Generation WebUI', type: 'text-generation-webui' },
+    ].flatMap((target) => [false, true].map((selectedKey) => ({ ...target, selectedKey }))),
+  )(
+    'retains $label credentials when JSON changes while the ID is blank (selected key: $selectedKey)',
+    async ({ label, type, selectedKey }) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      renderWithProviders(<AddProviderDialog open onClose={vi.fn()} onSave={onSave} />);
+      await user.click(screen.getByText(label, { selector: 'p' }).closest('[role="button"]')!);
+      await user.clear(screen.getByRole('textbox', { name: /Target ID/ }));
+      const replacement = {
+        apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+        ...(selectedKey ? { apiKeyEnvar: 'LOCAL_MODEL_KEY' } : {}),
+      };
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+        JSON.stringify(replacement),
+      );
+      const id = 'openai:chat:tenant/model.json-v2';
+      await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+      await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+      expect(onSave).toHaveBeenCalledOnce();
+      const [saved] = normalizeProviders(JSON.parse(JSON.stringify([onSave.mock.calls[0][0]])));
+      expect(saved).toMatchObject({
+        id,
+        config: { ...replacement, type, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+    },
+  );
+
   it.each([
     { model: 'tenant/model.json-v2', type: undefined },
     { model: 'tenant/model.pytorch-v2', type: undefined },
