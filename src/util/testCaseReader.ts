@@ -852,11 +852,9 @@ export function resolveTestsWatchPaths(
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // A value may be a list of references, or nest them, and generateVarCombinations()
+      // and renderPrompt() read every one, so walk the whole mapping.
+      return collectConfigFileReferences(entry.vars, basePath);
     }
     return [];
   });

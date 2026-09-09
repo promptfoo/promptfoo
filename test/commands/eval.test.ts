@@ -1089,6 +1089,41 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should keep watching after an unexpected failure on a file change', async () => {
+    // chokidar does not await the change handler, so rethrowing an unclassified error
+    // used to escape as an unhandled rejection and terminate the whole watch session.
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(new Error('provider exploded'));
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      expect(loggerErrorSpy).toHaveBeenCalledWith('provider exploded');
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
     const cmdObj = { config: [cloudConfigUuid] };
