@@ -176,7 +176,15 @@ export class ProviderRateLimitState extends EventEmitter {
         try {
           throwIfAborted(options.abortSignal);
           const result = await callFn();
-          throwIfAborted(options.abortSignal);
+          const hasErrorResponse =
+            result !== null &&
+            typeof result === 'object' &&
+            'error' in result &&
+            typeof result.error === 'string' &&
+            result.error.length > 0;
+          if (!hasErrorResponse) {
+            throwIfAborted(options.abortSignal);
+          }
           this.latencies.push(Date.now() - startTime);
 
           const headers = options.getHeaders?.(result);
@@ -187,24 +195,33 @@ export class ProviderRateLimitState extends EventEmitter {
           if (headers) {
             this.updateFromHeaders(headers, isRateLimited);
           }
+          if (isRateLimited) {
+            this.handleRateLimit(retryAfterMs);
+          }
           releaseSlot();
+
+          // Keep an independent failure's diagnostic and metadata intact, but
+          // never retry it once the caller has cancelled.
+          if (options.abortSignal?.aborted && hasErrorResponse) {
+            this.failedRequests++;
+            return result;
+          }
 
           if (!isRateLimited) {
             this.handleSuccess();
             this.completedRequests++;
             return result;
           }
-          this.handleRateLimit(retryAfterMs);
         } catch (error) {
           if (ownsSlot) {
             this.latencies.push(Date.now() - startTime);
           }
-          releaseSlot();
 
           // Cancellation is final, even for a custom reason or a message that
           // resembles a retryable error. Preserve unrelated provider errors.
           if (
-            options.abortSignal?.aborted ||
+            (options.abortSignal?.aborted &&
+              (error === options.abortSignal.reason || !(error instanceof Error))) ||
             (error instanceof Error &&
               (error.name === 'AbortError' || error.name === 'AbortException'))
           ) {
@@ -217,6 +234,9 @@ export class ProviderRateLimitState extends EventEmitter {
           retryAfterMs = options.getRetryAfter?.(undefined, retryError);
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
+          }
+          if (options.abortSignal?.aborted) {
+            throw error;
           }
         } finally {
           releaseSlot();

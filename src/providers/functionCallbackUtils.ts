@@ -113,7 +113,7 @@ export async function executeProviderFunctionCallback({
     }
     return String(result);
   } catch (error: any) {
-    if (isCallerAbortError(error, abortSignal)) {
+    if (isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
       throwIfAborted(abortSignal);
     }
     logger.error(

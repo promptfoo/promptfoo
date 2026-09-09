@@ -20,6 +20,7 @@ import {
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
+import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -689,7 +690,8 @@ async function fetchAndReadBody(
   maxRetries: number | undefined,
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
-  const maxBodyRetries = isIdempotent ? 2 : 0;
+  const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
+  const maxBodyRetries = isIdempotent ? Math.min(2, retryBudget) : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -700,7 +702,11 @@ async function fetchAndReadBody(
       const respText = await resp.text();
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
-      if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
+      if (
+        !options.signal?.aborted &&
+        isTransientConnectionError(err as Error) &&
+        bodyAttempt < maxBodyRetries
+      ) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
         logger.debug('[Cache] Body stream failed with transient error, retrying', {
           attempt: bodyAttempt + 1,
@@ -708,7 +714,8 @@ async function fetchAndReadBody(
           backoffMs,
           error: (err as Error)?.message?.slice(0, 200),
         });
-        await sleep(backoffMs);
+        await waitForPromiseWithAbort(sleep(backoffMs), options.signal);
+        throwIfAborted(options.signal);
         continue;
       }
       // Preserve cancellation: an aborted body read rejects with an AbortError, and
@@ -846,6 +853,9 @@ export async function fetchWithCache<T = unknown>(
 ): Promise<FetchWithCacheResult<T>> {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
   throwIfAborted(signal);
+  // fetchWithTimeout composes RequestInit.signal with its timeout signal.
+  // Forward a Request-owned signal too, while retaining an explicit override.
+  const transportOptions = signal === options.signal ? options : { ...options, signal };
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -868,7 +878,7 @@ export async function fetchWithCache<T = unknown>(
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      transportOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -915,7 +925,7 @@ export async function fetchWithCache<T = unknown>(
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        transportOptions,
         timeout,
         maxRetries,
         isIdempotent,

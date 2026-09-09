@@ -7,7 +7,13 @@ export function getAbortError(signal: AbortSignal): Error {
   ) {
     return reason;
   }
-  return Object.assign(new Error('The operation was aborted.'), {
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : 'The operation was aborted.';
+  return Object.assign(new Error(message), {
     name: 'AbortError',
     cause: reason,
   });

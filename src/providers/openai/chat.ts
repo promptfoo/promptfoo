@@ -140,9 +140,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+      const mcpClient = this.mcpClient;
+      try {
+        await this.initializationPromise;
+      } finally {
+        try {
+          await mcpClient.cleanup();
+        } finally {
+          this.mcpClient = null;
+        }
+      }
     }
   }
 
@@ -691,8 +698,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               try {
                 parsedArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
                 throwIfAborted(callApiOptions?.abortSignal);
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-                throwIfAborted(callApiOptions?.abortSignal);
+                const mcpResult = await this.mcpClient.callTool(
+                  functionName,
+                  parsedArgs,
+                  callApiOptions?.abortSignal,
+                );
 
                 if (isMcpErrorResult(mcpResult)) {
                   const errorMessage = getMcpErrorMessage(mcpResult);
@@ -704,7 +714,29 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                     output: errorMessage,
                     is_error: true,
                   });
+                  if (callApiOptions?.abortSignal?.aborted) {
+                    return {
+                      error: `MCP Tool Error (${functionName}): ${errorMessage}`,
+                      tokenUsage: getTokenUsage(data, cached),
+                      cached,
+                      latencyMs,
+                      logProbs,
+                      ...(finishReason && { finishReason }),
+                      cost,
+                      guardrails: { flagged: contentFiltered },
+                      metadata: {
+                        ...providerMetadata,
+                        http: {
+                          status,
+                          statusText,
+                          headers: responseHeaders ?? {},
+                        },
+                        toolCalls: mcpToolCalls,
+                      },
+                    };
+                  }
                 } else {
+                  throwIfAborted(callApiOptions?.abortSignal);
                   // Normalize MCP content to a readable string
                   const normalizeContent = (content: any): string => {
                     if (content == null) {
@@ -751,8 +783,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
-                if (isCallerAbortError(error, callApiOptions?.abortSignal)) {
+                if (
+                  isCallerAbortError(error, callApiOptions?.abortSignal, {
+                    requireReasonMatch: true,
+                  })
+                ) {
                   throwIfAborted(callApiOptions?.abortSignal);
+                }
+                if (callApiOptions?.abortSignal?.aborted) {
+                  throw error;
                 }
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
                 results.push(`MCP Tool Error (${functionName}): ${error}`);
@@ -786,8 +825,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               results.push(functionResult);
               hasSuccessfulCallback = true;
             } catch (error) {
-              if (isCallerAbortError(error, callApiOptions?.abortSignal)) {
+              if (
+                isCallerAbortError(error, callApiOptions?.abortSignal, {
+                  requireReasonMatch: true,
+                })
+              ) {
                 throwIfAborted(callApiOptions?.abortSignal);
+              }
+              if (callApiOptions?.abortSignal?.aborted) {
+                throw error;
               }
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
@@ -887,7 +933,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
-      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+      if (isCallerAbortError(err, callApiOptions?.abortSignal, { requireReasonMatch: true })) {
         throwIfAborted(callApiOptions?.abortSignal);
       }
       await deleteFromCache?.();

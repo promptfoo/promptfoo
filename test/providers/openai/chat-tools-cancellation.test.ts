@@ -143,21 +143,41 @@ describe('Chat post-response callback cancellation', () => {
     expect(callback).toHaveBeenCalledOnce();
   });
 
-  it('observes cancellation before successful fallback after an unrelated callback failure', async () => {
-    const controller = new AbortController();
-    const first = vi.fn(async () => {
-      controller.abort(new Error('caller cancellation'));
-      throw new Error('independent callback failure');
-    });
-    const second = vi.fn(async () => 'second result');
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce(toolResponse(['first', 'second']));
-    await expect(
-      provider({ functionToolCallbacks: { first, second } }).callApi('fixture', undefined, {
-        abortSignal: controller.signal,
-      }),
-    ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancellation' });
-    expect(second).not.toHaveBeenCalled();
-  });
+  it.each(['Error', 'AbortError', 'AbortException'])(
+    'preserves an unrelated callback-local %s after the caller independently aborts',
+    async (name) => {
+      const started = createDeferred<void>();
+      const result = createDeferred<string>();
+      const controller = new AbortController();
+      const callbackError = Object.assign(new Error('independent callback failure'), {
+        name,
+        cause: new Error('callback-local operation failed'),
+      });
+      const first = vi.fn(() => {
+        started.resolve();
+        return result.promise;
+      });
+      const second = vi.fn(async () => 'second result');
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(toolResponse(['first', 'second']));
+      const pending = provider({ functionToolCallbacks: { first, second } }).callApi(
+        'fixture',
+        undefined,
+        { abortSignal: controller.signal },
+      );
+      const preserved = expect(pending).resolves.toMatchObject({
+        error: expect.stringContaining(`${name}: independent callback failure`),
+        metadata: { http: { status: 200 } },
+      });
+      await started.promise;
+      controller.abort(new Error('independent caller cancellation'));
+      result.reject(callbackError);
+      await preserved;
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('independent callback failure'),
+      );
+      expect(second).not.toHaveBeenCalled();
+    },
+  );
 
   it('preserves ordinary callback failure fallback and successful callback output', async () => {
     vi.mocked(globalThis.fetch)
@@ -179,7 +199,7 @@ describe('Chat post-response callback cancellation', () => {
     expect(second).toHaveBeenCalledOnce();
   });
 
-  it.each(['two tools', 'final tool', 'tool error'])(
+  it.each(['two tools', 'final tool'])(
     'checks after the real MCP client awaits its SDK tool request (%s)',
     async (shape) => {
       vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined);
@@ -211,13 +231,62 @@ describe('Chat post-response callback cancellation', () => {
       controller.abort();
       toolResult.resolve({
         content: [{ type: 'text', text: 'first result' }],
-        isError: shape === 'tool error',
       });
       await rejected;
       expect(callTool).toHaveBeenCalledOnce();
       await target.cleanup();
     },
   );
+
+  it('preserves a returned MCP tool failure after caller abort and prevents later tool dispatch', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined);
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: ['first', 'second'].map((name) => ({
+        name,
+        inputSchema: { type: 'object' as const },
+      })),
+    });
+    const started = createDeferred<void>();
+    const toolResult = createDeferred<{
+      content: { type: 'text'; text: string }[];
+      isError: boolean;
+    }>();
+    const callTool = vi.spyOn(Client.prototype, 'callTool').mockImplementationOnce(() => {
+      started.resolve();
+      return toolResult.promise;
+    });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(toolResponse(['first', 'second']));
+    const target = provider({
+      mcp: { enabled: true, servers: [{ url: 'https://mcp.fixture.test' }] },
+    });
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    const content = [{ type: 'text' as const, text: 'independent tool failure' }];
+    const errorMessage = JSON.stringify(content);
+    const preserved = expect(pending).resolves.toMatchObject({
+      error: `MCP Tool Error (first): ${errorMessage}`,
+      tokenUsage: { total: 5 },
+      metadata: {
+        http: { status: 200 },
+        toolCalls: [
+          {
+            id: 'call-first',
+            name: 'first',
+            input: {},
+            output: errorMessage,
+            is_error: true,
+          },
+        ],
+      },
+    });
+    await started.promise;
+    controller.abort(new Error('independent caller cancellation'));
+    toolResult.resolve({ content, isError: true });
+    await preserved;
+    expect(callTool).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    await target.cleanup();
+  });
 
   it('preserves ordinary MCP tool errors, successful results and tool metadata', async () => {
     vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined);
@@ -249,6 +318,7 @@ describe('Chat post-response callback cancellation', () => {
       },
       tokenUsage: { total: 5 },
     });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
     await target.cleanup();
   });
 });

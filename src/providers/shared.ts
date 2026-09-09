@@ -26,16 +26,19 @@ export function throwIfAborted(signal?: AbortSignal | null): void {
   }
 }
 
-/** Recognize this caller's cancellation without reclassifying unrelated failures. */
-export function isCallerAbortError(error: unknown, signal?: AbortSignal | null): boolean {
+/** Match caller cancellation, requiring a reason link outside owned transport calls. */
+export function isCallerAbortError(
+  error: unknown,
+  signal?: AbortSignal | null,
+  { requireReasonMatch = false }: { requireReasonMatch?: boolean } = {},
+): boolean {
   if (!signal?.aborted) {
     return false;
   }
   return (
     error === signal.reason ||
     (error instanceof Error &&
-      (error.name === 'AbortError' ||
-        error.name === 'AbortException' ||
+      ((!requireReasonMatch && (error.name === 'AbortError' || error.name === 'AbortException')) ||
         (signal.reason !== undefined &&
           (error as Error & { cause?: unknown }).cause === signal.reason)))
   );
