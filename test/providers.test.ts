@@ -1029,10 +1029,7 @@ describe('loadApiProvider', () => {
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'gpt-4.1-2025-04-14',
-      expect.any(Object),
-    );
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6-terra', expect.any(Object));
     expect(provider).toBeDefined();
   });
 

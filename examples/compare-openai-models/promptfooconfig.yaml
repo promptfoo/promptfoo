@@ -1,21 +1,39 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing OpenAI flagship models performance on riddles
+description: Comparing current OpenAI models on riddles
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - openai:chat:gpt-5.4
-  - openai:chat:gpt-5.4-mini
+  - id: openai:responses:gpt-5.6-luna
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+  - id: openai:responses:gpt-5.6-terra
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+  - id: openai:responses:gpt-5.6-sol
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+  - id: openai:responses:gpt-6-astra
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
 
 defaultTest:
   assert:
-    # Inference should always cost less than this (USD)
+    # Example per-response budget (USD)
     - type: cost
-      threshold: 0.01
-    # Inference should always be faster than this (milliseconds)
+      threshold: 0.15
+    # Example per-response latency budget (milliseconds)
     - type: latency
-      threshold: 10000
+      threshold: 60000
 
 tests:
   - vars:
