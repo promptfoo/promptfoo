@@ -42,6 +42,11 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     super(modelName, {
       env,
       config: {
+        // This provider machine-parses its own output with JSON.parse, so never let
+        // rendered thinking text into it. Current models return an empty thinking block
+        // under the default `display: 'omitted'` and emit none at all under a forced
+        // tool_choice, but the parse should not depend on either staying true.
+        showThinking: false,
         tool_choice: { type: 'tool', name: 'grade_output' },
         tools: [
           {

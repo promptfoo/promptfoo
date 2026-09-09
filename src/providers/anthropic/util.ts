@@ -200,7 +200,9 @@ const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // (`claude-research-preview-5`), so five is generous headroom at O(1) work per candidate.
 const CLAUDE_5_OR_LATER_PATTERN =
   /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*){0,4}-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
-// Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
+// Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — the models that carry the regional premium
+// without the sampling/thinking deprecations. 4.6 additionally loses assistant prefill,
+// which CLAUDE_4_6_PATTERN below covers; 4.5 and Haiku 4.5 keep it.
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
 // Opus/Sonnet 4.6 specifically. The 4.6 generation is where Anthropic removed assistant
@@ -346,8 +348,23 @@ export function isForcedToolChoiceUnsupportedClaudeModel(modelId: string): boole
  * covers Opus/Sonnet 4.6, Opus 4.7/4.8, Opus 5, Sonnet 5, and the Fable/Mythos 5 families.
  * Opus/Sonnet/Haiku 4.5 and earlier still accept it.
  */
-export function isPrefillUnsupportedClaudeModel(modelId: string): boolean {
-  return hasClaudeCapability(modelId, 'prefillUnsupported');
+export function isPrefillUnsupportedClaudeModel(
+  modelId: string,
+  options: { allowGenerationFallback?: boolean } = {},
+): boolean {
+  const isApplicationInferenceProfileArn =
+    modelId.startsWith('arn:') && modelId.includes(':application-inference-profile/');
+
+  return (
+    hasClaudeCapability(modelId, 'prefillUnsupported') ||
+    // Anthropic has kept prefill removed in every family since 4.6, so a Claude 5+ name
+    // with no row yet is far more likely to reject prefill than to accept it. The cost of
+    // being wrong is one spurious log line; the cost of staying silent is the unexplained
+    // 400. Arbitrary deployment and inference-profile aliases cannot use the fallback.
+    (options.allowGenerationFallback !== false &&
+      !isApplicationInferenceProfileArn &&
+      CLAUDE_5_OR_LATER_PATTERN.test(modelId))
+  );
 }
 
 /**

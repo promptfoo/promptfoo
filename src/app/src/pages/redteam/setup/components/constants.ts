@@ -51,6 +51,9 @@ const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
+  // Previously advertised as a live preset. Kept so a saved config carrying the dated ID
+  // still hydrates to its Anthropic target instead of being rewritten to `custom`.
+  { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
 ];
 
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };

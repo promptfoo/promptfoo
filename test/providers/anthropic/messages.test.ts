@@ -3198,6 +3198,18 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    // A Claude 5+ family with no capability row yet still gets the diagnostic, via the
+    // generation fallback — the alternative is the opaque 400 this warning exists to explain.
+    it.each(['claude-haiku-5', 'claude-some-future-model-9'])(
+      'warns for the unlisted Claude 5+ family %s via the generation fallback',
+      async (model) => {
+        const warnSpy = await callWithPrefill(model);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Assistant message prefilling is not supported'),
+        );
+      },
+    );
+
     // The 4.5 generation and older still accept a trailing assistant turn.
     it.each(['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-3-opus-20240229'])(
       'does not warn for %s, which still accepts prefill',
