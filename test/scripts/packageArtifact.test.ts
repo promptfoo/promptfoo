@@ -29,6 +29,8 @@ function writeBuildAssets(source: string): void {
 
 describe('package artifact packing', () => {
   it('packs prebuilt bytes without hooks and inspects an unchanged archive with spaces in its path', () => {
+    const npmExecPath = process.env.npm_execpath;
+    expect(npmExecPath).toBeTruthy();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-packer-'));
     directories.push(root);
     const source = path.join(root, 'source');
@@ -52,7 +54,7 @@ describe('package artifact packing', () => {
     const metadata = JSON.parse(
       execFileSync(
         process.execPath,
-        [process.env.npm_execpath!, 'pack', renamed, '--dry-run', '--ignore-scripts', '--json'],
+        [npmExecPath!, 'pack', renamed, '--dry-run', '--ignore-scripts', '--json'],
         { cwd: source, encoding: 'utf8' },
       ),
     );

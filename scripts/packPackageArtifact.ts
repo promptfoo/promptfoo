@@ -8,6 +8,10 @@ import { parseArgs } from 'node:util';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 function listFiles(packageDir: string, rootDir: string): string[] {
+  assert(
+    fs.existsSync(rootDir),
+    `Missing built asset directory: ${path.relative(packageDir, rootDir)}`,
+  );
   return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = path.join(rootDir, entry.name);
     return entry.isDirectory()
@@ -55,12 +59,17 @@ export function packPackageArtifact(packageDir: string, destination: string): st
     ],
     { cwd: packageDir, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 },
   );
-  const results = JSON.parse(output) as Array<{
+  let results: Array<{
     name: string;
     version: string;
     filename: string;
     files: Array<{ path: string }>;
   }>;
+  try {
+    results = JSON.parse(output);
+  } catch {
+    assert.fail(`npm pack --json returned invalid JSON: ${output}`);
+  }
   assert.equal(results.length, 1, 'Expected exactly one package artifact');
   const [result] = results;
   assert.equal(result.name, manifest.name);
