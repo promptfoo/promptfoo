@@ -92,7 +92,7 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: any; region: string };
+  private initializedRuntime?: { client: any; region: string; credentialScope: string };
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -176,12 +176,16 @@ abstract class SageMakerGenericProvider {
     if (this.config.profile) {
       return { source: 'profile', profile: this.config.profile };
     }
-    // The default chain resolves at request time; key off what selects the account.
-    return {
-      source: 'default',
-      profile: process.env.AWS_PROFILE,
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    };
+    // The default chain resolves at request time, and reads process.env directly (it
+    // never sees promptfoo's `env:` overrides), so neither may this. AWS_PROFILE wins
+    // outright; env static credentials only select an account when the secret is set too.
+    if (process.env.AWS_PROFILE) {
+      return { source: 'default', profile: process.env.AWS_PROFILE };
+    }
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      return { source: 'default', accessKeyId: process.env.AWS_ACCESS_KEY_ID };
+    }
+    return { source: 'default' };
   }
 
   /**
@@ -202,12 +206,16 @@ abstract class SageMakerGenericProvider {
    * Initialize and return the SageMaker runtime client
    */
   async getSageMakerRuntimeInstance(region?: string) {
+    // A client memoizes the credentials it resolved on its first request, so it must be
+    // rebuilt when the scope changes — otherwise the cache key names a principal that is
+    // not the one signing, and a response gets stored under another account's key.
+    const credentialScope = JSON.stringify(this.getCredentialScope());
     if (
       !this.sagemakerRuntime ||
-      (region !== undefined &&
-        this.initializedRuntime !== undefined &&
+      (this.initializedRuntime !== undefined &&
         this.sagemakerRuntime === this.initializedRuntime.client &&
-        region !== this.initializedRuntime.region)
+        ((region !== undefined && region !== this.initializedRuntime.region) ||
+          credentialScope !== this.initializedRuntime.credentialScope))
     ) {
       try {
         const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
@@ -222,7 +230,7 @@ abstract class SageMakerGenericProvider {
         });
 
         this.sagemakerRuntime = runtime;
-        this.initializedRuntime = { client: runtime, region: runtimeRegion };
+        this.initializedRuntime = { client: runtime, region: runtimeRegion, credentialScope };
         logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
         return runtime;
       } catch {

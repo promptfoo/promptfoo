@@ -550,6 +550,74 @@ describe('SageMakerCompletionProvider', () => {
       expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
+    it('rebuilds the runtime client when the AWS profile changes', async () => {
+      // A client memoizes the credentials it resolved on its first request, so without a
+      // rebuild the second call would still sign as staging while its response was stored
+      // under production's cache key.
+      mockSend.mockImplementation(async () => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: 'A garden' })),
+      }));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+
+      vi.stubEnv('AWS_PROFILE', 'staging');
+      await provider.callApi('A quiet garden');
+      expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(1);
+
+      vi.stubEnv('AWS_PROFILE', 'production');
+      await provider.callApi('A quiet garden');
+      expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['is missing its secret', {}],
+      [
+        'is skipped in favor of AWS_PROFILE',
+        { AWS_SECRET_ACCESS_KEY: 's', AWS_PROFILE: 'staging' },
+      ],
+    ])('shares the cache when the env access key id %s', async (_label, extraEnv) => {
+      // Neither form selects the account for the default chain, so neither may split the cache.
+      mockSend.mockImplementation(async () => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: 'A garden' })),
+      }));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      for (const [key, value] of Object.entries(extraEnv)) {
+        vi.stubEnv(key, value);
+      }
+
+      for (const accessKeyId of ['AKIAOLD', 'AKIANEW']) {
+        vi.stubEnv('AWS_ACCESS_KEY_ID', accessKeyId);
+        await provider.callApi('A quiet garden');
+      }
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(1);
+    });
+
+    it('never puts a raw credential in the cache key', async () => {
+      mockSend.mockImplementation(async () => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: 'A garden' })),
+      }));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          accessKeyId: 'AKIACONFIGURED',
+          secretAccessKey: 'configured-secret',
+          sessionToken: 'configured-session-token',
+        },
+      });
+      vi.spyOn(provider, 'getCredentials').mockResolvedValue(undefined);
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'env-secret');
+
+      await provider.callApi('A quiet garden');
+
+      // The scope only ever reaches the digest; the key itself is structurally opaque.
+      expect(mockCacheGet.mock.calls[0][0]).toMatch(/^sagemaker:v4:test-endpoint:[0-9a-f]{64}$/);
+    });
+
     it('does not replay a cached success when a changed request fails', async () => {
       mockSend
         .mockResolvedValueOnce({
