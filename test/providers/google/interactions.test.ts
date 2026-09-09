@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { OAuth2Client } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeBlob } from '../../../src/blobs';
 import { fetchWithCache } from '../../../src/cache';
@@ -2828,6 +2829,19 @@ describe('GoogleInteractionsProvider', () => {
       config: { expressMode: true, projectId: 'configured-project' },
       env: { VERTEX_API_KEY: 'vertex-express-key' },
     },
+    {
+      name: 'expressMode overriding googleAuthOptions.projectId',
+      config: { expressMode: true, googleAuthOptions: { projectId: 'configured-project' } },
+      env: { VERTEX_API_KEY: 'vertex-express-key' },
+    },
+    {
+      name: 'an explicit API key overriding googleAuthOptions.projectId',
+      config: {
+        apiKey: 'vertex-express-key',
+        googleAuthOptions: { projectId: 'configured-project' },
+      },
+      env: undefined,
+    },
   ])('uses Vertex Express authentication for Robotics with $name', async ({ config, env }) => {
     const oauthSpy = vi
       .spyOn(GoogleAuthManager, 'getOAuthClient')
@@ -3070,6 +3084,80 @@ describe('GoogleInteractionsProvider', () => {
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(request.headers).not.toHaveProperty('x-goog-api-key');
   });
+
+  it.each([
+    { name: 'projectId', googleAuthOptions: { projectId: 'auth-project' }, env: undefined },
+    {
+      name: 'keyFile',
+      googleAuthOptions: { keyFile: '/test/service-account.json' },
+      env: undefined,
+    },
+    { name: 'authClient', googleAuthOptions: { authClient: new OAuth2Client() }, env: undefined },
+    {
+      name: 'projectId with provider-scoped VERTEX_API_KEY',
+      googleAuthOptions: { projectId: 'auth-project' },
+      env: { VERTEX_API_KEY: 'provider-vertex-key' },
+    },
+  ])(
+    'keeps googleAuthOptions.$name on Vertex OAuth despite an unrelated API key',
+    async ({ googleAuthOptions, env }) => {
+      vi.stubEnv('GOOGLE_API_KEY', 'unrelated-key');
+      vi.stubEnv('VERTEX_API_KEY', '');
+      vi.stubEnv('VERTEX_PROJECT_ID', '');
+      vi.stubEnv('GOOGLE_PROJECT_ID', '');
+      vi.stubEnv('GOOGLE_CLOUD_PROJECT', '');
+      const endpoint =
+        'https://aiplatform.googleapis.com/v1beta1/projects/auth-project/locations/global/interactions';
+      const getRequestHeaders = vi.fn().mockResolvedValue(
+        new Headers({
+          Authorization: 'Bearer vertex-token',
+          'x-goog-user-project': 'quota-project',
+        }),
+      );
+      const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+        client: {
+          getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+          getRequestHeaders,
+        },
+        projectId: 'auth-project',
+      });
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: { vertexai: true, googleAuthOptions },
+        env,
+      });
+
+      const result = await provider.callApi('Move the block.');
+
+      expect(result.error).toBeUndefined();
+      expect(getOAuthClient).toHaveBeenCalledExactlyOnceWith({
+        credentials: undefined,
+        googleAuthOptions,
+        keyFilename: undefined,
+        scopes: undefined,
+      });
+      expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        endpoint,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer vertex-token',
+            'x-goog-user-project': 'quota-project',
+          }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+      expect(mockFetchWithCache.mock.calls[0]?.[1]?.headers).not.toHaveProperty('x-goog-api-key');
+    },
+  );
 
   it('keeps a provider-scoped project on Vertex OAuth despite provider-scoped VERTEX_API_KEY', async () => {
     const endpoint =

@@ -3,7 +3,10 @@ import {
   Handoff,
   handoff,
   OpenAIProvider,
+  Runner,
+  run,
   setDefaultModelProvider,
+  tool,
   Usage,
 } from '@openai/agents';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -64,9 +67,228 @@ class RecordingModelProvider implements ModelProvider {
   }
 }
 
+class ToolCallingModel extends HandoffModel {
+  private invokedTool = false;
+
+  override async getResponse(request: ModelRequest): Promise<ModelResponse> {
+    if (request.tools.length && !this.invokedTool) {
+      this.invokedTool = true;
+      this.requests.push(request);
+      return {
+        usage: new Usage(),
+        output: [
+          {
+            type: 'function_call',
+            callId: 'delegate-call',
+            name: 'delegate',
+            arguments: '{"input":"Delegate."}',
+          },
+        ],
+      };
+    }
+    return super.getResponse(request);
+  }
+}
+
 describe('OpenAiAgentsProvider execution overrides', () => {
   afterEach(() => {
     setDefaultModelProvider(new OpenAIProvider({ cacheResponsesWebSocketModels: false }));
+  });
+
+  it.each([
+    { phase: 'input' as const, customModel: false },
+    { phase: 'output' as const, customModel: false },
+    { phase: 'input' as const, customModel: true },
+    { phase: 'output' as const, customModel: true },
+  ])(
+    'preserves independent $phase guardrail models and settings (custom Model: $customModel)',
+    async ({ phase, customModel }) => {
+      const modelProvider = new RecordingModelProvider();
+      setDefaultModelProvider(modelProvider);
+      const classifierModel = new HandoffModel();
+      const classifier = new Agent({
+        name: 'Independent Classifier',
+        model: customModel ? classifierModel : 'classifier-model',
+        modelSettings: { temperature: 0.05, topP: 0.6 },
+      });
+      const execute = vi.fn(async () => {
+        const result = customModel
+          ? await run(classifier, 'Classify this request.')
+          : await new Runner({ modelProvider }).run(classifier, 'Classify this request.');
+        return { tripwireTriggered: false, outputInfo: result.finalOutput };
+      });
+      const guardrail = { name: 'Independent safety check', execute, runInParallel: false };
+      const provider = new OpenAiAgentsProvider('evaluated-workflow', {
+        config: {
+          agent: new Agent({ name: 'Evaluated Agent', model: 'initial-model' }),
+          model: 'evaluated-model',
+          modelSettings: { temperature: 0.2 },
+          ...(phase === 'input'
+            ? { inputGuardrails: [guardrail] }
+            : { outputGuardrails: [guardrail] }),
+        },
+      });
+
+      await expect(provider.callApi('Evaluate this request.')).resolves.toMatchObject({
+        output: 'Escalated successfully.',
+      });
+
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(modelProvider.modelNames).toEqual(
+        customModel
+          ? ['evaluated-model']
+          : phase === 'input'
+            ? ['classifier-model', 'evaluated-model']
+            : ['evaluated-model', 'classifier-model'],
+      );
+      const classifierRequest = customModel
+        ? classifierModel.requests[0]
+        : modelProvider.model.requests[phase === 'input' ? 0 : 1];
+      expect(classifierRequest?.modelSettings).toEqual({ temperature: 0.05, topP: 0.6 });
+      expect(
+        modelProvider.model.requests[phase === 'input' && !customModel ? 1 : 0].modelSettings,
+      ).toEqual({ temperature: 0.2 });
+      expect(classifier.model).toBe(customModel ? classifierModel : 'classifier-model');
+    },
+  );
+
+  it.each(['input', 'output'] as const)(
+    'still enforces %s guardrail tripwires from independent classifiers',
+    async (phase) => {
+      const modelProvider = new RecordingModelProvider();
+      setDefaultModelProvider(modelProvider);
+      const classifierModel = new HandoffModel();
+      const classifier = new Agent({ name: 'Classifier', model: classifierModel });
+      const guardrail = {
+        name: 'Blocking classifier',
+        runInParallel: false,
+        execute: async () => {
+          const result = await run(classifier, 'Classify this request.');
+          return { tripwireTriggered: true, outputInfo: result.finalOutput };
+        },
+      };
+      const provider = new OpenAiAgentsProvider('evaluated-workflow', {
+        config: {
+          agent: new Agent({
+            name: 'Evaluated Agent',
+            ...(phase === 'input'
+              ? { inputGuardrails: [guardrail] }
+              : { outputGuardrails: [guardrail] }),
+          }),
+          model: 'evaluated-model',
+        },
+      });
+
+      await expect(provider.callApi('Evaluate this request.')).rejects.toThrow(/guardrail/i);
+      expect(classifierModel.requests).toHaveLength(1);
+      expect(modelProvider.model.requests).toHaveLength(phase === 'input' ? 0 : 1);
+    },
+  );
+
+  it.each([
+    'tool-input',
+    'tool-output',
+    'runner-input',
+    'runner-output',
+    'input-builder',
+    'output-extractor',
+  ])('preserves independent classifier and child models in %s callbacks', async (callback) => {
+    const evaluatedModel = new ToolCallingModel();
+    const getModel = vi.fn(() => evaluatedModel);
+    setDefaultModelProvider({ getModel });
+    const classifierModel = new HandoffModel();
+    const classifier = new Agent({
+      name: 'Classifier',
+      model: classifierModel,
+      modelSettings: { temperature: 0.05 },
+    });
+    const classify = vi.fn(async () => {
+      await run(classifier, 'Classify.');
+    });
+    const childModel = new HandoffModel();
+    const child = new Agent({
+      name: 'Child',
+      model: childModel,
+      modelSettings: { temperature: 0.9 },
+    });
+    const checkAgent = {
+      name: 'Independent classifier',
+      execute: async () => {
+        await classify();
+        return { tripwireTriggered: false, outputInfo: null };
+      },
+    };
+    const checkTool = {
+      name: 'Independent classifier',
+      run: async () => {
+        await classify();
+        return { behavior: { type: 'allow' as const } };
+      },
+    };
+    const delegatedTool = callback.startsWith('tool-')
+      ? tool({
+          name: 'delegate',
+          description: 'Delegate work.',
+          parameters: {
+            type: 'object',
+            properties: { input: { type: 'string' } },
+            required: ['input'],
+            additionalProperties: false,
+          },
+          execute: async () => 'Delegated.',
+          ...(callback === 'tool-input'
+            ? { inputGuardrails: [checkTool] }
+            : { outputGuardrails: [checkTool] }),
+        })
+      : child.asTool({
+          toolName: 'delegate',
+          runConfig:
+            callback === 'runner-input'
+              ? { inputGuardrails: [checkAgent] }
+              : callback === 'runner-output'
+                ? { outputGuardrails: [checkAgent] }
+                : undefined,
+          ...(callback === 'input-builder'
+            ? {
+                inputBuilder: async () => {
+                  await classify();
+                  return 'Delegate.';
+                },
+              }
+            : {}),
+          ...(callback === 'output-extractor'
+            ? {
+                customOutputExtractor: async () => {
+                  await classify();
+                  return 'Delegated.';
+                },
+              }
+            : {}),
+        });
+    const provider = new OpenAiAgentsProvider('evaluated-workflow', {
+      config: {
+        agent: new Agent({ name: 'Root', tools: [delegatedTool] }),
+        model: 'evaluated-model',
+        modelSettings: { temperature: 0.2 },
+      },
+    });
+
+    await expect(provider.callApi('Delegate this request.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    expect(classify).toHaveBeenCalledTimes(1);
+    expect(classifierModel.requests).toHaveLength(1);
+    expect(classifierModel.requests[0].modelSettings).toEqual({ temperature: 0.05 });
+    expect(getModel.mock.calls).toEqual([['evaluated-model'], ['evaluated-model']]);
+    expect(evaluatedModel.requests.map((request) => request.modelSettings)).toEqual([
+      { temperature: 0.2 },
+      { temperature: 0.2 },
+    ]);
+    if (!callback.startsWith('tool-')) {
+      expect(childModel.requests).toHaveLength(1);
+      expect(childModel.requests[0].modelSettings).toEqual({ temperature: 0.9 });
+      expect(child.model).toBe(childModel);
+    }
   });
 
   it.each([

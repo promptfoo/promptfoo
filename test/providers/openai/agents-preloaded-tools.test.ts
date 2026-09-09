@@ -10,7 +10,7 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
     vi.restoreAllMocks();
   });
 
-  it('applies provider overrides to agent tools created before the provider loads', async () => {
+  it('preserves agent tools created before the provider loads', async () => {
     const agents = await import('@openai/agents');
     const childAgent = new agents.Agent({
       name: 'Child Agent',
@@ -53,8 +53,8 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
     expect(executedAgents).toHaveLength(2);
     expect(executedAgents[0].tools[0]).toBe(childTool);
     expect(executedSettings[1]).toMatchObject({
-      model: 'gpt-5.6-terra',
-      modelSettings: { temperature: 0.2 },
+      model: 'gpt-5.4-mini',
+      modelSettings: { temperature: 0.9 },
     });
     expect(childAgent).toMatchObject({
       model: 'gpt-5.4-mini',
@@ -62,7 +62,7 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
     });
   });
 
-  it('shares execution overrides across duplicate provider module loads', async () => {
+  it('preserves SDK-owned agent tools across duplicate provider module loads', async () => {
     const agents = await import('@openai/agents');
 
     const executedSettings: Array<Pick<Agent<any, any>, 'model' | 'modelSettings'>> = [];
@@ -108,8 +108,8 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
       modelSettings: { temperature: 0.2 },
     });
     expect(executedSettings[1]).toMatchObject({
-      model: 'gpt-5.6-terra',
-      modelSettings: { temperature: 0.2 },
+      model: 'gpt-5.4-mini',
+      modelSettings: { temperature: 0.9 },
     });
     expect(childAgent).toMatchObject({
       model: 'gpt-5.4-mini',

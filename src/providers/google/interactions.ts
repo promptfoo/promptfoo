@@ -762,11 +762,14 @@ function usesVertexExpressInteractions(
     config.credentials ||
       config.keyFilename ||
       config.googleAuthOptions?.keyFilename ||
+      config.googleAuthOptions?.keyFile ||
+      config.googleAuthOptions?.authClient ||
       config.googleAuthOptions?.credentials,
   );
   const providerScopedRegion = config.region || env?.VERTEX_REGION || env?.GOOGLE_CLOUD_LOCATION;
   const hasProviderScopedOAuthConfig = Boolean(
     config.projectId ||
+      config.googleAuthOptions?.projectId ||
       env?.VERTEX_PROJECT_ID ||
       env?.GOOGLE_PROJECT_ID ||
       env?.GOOGLE_CLOUD_PROJECT ||
@@ -780,6 +783,7 @@ function usesVertexExpressInteractions(
     providerScopedRegion || getEnvString('VERTEX_REGION') || getEnvString('GOOGLE_CLOUD_LOCATION');
   const hasProjectScopedOAuthConfig = Boolean(
     config.projectId ||
+      config.googleAuthOptions?.projectId ||
       env?.VERTEX_PROJECT_ID ||
       env?.GOOGLE_PROJECT_ID ||
       env?.GOOGLE_CLOUD_PROJECT ||
