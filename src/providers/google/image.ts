@@ -93,7 +93,9 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   requiresApiKey(): boolean {
-    return !determineGoogleVertexMode(this.config, this.env);
+    return (
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
+    );
   }
 
   /** Helper method to get Google client with credentials support. */

@@ -47,6 +47,15 @@ afterEach(() => {
 });
 
 describe('scoped Google cloud project resolution', () => {
+  it.each([
+    [GoogleImageProvider, 'imagen-4.0-generate-001'],
+    [GoogleVideoProvider, 'veo-3.1-generate-preview'],
+  ])('preserves media API-key preflight opt-out for %p', (Provider, model) => {
+    const provider = new Provider(model, { config: { vertexai: false, apiKeyRequired: false } });
+
+    expect(provider.requiresApiKey()).toBe(false);
+  });
+
   it('keeps process-selected AI Studio mode with a scoped project', async () => {
     mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'false' });
     const provider = new GoogleVideoProvider(

@@ -168,7 +168,7 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   requiresApiKey(): boolean {
-    return !this.isVertexMode();
+    return this.config.apiKeyRequired !== false && !this.isVertexMode();
   }
 
   private getLocation(): string {

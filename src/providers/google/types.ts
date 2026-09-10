@@ -130,6 +130,7 @@ export interface GoogleSpeechConfig {
 
 export interface CompletionOptions {
   apiKey?: string;
+  apiKeyRequired?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
   /** Custom per-token cost override for both input and output tokens. */
@@ -567,6 +568,7 @@ export interface GoogleVideoOptions {
 
   // Authentication / transport mode
   apiKey?: string;
+  apiKeyRequired?: boolean;
   vertexai?: boolean;
 
   // Video parameters
