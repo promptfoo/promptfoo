@@ -10,6 +10,7 @@
 
 import type { Server } from 'node:http';
 
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
@@ -262,7 +263,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
       // Delete all results to test empty dataset handling
       const db = await getDb();
-      await db.run(`DELETE FROM eval_results WHERE eval_id = '${eval_.id}'`);
+      await db.run(sql`DELETE FROM eval_results WHERE eval_id = ${eval_.id}`);
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 

@@ -4,8 +4,8 @@
  * This file intentionally has NO dependencies to ensure the Node.js version
  * check runs before any module loading that might fail on older versions.
  *
- * Some dependencies (like string-width via ora) use ES2024 features (e.g., RegExp /v flag)
- * that cause cryptic syntax errors on Node.js < 20. By checking the version first,
+ * Some dependencies (like string-width via ora) use modern language features (e.g., RegExp /v flag)
+ * that cause cryptic syntax errors on unsupported Node.js versions. By checking the version first,
  * we can provide a helpful error message instead.
  */
 import * as path from 'node:path';
@@ -27,9 +27,9 @@ type ParseNodeEngineVersionOptions = {
 declare const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined;
 declare const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] | undefined;
 
-const fallbackNodeEngineRange = '>=20.0.0';
+const fallbackNodeEngineRange = '>=22.22.0';
 const fallbackNodeEngineComparatorSets: NodeEngineComparator[][] = [
-  [{ operator: '>=', version: '20.0.0' }],
+  [{ operator: '>=', version: '22.22.0' }],
 ];
 
 const nodeEngineRange =
@@ -40,7 +40,6 @@ const nodeEngineComparatorSets =
   typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
-
 function parseNodeEngineVersion(
   version: string,
   options: ParseNodeEngineVersionOptions = {},

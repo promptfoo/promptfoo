@@ -7,27 +7,42 @@ import { describe, expect, it } from 'vitest';
 const rootDir = path.join(__dirname, '../..');
 const examplesDir = path.join(rootDir, 'examples');
 
-const readmeFiles = globSync('**/README.md', { cwd: examplesDir }).sort();
+// Examples with their own dependencies get a node_modules directory when run
+// locally; those vendored READMEs are not promptfoo examples.
+const IGNORE_VENDORED = ['**/node_modules/**'];
+
+const readmeFiles = globSync('**/README.md', {
+  cwd: examplesDir,
+  ignore: IGNORE_VENDORED,
+}).sort();
 
 function getExampleName(readmePath: string): string {
   return path.dirname(readmePath).split(path.sep).join('/');
 }
 
 function isLeafExample(dirPath: string): boolean {
-  return globSync('promptfooconfig.*', { cwd: dirPath }).length > 0;
+  return globSync('promptfooconfig.*', { cwd: dirPath, ignore: IGNORE_VENDORED }).length > 0;
 }
 
 function hasSubExamples(dirPath: string): boolean {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   return entries.some(
-    (e) => e.isDirectory() && fs.existsSync(path.join(dirPath, e.name, 'README.md')),
+    (e) =>
+      e.isDirectory() &&
+      e.name !== 'node_modules' &&
+      fs.existsSync(path.join(dirPath, e.name, 'README.md')),
   );
 }
 
 function getSubExampleDirs(dirPath: string): string[] {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   return entries
-    .filter((e) => e.isDirectory() && fs.existsSync(path.join(dirPath, e.name, 'README.md')))
+    .filter(
+      (e) =>
+        e.isDirectory() &&
+        e.name !== 'node_modules' &&
+        fs.existsSync(path.join(dirPath, e.name, 'README.md')),
+    )
     .map((e) => e.name);
 }
 

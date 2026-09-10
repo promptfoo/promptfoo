@@ -298,7 +298,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # Configure promptfoo behavior
 export PROMPTFOO_CONFIG_DIR=/path/to/configs
-export PROMPTFOO_OUTPUT_DIR=/path/to/outputs
 
 # Start server with environment
 npx promptfoo@latest mcp --transport stdio

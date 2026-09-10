@@ -25,6 +25,17 @@ describe('OpenAI Provider', () => {
       },
     });
 
+    it('should reject a Codex-only embedding passthrough model override before dispatch', async () => {
+      const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-small', {
+        config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
+      });
+
+      await expect(passthroughProvider.callEmbeddingApi('test text')).rejects.toThrow(
+        'only available through openai:codex-sdk',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should call embedding API successfully', async () => {
       const mockResponse = {
         data: [
@@ -90,6 +101,9 @@ describe('OpenAI Provider', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
           body: JSON.stringify({
             input: 'test text',
             model: 'text-embedding-3-small',

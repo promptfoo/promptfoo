@@ -43,9 +43,9 @@ OWASP defines two types of prompt injection vulnerabilities:
 - **Direct Prompt Injection**: A user's prompt directly changes the LLM's behavior in an unintended way.
 - **Indirect Prompt Injection**: An LLM accepts input from an external source (like websites or files) that subsequently alters the LLM's behavior in unintended ways.
 
-Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and employing a "prompt injection" strategy.
+Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and layering strategies such as `jailbreak-templates` on top.
 
-Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding the prompt injection strategy modifies the way that adversarial inputs are sent.
+Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding the `jailbreak-templates` strategy modifies the way that adversarial inputs are sent.
 
 Example configuration:
 
@@ -58,8 +58,8 @@ redteam:
     - politics
     # ...
   strategies:
-    # Add prompt injection strategy
-    - prompt-injection
+    # Add the jailbreak-templates strategy
+    - jailbreak-templates
     # Additional strategies such as "jailbreak" are related to prompt injection
     - jailbreak
 ```
@@ -102,7 +102,7 @@ redteam:
     - pii:social
   strategies:
     # Apply additional techniques to extract PII
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak
 ```
 
@@ -168,7 +168,7 @@ redteam:
     - pii
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 For comprehensive supply chain security coverage, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
@@ -494,7 +494,7 @@ redteam:
   plugins:
     - owasp:llm
   strategies:
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak
 ```
 
