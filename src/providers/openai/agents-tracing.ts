@@ -748,6 +748,16 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   return value;
 }
 
+function isCredentialTupleValue(source: Record<string, unknown> | unknown[], key: string) {
+  return (
+    Array.isArray(source) &&
+    key === '1' &&
+    source.length === 2 &&
+    typeof source[0] === 'string' &&
+    isCredentialAttributeKey(source[0])
+  );
+}
+
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
@@ -768,13 +778,7 @@ function sanitizeStructuredAttribute(
       }
 
       let sanitized: unknown;
-      if (
-        Array.isArray(source) &&
-        key === '1' &&
-        source.length === 2 &&
-        typeof source[0] === 'string' &&
-        isCredentialAttributeKey(source[0])
-      ) {
+      if (isCredentialTupleValue(source, key)) {
         sanitized = '<redacted>';
         state.changed = true;
       } else if (isCredentialAttributeKey(key)) {
