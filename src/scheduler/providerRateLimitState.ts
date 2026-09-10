@@ -174,7 +174,7 @@ export class ProviderRateLimitState extends EventEmitter {
               // The lower target fetch selected this deadline before its wait.
               // Replaying relative headers when a consumer joins would extend it.
               this.updateFromHeaders(headers, false, backoff.resetAt);
-              this.handleRateLimit();
+              this.handleRateLimit(undefined, backoff.resetAt);
             } else {
               observedHeaders = headers;
               this.updateFromHeaders(headers, false);
@@ -355,12 +355,12 @@ export class ProviderRateLimitState extends EventEmitter {
    * Handle rate limit hit.
    * Delegates to SlotQueue which preserves existing resetAt from headers.
    */
-  private handleRateLimit(retryAfterMs?: number): void {
+  private handleRateLimit(retryAfterMs?: number, selectedResetAt?: number): void {
     this.rateLimitHits++;
 
-    // Pass retryAfterMs to queue (may be undefined)
-    // SlotQueue.markRateLimited preserves existing resetAt from headers if no retryAfter provided
-    this.slotQueue.markRateLimited(retryAfterMs);
+    // Proactive queue processing may already have cleared an elapsed deadline.
+    // Keep the selected timestamp explicit so it cannot become unknown quota.
+    this.slotQueue.markRateLimited(retryAfterMs, selectedResetAt);
 
     const change = this.adaptiveConcurrency.recordRateLimit();
     this.applyConcurrencyChange(change);

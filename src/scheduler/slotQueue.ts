@@ -147,20 +147,20 @@ export class SlotQueue {
   /**
    * Mark that a rate limit was hit.
    * Only updates resetAt if we don't already have a later reset time.
+   * A selected absolute deadline takes precedence over a relative retry delay.
    */
-  markRateLimited(retryAfterMs?: number): void {
+  markRateLimited(retryAfterMs?: number, selectedResetAt?: number): void {
     this.remainingRequests = 0;
     this.remainingTokens = 0;
 
-    // Only update resetAt if:
-    // 1. We have a retryAfterMs >= 0, OR
-    // 2. We don't have an existing resetAt
-    if (retryAfterMs !== undefined && retryAfterMs >= 0) {
-      // retryAfterMs = 0 means "retry immediately", so resetAt = now
-      const newResetAt = Date.now() + retryAfterMs;
-      // Use the later of existing or new reset time
-      this.resetAt = this.resetAt ? Math.max(this.resetAt, newResetAt) : newResetAt;
-    } else if (!this.resetAt) {
+    let newResetAt = selectedResetAt;
+    if (newResetAt === undefined && retryAfterMs !== undefined && retryAfterMs >= 0) {
+      newResetAt = Date.now() + retryAfterMs;
+    }
+    if (newResetAt !== undefined) {
+      // Preserve explicit elapsed/zero deadlines and any later known reset.
+      this.resetAt = Math.max(this.resetAt ?? newResetAt, newResetAt);
+    } else if (this.resetAt === null) {
       // No retryAfter provided and no existing reset - use conservative default
       this.resetAt = Date.now() + 60000;
     }
