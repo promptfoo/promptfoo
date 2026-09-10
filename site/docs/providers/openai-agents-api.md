@@ -101,7 +101,7 @@ The provider returns completed assistant messages marked `final_answer`, with a 
 
 Response metadata includes `sessionId`, `turnId`, `model`, `toolCalls`, and `sessionDeleted` when cleanup runs. Tool summaries contain IDs, types, names when available, and statuses. Inspect these alongside the final answer: a completed agent turn can still contain failed tool calls.
 
-Token usage comes from the session when available, including subagent work. The beta API reports usage on a best-effort basis; token counts and cost may be absent. Cost is an estimate for model tokens only; tools and hosted sandbox charges are additional. Executions are not cached because they can run tools and change remote state.
+Token usage comes from the session when available, including subagent work. The beta API reports usage on a best-effort basis; token counts and cost may be absent. Cost is also omitted when subagents are enabled or observed, because aggregate usage does not identify their models and service tiers. Otherwise, cost is an estimate for model tokens only; tools and hosted sandbox charges are additional. Executions are not cached because they can run tools and change remote state.
 
 Sessions are isolated between test cases and repeats. Set `retainSession: true` to inspect successful sessions or download artifacts through the OpenAI API after an eval. You are responsible for deleting retained sessions. Failed and cancelled evals still attempt to delete their sessions. A cleanup failure is reported in response metadata with the session ID for manual recovery.
 

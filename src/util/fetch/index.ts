@@ -487,7 +487,7 @@ async function peekRateLimitBody(
  * in that path we consult `Content-Length` first to skip materializing
  * very large bodies entirely.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
     if (Number.isFinite(contentLength) && contentLength > maxBytes) {

@@ -348,4 +348,80 @@ describe('OpenAiAgentsApiProvider', () => {
       .mockResolvedValueOnce(json(page([{ ...message, phase: null }])));
     expect(await provider().callApi('hi')).toMatchObject({ output: '42' });
   });
+
+  it('preserves API validation details while redacting echoed credentials', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            message: 'Invalid environment promptfoo-qa for test-key and alternate_credential_value',
+          },
+        }),
+        { status: 400 },
+      ),
+    );
+    const result = await provider({
+      headers: { 'X-Api-Key': 'alternate_credential_value' },
+    }).callApi('hi');
+    expect(result.error).toContain('Invalid environment promptfoo-qa');
+    expect(result.error).not.toContain('test-key');
+    expect(result.error).not.toContain('alternate_credential_value');
+    expect(result.error).toContain('[REDACTED]');
+  });
+
+  it('limits error detail length', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: { message: 'x'.repeat(4_000) },
+        }),
+        { status: 400 },
+      ),
+    );
+    const result = await provider().callApi('hi');
+    expect(result.error).toContain('HTTP 400');
+    expect(result.error!.length).toBeLessThan(1_100);
+  });
+
+  it('stops reading oversized error streams and cancels the body', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1_024)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(new Response(body, { status: 400 }));
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('HTTP 400'),
+    });
+    expect(cancelled).toBe(true);
+  });
+
+  it.each([true, false])(
+    'does not price aggregate subagent usage (enabled=%s)',
+    async (enabled) => {
+      vi.mocked(fetchWithRetries)
+        .mockResolvedValueOnce(json(session))
+        .mockResolvedValueOnce(json(page([turn])))
+        .mockResolvedValueOnce(
+          json({ ...session, agent: { ...session.agent, multi_agent: { enabled } } }),
+        )
+        .mockResolvedValueOnce(
+          json(
+            page([
+              ...(enabled ? [] : [{ id: 'child', type: 'create_subagent_call', turn_id: turn.id }]),
+              message,
+            ]),
+          ),
+        );
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.tokenUsage?.total).toBe(120);
+      expect(result.cost).toBeUndefined();
+      expect(result.metadata?.costScope).toBe('unavailable for aggregate subagent usage');
+    },
+  );
 });

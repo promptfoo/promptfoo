@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { fetchWithRetries } from '../../util/fetch/index';
+import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { sleepWithAbort } from '../../util/time';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
@@ -39,7 +39,7 @@ interface Usage {
 
 interface Session {
   id: string;
-  agent: { model: string; service_tier?: string };
+  agent: { model: string; service_tier?: string; multi_agent?: { enabled: boolean } };
   status: 'idle' | 'in_progress' | 'requires_action' | 'failed';
   error?: string | null;
   usage?: Usage | null;
@@ -124,9 +124,30 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       method === 'GET' ? this.config.maxRetries : 0,
     );
     if (!response.ok) {
-      await response.body?.cancel();
+      let detail = '';
+      try {
+        const body = JSON.parse(await readBoundedText(response, 8_192));
+        const message = typeof body?.error === 'string' ? body.error : body?.error?.message;
+        if (typeof message === 'string') {
+          detail = message;
+          // Error messages may echo request credentials, including custom auth headers.
+          const credentials = [
+            this.getApiKey(),
+            ...Object.values(this.config.headers ?? {}),
+            headers.get('Authorization')?.replace(/^(Bearer|Basic)\s+/i, ''),
+          ];
+          for (const credential of credentials) {
+            if (credential) {
+              detail = detail.replaceAll(credential, '[REDACTED]');
+            }
+          }
+          detail = detail.slice(0, 1_024);
+        }
+      } catch {
+        signal.throwIfAborted();
+      }
       throw new Error(
-        `Agents API ${method} failed: HTTP ${response.status} ${response.statusText}`,
+        `Agents API ${method} failed: HTTP ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`,
       );
     }
     return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
@@ -162,6 +183,22 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       after = page.last_id;
       cursors.add(after);
     } while (true);
+  }
+
+  private getFinalAnswer(items: Item[]): string {
+    const messages = items.filter(
+      (item) => item.type === 'message' && item.role === 'assistant' && item.status === 'completed',
+    );
+    const finalMessages = messages.filter((item) => item.phase === 'final_answer');
+    const output = (finalMessages.length ? finalMessages : messages.filter((item) => !item.phase))
+      .flatMap((item) => item.content ?? [])
+      .filter((part) => part.type === 'output_text')
+      .map((part) => part.text ?? '')
+      .join('\n');
+    if (!output) {
+      throw new Error('Agents API turn completed without a final assistant answer');
+    }
+    return output;
   }
 
   async callApi(
@@ -217,23 +254,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const items = (await this.list<Item>(`${endpoint}/items`, headers, signal)).filter(
         (item) => item.turn_id === turn.id,
       );
-      const messages = items.filter(
-        (item) =>
-          item.type === 'message' && item.role === 'assistant' && item.status === 'completed',
-      );
-      const finalMessages = messages.filter((item) => item.phase === 'final_answer');
-      const output = (finalMessages.length ? finalMessages : messages.filter((item) => !item.phase))
-        .flatMap((item) => item.content ?? [])
-        .filter((part) => part.type === 'output_text')
-        .map((part) => part.text ?? '')
-        .join('\n');
-      if (!output) {
-        throw new Error('Agents API turn completed without a final assistant answer');
-      }
       // Session usage includes subagent work; root-turn usage can undercount it.
       const usage = finished.usage ?? turn.usage;
       const model = finished.agent.model;
-      result.output = output;
+      result.output = this.getFinalAnswer(items);
       result.tokenUsage = usage
         ? {
             prompt: usage.input_tokens,
@@ -243,15 +267,23 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
           }
         : undefined;
-      result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
-        apiUrl: this.getApiUrl(),
-        serviceTier: finished.agent.service_tier,
-      });
+      const hasSubagents =
+        finished.agent.multi_agent?.enabled ||
+        items.some((item) => item.type === 'create_subagent_call');
+      // Aggregate session tokens do not identify each subagent's model or service tier.
+      if (!hasSubagents) {
+        result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
+          apiUrl: this.getApiUrl(),
+          serviceTier: finished.agent.service_tier,
+        });
+      }
       result.metadata = {
         ...result.metadata,
         turnId: turn.id,
         model,
-        costScope: 'model tokens only; excludes tools and sandbox charges',
+        costScope: hasSubagents
+          ? 'unavailable for aggregate subagent usage'
+          : 'model tokens only; excludes tools and sandbox charges',
         toolCalls: items
           .filter((item) => item.type !== 'message' && item.type !== 'reasoning')
           .map(({ id, type, name, status }) => ({ id, type, name, status })),
