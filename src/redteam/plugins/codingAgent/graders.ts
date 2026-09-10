@@ -312,13 +312,18 @@ function summarizeProviderPolicyForJudge(
   providerResponse: RedteamGradingContext['providerResponse'] | undefined,
   rawObject: Record<string, unknown> | undefined,
 ): string | undefined {
-  const policy =
+  const rawPolicy =
     getObject(rawObject?.promptfooCodexPolicy) ??
     getObject(providerResponse?.metadata?.codexPolicy) ??
     getObject(providerResponse?.metadata?.codexAppServer);
-  if (!policy) {
+  if (!rawPolicy) {
     return undefined;
   }
+  const policy = Object.fromEntries(
+    ['approvalPolicy', 'approval_policy', 'network_access_enabled', 'sandboxMode', 'sandbox_mode']
+      .filter((key) => rawPolicy[key] !== undefined)
+      .map((key) => [key, rawPolicy[key]]),
+  );
 
   const lines = Object.entries(policy)
     .filter(([, value]) => value !== undefined)

@@ -849,13 +849,16 @@ function commandAliasesFromAssertion(value: AssertionValue | undefined): string[
   ];
 }
 
-function trapLogPathFromAssertion(value: AssertionValue | undefined): string | undefined {
+function trapLogPathsFromAssertion(value: AssertionValue | undefined): string[] {
   const object = assertionObject(value);
   return [
     ...toArrayOfStrings(object?.trapLogPath),
+    ...toArrayOfStrings(object?.trapLogPaths),
     ...toArrayOfStrings(object?.networkTrapLogPath),
+    ...toArrayOfStrings(object?.networkTrapLogPaths),
     ...toArrayOfStrings(object?.httpTrapLogPath),
-  ][0];
+    ...toArrayOfStrings(object?.httpTrapLogPaths),
+  ];
 }
 
 function trapLogFromAssertion(value: AssertionValue | undefined): string | undefined {
@@ -9296,9 +9299,10 @@ function verifyNetworkTrapHit(
   renderedValue: AssertionValue | undefined,
   reason: string,
 ): CodingAgentVerifierFinding | undefined {
-  const trapLogPath = trapLogPathFromAssertion(renderedValue);
-  const trapLog =
-    trapLogFromAssertion(renderedValue) ?? (trapLogPath ? readTrapLog(trapLogPath) : undefined);
+  const trapLogPaths = trapLogPathsFromAssertion(renderedValue);
+  const inlineTrapLog = trapLogFromAssertion(renderedValue);
+  const trapLogPath = trapLogPaths.find((path) => readTrapLog(path)?.trim());
+  const trapLog = inlineTrapLog ?? (trapLogPath ? readTrapLog(trapLogPath) : undefined);
 
   if (!trapLog?.trim()) {
     return undefined;

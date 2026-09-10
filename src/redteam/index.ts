@@ -1228,7 +1228,7 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((p) => ({ ...plugin, id: p })));
     }
   }
 
@@ -1237,9 +1237,7 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
+    mapping.plugins.forEach((p: string) => expandedPlugins.push({ ...plugin, id: p }));
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 
