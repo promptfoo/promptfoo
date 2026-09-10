@@ -620,6 +620,25 @@ describe('dependency ownership report', () => {
     ).toEqual([expect.objectContaining({ file: 'src/app/src/component.js', scope: 'source' })]);
   });
 
+  it('records package subpaths containing colons while excluding URL schemes', () => {
+    write(
+      'src/index.ts',
+      "import 'shared/feature:x'; import 'missing/feature:x'; import '@scope/missing/feature:x'; import 'node:fs'; import 'https://example.com/module.js'; import 'data:text/javascript,export{}';",
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
+      expect.objectContaining({ specifier: 'shared/feature:x' }),
+    ]);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual([
+      '@scope/missing',
+      'missing',
+    ]);
+    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual([
+      '@scope/missing',
+      'missing',
+    ]);
+  });
+
   it('keeps real workspace packages visible when their scope overlaps a source alias', () => {
     write('src/app/src/components.ts', 'export {};');
     write('src/util/text.ts', 'export {};');
@@ -851,6 +870,7 @@ describe('dependency ownership report', () => {
   it('reports stale annotations, missing evidence, and unassigned workspace ownership', () => {
     json('architecture/dependency-ownership.json', {
       manifestOwners: { 'ghost/package.json': 'ghost' },
+      aliases: { 'removed/package.json': ['@removed'] },
       annotations: [
         {
           manifest: 'package.json',
@@ -864,6 +884,7 @@ describe('dependency ownership report', () => {
     const report = reportDependencyOwnership(root, config);
     expect(report.annotationErrors).toEqual([
       'Unknown manifest owner: ghost/package.json',
+      'Unknown manifest owner: removed/package.json',
       'Annotation has no declaration: package.json: removed',
       'Missing annotation evidence: missing.ts',
     ]);

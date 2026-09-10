@@ -345,7 +345,10 @@ export function reportDependencyOwnership(
     fileAnnotations: string[];
   }> = [];
   const annotationErrors: string[] = [];
-  for (const manifest of Object.keys(ledger.manifestOwners)) {
+  for (const manifest of new Set([
+    ...Object.keys(ledger.manifestOwners),
+    ...Object.keys(ledger.aliases),
+  ])) {
     if (!packages.has(manifest)) {
       annotationErrors.push(`Unknown manifest owner: ${manifest}`);
     }
@@ -390,6 +393,8 @@ export function reportDependencyOwnership(
     usages.set(key, refs);
   }
 
+  const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
+
   for (const file of [...files].sort()) {
     const manifest = manifestFor(file, manifests);
     const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
@@ -402,7 +407,6 @@ export function reportDependencyOwnership(
     const scope = scopeFor(file, manifest, configuredRoots);
     const layer = getLayerForFile(file, sourceConfig);
     const aliases = ledger.aliases[manifest] ?? [];
-    const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
     const add = (
       node: Pick<Node, 'start'>,
       specifier: string,
@@ -426,7 +430,7 @@ export function reportDependencyOwnership(
           !packageNames.includes(dependency)) ||
         specifier === 'src' ||
         specifier.startsWith('src/') ||
-        specifier.includes(':')
+        /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(specifier)
       ) {
         return;
       }
