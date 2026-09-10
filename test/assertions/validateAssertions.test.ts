@@ -298,6 +298,36 @@ describe('validateAssertions', () => {
       ).not.toThrow();
     });
 
+    it('inherits disabled default assertions in scenario tests', () => {
+      expect(() =>
+        validateAssertions(
+          [],
+          {
+            options: { disableDefaultAsserts: true },
+            assert: [{ type: 'equals', value: 'disabled default', fallback: 'next' }],
+          },
+          [{ config: [{}], tests: [{}] }],
+        ),
+      ).not.toThrow();
+    });
+
+    it('uses scenario paths for scenario assertion errors', () => {
+      expect(() =>
+        validateAssertions([], undefined, [
+          { config: [{}], tests: [{ assert: [{ value: 'missing type' } as any] }] },
+        ]),
+      ).toThrow(/scenarios\[0\]\.config\[0\]\.tests\[0\]\.assert\[0\]/);
+    });
+
+    it('limits the effective default and test assertion list', () => {
+      const assertion = { type: 'equals' as const, value: 'ok' };
+      expect(() =>
+        validateAssertions([{ assert: Array(5001).fill(assertion) }], {
+          assert: Array(5000).fill(assertion),
+        }),
+      ).toThrow(/mergedAssert has 10001 assertions/);
+    });
+
     it('includes nested assert-set paths in fallback validation errors', () => {
       const tests: TestCase[] = [
         {

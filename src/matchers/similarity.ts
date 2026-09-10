@@ -7,6 +7,7 @@ import {
   cosineSimilarity,
   dotProduct,
   euclideanDistance,
+  fail,
   graderFail,
   normalizeMatcherTokenUsage,
 } from './shared';
@@ -37,7 +38,10 @@ function calculateSimilarityScore(
       // apply distance semantics when building the final grading result.
       return euclideanDistance(expectedEmbedding, outputEmbedding);
     default:
-      return graderFail(`Unsupported metric: ${metric}`, tokensUsed);
+      return {
+        ...fail(`Unsupported metric: ${metric}`, tokensUsed),
+        metadata: { assertionError: true },
+      };
   }
 }
 

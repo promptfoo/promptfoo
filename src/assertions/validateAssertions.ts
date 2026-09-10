@@ -213,13 +213,16 @@ export function validateAssertions(
   }
 
   const validationTests = [
-    ...tests,
-    ...(scenarios?.flatMap((scenario) =>
-      (scenario.config || []).flatMap((data) =>
-        (scenario.tests || [{}]).map((test) => ({
-          ...test,
-          options: { ...data.options, ...test.options },
-          assert: [...(data.assert || []), ...(test.assert || [])],
+    ...tests.map((test, index) => ({ test, path: `tests[${index}]` })),
+    ...(scenarios?.flatMap((scenario, scenarioIndex) =>
+      (scenario.config || []).flatMap((data, configIndex) =>
+        (scenario.tests || [{}]).map((test, testIndex) => ({
+          test: {
+            ...test,
+            options: { ...defaultTest?.options, ...data.options, ...test.options },
+            assert: [...(data.assert || []), ...(test.assert || [])],
+          },
+          path: `scenarios[${scenarioIndex}].config[${configIndex}].tests[${testIndex}]`,
         })),
       ),
     ) || []),
@@ -227,19 +230,19 @@ export function validateAssertions(
 
   // Validate test case assertions
   for (let testIdx = 0; testIdx < validationTests.length; testIdx++) {
-    const test = validationTests[testIdx];
+    const { test, path } = validationTests[testIdx];
     const parsedAssertions: AssertionOrSet[] = [];
     if (test.assert !== undefined) {
       if (!Array.isArray(test.assert)) {
-        throw new AssertValidationError(`tests[${testIdx}].assert must be an array`);
+        throw new AssertValidationError(`${path}.assert must be an array`);
       }
       if (test.assert.length > MAX_ASSERTIONS_PER_TEST) {
         throw new AssertValidationError(
-          `tests[${testIdx}].assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+          `${path}.assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
         );
       }
       for (let i = 0; i < test.assert.length; i++) {
-        parsedAssertions.push(parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`));
+        parsedAssertions.push(parseAssertion(test.assert[i], `${path}.assert[${i}]`));
       }
     }
 
@@ -247,11 +250,16 @@ export function validateAssertions(
     const effectiveAssertions = includeDefaultAssertions
       ? [...parsedDefaultAssertions, ...parsedAssertions]
       : parsedAssertions;
+    if (effectiveAssertions.length > MAX_ASSERTIONS_PER_TEST) {
+      throw new AssertValidationError(
+        `${path}.mergedAssert has ${effectiveAssertions.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+      );
+    }
     if (effectiveAssertions.length > 0) {
       const fallbackPath =
         includeDefaultAssertions && parsedDefaultAssertions.length > 0
-          ? `tests[${testIdx}].mergedAssert`
-          : `tests[${testIdx}].assert`;
+          ? `${path}.mergedAssert`
+          : `${path}.assert`;
       validateFallbackChainsForConfig(effectiveAssertions, fallbackPath);
     }
   }

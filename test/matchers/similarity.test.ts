@@ -271,6 +271,19 @@ describe('matchesSimilarity', () => {
     expect(result.metadata?.graderError).toBe(true);
   });
 
+  it('tags an unsupported metric as an assertion error', async () => {
+    const result = await matchesSimilarity(
+      'Expected output',
+      'Sample output',
+      0.5,
+      false,
+      undefined,
+      'unsupported' as any,
+    );
+
+    expect(result.metadata).toEqual({ assertionError: true });
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
