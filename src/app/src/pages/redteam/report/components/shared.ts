@@ -54,6 +54,12 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
+function isNonnegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value >= 0
+  );
+}
+
 function isSemanticFrontierBandSummary(value: unknown): value is SemanticFrontierBandSummary {
   if (!value || typeof value !== 'object') {
     return false;
@@ -61,12 +67,16 @@ function isSemanticFrontierBandSummary(value: unknown): value is SemanticFrontie
 
   const band = value as Partial<SemanticFrontierBandSummary>;
   return (
-    typeof band.featureCount === 'number' &&
-    typeof band.observedFeatureCount === 'number' &&
+    isNonnegativeInteger(band.featureCount) &&
+    isNonnegativeInteger(band.observedFeatureCount) &&
     isStringArray(band.observedFeatureIds) &&
-    typeof band.reachableFeatureCount === 'number' &&
+    band.observedFeatureIds.length === band.observedFeatureCount &&
+    isNonnegativeInteger(band.reachableFeatureCount) &&
     isStringArray(band.reachableFeatureIds) &&
-    isStringArray(band.unreachableFeatureIds)
+    band.reachableFeatureIds.length === band.reachableFeatureCount &&
+    isStringArray(band.unreachableFeatureIds) &&
+    band.featureCount === band.reachableFeatureCount + band.unreachableFeatureIds.length &&
+    band.observedFeatureCount <= band.reachableFeatureCount
   );
 }
 
@@ -79,7 +89,7 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
   return (
     typeof summary.active === 'boolean' &&
     typeof summary.complete === 'boolean' &&
-    typeof summary.minimumPortfolioSize === 'number' &&
+    isNonnegativeInteger(summary.minimumPortfolioSize) &&
     Boolean(summary.bands) &&
     typeof summary.bands === 'object' &&
     !Array.isArray(summary.bands) &&
@@ -202,7 +212,13 @@ export function summarizeSemanticFrontierDiagnosticsFromResults(
       ].sort();
 
       return {
-        completeFrontierCount: summaries.filter((summary) => summary.complete).length,
+        completeFrontierCount: summaries.filter((summary) =>
+          Object.values(summary.bands).every(
+            (band) =>
+              band.unreachableFeatureIds.length === 0 &&
+              band.observedFeatureCount === band.reachableFeatureCount,
+          ),
+        ).length,
         frontierCount: summaries.length,
         pluginId,
         structurallyDegraded: unreachableFeatureIds.length > 0,

@@ -657,6 +657,7 @@ async function applyStrategies(
   strategies: RedteamStrategyObject[],
   injectVar: string,
   provider: ApiProvider,
+  mathPromptProvider: ApiProvider,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
@@ -738,7 +739,7 @@ async function applyStrategies(
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
-        generationProvider: provider,
+        generationProvider: strategy.id === 'math-prompt' ? mathPromptProvider : provider,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,
@@ -1131,6 +1132,12 @@ export async function synthesize({
     total: 0,
   };
   const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+  const mathPromptProvider = provider
+    ? redteamProvider
+    : trackGenerationTokenUsage(
+        await redteamProviderManager.getProvider({ jsonOnly: true, preferSmallModel: true }),
+        generationTokenUsage,
+      );
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1723,6 +1730,7 @@ export async function synthesize({
       [retryStrategy],
       injectVar,
       redteamProvider,
+      mathPromptProvider,
       purpose,
       undefined,
       maxCharsPerMessage,
@@ -1747,6 +1755,7 @@ export async function synthesize({
       nonBasicStrategies,
       injectVar,
       redteamProvider,
+      mathPromptProvider,
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
