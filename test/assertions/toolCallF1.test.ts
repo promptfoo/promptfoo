@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
@@ -33,6 +33,10 @@ const createParams = (
 });
 
 describe('handleToolCallF1', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('F1 score calculation', () => {
     it('should return F1=1.0 when actual tools exactly match expected tools', () => {
       const output = {
@@ -372,18 +376,88 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(0);
     });
 
-    it('does not count an inline JSON example in prose as a tool call', () => {
-      const output = 'The tool payload would be {"type":"tool_use","name":"delete_account"}';
+    it.each([
+      'The tool payload would be {"type":"tool_use","name":"delete_account"}',
+      '{"type":"tool_use","name":"delete_account"} is an example payload.',
+      '{\n"input":\n{"type":"tool_use","name":"delete_account"}\n} is an example payload.',
+    ])('does not count a JSON example in prose as a tool call: %s', (output) => {
       const result = handleToolCallF1(createParams(output, ['delete_account']));
 
       expect(result.score).toBe(0);
     });
 
-    it('ignores many malformed line-delimited JSON candidates', () => {
-      const output = Array.from({ length: 10_000 }, () => '{').join('\n');
+    it.each(['{', '[', '{"broken":', '{]', '{"broken":"unfinished\\'])(
+      'recovers a complete call after an unfinished or invalid candidate: %s',
+      (prefix) => {
+        const output = `${prefix}\n${JSON.stringify(
+          { type: 'tool_use', name: 'get_weather', input: { city: 'NYC' } },
+          null,
+          2,
+        )}`;
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it('keeps unindented nested tool-shaped arguments inside their enclosing call', () => {
+      const output = `Calling the weather tool.\n${JSON.stringify(
+        {
+          type: 'tool_use',
+          name: 'get_weather',
+          input: [{ type: 'tool_use', name: 'delete_account', query: 'a \\" } [ b' }],
+        },
+        null,
+        2,
+      ).replace(/^ +/gm, '')}`;
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      ['```json', '```'],
+      ['~~~json', '~~~'],
+      ['   ```json', '   ````'],
+      ['````json', '```\n~~~\n````'],
+      ['```json', '~~~\n```'],
+      ['```json', '```json\n```'],
+    ])('ignores examples inside %s fences and preserves later calls', (opening, closing) => {
+      const output = [
+        'Example:',
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\r\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('ignores an example in an unclosed fence', () => {
+      const output = 'Example:\n```json\n{"type":"tool_use","name":"delete_account"}';
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('bounds parsing work for nested invalid JSON candidates', () => {
+      const output = `${'{\n'.repeat(1_000)}${'}\n'.repeat(1_000)}`;
+      const parse = vi.spyOn(JSON, 'parse');
       const result = handleToolCallF1(createParams(output, ['get_weather']));
 
       expect(result.score).toBe(0);
+      // One whole-output attempt and non-overlapping embedded candidates.
+      const parsedCharacters = parse.mock.calls.reduce((total, [value]) => total + value.length, 0);
+      expect(parsedCharacters).toBeLessThanOrEqual(2 * output.length);
+    });
+
+    it('recovers a call after many unmatched opening braces', () => {
+      const output = `${'{\n'.repeat(10_000)}{"type":"tool_use","name":"get_weather"}`;
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
     it('should handle Anthropic output with only one tool call in string', () => {

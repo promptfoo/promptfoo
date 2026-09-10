@@ -2,67 +2,93 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function extractJsonBlocks(text: string): unknown[] {
-  const parsed: unknown[] = [];
-  let start = -1;
-  let closing: string[] = [];
+function* extractJsonBlocks(text: string): Generator<unknown> {
+  const candidates = new Map<number, { end: number; endsLine: boolean } | undefined>();
+  const openings: number[] = [];
   let inString = false;
   let escaped = false;
-  let lineHasContent = false;
+  let fence = '';
+  let offset = 0;
 
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (start < 0) {
-      if (char === '\n') {
-        lineHasContent = false;
-        continue;
-      }
-      if (!lineHasContent && /\s/.test(char)) {
-        continue;
-      }
-      if ((char === '{' || char === '[') && !lineHasContent) {
-        start = index;
-        closing = [char === '{' ? '}' : ']'];
-      } else {
-        lineHasContent = true;
+  // Record balanced ranges once, including blocks inside unfinished candidates.
+  for (const line of text.split('\n')) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const content = line.trimEnd();
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(content);
+    if (marker) {
+      if (!fence) {
+        fence = marker[1];
+        openings.length = 0;
+      } else if (
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
+        !content.slice(marker[0].length).trim()
+      ) {
+        fence = '';
       }
       continue;
     }
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
+    if (fence) {
       continue;
     }
 
-    if (char === '"') {
-      inString = true;
-    } else if (char === '{' || char === '[') {
-      closing.push(char === '{' ? '}' : ']');
-    } else if (char === '}' || char === ']') {
-      if (closing.pop() !== char) {
-        start = -1;
-        closing = [];
-        lineHasContent = true;
-        continue;
-      }
-      if (closing.length === 0) {
-        try {
-          parsed.push(JSON.parse(text.slice(start, index + 1)));
-        } catch {
-          // A balanced line-delimited fragment may still be invalid JSON.
+    const firstContent = content.search(/\S/);
+    for (let column = 0; column < content.length; column++) {
+      const char = content[column];
+      const index = lineStart + column;
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
         }
-        start = -1;
-        lineHasContent = true;
+        continue;
       }
+
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{' || char === '[') {
+        openings.push(index);
+        if (column === firstContent) {
+          candidates.set(index, undefined);
+        }
+      } else if (char === '}' || char === ']') {
+        const start = openings.pop();
+        if (start === undefined || text[start] !== (char === '}' ? '{' : '[')) {
+          openings.length = 0;
+        } else if (candidates.has(start)) {
+          candidates.set(start, { end: index + 1, endsLine: column === content.length - 1 });
+        }
+      }
+    }
+
+    // JSON strings cannot span literal newlines.
+    if (inString) {
+      openings.length = 0;
+      inString = false;
+      escaped = false;
     }
   }
-  return parsed;
+
+  // Parse non-overlapping ranges, even when a balanced candidate is invalid JSON.
+  let end = 0;
+  for (const [start, candidate] of candidates) {
+    if (start < end || !candidate) {
+      continue;
+    }
+    end = candidate.end;
+    if (!candidate.endsLine) {
+      continue;
+    }
+    try {
+      yield JSON.parse(text.slice(start, end));
+    } catch {
+      // Delimiter balancing does not validate JSON syntax.
+    }
+  }
 }
 
 /**
@@ -99,9 +125,7 @@ function extractToolNames(output: unknown): Set<string> {
       // Not valid JSON as a whole; look for embedded JSON values.
     }
 
-    // Provider text joins serialized blocks at line boundaries. Scan once so
-    // malformed braces cannot repeatedly rescan the remaining output, and
-    // prose that merely mentions inline JSON is not mistaken for a tool call.
+    // Providers join serialized calls at line boundaries.
     for (const block of extractJsonBlocks(output)) {
       for (const name of extractToolNames(block)) {
         names.add(name);
