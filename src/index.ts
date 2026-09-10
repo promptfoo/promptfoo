@@ -15,9 +15,8 @@ import { Strategies } from './redteam/strategies/index';
 
 import type { RedteamRunOptions } from './redteam/types';
 
-export { PromptSuggestionsRejectedError } from './evaluator';
+export { EvalRunError, PromptSuggestionsRejectedError } from './evaluator/errors';
 export { EmailValidationError } from './globalConfig/accounts';
-export { EvalRunError } from './node/doEval';
 export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
 // EVENT_SOURCES, EventSource, EventSourceSchema, isCliEventSource flow through ./types/index.
