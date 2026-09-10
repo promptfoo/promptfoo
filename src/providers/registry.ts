@@ -627,9 +627,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      const providerEnv = Object.fromEntries(
+        Object.entries(providerOptions.env ?? {}).filter(([, value]) => value),
+      );
       return createEnvoyProvider(providerPath, {
         config: providerOptions,
-        env: { ...context.env, ...providerOptions.env },
+        env: { ...context.env, ...providerEnv },
       });
     },
   },

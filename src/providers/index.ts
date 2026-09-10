@@ -376,10 +376,9 @@ export async function loadApiProviders(
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
 
-  const env = {
-    ...cliState.config?.env,
-    ...options.env,
-  };
+  // An explicit suite env, including an empty one during reload, replaces the
+  // previous suite. Only inherit cliState when callers did not supply env.
+  const env = options.env ?? cliState.config?.env;
 
   if (typeof providerPaths === 'string') {
     // Check if the string path points to a file

@@ -130,6 +130,13 @@ describe('Envoy gateway URLs', () => {
     ],
     ['empty provider', '', undefined, undefined, 'https://env.example/v1/chat/completions'],
     [
+      'empty provider over suite',
+      '',
+      'https://suite.example/',
+      undefined,
+      'https://suite.example/v1/chat/completions',
+    ],
+    [
       'empty provider with registered value',
       '',
       undefined,

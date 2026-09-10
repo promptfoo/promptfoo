@@ -328,7 +328,9 @@ export async function evaluateWithSource(
     env: testSuiteConfig.env,
   });
   const providerMap = buildConfiguredProviderMap(loadedProviders);
-  const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+  const constructedTestSuite = await cliState.withConfig({ env: testSuiteConfig.env }, () =>
+    createRuntimeTestSuite(testSuiteConfig, loadedProviders),
+  );
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
   const parsedProviderPromptMap = readProviderPromptMap(

@@ -74,21 +74,9 @@ const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
-let globalConfig: Partial<UnifiedConfig> | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
-  get config() {
-    return configContext.getStore()?.config ?? globalConfig;
-  },
-  set config(value: Partial<UnifiedConfig> | undefined) {
-    const store = configContext.getStore();
-    if (store && value) {
-      store.config = value;
-      return;
-    }
-    globalConfig = value;
-  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -129,6 +117,9 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => state.config?.env);
+setEnvOverridesProvider(() => {
+  const store = configContext.getStore();
+  return store ? store.config.env : state.config?.env;
+});
 
 export default state;
