@@ -241,19 +241,31 @@ function TableHeader({
   expandedText,
   resourceId,
   loadExpandedText,
+  hydrationKey = expandedText,
   className,
 }: TruncatedTextProps & {
   expandedText?: string;
   resourceId?: string;
   loadExpandedText?: () => Promise<string | undefined>;
+  hydrationKey?: string;
   className?: string;
 }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const [fullText, setFullText] = React.useState(expandedText);
+  const [fullText, setFullText] = React.useState<{ key?: string; value: string }>();
+  const hydrationKeyRef = React.useRef(hydrationKey);
+  hydrationKeyRef.current = hydrationKey;
+  const hydratedText = fullText && fullText.key === hydrationKey ? fullText.value : expandedText;
   const handlePromptOpen = () => {
     setPromptOpen(true);
     if (isOmittedText(expandedText) && loadExpandedText) {
-      void loadExpandedText().then((value) => value && setFullText(value));
+      void loadExpandedText()
+        .then(
+          (value) =>
+            value &&
+            hydrationKeyRef.current === hydrationKey &&
+            setFullText({ key: hydrationKey, value }),
+        )
+        .catch(() => {});
     }
   };
   const handlePromptClose = () => {
@@ -282,7 +294,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={fullText ?? expandedText}
+              prompt={hydratedText ?? expandedText}
             />
           )}
           {resourceId && (
@@ -311,16 +323,21 @@ function HydratedText({
   value,
   loadValue,
   maxLength,
+  identity,
 }: {
   value: string;
   loadValue: () => Promise<string | undefined>;
   maxLength: number;
+  identity: string;
 }) {
-  const [fullValue, setFullValue] = React.useState<string>();
+  const [fullValue, setFullValue] = React.useState<{ identity: string; value: string }>();
   const [loading, setLoading] = React.useState(false);
+  const identityRef = React.useRef(identity);
+  identityRef.current = identity;
+  const hydratedValue = fullValue?.identity === identity ? fullValue.value : undefined;
 
-  if (fullValue || !isOmittedText(value)) {
-    return <TruncatedText text={fullValue ?? value} maxLength={maxLength} />;
+  if (hydratedValue || !isOmittedText(value)) {
+    return <TruncatedText text={hydratedValue ?? value} maxLength={maxLength} />;
   }
 
   return (
@@ -331,7 +348,11 @@ function HydratedText({
       onClick={async () => {
         setLoading(true);
         try {
-          setFullValue(await loadValue());
+          const loaded = await loadValue();
+          if (loaded && identityRef.current === identity) {
+            setFullValue({ identity, value: loaded });
+          }
+        } catch {
         } finally {
           setLoading(false);
         }
@@ -659,6 +680,7 @@ function renderVariableCell({
       <HydratedText
         value={value}
         maxLength={maxTextLength}
+        identity={`${output.evalId || evalId}/${output.id}/actual`}
         loadValue={async () => {
           const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
           return getActualPrompt(detail?.response as Parameters<typeof getActualPrompt>[0]);
@@ -1385,6 +1407,7 @@ function PromptColumnHeader({
         expandedText={prompt.raw}
         maxLength={maxTextLength}
         resourceId={prompt.id}
+        hydrationKey={`${prompt.id || prompt.label || idx}`}
         loadExpandedText={
           isOmittedText(prompt.raw) && evalId
             ? async () => {
@@ -1394,7 +1417,14 @@ function PromptColumnHeader({
                   : prompts && typeof prompts === 'object'
                     ? Object.values(prompts)
                     : [prompts];
-                const fullPrompt = values[idx];
+                const fullPrompt =
+                  values.find(
+                    (value) =>
+                      value &&
+                      typeof value === 'object' &&
+                      ((prompt.id && 'id' in value && value.id === prompt.id) ||
+                        (prompt.label && 'label' in value && value.label === prompt.label)),
+                  ) ?? values[idx];
                 if (typeof fullPrompt === 'string') {
                   return fullPrompt;
                 }
@@ -2321,6 +2351,7 @@ function ResultsTable({
                     <HydratedText
                       value={value}
                       maxLength={maxTextLength}
+                      identity={`${output.evalId || evalId}/${output.id}/${varName}`}
                       loadValue={async () => {
                         const detailEvalId = output.evalId || evalId;
                         if (!detailEvalId) {
