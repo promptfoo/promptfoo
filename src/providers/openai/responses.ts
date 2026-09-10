@@ -737,12 +737,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached);
     const billedResult = this.applyBilling(result, data, config, cached);
+    const incompleteReason = data.incomplete_details?.reason;
+    const incompleteResult =
+      data.status === 'incomplete'
+        ? {
+            ...billedResult,
+            finishReason: incompleteReason === 'max_output_tokens' ? 'length' : incompleteReason,
+            ...(incompleteReason === 'content_filter'
+              ? {
+                  error: 'Response incomplete: content_filter',
+                  isRefusal: true,
+                  guardrails: { flagged: true },
+                }
+              : {}),
+          }
+        : billedResult;
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
-      ...billedResult,
+      ...incompleteResult,
       metadata: {
-        ...billedResult.metadata,
+        ...incompleteResult.metadata,
         ...getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
       },
     };

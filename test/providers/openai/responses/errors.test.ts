@@ -262,6 +262,64 @@ describe('OpenAiResponsesProvider error handling', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it('surfaces content-filtered incomplete streams as refusals', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_incomplete',
+        status: 'incomplete',
+        incomplete_details: { reason: 'content_filter' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'partial' }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', { config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result).toMatchObject({
+      error: 'Response incomplete: content_filter',
+      finishReason: 'content_filter',
+      isRefusal: true,
+      guardrails: { flagged: true },
+    });
+  });
+
+  it('maps max-token incomplete streams to the length finish reason', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_incomplete',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'partial' }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', { config: { apiKey: 'test-key' } });
+
+    await expect(provider.callApi('Test prompt')).resolves.toMatchObject({
+      output: 'partial',
+      finishReason: 'length',
+    });
+  });
+
   it('should handle error processing results with non-array output', async () => {
     // Setup mock for fetchWithCache to return data that will trigger a processing error
     const mockApiResponse = {

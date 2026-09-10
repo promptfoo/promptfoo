@@ -426,8 +426,19 @@ export class ChatKitBrowserPool {
    * Try to serve waiting requests by creating new pages if we have capacity
    */
   private async tryServeWaiters(): Promise<void> {
-    // Process waiters while we have capacity and waiters exist
-    while (this.waitQueue.length > 0 && this.pages.length < this.config.maxConcurrency) {
+    // Process waiters while capacity is available. An idle page for a different
+    // template is capacity too: close it before recreating so isolated templates
+    // cannot strand the queue at the pool limit.
+    while (this.waitQueue.length > 0) {
+      if (this.pages.length >= this.config.maxConcurrency) {
+        const idlePage = this.pages.find((page) => !page.inUse);
+        if (!idlePage) {
+          break;
+        }
+        this.pages.splice(this.pages.indexOf(idlePage), 1);
+        await idlePage.context.close().catch(() => {});
+      }
+
       const waiter = this.waitQueue.shift();
       if (!waiter) {
         break;

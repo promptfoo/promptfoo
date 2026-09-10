@@ -559,6 +559,20 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('template isolation', () => {
+    it('reclaims an idle page for a waiting isolated template at capacity', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      const key1 = 'wf_workflow1:default:default';
+      const key2 = 'wf_workflow2:default:default';
+      instance.setTemplate(key1, '<html>workflow1</html>');
+      instance.setTemplate(key2, '<html>workflow2</html>');
+
+      const page1 = await instance.acquirePage(key1);
+      const pendingPage2 = instance.acquirePage(key2);
+      await instance.releasePage(page1);
+
+      await expect(pendingPage2).resolves.toMatchObject({ templateKey: key2 });
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';
