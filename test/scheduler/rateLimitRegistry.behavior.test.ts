@@ -322,7 +322,7 @@ describe('RateLimitRegistry integration - cancellation', () => {
 
     try {
       controller.abort(reason);
-      await expect(queued).rejects.toBe(reason);
+      await expect(queued).rejects.toMatchObject({ name: 'AbortError', cause: reason });
       first.resolve();
       await firstCall;
       expect(queuedCall).not.toHaveBeenCalled();

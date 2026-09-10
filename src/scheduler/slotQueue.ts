@@ -17,6 +17,16 @@ export interface SlotQueueOptions {
 
 const DEFAULT_QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+function abortError(reason: unknown): Error {
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  error.cause = reason;
+  return error;
+}
+
 /**
  * Manages concurrency slots with FIFO queue for waiting requests.
  *
@@ -66,11 +76,7 @@ export class SlotQueue {
         if (idx !== -1) {
           this.waiting.splice(idx, 1);
         }
-        wrappedReject(
-          signal?.reason instanceof Error
-            ? signal.reason
-            : Object.assign(new Error('Request was aborted'), { name: 'AbortError' }),
-        );
+        wrappedReject(abortError(signal?.reason));
       };
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(() => {

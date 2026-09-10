@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider, throwIfAborted, waitWithAbort } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
@@ -94,10 +94,13 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config from parent class
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
-    callApiOptions?.abortSignal?.throwIfAborted();
+    const { body, config } = await waitWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {
@@ -145,7 +148,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
           context?.bustCache ?? context?.debug,
         ));
 
-      callApiOptions?.abortSignal?.throwIfAborted();
+      throwIfAborted(callApiOptions?.abortSignal);
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
@@ -153,7 +156,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       }
     } catch (err) {
       if (callApiOptions?.abortSignal?.aborted) {
-        callApiOptions.abortSignal.throwIfAborted();
+        throwIfAborted(callApiOptions.abortSignal);
       }
       logger.error(`[Snowflake Cortex] API call error: ${String(err)}`);
       return {

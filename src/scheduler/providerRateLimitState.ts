@@ -149,14 +149,19 @@ export class ProviderRateLimitState extends EventEmitter {
         : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
 
     while (true) {
+      let ownsSlot = false;
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
         await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
+        ownsSlot = true;
       } catch (acquireError) {
-        // Queue timeout or other acquire failures
         this.failedRequests++;
-        this.emit('queue:timeout', {
+        const event =
+          acquireError instanceof Error && acquireError.name === 'AbortError'
+            ? 'queue:cancelled'
+            : 'queue:timeout';
+        this.emit(event, {
           rateLimitKey: this.rateLimitKey,
           requestId,
           error: String(acquireError),
@@ -183,6 +188,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Release slot
         this.slotQueue.release();
+        ownsSlot = false;
 
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
@@ -228,7 +234,9 @@ export class ProviderRateLimitState extends EventEmitter {
         lastError = error as Error;
 
         // Release slot
-        this.slotQueue.release();
+        if (ownsSlot) {
+          this.slotQueue.release();
+        }
 
         // Cancellation is final, even when its message resembles a retryable error.
         if (

@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider, throwIfAborted, waitWithAbort } from './openai/chat';
 import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
@@ -201,10 +201,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
-    callApiOptions?.abortSignal?.throwIfAborted();
+    const { body, config } = await waitWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
@@ -252,7 +255,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           context?.bustCache ?? context?.debug,
         ));
 
-      callApiOptions?.abortSignal?.throwIfAborted();
+      throwIfAborted(callApiOptions?.abortSignal);
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
@@ -260,7 +263,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       }
     } catch (err) {
       if (callApiOptions?.abortSignal?.aborted) {
-        callApiOptions.abortSignal.throwIfAborted();
+        throwIfAborted(callApiOptions.abortSignal);
       }
       logger.error(`API call error: ${String(err)}`);
       return {

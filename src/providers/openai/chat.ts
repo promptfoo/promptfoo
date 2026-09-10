@@ -58,7 +58,7 @@ export type OpenAiChatCompletionCostData = Pick<
   'service_tier' | 'usage'
 >;
 
-function throwIfAborted(signal?: AbortSignal): void {
+export function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) {
     return;
   }
@@ -73,7 +73,7 @@ function throwIfAborted(signal?: AbortSignal): void {
   throw error;
 }
 
-async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+export async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   throwIfAborted(signal);
   if (!signal) {
     return promise;
