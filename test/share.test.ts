@@ -843,6 +843,29 @@ describe('createShareableUrl', () => {
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
 
+    it('redacts provider credentials from the shared eval config', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.config = {
+        providers: [{ id: 'openai:gpt-4', config: { apiKey: 'sk-provider-secret' } }],
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: mockEval.id }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.config.providers[0].config.apiKey).toBe('[REDACTED]');
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('sk-provider-secret');
+    });
+
     it('includes eval tags in the shared config payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {
