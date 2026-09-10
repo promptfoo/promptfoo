@@ -1,4 +1,5 @@
 import { evaluate as evaluateWithRuntime } from '../evaluator/engine';
+import { isCliEventSource } from '../types/eventSource';
 import { nodeEvaluatorRuntime } from './evaluatorRuntime';
 
 import type {
@@ -34,6 +35,11 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
+  if (!runtime && isCliEventSource(options)) {
+    return import('./evaluateForCli').then(({ evaluateForCli }) =>
+      evaluateForCli(testSuite, evalRecord as unknown as Eval, options),
+    ) as Promise<TEvaluation>;
+  }
   return evaluateWithRuntime(
     testSuite,
     evalRecord,
