@@ -131,6 +131,16 @@ function propertyName(node: Node, computed: boolean): string | undefined {
   return undefined;
 }
 
+function isViHoistedCall(node: Extract<Node, { type: 'CallExpression' }>): boolean {
+  const callee = unwrap(node.callee);
+  return (
+    callee.type === 'MemberExpression' &&
+    callee.object.type === 'Identifier' &&
+    callee.object.name === 'vi' &&
+    propertyName(callee.property, callee.computed) === 'hoisted'
+  );
+}
+
 function members(value: Value): Value[] {
   return value.kind === 'union' ? value.values : [value];
 }
@@ -540,22 +550,37 @@ export function findHoistedPersistentMockWithoutReset(
       );
       bind(pattern.left, union(effective), context, target, directFunction);
     } else if (pattern.type === 'ObjectPattern') {
+      const used = new Set<string>();
       for (const property of pattern.properties) {
         if (property.type === 'RestElement') {
-          bind(property.argument, UNKNOWN, context, target);
+          const rest =
+            value.kind === 'object' && !value.array
+              ? {
+                  ...value,
+                  properties: new Map([...value.properties].filter(([key]) => !used.has(key))),
+                }
+              : UNKNOWN;
+          bind(property.argument, rest, context, target);
         } else {
-          bind(
-            property.value,
-            get(value, evaluateProperty(property.key, property.computed, context), context),
-            context,
-            target,
-          );
+          const key = evaluateProperty(property.key, property.computed, context);
+          if (key !== undefined) {
+            used.add(key);
+          }
+          bind(property.value, get(value, key, context), context, target);
         }
       }
     } else if (pattern.type === 'ArrayPattern') {
       for (const [index, element] of pattern.elements.entries()) {
         if (element) {
-          bind(element, get(value, String(index), context), context, target);
+          if (element.type === 'RestElement') {
+            const rest =
+              value.kind === 'object' && value.array && value.elements
+                ? arrayValue(value.elements.slice(index))
+                : UNKNOWN;
+            bind(element.argument, rest, context, target);
+          } else {
+            bind(element, get(value, String(index), context), context, target);
+          }
         }
       }
     } else if (pattern.type === 'RestElement') {
@@ -1057,13 +1082,13 @@ export function findHoistedPersistentMockWithoutReset(
       );
     }
     if (persistentMockMethodNames.has(method)) {
-      recordPersistentSetter(receiver, node, context);
+      recordPersistentSetter(receiver, method, node, context);
     }
     return method.startsWith('mock') ? receiver : UNKNOWN;
   }
 
-  function recordPersistentSetter(receiver: Value, node: Node, context: Context) {
-    if (context.phase === 'reset' && !hasConditionalSetup(context)) {
+  function recordPersistentSetter(receiver: Value, method: string, node: Node, context: Context) {
+    if (context.phase === 'reset' && !hasConditionalSetup(context) && !method.endsWith('Once')) {
       return;
     }
     for (let part of members(receiver)) {
@@ -1191,6 +1216,23 @@ export function findHoistedPersistentMockWithoutReset(
       suitesWithTests.add(context.suite);
     }
     if (receiver && method) {
+      if (
+        context.phase === 'hoisted' &&
+        (method === 'call' || method === 'apply') &&
+        members(receiver).every((part) => part.kind === 'function')
+      ) {
+        const calledArgs =
+          method === 'apply' && args[1]?.kind === 'object' && args[1].array && args[1].elements
+            ? args[1].elements.map((element) => element.value)
+            : args.slice(1);
+        return invoke(receiver, calledArgs, context, node, { tail });
+      }
+      if (
+        context.phase === 'hoisted' &&
+        members(callable).every((part) => part.kind === 'function')
+      ) {
+        return invoke(callable, args, context, node, { tail, spreads });
+      }
       forgetArrays(receiver);
       if (!members(receiver).every((part) => part.kind === 'mock')) {
         forgetArrays(...args);
@@ -1274,7 +1316,15 @@ export function findHoistedPersistentMockWithoutReset(
       }
       const key = evaluateProperty(property.key, property.computed, context);
       const value =
-        property.method || property.kind !== 'init' ? UNKNOWN : evaluate(property.value, context);
+        property.kind === 'init'
+          ? property.method && isFunction(property.value)
+            ? [...persistentMockMethodNames].some((method) =>
+                file.source.slice(property.value.start, property.value.end).includes(`.${method}`),
+              )
+              ? functionValue(property.value, context.scope)
+              : UNKNOWN
+            : evaluate(property.value, context)
+          : UNKNOWN;
       if (key === undefined) {
         unknownProperties = true;
         properties.clear();
@@ -1586,6 +1636,10 @@ export function findHoistedPersistentMockWithoutReset(
             part.kind === 'shortCircuit' ? MISSING : part,
           ),
         );
+      case 'AwaitExpression':
+        return node.argument.type === 'CallExpression' && isViHoistedCall(node.argument)
+          ? evaluate(node.argument, context, tail)
+          : evaluateChildren(node, context);
       case 'MemberExpression': {
         const object = evaluate(node.object, context);
         return optionalTarget(object, node, context, (target, nested) =>
@@ -1954,21 +2008,29 @@ export function findHoistedPersistentMockWithoutReset(
       return undefined;
     }
     const iterable = evaluate(node.right, context);
-    if (
-      node.type === 'ForOfStatement' &&
-      iterable.kind === 'object' &&
-      iterable.array &&
-      iterable.elements
-    ) {
-      return executeArrayLoop(node, iterable.elements, context);
+    if (iterable.kind === 'object') {
+      if (node.type === 'ForOfStatement' && iterable.array && iterable.elements) {
+        return executeKnownLoop(node, iterable.elements, context);
+      }
+      if (
+        context.phase === 'reset' &&
+        node.type === 'ForInStatement' &&
+        !iterable.unknownProperties
+      ) {
+        return executeKnownLoop(
+          node,
+          [...iterable.properties.keys()].map((key) => ({ value: literal(key) })),
+          context,
+        );
+      }
     }
     const nested = loopBinding(node, UNKNOWN, guarded(context, node, true));
     const result = execute(node.body, nested);
     return finishLoop(result, node, context, nested, false);
   }
 
-  function executeArrayLoop(
-    node: Extract<Node, { type: 'ForOfStatement' }>,
+  function executeKnownLoop(
+    node: Extract<Node, { type: 'ForInStatement' | 'ForOfStatement' }>,
     elements: ArrayElement[],
     context: Context,
   ): ReturnFlow | undefined {

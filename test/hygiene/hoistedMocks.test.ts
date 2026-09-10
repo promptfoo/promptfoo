@@ -2042,4 +2042,27 @@ describe('hoisted mock provenance', () => {
       }),
     ]);
   });
+
+  it.each([
+    "const helper = { configure() { mock.mockReturnValue('x'); } }; helper.configure();",
+    "function configure() { mock.mockReturnValue('x'); } configure.call(undefined);",
+  ])('finds a setter reached through %s', (usage) => {
+    const source = `const mock = vi.hoisted(() => { const mock = vi.fn(); ${usage} return mock; });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    'const { ...mocks } = vi.hoisted(() => ({ request: vi.fn().mockReturnValue(1) })); beforeEach(() => mocks.request.mockReset());',
+    'const [...mocks] = vi.hoisted(() => [vi.fn().mockReturnValue(1)]); beforeEach(() => mocks[0].mockReset());',
+    'const mock = await vi.hoisted(async () => vi.fn().mockReturnValue(1)); beforeEach(() => mock.mockReset());',
+    'const mock = vi.hoisted(() => vi.fn().mockReturnValue(1)); beforeEach(() => { for (const key in { only: true }) mock.mockReset(); });',
+  ])('preserves a known reset target in %s', (source) => {
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('requires reset before unconditional once reseeding', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      beforeEach(() => mock.mockReturnValueOnce(1)); it('a', () => {});`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
 });

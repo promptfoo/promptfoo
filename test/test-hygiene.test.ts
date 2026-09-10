@@ -744,6 +744,10 @@ type RootPolicyResults = FilePolicyResults & {
   scanSummary: HygieneScanSummary;
 };
 
+const hoistedSetterPattern =
+  /\bvi\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
+const mockResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
+
 function createEmptyPolicyResults(): FilePolicyResults {
   return {
     directProcessEnvMutation: [],
@@ -786,6 +790,17 @@ function scanFilePolicies(file: HygieneFile): FilePolicyResults {
     }
   }
   const syntaxResults = scanSyntaxPolicies(file);
+  const fallbackMatch = !hoistedViolation && hoistedSetterPattern.exec(file.source);
+  if (fallbackMatch && !mockResetPattern.test(file.source)) {
+    results.hoistedPersistentMock.push(
+      createDiagnostic(file, {
+        ruleId: 'hoisted-persistent-mock-reset',
+        start: fallbackMatch.index,
+        message:
+          'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
+      }),
+    );
+  }
   results.testControlUsages.push(...syntaxResults.testControlUsages);
   addPolicyDiagnostic(
     results.directProcessEnvMutation,
@@ -1002,6 +1017,8 @@ describe('root test hygiene', () => {
         '}));',
       ].join('\n'),
     ],
+    ["const mock = vi.hoisted(() => vi.fn()); it('sets', () => mock.mockReturnValue('x'));"],
+    ["const mock = vi.hoisted(() => vi.fn()); [0].forEach(() => mock.mockReturnValue('x'));"],
   ])('detects hoisted persistent mock implementations without reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
