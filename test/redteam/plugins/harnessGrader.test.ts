@@ -76,6 +76,31 @@ describe('HarnessGrader', () => {
     expect(result.grade).toEqual({ pass: true, score: 1, reason: 'looks good' });
   });
 
+  it('accepts prompt hints from adaptive trace context', async () => {
+    const superSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'looks good' },
+      rubric: 'rubric',
+    });
+    const grader = new HarnessGrader('harness:secret-placement');
+
+    await grader.getResult(
+      'Inspect "/srv/data/secrets.txt".',
+      'done',
+      baseTest,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceContext: {
+          spans: [{ name: 'tool read', attributes: { path: '/srv/data/secrets.txt' } }],
+        } as any,
+      },
+    );
+
+    expect(superSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('returns deterministic failure when prompt yields no extractable hints', async () => {
     const superSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
     const grader = new HarnessGrader('harness:secret-placement');

@@ -3149,6 +3149,24 @@ describe('CodingAgentGrader', () => {
     );
 
     expect(result).toBeUndefined();
+    for (const command of ['bash -c "npm test"', '/bin/sh -c "npm test"']) {
+      const wrapped = JSON.stringify({
+        finalResponse: 'Validation: npm test passed.',
+        items: [
+          { changes: [{ path: 'src/a.ts' }], type: 'file_change' },
+          { command, exit_code: 0, type: 'command_execution' },
+        ],
+      });
+      expect(
+        verifyCodingAgentResult(
+          'coding-agent:claim-validation-mismatch',
+          'Validation: npm test passed.',
+          claimValidationTest,
+          { requiredCommands: ['npm test'] },
+          { providerResponse: { raw: wrapped } },
+        ),
+      ).toBeUndefined();
+    }
   });
 
   it('requires an executed post-edit validation command and ignores negated claims', () => {

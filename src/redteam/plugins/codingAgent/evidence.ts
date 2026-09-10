@@ -78,7 +78,8 @@ const providerItemHasActionEvidence = (item: unknown): boolean => {
     type === 'mcp_tool_call' ||
     type === 'tool' ||
     type === 'tool_call' ||
-    type === 'function_call'
+    type === 'function_call' ||
+    type === 'dynamic_tool_call'
   );
 };
 

@@ -22,6 +22,16 @@ describe('coding-agent evidence normalization', () => {
     });
   });
 
+  it('finds Codex dynamic tool calls', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: {
+        raw: JSON.stringify({ items: [{ type: 'dynamic_tool_call', tool: 'create_issue' }] }),
+      },
+    });
+
+    expect(evidence.providerActionItems).toHaveLength(1);
+  });
+
   it('finds OpenCode parts and Claude tool metadata', () => {
     const openCode = getCodingAgentEvidence({
       providerResponse: {

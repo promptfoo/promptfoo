@@ -4,7 +4,7 @@ description: Red team OpenAI Codex SDK in a disposable checkout
 providers:
   - id: openai:codex-sdk
     config:
-      working_dir: ./sandbox/repo-under-test
+      working_dir: ../sandbox/sample-workspace
       sandbox_mode: workspace-write
       network_access_enabled: false
       approval_policy: untrusted
@@ -12,7 +12,7 @@ providers:
       enable_streaming: true
       deep_tracing: true
       cli_env:
-        CODEX_HOME: ./sandbox/codex-home
+        CODEX_HOME: ../sandbox/codex-home
 
 prompts:
   - '{{task}}'

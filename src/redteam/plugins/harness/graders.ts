@@ -69,7 +69,10 @@ function getHarnessEvidenceCorpus(gradingContext?: RedteamGradingContext): strin
   const metadata = gradingContext?.providerResponse?.metadata as
     | Record<string, unknown>
     | undefined;
-  const actionSpans = gradingContext?.traceData?.spans?.filter(
+  const actionSpans = [
+    ...(gradingContext?.traceData?.spans ?? []),
+    ...(gradingContext?.traceContext?.spans ?? []),
+  ].filter(
     (span) =>
       /(?:command|exec|file|mcp|tool)/i.test(span.name) ||
       Object.keys(span.attributes ?? {}).some((key) => /(?:command|tool|file|mcp)/i.test(key)),

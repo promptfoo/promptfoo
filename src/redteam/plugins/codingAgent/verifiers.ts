@@ -18,7 +18,16 @@ function isWithin(candidate: string, root: string): boolean {
 
 function readVerifierArtifactSync(filePath: string): Buffer;
 function readVerifierArtifactSync(filePath: string, encoding: BufferEncoding): string;
-function readVerifierArtifactSync(filePath: string, encoding?: BufferEncoding): Buffer | string {
+function readVerifierArtifactSync(
+  filePath: string,
+  encoding: BufferEncoding,
+  maxBytes: number,
+): string;
+function readVerifierArtifactSync(
+  filePath: string,
+  encoding?: BufferEncoding,
+  maxBytes = MAX_VERIFIER_ARTIFACT_BYTES,
+): Buffer | string {
   const realPath = fs.realpathSync(filePath);
   const roots = [process.cwd(), os.tmpdir()].map((root) => fs.realpathSync(root));
   if (!roots.some((root) => isWithin(realPath, root))) {
@@ -26,11 +35,18 @@ function readVerifierArtifactSync(filePath: string, encoding?: BufferEncoding): 
   }
 
   const stat = fs.statSync(realPath);
-  if (!stat.isFile() || stat.size > MAX_VERIFIER_ARTIFACT_BYTES) {
+  if (!stat.isFile() || stat.size > maxBytes) {
     throw new Error('Verifier artifact must be a bounded regular file');
   }
 
   return encoding ? fs.readFileSync(realPath, encoding) : fs.readFileSync(realPath);
+}
+
+function traceSpans(gradingContext?: RedteamGradingContext) {
+  return [
+    ...(gradingContext?.traceData?.spans ?? []),
+    ...(gradingContext?.traceContext?.spans ?? []),
+  ];
 }
 
 type CommandExecution = {
@@ -1327,7 +1343,7 @@ function externalizedAgentLedgerFromText(
 function readExternalizedAgentLedger(path: string): ExternalizedAgentLedger | undefined {
   try {
     return externalizedAgentLedgerFromText(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
       'externalized-agent ledger file',
       path,
     );
@@ -6908,14 +6924,14 @@ function collectTargetTextEvidence(
     evidence.push({ location: 'trace summary', text: gradingContext.traceSummary });
   }
 
-  for (const [index, span] of gradingContext?.traceData?.spans?.entries() ?? []) {
+  for (const [index, span] of traceSpans(gradingContext).entries()) {
     const spanIndex = index + 1;
     evidence.push({ location: `trace span ${spanIndex} name`, text: span.name });
     evidence.push({
       location: `trace span ${spanIndex} attributes`,
       text: safeStringify(span.attributes ?? {}),
     });
-    if (span.statusMessage) {
+    if ('statusMessage' in span && span.statusMessage) {
       evidence.push({
         location: `trace span ${spanIndex} status`,
         text: span.statusMessage,
@@ -6961,7 +6977,7 @@ function collectAgentResponseTextEvidence(
     }
   });
 
-  gradingContext?.traceData?.spans?.forEach((span, index) => {
+  traceSpans(gradingContext).forEach((span, index) => {
     const attrs = span.attributes ?? {};
     const message = getString(attrs['codex.message']);
     const itemType = getString(attrs['codex.item.type']);
@@ -7003,7 +7019,7 @@ function collectTerminalCommandOutputEvidence(
     }
   });
 
-  gradingContext?.traceData?.spans?.forEach((span, index) => {
+  traceSpans(gradingContext).forEach((span, index) => {
     const attrs = span.attributes ?? {};
     const itemType = getString(attrs['codex.item.type']);
     const command = getString(attrs['codex.command']);
@@ -7051,7 +7067,7 @@ function collectMcpToolResultEvidence(
     }
   });
 
-  gradingContext?.traceData?.spans?.forEach((span, index) => {
+  traceSpans(gradingContext).forEach((span, index) => {
     const attrs = span.attributes ?? {};
     const itemType = getString(attrs['codex.item.type']);
     const spanName = normalizeForSearch(span.name);
@@ -8092,7 +8108,7 @@ function childAgentSidecarsFromAssertion(
 }
 
 function commandMatchesEvidence(observedCommand: string, expectedCommand: string): boolean {
-  const shellCommand = observedCommand.match(/^(?:\/bin\/)?(?:ba|z)?sh\s+-lc\s+['"](.+)['"]$/);
+  const shellCommand = observedCommand.match(/^(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+['"](.+)['"]$/);
   if (shellCommand) {
     return commandMatchesEvidence(shellCommand[1], expectedCommand);
   }
@@ -8191,7 +8207,7 @@ function traceTrajectory(gradingContext?: RedteamGradingContext): CodingAgentTra
     messages: [],
   };
 
-  gradingContext?.traceData?.spans?.forEach((span, index) => {
+  traceSpans(gradingContext).forEach((span, index) => {
     const spanIndex = index + 1;
     const attrs = span.attributes ?? {};
     const itemIndex = typeof attrs['codex.item.id'] === 'string' ? spanIndex : spanIndex;
@@ -8398,7 +8414,7 @@ function collectTraceSpanCompletenessEvidence(
   inventory: TraceCompletenessInventory,
   gradingContext?: RedteamGradingContext,
 ) {
-  const spans = gradingContext?.traceData?.spans ?? [];
+  const spans = traceSpans(gradingContext);
   inventory.traceSpanCount = spans.length;
 
   spans.forEach((span, index) => {
