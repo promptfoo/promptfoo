@@ -4,18 +4,19 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}" and respond with structured JSON data.'
 
 providers:
-  - id: openai:responses:gpt-4.1-nano
+  - id: openai:responses:gpt-5.6-luna
     config:
-      temperature: 0.3
+      reasoning:
+        effort: none
       max_output_tokens: 600
-      top_p: 0.95
       instructions: 'You are an expert customer support analyst. Analyze the customer query and provide structured information following the exact JSON schema provided.'
       response_format: file://schema.responses.yaml # External schema file reference
 
-  - id: openai:responses:gpt-4.1-mini
+  - id: openai:responses:gpt-5.6-terra
     label: Responses API (Inline Schema)
     config:
-      temperature: 0.2
+      reasoning:
+        effort: none
       max_output_tokens: 800
       instructions: 'You are an expert customer support analyst. Analyze the customer query and provide structured information following the exact JSON schema provided.'
       response_format:

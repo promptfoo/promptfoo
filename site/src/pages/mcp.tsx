@@ -163,7 +163,7 @@ export default function Mcp(): React.ReactElement {
       description="Enterprise-grade MCP proxy for secure AI tool integration. Whitelist approved MCP servers, grant granular permissions, and monitor for PII and sensitive data exposure."
     >
       <Head>
-        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/mcp.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>

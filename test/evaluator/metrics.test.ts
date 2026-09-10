@@ -462,6 +462,66 @@ describeEvaluator('evaluator metrics and scoring', () => {
     }
   });
 
+  it('clears cached assertion provenance when select-best performs fresh grading', async () => {
+    const matchers = await import('../../src/matchers/comparison');
+    const freshComparison = {
+      pass: true,
+      score: 1,
+      reason: 'Fresh comparison grade',
+      tokensUsed: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+    };
+    const matchesSelectBestSpy = vi
+      .spyOn(matchers, 'matchesSelectBest')
+      .mockResolvedValue([freshComparison, { ...freshComparison }]);
+    const cachedGradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Cached grading result' }),
+        cached: true,
+        tokenUsage: { total: 97, prompt: 61, completion: 36, numRequests: 1 },
+      }),
+    };
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'llm-rubric',
+                value: 'The response should be useful',
+                provider: cachedGradingProvider,
+              },
+              { type: 'select-best', value: 'choose the best response' },
+            ],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.results).toHaveLength(2);
+      for (const result of summary.results) {
+        expect(result.gradingResult?.metadata?.cachedResponse).toBeUndefined();
+        expect(result.tokenUsage?.assertions).toMatchObject({
+          total: 110,
+          cached: 97,
+          numRequests: 2,
+        });
+        expect(result.tokenUsage?.incurredTokenUsage?.assertions).toMatchObject({
+          total: 13,
+          numRequests: 1,
+        });
+      }
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+    }
+  });
+
   it('evaluate with assertScoringFunction', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

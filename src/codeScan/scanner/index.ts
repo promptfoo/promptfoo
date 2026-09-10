@@ -16,25 +16,23 @@ import {
   type ScanResponse,
 } from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
-import {
-  loadConfigOrDefault,
-  mergeConfigWithOptions,
-  resolveApiHost,
-  resolveGuidance,
-} from '../config/loader';
+import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { stopFilesystemMcpServer } from '../mcp/filesystem';
-import { setupMcpBridge } from '../mcp/index';
+import {
+  startFilesystemMcpServer,
+  stopFilesystemMcpServer,
+  waitForFilesystemMcpServerReady,
+} from '../mcp/filesystem';
+import { SocketIoMcpBridge } from '../mcp/transport';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
-import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
+import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
 import type { Config } from '../config/schema';
-import type { SocketIoMcpBridge } from '../mcp/transport';
 
 /**
  * Options for executing a scan
@@ -89,20 +87,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
+  const abortController = new AbortController();
   const originalLogLevel = getLogLevel();
   const structuredOutputRequested =
     options.json === true ||
     options.format === CodeScanOutputFormat.JSON ||
     options.format === CodeScanOutputFormat.SARIF;
   const absoluteRepoPath = path.resolve(repoPath);
-  const cleanupRefs: CleanupRefs = {
-    repoPath: absoluteRepoPath,
-    socket: null,
-    mcpBridge: null,
-    mcpProcess: null,
-    spinner: null,
-    abortController: null,
-  };
   let outputFormat: CodeScanOutputFormat | null = null;
   let spinner: ReturnType<typeof createSpinner> | undefined;
   let showSpinner = false;
@@ -141,7 +132,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     logger.debug(`Repository: ${absoluteRepoPath}`);
 
     // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
-    registerCleanupHandlers(cleanupRefs);
+    registerCleanupHandlers(abortController);
 
     // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
     const isWebUI = Boolean(cliState.webUI);
@@ -151,15 +142,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       logLevel: getLogLevel(),
     });
 
-    if (spinner) {
-      cleanupRefs.spinner = spinner; // Update ref for signal handlers
-    }
-
     showSpinner = Boolean(spinner);
-
-    // Create AbortController for cancelling the scan
-    const abortController = new AbortController();
-    cleanupRefs.abortController = abortController; // Update ref for signal handlers
 
     // Parse PR context early for auth (if --github-pr provided)
     // This is needed for fork PR authentication where OIDC is unavailable
@@ -183,20 +166,39 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     client = await createAgentClient({
       agent: 'code-scan',
-      host: resolveApiHost(options, config),
+      host: config.apiHost || 'https://api.promptfoo.app',
       auth: resolveAuthCredentials(options.apiKey, parsedPR),
     });
     sessionId = client.sessionId;
-    cleanupRefs.socket = client.socket; // Update ref for signal handlers
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      const mcpSetup = await setupMcpBridge(client.socket, absoluteRepoPath, sessionId);
-      mcpProcess = mcpSetup.mcpProcess;
-      mcpBridge = mcpSetup.mcpBridge;
+      logger.debug('Setting up repo MCP access...');
+      logger.debug(`Using session ID: ${sessionId}`);
 
-      cleanupRefs.mcpProcess = mcpProcess; // Update ref for signal handlers
-      cleanupRefs.mcpBridge = mcpBridge; // Update ref for signal handlers
+      const startedMcpProcess = startFilesystemMcpServer(absoluteRepoPath);
+      try {
+        await waitForFilesystemMcpServerReady(startedMcpProcess);
+        logger.debug('Filesystem MCP server ready');
+
+        const connectedMcpBridge = new SocketIoMcpBridge(
+          startedMcpProcess,
+          client.socket,
+          sessionId,
+        );
+        await connectedMcpBridge.connect();
+
+        client.socket.emit('runner:hello', {
+          session_id: sessionId,
+          repo_root: absoluteRepoPath,
+        });
+
+        mcpProcess = startedMcpProcess;
+        mcpBridge = connectedMcpBridge;
+      } catch (error) {
+        await stopFilesystemMcpServer(startedMcpProcess);
+        throw error;
+      }
     }
 
     // Validate branch and determine base branch
