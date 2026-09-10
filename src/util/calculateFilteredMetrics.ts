@@ -114,6 +114,13 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
+  const generationCarrierSql = sql`NOT EXISTS (
+    SELECT 1 FROM eval_results AS earlier
+    WHERE earlier.eval_id = eval_results.eval_id
+      AND json_extract(earlier.test_case, '$.metadata.providerTokenUsage') IS NOT NULL
+      AND (earlier.prompt_idx < eval_results.prompt_idx
+        OR (earlier.prompt_idx = eval_results.prompt_idx AND earlier.test_idx < eval_results.test_idx))
+  )`;
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
   const basicMetricsQuery = sql`
@@ -128,22 +135,22 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(cost) as total_cost,
       -- Target usage lives on the response; generation usage is carried on the first test.
       -- Count it once on the canonical first result, without inflating redteam probes.
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.total') AS INTEGER), 0) ELSE 0 END) as total_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.prompt') AS INTEGER), 0) ELSE 0 END) as prompt_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completion') AS INTEGER), 0) ELSE 0 END) as completion_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.cached') AS INTEGER), 0) ELSE 0 END) as cached_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.reasoning') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.reasoning') AS INTEGER), 0) ELSE 0 END) as completion_details_reasoning,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_accepted_prediction,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_rejected_prediction,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_read_input_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) + CASE WHEN prompt_idx = 0 AND test_idx = 0 THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_creation_input_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.total') AS INTEGER), 0) ELSE 0 END) as total_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.prompt') AS INTEGER), 0) ELSE 0 END) as prompt_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completion') AS INTEGER), 0) ELSE 0 END) as completion_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.cached') AS INTEGER), 0) ELSE 0 END) as cached_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.reasoning') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.reasoning') AS INTEGER), 0) ELSE 0 END) as completion_details_reasoning,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_accepted_prediction,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_rejected_prediction,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_read_input_tokens,
+      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_creation_input_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.total') AS INTEGER)) as assertion_total_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.prompt') AS INTEGER)) as assertion_prompt_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completion') AS INTEGER)) as assertion_completion_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.cached') AS INTEGER)) as assertion_cached_tokens,
       SUM(
         CASE
-          WHEN json_extract(grading_result, '$.tokensUsed') IS NOT NULL
+          WHEN grading_result IS NOT NULL
           THEN COALESCE(CAST(json_extract(grading_result, '$.tokensUsed.numRequests') AS INTEGER), 1)
           ELSE 0
         END

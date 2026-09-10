@@ -711,6 +711,7 @@ function renderTokenMetrics({
 }): React.ReactNode[] {
   const totalTokens = metrics?.tokenUsage?.total ?? 0;
   const gradingTokens = metrics?.tokenUsage?.assertions?.total ?? 0;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage?.assertions?.total;
   const rows: React.ReactNode[] = [];
   const filteredTokens = filteredMetrics?.tokenUsage?.total;
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
@@ -736,6 +737,9 @@ function renderTokenMetrics({
     rows.push(
       <div key="grading-tokens">
         <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+        {filteredGradingTokens
+          ? renderFilteredSuffix(formatMetricValue(filteredGradingTokens))
+          : null}
       </div>,
     );
   }

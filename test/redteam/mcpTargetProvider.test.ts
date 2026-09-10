@@ -332,6 +332,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       ),
     ).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: { numRequests: 0 },
     });
     expect(target.calls).toHaveLength(0);
   });
@@ -349,6 +350,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
 
     await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
+      tokenUsage: { numRequests: 0 },
     });
     expect(target.calls).toHaveLength(0);
   });

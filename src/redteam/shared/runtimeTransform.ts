@@ -247,31 +247,31 @@ export async function applyRuntimeTransforms(
         ...layerConfig,
         ...remoteGenerationContextPayload(context?.targetId),
       });
+      for (const generated of result) {
+        const metadata = generated.metadata ?? {};
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: metadata[RUNTIME_TRANSFORM_TOKEN_USAGE_KEY] as TokenUsage | undefined },
+          { countAsRequest: false },
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          {
+            tokenUsage: subtractTokenUsage(
+              metadata.providerTokenUsage as TokenUsage | undefined,
+              previousProviderTokenUsage,
+            ),
+          },
+          { countAsRequest: false },
+        );
+      }
       const transformed = result[0];
 
       if (transformed) {
         const transformedMetadata = {
           ...(transformed.metadata ?? {}),
         };
-        const transformTokenUsage = transformedMetadata[
-          RUNTIME_TRANSFORM_TOKEN_USAGE_KEY
-        ] as TokenUsage | undefined;
-        const providerTokenUsageDelta = subtractTokenUsage(
-          transformedMetadata.providerTokenUsage as TokenUsage | undefined,
-          previousProviderTokenUsage,
-        );
         delete transformedMetadata[RUNTIME_TRANSFORM_TOKEN_USAGE_KEY];
-
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: transformTokenUsage },
-          { countAsRequest: false },
-        );
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: providerTokenUsageDelta },
-          { countAsRequest: false },
-        );
 
         // Preserve context metadata (evaluationId, testCaseId, purpose, goal) across transforms
         // by merging original metadata first, then transformed metadata on top

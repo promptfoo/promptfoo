@@ -2383,7 +2383,20 @@ async function buildRunEvalOptions({
       testSuite,
     });
   }
-  const generationCarrier = runEvalOptions.find(({ test }) => test.metadata?.providerTokenUsage);
+  const detachedGenerationUsage = tests.find(({ metadata }) => metadata?.providerTokenUsage)
+    ?.metadata?.providerTokenUsage;
+  const generationCarrier =
+    runEvalOptions.find(({ test }) => test.metadata?.providerTokenUsage) ?? runEvalOptions[0];
+  if (
+    generationCarrier &&
+    detachedGenerationUsage &&
+    !generationCarrier.test.metadata?.providerTokenUsage
+  ) {
+    generationCarrier.test.metadata = {
+      ...generationCarrier.test.metadata,
+      providerTokenUsage: detachedGenerationUsage,
+    };
+  }
   if (generationCarrier) {
     for (const option of runEvalOptions) {
       option.includeGenerationTokenUsage = option === generationCarrier;

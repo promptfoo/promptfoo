@@ -8,7 +8,11 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -663,10 +667,12 @@ export class CustomProvider implements ApiProvider {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
-        if (error instanceof RedteamProviderError && error.tokenUsage) {
+        const errorTokenUsage =
+          error instanceof RedteamProviderError ? error.tokenUsage : getErrorTokenUsage(error);
+        if (errorTokenUsage) {
           accumulateResponseTokenUsage(
             totalTokenUsage,
-            { tokenUsage: error.tokenUsage },
+            { tokenUsage: errorTokenUsage },
             { countAsRequest: false },
           );
         }

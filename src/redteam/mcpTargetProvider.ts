@@ -146,7 +146,8 @@ class RedteamMcpTargetProvider implements ApiProvider {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,
-        ...(hasAuxiliaryTokenUsage || targetCallAttempted ? { tokenUsage: totalTokenUsage } : {}),
+        tokenUsage:
+          hasAuxiliaryTokenUsage || targetCallAttempted ? totalTokenUsage : { numRequests: 0 },
       };
     }
   }
