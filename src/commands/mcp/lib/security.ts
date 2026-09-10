@@ -17,7 +17,7 @@ type EnvOverrides = Record<string, string | undefined>;
 
 const FILE_PROVIDER_PREFIX = 'file://';
 const LOCAL_PROVIDER_PREFIXES = ['exec:', 'golang:', 'python:', 'ruby:'] as const;
-const STATIC_CONFIG_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
+const STATIC_CONFIG_EXTENSIONS = new Set(['.json', '.jsonl', '.yaml', '.yml']);
 const PROVIDER_FILE_EXTENSIONS = new Set([
   'cjs',
   'cts',
@@ -312,8 +312,6 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
     const rendered = renderEnvOnlyInObject(value, state.env);
     if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
       validateConfigFileReference(rendered, state);
-    } else if (LOCAL_PROVIDER_PREFIXES.some((prefix) => rendered.startsWith(prefix))) {
-      validateProviderIdWithState(rendered, state);
     }
     return;
   }
@@ -339,6 +337,9 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
     }
     validateCodeReference(getObject(object.options)?.transform, 'test transform', state);
     if (object.type === 'file' && typeof object.path === 'string') {
+      validateConfigFileReference(object.path, state);
+    }
+    if (object.type === 'path' && typeof object.path === 'string') {
       validateConfigFileReference(object.path, state);
     }
     for (const [key, entry] of Object.entries(object)) {
@@ -425,6 +426,7 @@ function validateStaticConfigLocalReferences(
   }
   validateLocalConfigFileReferences(rootConfig.tests, state, false, true);
   validateLocalConfigFileReferences(rootConfig.defaultTest, state, false, true);
+  validateLocalConfigFileReferences(rootConfig.scenarios, state, false, true);
   validateLocalConfigFileReferences(rootConfig.outputPath, state);
   for (const envPath of [getObject(rootConfig.commandLineOptions)?.envPath].flat()) {
     if (typeof envPath === 'string') {
@@ -508,6 +510,12 @@ function validateProviderReferenceWithState(
     'sessionParser',
   ]) {
     validateCodeReference(configObject?.[key], key, providerState);
+  }
+  const functionToolCallbacks = getObject(configObject?.functionToolCallbacks);
+  if (functionToolCallbacks) {
+    Object.values(functionToolCallbacks).forEach((callback) =>
+      validateCodeReference(callback, 'function tool callback', providerState),
+    );
   }
   validateCodeReference(
     getObject(configObject?.session)?.responseParser,
@@ -644,7 +652,14 @@ function validateStaticConfigFile(
   }
 
   const realConfigPath = fs.realpathSync(configPath);
-  const rawConfig = loadYaml(fs.readFileSync(realConfigPath, 'utf8'));
+  const contents = fs.readFileSync(realConfigPath, 'utf8');
+  const rawConfig =
+    extension === '.jsonl'
+      ? contents
+          .split(/\r?\n/)
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line))
+      : loadYaml(contents);
   const configState = {
     ...state,
     basePath: preserveBasePath ? state.basePath : path.dirname(realConfigPath),
@@ -737,7 +752,11 @@ export function validateMcpProviderPrompt(
   prompt: string,
 ): void {
   const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-  if (providerId.startsWith('openai:transcription:')) {
+  if (
+    providerId.startsWith('openai:transcription:') ||
+    providerId.startsWith('elevenlabs:stt:') ||
+    providerId === 'elevenlabs:isolation'
+  ) {
     validateMcpFilePath(prompt.trim());
   }
 }

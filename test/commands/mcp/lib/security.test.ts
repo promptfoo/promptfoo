@@ -7,6 +7,7 @@ import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
 import {
   validateMcpConfigFile,
   validateMcpFilePath,
+  validateMcpProviderPrompt,
   validateProviderId,
   validateProviderReference,
 } from '../../../../src/commands/mcp/lib/security';
@@ -63,6 +64,23 @@ describe('MCP Security', () => {
       );
     });
 
+    it('rejects inline callbacks and multipart path sources', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:assistant:fixture',
+          config: { functionToolCallbacks: { lookup: 'process.cwd()' } },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          config: {
+            multipart: { parts: [{ source: { type: 'path', path: path.join(root, 'outside') } }] },
+          },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
     it('keeps the runtime provider base when following a nested schema reference', () => {
       fs.writeFileSync(path.join(workspace, 'sub', 'provider.yaml'), 'id: python:../outside.py\n');
       fs.writeFileSync(
@@ -108,6 +126,28 @@ describe('MCP Security', () => {
     it('requires an existing workspace script rather than a path-shaped argument', () => {
       expect(() => validateProviderId('exec:node missing.js')).toThrow(ConfigurationError);
       expect(() => validateProviderId('exec:node ./script.js')).not.toThrow();
+    });
+
+    it('does not treat ordinary variable text as a provider reference', () => {
+      fs.writeFileSync(
+        path.join(workspace, 'config.json'),
+        JSON.stringify({
+          prompts: ['hello'],
+          providers: ['echo'],
+          tests: [{ vars: { snippet: 'python: print(1)' } }],
+        }),
+      );
+      expect(() => validateMcpConfigFile('config.json')).not.toThrow();
+    });
+
+    it.each([
+      'openai:transcription:gpt-transcribe',
+      'elevenlabs:stt:fixture',
+      'elevenlabs:isolation',
+    ])('guards file prompts for %s', (id) => {
+      expect(() => validateMcpProviderPrompt({ id }, path.join(root, 'outside.wav'))).toThrow(
+        ConfigurationError,
+      );
     });
   });
 
@@ -524,6 +564,32 @@ describe('MCP Security', () => {
   });
 
   describe('validateMcpConfigFile', () => {
+    it('validates referenced scenario and JSONL test contents', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside.py');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'scenarios.yaml'),
+        '- tests:\n    - provider: file://' + outside + '\n',
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'tests.jsonl'),
+        JSON.stringify({ provider: 'file://' + outside }),
+      );
+      try {
+        for (const config of [
+          { prompts: ['hello'], providers: ['echo'], scenarios: 'scenarios.yaml' },
+          { prompts: ['hello'], providers: ['echo'], tests: 'tests.jsonl' },
+        ]) {
+          fs.writeFileSync(path.join(workspace, 'config.json'), JSON.stringify(config));
+          expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        }
+      } finally {
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
     it('should reject file references in static configuration before resolution', () => {
       const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
       const workspace = path.join(tempRoot, 'workspace');
