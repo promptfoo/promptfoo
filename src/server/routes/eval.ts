@@ -748,7 +748,7 @@ evalRouter.post(
     try {
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-      const gradingResult = bodyResult.data as unknown as GradingResult;
+      let gradingResult = bodyResult.data as unknown as GradingResult;
       const result = await EvalResult.findById(id);
       if (!result || result.evalId !== evalId) {
         res.status(404).json({ error: 'Result not found' });
@@ -761,18 +761,30 @@ evalRouter.post(
         return;
       }
 
-      // Lean table rows can carry placeholders inside non-human component
-      // results. A manual rating changes only the human override, so keep the
-      // stored grader evidence instead of writing placeholders back to it.
-      if (result.gradingResult?.componentResults && gradingResult.componentResults) {
-        gradingResult.componentResults = [
-          ...result.gradingResult.componentResults.filter(
-            (component) => component.assertion?.type !== HUMAN_ASSERTION_TYPE,
-          ),
-          ...gradingResult.componentResults.filter(
-            (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
-          ),
-        ];
+      // A manual rating changes only manual fields; keep full stored grader evidence
+      // when a lean table submitted placeholders.
+      if (result.gradingResult) {
+        const stored = result.gradingResult;
+        const reason =
+          typeof gradingResult.reason === 'string' &&
+          gradingResult.reason.startsWith('[content omitted:')
+            ? stored.reason
+            : gradingResult.reason;
+        gradingResult = {
+          ...stored,
+          pass: gradingResult.pass,
+          score: gradingResult.score,
+          reason,
+          comment: gradingResult.comment,
+          componentResults: [
+            ...(stored.componentResults ?? []).filter(
+              (component) => component.assertion?.type !== HUMAN_ASSERTION_TYPE,
+            ),
+            ...(gradingResult.componentResults ?? []).filter(
+              (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+            ),
+          ],
+        };
       }
 
       // Capture the current state before we change it

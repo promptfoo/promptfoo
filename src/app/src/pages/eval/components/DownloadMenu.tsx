@@ -377,7 +377,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
 
     await runAdvancedExport('failed-tests', async () => {
-      const failedRows = table.body.filter((row) => row.outputs.some((output) => !output?.pass));
+      // Exports use the base eval config, so only base-eval failures belong in it.
+      const failedRows = table.body.filter((row) => !getFirstOutput(row)?.pass);
 
       if (failedRows.length === 0) {
         showToast('No failed tests found', 'info');
@@ -392,10 +393,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         DETAIL_EXPORT_CONCURRENCY,
         async (row) => {
           try {
-            const failedOutput =
-              row.outputs.find((output): output is EvaluateTableOutput =>
-                Boolean(output && !output.pass),
-              ) ?? getFirstOutput(row);
+            const failedOutput = getFirstOutput(row);
             const detail = await getOutputDetail(failedOutput);
             return detail?.testCase ?? (failedOutput?.detail?.available ? null : row.test);
           } finally {

@@ -1948,6 +1948,7 @@ function ResultsTable({
             clearEvalApiResponseCache(evalId);
           }
         } catch (error) {
+          setTable({ ...table, head, body });
           console.error('Failed to update table:', error);
           showToast('Failed to save rating', 'error');
           throw error;

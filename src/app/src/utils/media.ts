@@ -179,6 +179,7 @@ export function resolveAudioSource(
   const src = resolveInlineMediaSource(data, {
     kind: 'audio',
     format,
+    minimumBase64Length: 12,
   });
 
   if (!src) {
