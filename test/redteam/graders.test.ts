@@ -22,6 +22,7 @@ import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
+import { XssOutputGrader } from '../../src/redteam/plugins/xssOutput';
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {
@@ -85,6 +86,9 @@ describe('getGraderById', () => {
 
     const codingAgentGrader = getGraderById('promptfoo:redteam:coding-agent:secret-env-read');
     expect(codingAgentGrader).toBeInstanceOf(CodingAgentGrader);
+
+    const xssOutputGrader = getGraderById('promptfoo:redteam:xss-output');
+    expect(xssOutputGrader).toBeInstanceOf(XssOutputGrader);
   });
 
   it('should return specific grader for misinformation-disinformation', () => {

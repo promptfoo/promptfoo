@@ -25,6 +25,7 @@ import {
   CODING_AGENT_CORE_PLUGINS,
   CODING_AGENT_PLUGINS,
 } from '../../src/redteam/constants/codingAgents';
+import { OWASP_LLM_TOP_10_MAPPING } from '../../src/redteam/constants/frameworks';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -184,6 +185,10 @@ describe('constants', () => {
     expect(CONFIG_REQUIRED_PLUGINS).toContain('policy');
     expect(CONFIG_REQUIRED_PLUGINS).toContain('intent');
     expect(Array.isArray(CONFIG_REQUIRED_PLUGINS)).toBe(true);
+  });
+
+  it('OWASP LLM05 should include output-side XSS coverage', () => {
+    expect(OWASP_LLM_TOP_10_MAPPING['owasp:llm:05'].plugins).toContain('xss-output');
   });
 
   describe('categoryDescriptions', () => {
