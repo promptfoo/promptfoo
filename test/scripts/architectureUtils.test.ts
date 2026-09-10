@@ -295,6 +295,31 @@ describe('getSourceFiles', () => {
     );
   });
 
+  it.each(['internal/tool.cjs', 'internal/tool'])(
+    'enforces single-file layer boundaries for %s',
+    (specifier) => {
+      write('src/index.ts');
+      write('src/runtime.ts', `import '${specifier}';`);
+      write('internal/tool.cts');
+      const config: LayerConfig = {
+        publicFacade: 'src/index.ts',
+        layers: [
+          { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+          { name: 'runtime', roots: ['src/runtime.ts'], allowedDependencies: [] },
+          { name: 'tool', roots: ['internal/tool.cts'], allowedDependencies: [] },
+        ],
+      };
+
+      expect(findViolations(repoRoot, config)).toEqual([
+        expect.objectContaining({
+          kind: 'layer',
+          importer: 'src/runtime.ts',
+          imported: 'internal/tool.cts',
+        }),
+      ]);
+    },
+  );
+
   it('ignores nested node_modules and configured roots', () => {
     write('src/core/a.ts');
     write('src/app/node_modules/pkg/index.ts');
