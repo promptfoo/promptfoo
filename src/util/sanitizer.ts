@@ -1087,12 +1087,31 @@ function hasSensitiveFields(value: unknown, seen = new WeakSet<object>()): boole
   if (!value || typeof value !== 'object' || seen.has(value)) {
     return false;
   }
-  seen.add(value);
+  // Built-in serializers do not rename custom credential properties.
+  if (Buffer.isBuffer(value)) {
+    return value.toJSON !== Buffer.prototype.toJSON;
+  }
+  if (value instanceof URL && value.toJSON === URL.prototype.toJSON) {
+    return false;
+  }
 
-  return Object.entries(Object.getOwnPropertyDescriptors(value)).some(
-    ([key, descriptor]) =>
-      isSecretEnvVarName(key) || descriptor.get || hasSensitiveFields(descriptor.value, seen),
-  );
+  for (
+    let current = value;
+    current && current !== Object.prototype && !seen.has(current);
+    current = Object.getPrototypeOf(current)
+  ) {
+    seen.add(current);
+    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(current))) {
+      if (
+        isSecretEnvVarName(key) ||
+        (current === value && descriptor.get) ||
+        hasSensitiveFields(descriptor.value, seen)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**

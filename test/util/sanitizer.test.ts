@@ -1084,6 +1084,17 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('does not trust a custom Buffer serializer that renames credentials', () => {
+      const bytes = Object.assign(Buffer.from('ok'), {
+        apiKey: 'short-buffer-fixture',
+        toJSON() {
+          return { message: this.apiKey };
+        },
+      });
+
+      expect(JSON.stringify(sanitizeObject({ bytes }))).not.toContain('short-buffer-fixture');
+    });
+
     it('does not let custom JSON rename nested credentials', () => {
       const input = {
         connection: {
@@ -1095,6 +1106,21 @@ describe('sanitizeObject', () => {
       };
 
       expect(JSON.stringify(sanitizeObject(input))).not.toContain('short-fixture');
+    });
+
+    it('does not let custom JSON rename inherited credentials', () => {
+      class Connection {
+        get apiKey() {
+          return 'short-inherited-fixture';
+        }
+        toJSON() {
+          return { message: `Invalid key ${this.apiKey}` };
+        }
+      }
+
+      expect(JSON.stringify(sanitizeObject({ connection: new Connection() }))).not.toContain(
+        'short-inherited-fixture',
+      );
     });
 
     it('should convert class instances to plain objects via JSON', () => {
