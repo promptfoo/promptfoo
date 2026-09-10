@@ -62,7 +62,7 @@ function getRedteamConfig(parsed: unknown): Record<string, unknown> | undefined 
     return config.redteam as Record<string, unknown>;
   }
 
-  return Object.keys(config).every((key) => REDTEAM_CONFIG_KEYS.has(key)) ? config : undefined;
+  return Object.keys(config).some((key) => REDTEAM_CONFIG_KEYS.has(key)) ? config : undefined;
 }
 
 function validateYamlFence(file: string, line: number, yaml: string): string | undefined {
@@ -374,6 +374,12 @@ describe('Plugin Documentation', () => {
       errors,
       `Invalid redteam documentation frontmatter or images:\n${errors.join('\n')}`,
     ).toEqual([]);
+  });
+
+  it('reports unknown keys in direct redteam snippets', () => {
+    expect(validateYamlFence('example.md', 1, 'strategies: [base64]\nnumTestz: 3')).toContain(
+      'unknown redteam keys: numTestz',
+    );
   });
 
   it('should contain valid YAML and redteam config examples', () => {

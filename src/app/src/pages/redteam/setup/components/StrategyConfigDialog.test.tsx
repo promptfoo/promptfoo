@@ -1331,6 +1331,23 @@ describe('StrategyConfigDialog', () => {
       expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
     });
 
+    it('should not allow indirect-web-pwn after mischievous-user', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['mischievous-user'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+    });
+
     it('should not allow an orchestrating attack strategy after indirect-web-pwn', async () => {
       const user = userEvent.setup();
       renderWithProviders(

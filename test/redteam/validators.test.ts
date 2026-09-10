@@ -1801,4 +1801,19 @@ describe('InputsSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  it('rejects incompatible layer agentic ordering', () => {
+    for (const steps of [
+      ['indirect-web-pwn', 'jailbreak:hydra'],
+      ['mischievous-user', 'indirect-web-pwn'],
+      ['jailbreak:hydra', 'crescendo'],
+    ]) {
+      expect(
+        RedteamConfigSchema.safeParse({
+          plugins: ['default'],
+          strategies: [{ id: 'layer', config: { steps } }],
+        }).success,
+      ).toBe(false);
+    }
+  });
 });

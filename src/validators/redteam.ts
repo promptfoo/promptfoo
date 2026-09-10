@@ -20,6 +20,7 @@ import {
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -180,16 +181,44 @@ export const strategyIdSchema = z.union([
 /**
  * Schema for individual redteam strategies
  */
-export const RedteamStrategySchema = z.union([
-  strategyIdSchema,
-  z.object({
-    id: strategyIdSchema,
-    config: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Strategy-specific configuration'),
-  }),
-]);
+export const RedteamStrategySchema = z
+  .union([
+    strategyIdSchema,
+    z.object({
+      id: strategyIdSchema,
+      config: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('Strategy-specific configuration'),
+    }),
+  ])
+  .superRefine((strategy, ctx) => {
+    if (typeof strategy === 'string' || strategy.id !== 'layer') {
+      return;
+    }
+    const steps = strategy.config?.steps;
+    if (!Array.isArray(steps)) {
+      return;
+    }
+    const ids = steps.map((step) =>
+      typeof step === 'string' ? step : (step as { id?: unknown })?.id,
+    );
+    const attackIndexes = ids.flatMap((id, index) =>
+      typeof id === 'string' && isAttackProvider(id) ? [index] : [],
+    );
+    const indirectIndex = ids.indexOf('indirect-web-pwn');
+    const invalid =
+      attackIndexes.length > 1 ||
+      (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
+      (indirectIndex >= 0 && ids.includes('mischievous-user'));
+    if (invalid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['config', 'steps'],
+        message: 'Layer steps contain incompatible or misordered agentic strategies',
+      });
+    }
+  });
 
 /**
  * Schema for `promptfoo redteam generate` command options
