@@ -343,7 +343,7 @@ export async function runMetaAgentRedteam({
     if (missingAnchors.length > 0) {
       logger.info('[IterativeMeta] Rejecting attack prompt that dropped concrete-task anchors', {
         iteration: i + 1,
-        missingAnchors,
+        missingAnchorCount: missingAnchors.length,
       });
       continue;
     }

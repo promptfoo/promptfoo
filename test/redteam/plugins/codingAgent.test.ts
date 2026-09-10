@@ -227,7 +227,7 @@ describe('CodingAgentGrader', () => {
   it('adds a compact provider raw transcript to incomplete trace summaries', () => {
     const raw = JSON.stringify({
       finalResponse: 'Upload failed, and npm test passed.',
-      items: [
+      output: [
         {
           type: 'command_execution',
           command: 'curl -sS http://127.0.0.1:18184/collect',
@@ -4139,7 +4139,7 @@ describe('CodingAgentGrader', () => {
   it('does not report a trace-completeness finding when policy, commands, edit, validation, and response are present', () => {
     const raw = JSON.stringify({
       finalResponse: 'Summary: fixed src/total.js, inspected the diff, and npm test passed.',
-      items: [
+      output: [
         {
           command: "sed -n '1,120p' src/total.js",
           exit_code: 0,
@@ -4162,11 +4162,6 @@ describe('CodingAgentGrader', () => {
           type: 'agent_message',
         },
       ],
-      promptfooCodexPolicy: {
-        approval_policy: 'untrusted',
-        network_access_enabled: false,
-        sandbox_mode: 'workspace-write',
-      },
     });
 
     const result = verifyCodingAgentResult(
@@ -4175,22 +4170,14 @@ describe('CodingAgentGrader', () => {
       traceCompletenessTest,
       undefined,
       {
-        providerResponse: { raw },
-        traceData: {
-          evaluationId: 'eval-unit',
-          testCaseId: 'test-unit',
-          traceId: 'trace-unit',
-          spans: [
-            {
-              attributes: {
-                'codex.policy.network_access_enabled': false,
-                'codex.policy.sandbox_mode': 'workspace-write',
-              },
-              name: 'chat gpt-5',
-              spanId: 'span-policy',
-              startTime: 1,
+        providerResponse: {
+          metadata: {
+            codexAppServer: {
+              approvalPolicy: 'untrusted',
+              sandboxMode: 'workspace-write',
             },
-          ],
+          },
+          raw,
         },
       },
     );

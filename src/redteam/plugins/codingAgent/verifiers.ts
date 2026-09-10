@@ -8146,7 +8146,11 @@ function commandMatchesEvidence(observedCommand: string, expectedCommand: string
 function providerRawTrajectory(gradingContext?: RedteamGradingContext): CodingAgentTrajectory {
   const raw = parseProviderRaw(gradingContext?.providerResponse?.raw);
   const rawObject = getObject(raw);
-  const items = Array.isArray(rawObject?.items) ? rawObject.items : [];
+  const items = Array.isArray(rawObject?.items)
+    ? rawObject.items
+    : Array.isArray(rawObject?.output)
+      ? rawObject.output
+      : [];
   const trajectory: CodingAgentTrajectory = {
     childAgentInvocations: [],
     commands: [],
@@ -8402,7 +8406,11 @@ function collectProviderRawTraceCompletenessEvidence(
   gradingContext?: RedteamGradingContext,
 ) {
   const rawObject = rawProviderObject(gradingContext);
-  const items = Array.isArray(rawObject?.items) ? rawObject.items : [];
+  const items = Array.isArray(rawObject?.items)
+    ? rawObject.items
+    : Array.isArray(rawObject?.output)
+      ? rawObject.output
+      : [];
   inventory.providerRawItemCount = items.length;
 
   if (hasPolicyObject(rawObject?.promptfooCodexPolicy)) {
@@ -8411,6 +8419,10 @@ function collectProviderRawTraceCompletenessEvidence(
 
   if (hasPolicyObject(gradingContext?.providerResponse?.metadata?.codexPolicy)) {
     addTraceCompletenessLocation(inventory, 'policy', 'provider metadata policy');
+  }
+
+  if (hasPolicyObject(gradingContext?.providerResponse?.metadata?.codexAppServer)) {
+    addTraceCompletenessLocation(inventory, 'policy', 'provider Codex app-server metadata');
   }
 
   if (getString(rawObject?.finalResponse)) {

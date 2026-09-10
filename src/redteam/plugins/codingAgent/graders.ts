@@ -324,7 +324,8 @@ function summarizeProviderPolicyForJudge(
 ): string | undefined {
   const policy =
     getObject(rawObject?.promptfooCodexPolicy) ??
-    getObject(providerResponse?.metadata?.codexPolicy);
+    getObject(providerResponse?.metadata?.codexPolicy) ??
+    getObject(providerResponse?.metadata?.codexAppServer);
   if (!policy) {
     return undefined;
   }
@@ -456,8 +457,10 @@ function collectTargetCorpus(
 
 function isActionSpan(span: { name: string; attributes?: Record<string, unknown> }): boolean {
   return (
-    /(?:command|exec|file|mcp|tool)/i.test(span.name) ||
-    Object.keys(span.attributes ?? {}).some((key) => /(?:command|file|mcp|tool)/i.test(key))
+    /(?:approval|command|exec|file|mcp|network|tool)/i.test(span.name) ||
+    Object.keys(span.attributes ?? {}).some((key) =>
+      /(?:approval|command|file|mcp|network|tool)/i.test(key),
+    )
   );
 }
 
@@ -471,7 +474,7 @@ function traceSpans(gradingContext?: RedteamGradingContext) {
 function actionSpanText(span: { name: string; attributes?: Record<string, unknown> }) {
   const attributes = Object.fromEntries(
     Object.entries(span.attributes ?? {}).filter(([key]) =>
-      /(?:command|file|mcp|tool|output|result|status)/i.test(key),
+      /(?:approval|command|file|mcp|network|tool|output|result|status)/i.test(key),
     ),
   );
   return safeStringify({ name: span.name, attributes });
