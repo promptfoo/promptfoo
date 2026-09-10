@@ -260,6 +260,31 @@ override the grader. There are several ways to do this, depending on your prefer
            provider: openai:gpt-5.6
    ```
 
+:::caution `defaultTest.provider` also sets the grader
+
+`defaultTest.provider` is the field that pins the **target model** for every test in a suite. As a
+side-effect it is also consulted as a grader fallback — before the dedicated
+`defaultTest.options.provider` slot — when no explicit grader is configured.
+
+This means the following config generates responses **and** grades them with `gpt-4.1`:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # ← also becomes the judge
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Answers the question accurately
+```
+
+To use a dedicated judge while still pinning the target, set `defaultTest.options.provider`
+separately (option 2 above) or use `--grader` on the CLI. Only the
+`defaultTest.options.provider` / `test.options.provider` slots are documented grader
+configuration points; `defaultTest.provider` is an undocumented fallback that exists purely
+for backwards compatibility.
+
+:::
+
 Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
 ```yaml
