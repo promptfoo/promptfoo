@@ -1,6 +1,7 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -9,7 +10,7 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
  *
  * TogetherAI supports many parameters beyond standard OpenAI ones.
- * All parameters are automatically passed through to the TogetherAI API.
+ * Model parameters are passed through; connection and runtime options stay local.
  */
 export function createTogetherAiProvider(
   providerPath: string,
@@ -22,14 +23,16 @@ export function createTogetherAiProvider(
   const splits = providerPath.split(':');
 
   const config = options.config?.config || {};
+  const { modelParameters } = splitLocalOptions(config);
   const togetherAiConfig = {
-    ...options,
+    ...options.config,
+    id: options.id ?? options.config?.id,
+    env: options.config?.env ?? options.env,
     config: {
-      apiBaseUrl: 'https://api.together.xyz/v1',
-      apiKeyEnvar: 'TOGETHER_API_KEY',
-      passthrough: {
-        ...config,
-      },
+      ...config,
+      apiBaseUrl: config.apiBaseUrl || 'https://api.together.xyz/v1',
+      apiKeyEnvar: config.apiKeyEnvar || 'TOGETHER_API_KEY',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 

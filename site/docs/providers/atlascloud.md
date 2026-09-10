@@ -20,17 +20,15 @@ You can also pass `apiKey` directly in the provider config, but using an environ
 
 ## Basic Configuration
 
+This example uses the `deepseek-v3` chat ID from Atlas Cloud's [first-model guide](https://www.atlascloud.ai/docs/en/models/get-start). Use Atlas Cloud's model ID for your selected endpoint; native vendor IDs may differ.
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: atlascloud:deepseek-ai/DeepSeek-V3-0324
+  - id: atlascloud:deepseek-v3
     config:
       temperature: 0.7
       max_tokens: 500
-
-  - id: atlascloud:qwen/qwen3-32b
-    config:
-      temperature: 0.2
 
 prompts:
   - 'Answer clearly and concisely: {{question}}'
@@ -43,11 +41,11 @@ tests:
         value: 'Paris'
 ```
 
-By default, the Atlas Cloud provider sends chat requests to `https://api.atlascloud.ai/v1`.
+The default `apiBaseUrl` is `https://api.atlascloud.ai/v1`; promptfoo appends `/chat/completions` when sending chat requests. Atlas Cloud's image and video APIs use separate endpoints and asynchronous prediction handling; the `atlascloud:` provider implements the chat API.
 
 ## Configuration Options
 
-Atlas Cloud supports the standard OpenAI chat options already available in promptfoo, including:
+The provider accepts the shared OpenAI chat options below. Check your selected Atlas Cloud model's API reference for supported parameters and features:
 
 - `temperature`
 - `max_tokens`
@@ -67,7 +65,7 @@ If you route Atlas Cloud through a proxy or internal gateway, override `apiBaseU
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: atlascloud:deepseek-ai/DeepSeek-V3-0324
+  - id: atlascloud:deepseek-v3
     config:
       apiBaseUrl: https://proxy.example.com/atlas/v1
       apiKeyEnvar: MY_ATLASCLOUD_TOKEN
@@ -81,16 +79,14 @@ Precedence is:
 
 ## Model Examples
 
-Atlas Cloud's catalog changes over time. You should use the exact model ID returned by `GET /v1/models`. For example, this provider was verified against live Atlas Cloud model IDs such as `deepseek-ai/DeepSeek-V3-0324` and `qwen/qwen3-32b`.
+Atlas Cloud's catalog changes over time. Use the exact chat model ID from its model library or API reference. The public first-model guide uses:
 
 ```yaml
 providers:
-  - atlascloud:deepseek-ai/DeepSeek-V3-0324
-  - atlascloud:qwen/qwen3-32b
-  - atlascloud:moonshotai/Kimi-K2-Instruct
+  - atlascloud:deepseek-v3
 ```
 
-Use the exact model ID shown in the Atlas Cloud model library or docs.
+The provider forwards your configured model ID unchanged. You can use any chat ID available to your Atlas Cloud account.
 
 ## Example
 

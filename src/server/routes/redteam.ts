@@ -7,14 +7,13 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
-import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import {
   trackGenerationErrorTokenUsage,
   trackGenerationResponseTokenUsage,
   trackGenerationTokenUsage,
-} from '../../redteam/providers/generationTokenUsage';
+} from '../../redteam/generationTokenUsage';
+import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -24,7 +23,7 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { TestCaseWithPlugin } from '../../types';
+import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { BaseTokenUsageSchema, type TokenUsage } from '../../types/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -38,8 +37,6 @@ import {
 } from '../services/redteamTestCaseGenerationService';
 import type { Request, Response } from 'express';
 
-import type { ApiProvider } from '../../types';
-
 export const redteamRouter = Router();
 
 /**
@@ -47,9 +44,6 @@ export const redteamRouter = Router();
  */
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   const generationTokenUsage: TokenUsage = {};
-  const trackTokenUsage = (response: { tokenUsage?: unknown; cached?: boolean }): void => {
-    trackGenerationResponseTokenUsage(generationTokenUsage, response);
-  };
 
   try {
     const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
@@ -62,6 +56,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       plugin,
       strategy,
       config,
+      provider,
       turn,
       maxTurns,
       history,
@@ -100,19 +95,23 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // be passed in as a configuration option.
     const injectVar = 'query';
 
-    // Get the red team provider
-    const providerForGeneration = await redteamProviderManager.getProvider({
-      provider: REDTEAM_MODEL,
+    // Keep preview generation request-scoped. A form-selected provider wins, followed by
+    // any org/team cache, then the built-in default; previous CLI runs must not leak here.
+    const providerSelection = await redteamProviderManager.getProviderSelection({
+      provider: provider as RedteamFileConfig['provider'],
+      ignoreCliState: true,
     });
-    const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+    const trackedProviderSelection = {
+      ...providerSelection,
+      provider: trackGenerationTokenUsage(providerSelection.provider, generationTokenUsage),
+    };
 
     const testCases = await pluginFactory.action({
-      provider: redteamProvider,
+      provider: trackedProviderSelection.provider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
       n: effectiveCount, // Generate requested number of test cases
       delayMs: 0,
-      trackTokenUsage,
       config: {
         ...plugin.config,
         language: plugin.config.language ?? 'en',
@@ -141,11 +140,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           injectVar,
           {
             ...(strategy.config || {}),
-            __wrapGenerationProvider: (provider: ApiProvider) =>
-              trackGenerationTokenUsage(provider, generationTokenUsage),
-            __trackGenerationTokenUsage: trackTokenUsage,
           },
           strategy.id,
+          {
+            // Provider options stay request-local because they can contain credentials.
+            generationProviderSelection: trackedProviderSelection,
+            wrapGenerationProvider: (provider) =>
+              trackGenerationTokenUsage(provider, generationTokenUsage),
+          },
         );
 
         if (strategyTestCases && strategyTestCases.length > 0) {

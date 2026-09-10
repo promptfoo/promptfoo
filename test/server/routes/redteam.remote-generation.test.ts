@@ -41,10 +41,10 @@ describe('POST /redteam/generate-test remote generation accounting', () => {
       'Content-Type': 'application/json',
     });
     vi.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'healthy' });
-    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue({
-      id: () => 'unused-provider',
-      callApi: vi.fn(),
-    } as any);
+    vi.mocked(redteamProviderManager.getProviderSelection).mockResolvedValue({
+      source: 'default',
+      provider: { id: () => 'unused-provider', callApi: vi.fn(async () => ({ output: 'unused' })) },
+    });
   });
 
   it('returns combined usage from an actual remote contracts plugin and citation strategy', async () => {
@@ -113,12 +113,13 @@ describe('POST /redteam/generate-test remote generation accounting', () => {
       });
 
     expect(response.status).toBe(200);
-    expect(response.body.tokenUsage).toEqual({
+    expect(response.body.tokenUsage).toMatchObject({
       total: 17,
-      prompt: 0,
-      completion: 0,
+      prompt: 10,
+      completion: 7,
       cached: 17,
-      numRequests: 0,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
     });
   });
 });

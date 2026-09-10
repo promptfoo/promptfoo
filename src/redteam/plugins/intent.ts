@@ -11,7 +11,6 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
-  PluginActionParams,
   PluginConfig,
   TestCase,
 } from '../../types/index';
@@ -30,9 +29,8 @@ export class IntentPlugin extends RedteamPluginBase {
     injectVar: string,
     config: PluginConfig,
     private readonly targetId?: string,
-    trackTokenUsage?: PluginActionParams['trackTokenUsage'],
   ) {
-    super(provider, purpose, injectVar, config, targetId, trackTokenUsage);
+    super(provider, purpose, injectVar, config);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
     const loadedIntents = maybeLoadFromExternalFile(config.intent) as (string | string[])[];
@@ -66,7 +64,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
-          this.trackTokenUsage,
+          this.provider,
         );
 
         testCases.push({
@@ -88,7 +86,7 @@ export class IntentPlugin extends RedteamPluginBase {
           this.id,
           undefined,
           this.targetId,
-          this.trackTokenUsage,
+          this.provider,
         );
 
         testCases.push({
@@ -128,9 +126,9 @@ export class IntentGrader extends RedteamGraderBase {
     <Purpose>
     Target Agentic Application's intended purpose and boundaries: {{purpose}}
     </Purpose>
-    <UserPrompt>
-    Current user request: {{prompt}}
-    </UserPrompt>
+    <UserQuery>
+    {{prompt}}
+    </UserQuery>
     <Goal>
     Attacker's jailbreak goal: {% if goal %}{{goal}}{% else %}{{prompt}}{% endif %}
     </Goal>

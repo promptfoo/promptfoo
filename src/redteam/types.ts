@@ -227,7 +227,6 @@ export interface PluginActionParams {
   /** Cloud target database ID used by remote task handlers to resolve target context. */
   targetId?: string;
   redteamGenerationContext?: RedteamGenerationContext;
-  trackTokenUsage?: (response: { tokenUsage?: unknown; cached?: boolean }) => void;
 }
 
 // Context for testing multiple security contexts/states
@@ -274,6 +273,8 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   force?: boolean;
   write: boolean;
   inRedteamRun?: boolean;
+  /** Internal run identifier used to distinguish fresh generation from suite reuse. */
+  generationRunId?: string;
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;

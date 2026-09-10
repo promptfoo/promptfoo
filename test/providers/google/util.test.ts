@@ -16,16 +16,23 @@ import logger from '../../../src/logger';
 import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   clearCachedAuth,
   collectGroundingMetadata,
+  collectThoughtSignatures,
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
+  getGoogleResponseServiceTier,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -149,6 +156,57 @@ describe('util', () => {
 
     it('should return undefined as-is', () => {
       expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('Google service tiers', () => {
+    it.each([
+      ['standard', false, 'standard'],
+      ['priority', false, 'priority'],
+      ['flex', false, 'flex'],
+      ['SERVICE_TIER_PRIORITY', false, 'priority'],
+      ['standard', true, 'SERVICE_TIER_STANDARD'],
+      ['priority', true, 'SERVICE_TIER_PRIORITY'],
+      ['flex', true, 'SERVICE_TIER_FLEX'],
+      ['SERVICE_TIER_FLEX', true, 'SERVICE_TIER_FLEX'],
+    ])('normalizes %s for Vertex=%s', (tier, vertexai, expected) => {
+      expect(normalizeGoogleServiceTier(tier, vertexai)).toBe(expected);
+    });
+
+    it('preserves an unknown tier so the API can reject it', () => {
+      expect(normalizeGoogleServiceTier('custom', true)).toBe('custom');
+    });
+
+    it('prefers the actual tier reported in response headers', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          { 'X-Gemini-Service-Tier': 'standard' },
+          { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        ),
+      ).toBe('standard');
+    });
+
+    it('falls back to the actual tier reported in usage metadata', () => {
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
+        'flex',
+      );
+    });
+  });
+
+  describe('mergeGoogleRequestTools', () => {
+    it('omits tools when no configured or passthrough tools exist', () => {
+      expect(mergeGoogleRequestTools([], undefined)).toBeUndefined();
+    });
+
+    it('merges configured tools with a single passthrough tool', () => {
+      expect(mergeGoogleRequestTools([{ googleSearch: {} }], { codeExecution: {} })).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+
+    it('preserves explicitly empty passthrough tools', () => {
+      expect(mergeGoogleRequestTools([], [])).toEqual([]);
     });
   });
 
@@ -659,6 +717,52 @@ describe('util', () => {
       ];
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
+        contents: input,
+        coerced: false,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve native Gemini tool history and thought signatures', () => {
+      const input = [
+        { role: 'user', parts: [{ text: 'What is the weather in Boston?' }] },
+        {
+          role: 'model',
+          parts: [
+            {
+              functionCall: {
+                id: 'call-1',
+                name: 'get_weather',
+                args: { location: 'Boston' },
+              },
+              thoughtSignature: 'signed-thought',
+            },
+          ],
+        },
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: 'call-1',
+                name: 'get_weather',
+                response: { result: 'Sunny' },
+                parts: [
+                  {
+                    fileData: {
+                      mimeType: 'image/jpeg',
+                      fileUri: 'gs://test-bucket/weather.jpg',
+                      displayName: 'weather.jpg',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ];
+
+      expect(maybeCoerceToGeminiFormat(input)).toEqual({
         contents: input,
         coerced: false,
         systemInstruction: undefined,
@@ -1678,6 +1782,156 @@ describe('util', () => {
       });
 
       describe('data URL support', () => {
+        const asfHeader = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
+        const asfStreamProperties = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
+        const asfVideoStream = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
+        const asfAudioStream = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'hex');
+        const wmvBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfVideoStream,
+        ]).toString('base64');
+        const wmaBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfAudioStream,
+        ]).toString('base64');
+        const webmBase64 = Buffer.from('1a45dfa3a34282847765626d00000000', 'hex').toString(
+          'base64',
+        );
+        const matroskaBase64 = Buffer.from(
+          '1a45dfa3a34282886d6174726f736b6100000000',
+          'hex',
+        ).toString('base64');
+
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['IMAGE/PNG', Buffer.from('89504e470d0a1a0a0000000000000000', 'hex').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFFCOMM........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/quicktime', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001ba000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['video/webm', webmBase64],
+        ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
+          const dataUrl = `data:${mimeType};base64,${base64Data}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: mimeType.toLowerCase(), data: base64Data } },
+          ]);
+        });
+
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFCCOMM........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff05080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff85080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff95080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mpeg', Buffer.from('fffb5000000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/quicktime', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/quicktime', Buffer.from('....moov............').toString('base64')],
+          ['video/quicktime', Buffer.from('....mdat............').toString('base64')],
+          ['video/quicktime', Buffer.from('....wide............').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001b3000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['video/webm', webmBase64],
+        ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it.each([
+          ['image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')],
+          ['image/gif', Buffer.from('GIF89a..............')],
+          ['image/bmp', Buffer.from('BM..................')],
+          ['image/tiff', Buffer.from('II*.................')],
+          ['image/x-icon', Buffer.from('00000100010000000000000000000000', 'hex')],
+          ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
+          ['video/ogg', Buffer.from('OggS........\u0080theora...')],
+          ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
+          ['audio/unsupported', Buffer.from('unsupported audio...')],
+          ['video/unsupported', Buffer.from('unsupported video...')],
+        ])('leaves unsupported %s data URLs as text', (mimeType, bytes) => {
+          const dataUrl = `data:${mimeType};base64,${bytes.toString('base64')}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([{ text: dataUrl }]);
+        });
+
+        it.each([
+          ['GIF image', Buffer.from('GIF89a..............').toString('base64')],
+          ['WMA audio', wmaBase64],
+          [
+            'Ogg/Theora video',
+            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
+              'base64',
+            ),
+          ],
+        ])('leaves unsupported raw %s as text', (_media, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ text: base64Data }]);
+        });
+
+        it('does not misclassify Matroska containers as WebM', () => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: matroskaBase64 }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: matroskaBase64 });
+
+          expect(contents[0].parts).toEqual([{ text: matroskaBase64 }]);
+        });
+
+        it('sniffs only the beginning of large base64 media', () => {
+          const bytes = Buffer.concat([Buffer.from('RIFF....WAVEfmt ........'), Buffer.alloc(1e6)]);
+          const base64Data = bytes.toString('base64');
+          const fromSpy = vi.spyOn(Buffer, 'from');
+
+          try {
+            const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+            const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/wav', data: base64Data } },
+            ]);
+            expect(fromSpy.mock.calls.some(([value]) => value === base64Data)).toBe(false);
+          } finally {
+            fromSpy.mockRestore();
+          }
+        });
+
         it('should handle JPEG data URLs and extract base64', () => {
           const base64Data = validBase64Image;
           const dataUrl = `data:image/jpeg;base64,${base64Data}`;
@@ -1746,38 +2000,6 @@ describe('util', () => {
             {
               inlineData: {
                 mimeType: 'image/png',
-                data: base64Data,
-              },
-            },
-          ]);
-        });
-
-        it('should handle GIF data URLs', () => {
-          const base64Data =
-            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
-          const dataUrl = `data:image/gif;base64,${base64Data}`;
-
-          const prompt = JSON.stringify([
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: dataUrl,
-                },
-              ],
-            },
-          ]);
-
-          const contextVars = {
-            image1: dataUrl,
-          };
-
-          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
-
-          expect(contents[0].parts).toEqual([
-            {
-              inlineData: {
-                mimeType: 'image/gif',
                 data: base64Data,
               },
             },
@@ -2574,7 +2796,157 @@ describe('util', () => {
     });
   });
 
+  describe('removeDeprecatedGeminiGenerationParams', () => {
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ])('removes unsupported sampling and penalty parameters for %s', (modelName) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams(modelName, {
+          temperature: 0.5,
+          topP: 0.5,
+          top_p: 0.5,
+          topK: 10,
+          top_k: 10,
+          candidateCount: 2,
+          candidate_count: 2,
+          presencePenalty: 0.5,
+          presence_penalty: 0.5,
+          frequencyPenalty: 0.5,
+          frequency_penalty: 0.5,
+          maxOutputTokens: 128,
+        }),
+      ).toEqual({ maxOutputTokens: 128 });
+    });
+
+    it('preserves generation parameters for other Gemini models', () => {
+      const config = { presencePenalty: 0.5, frequencyPenalty: 0.5 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
+    });
+    it.each([
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ])('removes unsupported sampling and candidate controls for %s', (modelName) => {
+      const generationConfig = {
+        temperature: 0.7,
+        topP: 0.9,
+        top_p: 0.8,
+        topK: 40,
+        top_k: 30,
+        candidateCount: 2,
+        candidate_count: 3,
+        presencePenalty: 1,
+        presence_penalty: 1,
+        frequencyPenalty: 1,
+        frequency_penalty: 1,
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      };
+
+      expect(removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toEqual({
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      });
+      expect(generationConfig.temperature).toBe(0.7);
+    });
+
+    it('preserves sampling controls for models that still support them', () => {
+      const generationConfig = { temperature: 0.7, topP: 0.9, topK: 40 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-3.5-flash', generationConfig)).toBe(
+        generationConfig,
+      );
+    });
+
+    it.each([
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: {
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+          thinking_config: { thinking_level: 'MINIMAL' },
+        },
+      },
+    ])('rejects unsupported MINIMAL thinking on $modelName', ({ modelName, generationConfig }) => {
+      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+        `${modelName} does not support MINIMAL thinking`,
+      );
+    });
+
+    it.each([
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.8-flash',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinkingConfig: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-3.7-flash',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-flash-latest',
+        generationConfig: {
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+          thinking_config: { thinking_budget: 1024 },
+        },
+      },
+    ])('rejects deprecated thinking budgets on $modelName', ({ modelName, generationConfig }) => {
+      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+        `${modelName} does not support thinkingBudget. Use thinkingLevel`,
+      );
+    });
+  });
+
   describe('calculateGoogleCost', () => {
+    beforeEach(() => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
       expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
@@ -2662,6 +3034,793 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it.each([
+      ['gemini-3.5-flash', false, 'standard', 0.00096],
+      ['gemini-3.5-flash', false, 'priority', 0.001728],
+      ['gemini-3.5-flash', false, 'flex', 0.000482],
+      ['gemini-3.5-flash', true, 'flex', 0.00048],
+      ['gemini-3.1-flash-lite', false, 'priority', 0.000576],
+      ['gemini-3.1-flash-lite', false, 'flex', 0.00016],
+      ['gemini-3.1-flash-lite', true, 'priority', 0.000576],
+      ['gemini-3.1-flash-lite', true, 'flex', 0.00016],
+    ] as const)(
+      'matches published audio and cache rates for %s (Vertex: %s, tier: %s)',
+      (modelName, isVertex, serviceTier, expectedCost) => {
+        const cost = calculateGoogleCost(
+          modelName,
+          { service_tier: serviceTier },
+          1000,
+          0,
+          isVertex,
+          1000,
+          0,
+          0,
+          0,
+          400,
+          400,
+        );
+        expect(cost).toBeCloseTo(expectedCost, 12);
+      },
+    );
+
+    describe('Gemini Flash introductory pricing', () => {
+      it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
+        'switches %s to standard rates when introductory pricing expires',
+        (modelName) => {
+          const now = vi.spyOn(Date, 'now');
+          now.mockReturnValue(Date.UTC(2026, 11, 31, 23, 59, 59, 999));
+
+          expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.002625, 10);
+
+          now.mockReturnValue(Date.UTC(2027, 0, 1));
+
+          expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.00525, 10);
+        },
+      );
+
+      it('uses standard priority and cache rates after introductory pricing expires', () => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2027, 0, 1));
+
+        const cost = calculateGoogleCost(
+          'gemini-3.7-flash',
+          { service_tier: 'priority' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(cost).toBeCloseTo((600 * 2.7 + 400 * 0.27 + 500 * 13.5) / 1e6, 12);
+      });
+    });
+
+    it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
+      'uses Gemini 3.5 Flash-Lite pricing for %s',
+      (modelName) => {
+        const cost = calculateGoogleCost(modelName, {}, 1000, 500);
+
+        expect(cost).toBeCloseTo(0.00155, 10);
+      },
+    );
+
+    it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'])(
+      'applies cached, priority, and flex pricing for %s',
+      (modelName) => {
+        const standard = calculateGoogleCost(
+          modelName,
+          {},
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+        const priority = calculateGoogleCost(
+          modelName,
+          { service_tier: 'priority' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+        const flex = calculateGoogleCost(
+          modelName,
+          { service_tier: 'flex' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(standard).toBeCloseTo((600 * 0.75 + 400 * 0.075 + 500 * 3.75) / 1e6, 12);
+        expect(priority).toBeCloseTo((600 * 1.35 + 400 * 0.135 + 500 * 6.75) / 1e6, 12);
+        expect(flex).toBeCloseTo((600 * 0.375 + 400 * 0.0375 + 500 * 1.875) / 1e6, 12);
+      },
+    );
+
+    it('uses AI Studio Flash-Lite tier-specific cached token prices', () => {
+      const priority = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1000,
+        500,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+      const flex = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1000,
+        500,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(priority).toBeCloseTo((600 * 0.54 + 400 * 0.05 + 500 * 4.5) / 1e6, 12);
+      expect(flex).toBeCloseTo((600 * 0.15 + 400 * 0.02 + 500 * 1.25) / 1e6, 12);
+    });
+
+    it('uses Vertex Flash-Lite tier-specific cached token prices', () => {
+      const priority = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: 'priority' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+      const flex = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: 'flex' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(priority).toBeCloseTo((600 * 0.54 + 400 * 0.054 + 500 * 4.5) / 1e6, 12);
+      expect(flex).toBeCloseTo((600 * 0.15 + 400 * 0.015 + 500 * 1.25) / 1e6, 12);
+    });
+
+    it.each([
+      { modelName: 'gemini-3.8-flash', region: 'global', expectedCost: 0.002625 },
+      { modelName: 'gemini-3.8-flash', region: 'us', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.8-flash', region: 'eu', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.7-flash', region: 'us', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.6-flash', region: 'eu', expectedCost: 0.0028875 },
+      { modelName: 'gemini-3.5-flash-lite', region: 'us', expectedCost: 0.001705 },
+      { modelName: 'gemini-3.5-flash-lite', region: 'eu', expectedCost: 0.001705 },
+      { modelName: 'gemini-3.5-flash', region: 'us', expectedCost: 0.0066 },
+      { modelName: 'gemini-3.5-flash', region: 'eu', expectedCost: 0.0066 },
+    ])(
+      'applies the Vertex regional premium to $modelName in the $region multi-region',
+      ({ modelName, region, expectedCost }) => {
+        const cost = calculateGoogleCost(modelName, { region }, 1000, 500, true);
+
+        expect(cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
+
+    it.each([
+      { date: Date.UTC(2026, 11, 31), expectedCost: 0.0025905 },
+      { date: Date.UTC(2027, 0, 1), expectedCost: 0.005181 },
+    ])(
+      'combines Gemini 3.8 Flash regional and cached pricing at $date',
+      ({ date, expectedCost }) => {
+        vi.spyOn(Date, 'now').mockReturnValue(date);
+
+        const cost = calculateGoogleCost(
+          'gemini-3.8-flash',
+          { region: 'eu' },
+          1000,
+          500,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(cost).toBeCloseTo(expectedCost, 12);
+      },
+    );
+
+    it('applies the Vertex Gemini 3.5 Flash regional premium to cached tokens', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { region: 'us' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(cost).toBeCloseTo((600 * 1.65 + 400 * 0.165 + 500 * 9.9) / 1e6, 12);
+    });
+
+    it.each([
+      { serviceTier: undefined, tierMultiplier: 1 },
+      { serviceTier: 'priority', tierMultiplier: 1.8 },
+    ])(
+      'applies the Vertex Gemini 3.5 Flash regional premium to $serviceTier audio pricing',
+      ({ serviceTier, tierMultiplier }) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.5-flash',
+          { region: 'eu', ...(serviceTier && { service_tier: serviceTier }) },
+          1000,
+          500,
+          true,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
+
+        expect(cost).toBeCloseTo(
+          (tierMultiplier * (400 * 1.65 + 200 * 0.165 + 100 * 1.65 + 300 * 0.165 + 500 * 9.9)) /
+            1e6,
+          12,
+        );
+      },
+    );
+
+    it('preserves explicit audio price overrides in Vertex multi-regions', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { region: 'us', audioInputCost: 4 / 1e6 },
+        1000,
+        500,
+        true,
+        400,
+      );
+
+      expect(cost).toBeCloseTo((600 * 1.65 + 400 * 4 + 500 * 9.9) / 1e6, 12);
+    });
+
+    it('does not apply the Vertex Flash-Lite regional premium to explicit price overrides', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', inputCost: 5 / 1e6 },
+        1000,
+        500,
+        true,
+      );
+
+      expect(cost).toBeCloseTo(0.006375, 10);
+    });
+
+    it('applies the Vertex regional premium to cached multimodal tokens once', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'eu', service_tier: 'priority' },
+        1000,
+        500,
+        true,
+        200,
+        0,
+        undefined,
+        100,
+        400,
+        100,
+        100,
+      );
+
+      expect(cost).toBeCloseTo((600 * 0.594 + 400 * 0.0594 + 500 * 4.95) / 1e6, 12);
+    });
+
+    it('should calculate cost for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should use the video-output rate for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-omni-flash-preview',
+        {},
+        1_000,
+        600,
+        false,
+        undefined,
+        undefined,
+        500,
+      );
+      expect(cost).toBeCloseTo((1_000 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
+    });
+
+    it('should calculate cost for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost('gemini-3.1-flash-live-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.003, 10);
+    });
+
+    it('should calculate mixed text and audio cost for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-live-preview',
+        {},
+        1_000,
+        500,
+        false,
+        200,
+        100,
+      );
+      expect(cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+    });
+
+    it.each([
+      ['gemini-live-2.5-flash-preview-native-audio-09-2025', 0.3, 2.0, 3.0, 12.0],
+      ['gemini-2.5-flash-native-audio-latest', 0.5, 2.0, 3.0, 12.0],
+      ['gemini-2.5-flash-native-audio-preview-09-2025', 0.3, 2.5, 1.0, 2.5],
+      ['gemini-2.5-flash-native-audio-preview-12-2025', 0.5, 2.0, 3.0, 12.0],
+    ])(
+      'should calculate mixed text and audio cost for %s',
+      (id, input, output, audioInput, audioOutput) => {
+        expect(calculateGoogleCost(id, {}, 1_000, 500, false, 200, 100)).toBeCloseTo(
+          (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it('should apply the Gemini Live cached-input rate across cached modalities', () => {
+      const cost = calculateGoogleCost(
+        'gemini-live-2.5-flash-preview-native-audio-09-2025',
+        {},
+        1_000,
+        500,
+        false,
+        400,
+        500,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
+    });
+
+    it.each(['gemini-3.5-flash'])(
+      'should apply cached, audio, and priority pricing for %s',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { passthrough: { service_tier: 'priority' } },
+          1_000,
+          500,
+          false,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
+
+        expect(cost).toBeCloseTo(
+          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it.each([
+      ['gemini-3.6-flash', 'priority', 0.75, 3.75, 1.8, 0.135],
+      ['gemini-3.6-flash', 'flex', 0.75, 3.75, 0.5, 0.0375],
+      ['gemini-3.5-flash-lite', 'priority', 0.3, 2.5, 1.8, 0.05],
+      ['gemini-3.5-flash-lite', 'flex', 0.3, 2.5, 0.5, 0.02],
+    ])(
+      'should apply AI Studio cached multimodal pricing for %s at %s tier',
+      (modelId, serviceTier, input, output, multiplier, cachedInput) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { passthrough: { service_tier: serviceTier } },
+          1_000,
+          500,
+          false,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
+
+        expect(cost).toBeCloseTo(
+          (multiplier * (500 * input + 500 * output) + 500 * cachedInput) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it.each([
+      ['priority', 1.8, 0.054],
+      ['flex', 0.5, 0.015],
+    ])(
+      'should keep Vertex Flash-Lite cached pricing at the %s tier',
+      (serviceTier, multiplier, cachedInput) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.5-flash-lite',
+          { region: 'global', service_tier: serviceTier } as any,
+          1_000,
+          500,
+          true,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
+
+        expect(cost).toBeCloseTo(
+          (multiplier * (500 * 0.3 + 500 * 2.5) + 500 * cachedInput) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it.each([
+      ['global', 0.00155],
+      ['us', 0.001705],
+      ['eu', 0.001705],
+      ['us-central1', 0.00155],
+      ['europe-west1', 0.00155],
+    ])(
+      'applies the Gemini 3.5 Flash-Lite premium only to supported multi-regions: %s',
+      (region, expectedCost) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.5-flash-lite',
+          { region } as any,
+          1_000,
+          500,
+          true,
+        );
+
+        expect(cost).toBeCloseTo(expectedCost, 12);
+      },
+    );
+
+    it('should not stack the Gemini Vertex regional premium on a cost override', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', cost: 1 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0015, 12);
+    });
+
+    it('should apply the Vertex regional premium only to non-overridden input and output rates', () => {
+      const inputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', inputCost: 2 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+      const outputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', outputCost: 4 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(inputOverrideCost).toBeCloseTo(0.003375, 12);
+      expect(outputOverrideCost).toBeCloseTo(0.00233, 12);
+    });
+
+    it('should not apply the Vertex regional premium to overridden modality rates', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        {
+          region: 'us',
+          audioInputCost: 2 / 1e6,
+          audioOutputCost: 3 / 1e6,
+          imageInputCost: 4 / 1e6,
+          videoOutputCost: 5 / 1e6,
+        } as any,
+        1_000,
+        500,
+        true,
+        200,
+        100,
+        150,
+        300,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0035025, 12);
+    });
+
+    it.each(['gemini-3.1-pro-preview', 'gemini-pro-latest'])(
+      'should apply long-context cached and priority pricing for %s',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority' } as any,
+          250_001,
+          1_000,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          1_000,
+        );
+
+        expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
+      },
+    );
+
+    it('should apply standard and long-context priority pricing for Gemini 3.1 Pro custom tools', () => {
+      const standardCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { serviceTier: 'priority' } },
+        1_000,
+        100,
+      );
+      const longContextCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { service_tier: 'priority' } },
+        250_001,
+        1_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000,
+      );
+
+      expect(standardCost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
+      expect(longContextCost).toBeCloseTo(
+        (1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6,
+        12,
+      );
+    });
+
+    it.each(['gemini-3.1-flash-lite'])(
+      'should apply the published %s audio-input rate at priority tier',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority' },
+          1_000,
+          100,
+          false,
+          200,
+          0,
+          undefined,
+          0,
+          500,
+          100,
+        );
+
+        expect(cost).toBeCloseTo(
+          (400 * 0.45 + 400 * 0.045 + 100 * 0.9 + 100 * 0.09 + 100 * 2.7) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it.each(['gemini-3.1-flash-lite'])(
+      'should apply %s flex pricing with passthrough precedence',
+      (modelId) => {
+        const flexCost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
+          1_000_000,
+          100_000,
+          false,
+          200_000,
+          0,
+          undefined,
+          0,
+          500_000,
+          100_000,
+        );
+
+        expect(flexCost).toBeCloseTo(
+          (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.25 + 100_000 * 0.025 + 100_000 * 0.75) /
+            1e6,
+          12,
+        );
+      },
+    );
+
+    it.each([
+      ['gemini-3.5-flash', 1.5, 0.15, 0.15, 1.5, 9],
+      ['gemini-3.1-flash-lite', 0.25, 0.025, 0.05, 0.5, 1.5],
+      ['gemini-flash-latest', 0.75, 0.075, 0.075, 0.75, 3.75],
+      ['gemini-flash-lite-latest', 0.3, 0.03, 0.03, 0.3, 2.5],
+      ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
+    ])(
+      'uses AI Studio cached and audio rates for %s',
+      (id, input, cached, cachedAudio, audioInput, output) => {
+        expect(
+          calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
+        ).toBeCloseTo(
+          (500 * input + 300 * cached + 100 * audioInput + 100 * cachedAudio + 100 * output) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it.each([
+      ['gemini-2.5-flash', 0.1],
+      ['gemini-2.5-flash-lite', 0.03],
+      ['gemini-3-flash-preview', 0.1],
+      ['gemini-3.1-flash-lite', 0.05],
+      ['gemini-2.0-flash-001', 0.175],
+    ])('uses the published cached-audio rate for %s', (id, cachedAudio) => {
+      expect(
+        calculateGoogleCost(
+          id,
+          {},
+          1_000_000,
+          0,
+          false,
+          1_000_000,
+          0,
+          undefined,
+          0,
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBeCloseTo(cachedAudio, 12);
+    });
+
+    it.each([
+      ['gemini-2.5-pro-preview-tts', 1, 20],
+      ['gemini-2.5-flash-preview-tts', 0.5, 10],
+    ])('prices %s using the published TTS rates without context tiering', (id, input, output) => {
+      expect(calculateGoogleCost(id, {}, 1_000, 100, false, 0, 100)).toBeCloseTo(
+        (1_000 * input + 100 * output) / 1e6,
+        12,
+      );
+      expect(calculateGoogleCost(id, {}, 250_001, 1_000, false, 0, 1_000)).toBeCloseTo(
+        (250_001 * input + 1_000 * output) / 1e6,
+        12,
+      );
+    });
+
+    it('should forward standard Gemini usage metadata into modality-aware billing', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash',
+        { passthrough: { service_tier: 'priority' } },
+        1_000,
+        500,
+        false,
+        {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 600 },
+            { modality: 'AUDIO', tokenCount: 400 },
+          ],
+          cacheTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality: 'AUDIO', tokenCount: 300 },
+          ],
+          cachedContentTokenCount: 500,
+          candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 500 }],
+        },
+      );
+
+      expect(cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+    });
+
+    it('uses the actual response tier instead of the requested priority tier', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_STANDARD' },
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
+    });
+
+    it('prefers the actual response header tier over usage metadata', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        'standard',
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
+    });
+
+    it('should infer cached Gemini audio and image tokens without cache modality details', () => {
+      const model = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
+      const calculateCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [{ modality, tokenCount: 1_000 }],
+          cachedContentTokenCount: 1_000,
+        });
+
+      expect(calculateCachedCost('AUDIO')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+      expect(calculateCachedCost('IMAGE')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+
+      const calculateMixedCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality, tokenCount: 800 },
+          ],
+          cachedContentTokenCount: 500,
+        });
+      expect(calculateMixedCachedCost('AUDIO')).toBeCloseTo(
+        (200 * 0.075 + 500 * 3 + 300 * 0.075) / 1e6,
+        12,
+      );
+      expect(calculateMixedCachedCost('IMAGE')).toBeCloseTo(
+        (200 * 0.075 + 500 * 0.3 + 300 * 0.075) / 1e6,
+        12,
+      );
+    });
+
+    it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-live-preview',
+        {},
+        1_000,
+        0,
+        false,
+        0,
+        0,
+        undefined,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(1_000 / 1e6, 12);
+    });
+
     it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
       // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
       // standard rate (unlike the tiered gemini-3.1-pro-preview).
@@ -2683,16 +3842,11 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
-    it('should apply Gemini 3 Pro tiered pricing for the gemini-pro-latest alias', () => {
-      // gemini-pro-latest resolves to the current Gemini Pro snapshot
-      // (gemini-3.1-pro-preview): base input=2.0/1M, output=12.0/1M;
-      // tiered (>200k): input=4.0/1M, output=18.0/1M.
+    it('should apply resolved-model tiered pricing for the gemini-pro-latest alias', () => {
       const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
-      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
       expect(costBelowThreshold).toBeCloseTo(0.8, 10);
 
       const costAboveThreshold = calculateGoogleCost('gemini-pro-latest', {}, 250000, 50000);
-      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
       expect(costAboveThreshold).toBeCloseTo(1.9, 10);
     });
 
@@ -2757,16 +3911,30 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate cost for gemini-flash-latest using the tier it currently resolves to', () => {
-      // gemini-flash-latest resolves server-side to gemini-3.5-flash: input=1.5/1M, output=9/1M
+    it('should calculate resolved-model cost for gemini-flash-latest', () => {
+      // gemini-flash-latest serves gemini-3.6-flash: input=1.5/1M, output=7.5/1M
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.006, 10);
+      expect(cost).toBeCloseTo(0.002625, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using the tier it currently resolves to', () => {
-      // gemini-flash-lite-latest resolves server-side to gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
+    it('should calculate resolved-model cost for gemini-flash-lite-latest', () => {
+      // gemini-flash-lite-latest serves gemini-3.5-flash-lite: input=0.3/1M, output=2.5/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.001, 10);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    // Keep the fallback alias estimates aligned with the current model catalog.
+    it.each([
+      ['gemini-flash-latest', 'gemini-3.8-flash'],
+      ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'],
+      ['gemini-pro-latest', 'gemini-3.1-pro-preview'],
+    ])('should price the %s alias exactly like %s', (alias, resolvedModel) => {
+      const aliasEntry = GOOGLE_MODELS.find((model) => model.id === alias);
+      const resolvedEntry = GOOGLE_MODELS.find((model) => model.id === resolvedModel);
+
+      expect(aliasEntry, `${alias} must be in the catalog`).toBeDefined();
+      expect(resolvedEntry, `${resolvedModel} must be in the catalog`).toBeDefined();
+      expect({ ...aliasEntry, id: resolvedModel }).toEqual(resolvedEntry);
     });
 
     it('should return undefined for shutdown models', () => {
@@ -2779,6 +3947,7 @@ describe('util', () => {
         'gemini-2.5-flash-preview-05-20',
         'gemini-2.5-flash-preview-09-2025',
         'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.5-flash-lite-preview-06-17',
         'gemini-2.0-pro',
         'gemini-2.0-flash-exp',
         'gemini-2.0-flash-thinking-exp',
@@ -2817,6 +3986,71 @@ describe('util', () => {
       const config = { cost: 0.02, inputCost: 0.001, outputCost: 0.003 };
       const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
       expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should apply generic and modality-specific cost overrides to multimodal tokens', () => {
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { cost: 0.01 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(5, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02, outputCost: 0.03 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(13, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          {
+            inputCost: 0.02,
+            outputCost: 0.03,
+            audioInputCost: 0.04,
+            audioOutputCost: 0.05,
+            imageInputCost: 0.06,
+            videoOutputCost: 0.07,
+          },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(25, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02 },
+          200,
+          0,
+          false,
+          100,
+          0,
+          0,
+          100,
+          200,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(4, 10);
     });
 
     it('should respect separate custom costs for tiered pricing', () => {
@@ -2899,16 +4133,14 @@ describe('util', () => {
   });
 
   describe('resolveGoogleToolConfig', () => {
-    it('any disable signal forces NONE, even when explicit toolConfig says AUTO', () => {
-      // Documents the safety bias: a "no tools" signal from any source wins.
-      // If this needs to flip, update the test with the new precedence rule.
+    it('derives disablement from the winning tool config', () => {
       const result = resolveGoogleToolConfig({
-        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-        tool_choice: 'none',
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
       });
       expect(result).toEqual({
-        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-        toolsDisabled: true,
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
       });
     });
 
@@ -2922,6 +4154,18 @@ describe('util', () => {
       });
     });
 
+    it.each([
+      ['camel case', { toolConfig: { functionCallingConfig: { mode: 'NONE' } } }],
+      ['snake case', { tool_config: { function_calling_config: { mode: 'NONE' } } }],
+    ])('honors passthrough tool disabling in %s', (_label, passthrough) => {
+      const result = resolveGoogleToolConfig({
+        functionToolCallbacks: { get_weather: () => 'sunny' },
+        passthrough,
+      } as any);
+
+      expect(result.toolsDisabled).toBe(true);
+    });
+
     it('falls back to tool_choice when explicit toolConfig has invalid mode', () => {
       const result = resolveGoogleToolConfig({
         toolConfig: { functionCallingConfig: { mode: 'BOGUS' as any } },
@@ -2930,6 +4174,110 @@ describe('util', () => {
       expect(result).toEqual({
         toolConfig: { functionCallingConfig: { mode: 'ANY' } },
         toolsDisabled: false,
+      });
+    });
+
+    it('merges a required tool choice with streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: 'required',
+        toolConfig: {
+          functionCallingConfig: { streamFunctionCallArguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('merges a named tool choice with snake_case streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        tool_config: {
+          function_calling_config: { stream_function_call_arguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            allowedFunctionNames: ['get_weather'],
+            streamFunctionCallArguments: true,
+          },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('preserves passthrough-only tool config', () => {
+      expect(
+        resolveGoogleToolConfig({
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: ['get_weather'],
+              },
+            },
+          },
+        } as any),
+      ).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_weather'] },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('preserves Maps retrieval config without a function-calling policy', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('normalizes snake_case Maps retrieval config and preserves it when functions are disabled', () => {
+      const result = resolveGoogleToolConfig({
+        tool_config: {
+          retrieval_config: {
+            lat_lng: { latitude: 42.36, longitude: -71.06 },
+            language_code: 'en-US',
+          },
+          include_server_side_tool_invocations: true,
+        },
+        tool_choice: 'none',
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: true,
       });
     });
   });
@@ -2945,6 +4293,11 @@ describe('util', () => {
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
     });
 
+    it('drops documented snake_case function_declarations entries', () => {
+      const tools = [{ function_declarations: [{ name: 'foo' }] }] as unknown as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
+    });
+
     it('strips functionDeclarations from mixed-capability tool entries', () => {
       const tools = [
         {
@@ -2953,6 +4306,14 @@ describe('util', () => {
         },
       ] as Tool[];
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('strips snake_case function declarations from a single mixed-capability tool', () => {
+      const tool = {
+        function_declarations: [{ name: 'foo' }],
+        googleSearch: {},
+      } as unknown as Tool;
+      expect(removeGoogleFunctionDeclarations(tool)).toEqual([{ googleSearch: {} }]);
     });
 
     it('passes through non-function tools unchanged', () => {
@@ -2985,6 +4346,38 @@ describe('util', () => {
   });
 
   describe('mergeParts', () => {
+    it('keeps signed textual responses compatible with text and JSON assertions', () => {
+      const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
+
+      expect(formatCandidateContents({ content: { parts: [signedPart] } } as any)).toBe(
+        'Signed response',
+      );
+    });
+
+    it('collects thought signatures across streamed candidate parts', () => {
+      expect(
+        collectThoughtSignatures([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'First', thoughtSignature: 'first' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Second', thoughtSignature: 'second' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          { candidates: [] },
+        ]),
+      ).toEqual(['first', 'second']);
+    });
+
     it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
       const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
       const secondChunk = [{ text: 'done' }];
@@ -3025,6 +4418,33 @@ describe('util', () => {
       );
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
+      expect(merged.tool_config).toBeUndefined();
+    });
+
+    it.each([
+      {
+        toolConfig: {
+          functionCallingConfig: { mode: 'AUTO' as const },
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        },
+      },
+      {
+        tool_config: {
+          function_calling_config: { mode: 'AUTO' as const },
+          retrieval_config: { lat_lng: { latitude: 42.36, longitude: -71.06 } },
+          include_server_side_tool_invocations: true,
+        },
+      },
+    ])('preserves non-function Maps settings when a prompt overrides tool choice', (baseConfig) => {
+      const merged = mergeGoogleCompletionOptions(baseConfig, { tool_choice: 'required' });
+
+      expect(merged.tool_choice).toBe('required');
+      expect(merged.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+      expect(merged.toolConfig?.functionCallingConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
     });
   });

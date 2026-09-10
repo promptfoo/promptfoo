@@ -763,8 +763,6 @@ describe('API schema red-team coverage', () => {
           currentVersion: '1.0.0',
           latestVersion: '1.0.1',
           updateAvailable: true,
-          updateBlockedByRuntime: false,
-          runtimeNotice: null,
           selfHosted: false,
           isNpx: true,
           updateCommands: {
@@ -780,8 +778,6 @@ describe('API schema red-team coverage', () => {
           currentVersion: '1.0.0',
           latestVersion: '1.0.1',
           updateAvailable: true,
-          updateBlockedByRuntime: false,
-          runtimeNotice: null,
           selfHosted: false,
           isNpx: true,
           updateCommands: {

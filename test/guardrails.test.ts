@@ -12,6 +12,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
+    getAuthHeaders: vi.fn(),
   },
 }));
 
@@ -44,6 +45,12 @@ describe('guardrails', () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    // Mirrors the real cloudConfig.getAuthHeaders(): undefined with no key,
+    // otherwise a Bearer token under the (default Authorization) header name.
+    vi.mocked(cloudConfig.getAuthHeaders).mockImplementation(() => {
+      const apiKey = cloudConfig.getApiKey();
+      return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+    });
   });
 
   describe('guard', () => {
@@ -433,6 +440,19 @@ describe('guardrails', () => {
       // getApiHost() must not be consulted on the non-cloud path, and no token is sent.
       expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
       expect((opts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    });
+
+    it('sends the credential under a custom auth header name, without a duplicate Authorization header', async () => {
+      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
+        'X-Custom-Header': `Bearer ${ONPREM_KEY}`,
+      });
+
+      await guardrails.guard('test input');
+
+      const [, opts] = vi.mocked(fetchWithCache).mock.calls[0];
+      const headers = opts?.headers as Record<string, string>;
+      expect(headers['X-Custom-Header']).toBe(`Bearer ${ONPREM_KEY}`);
+      expect(headers.Authorization).toBeUndefined();
     });
 
     it('lets an explicit PROMPTFOO_REMOTE_API_BASE_URL override win, without leaking the token', async () => {

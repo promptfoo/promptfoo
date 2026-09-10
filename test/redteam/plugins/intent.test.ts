@@ -4,6 +4,7 @@ import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { createMockProvider } from '../../factories/provider';
 
@@ -94,51 +95,6 @@ describe('IntentPlugin', () => {
     expect(requestBody.targetId).toBe('cloud-target-123');
   });
 
-  it('reports extract-intent usage for scalar and multi-turn intents', async () => {
-    const trackTokenUsage = vi.fn();
-    vi.mocked(fetchWithCache)
-      .mockResolvedValueOnce({
-        data: {
-          intent: 'Access unauthorized customer data',
-          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
-        },
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      })
-      .mockResolvedValueOnce({
-        data: {
-          intent: 'Escalate access across turns',
-          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-        },
-        status: 200,
-        statusText: 'OK',
-        cached: true,
-      });
-
-    const plugin = new IntentPlugin(
-      mockProvider,
-      'test-purpose',
-      'prompt',
-      { intent: ['Read another customer record', ['Escalate access', 'Read the record']] },
-      'cloud-target-123',
-      trackTokenUsage,
-    );
-
-    const tests = await plugin.generateTests(2, 0);
-
-    expect(tests).toHaveLength(2);
-    expect(trackTokenUsage).toHaveBeenCalledTimes(2);
-    expect(trackTokenUsage).toHaveBeenNthCalledWith(1, {
-      tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
-      cached: false,
-    });
-    expect(trackTokenUsage).toHaveBeenNthCalledWith(2, {
-      tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-      cached: true,
-    });
-  });
-
   it('should initialize with an array of string intents', async () => {
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: ['intent1', 'intent2', 'intent3'],
@@ -150,6 +106,33 @@ describe('IntentPlugin', () => {
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
+  });
+
+  it('accounts for every remote intent extraction exactly once', async () => {
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { intent: 'First goal', tokenUsage: { total: 9, prompt: 6, completion: 3 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      })
+      .mockResolvedValueOnce({
+        data: { intent: 'Second goal', tokenUsage: { total: 11, prompt: 7, completion: 4 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+    const usage = {};
+    const plugin = new IntentPlugin(
+      trackGenerationTokenUsage(mockProvider, usage),
+      'test-purpose',
+      'prompt',
+      { intent: ['intent1', 'intent2'] },
+    );
+
+    await plugin.generateTests(1, 0);
+
+    expect(usage).toMatchObject({ total: 20, prompt: 13, completion: 7, numRequests: 2 });
   });
 
   it('should initialize with a list of list of strings', async () => {

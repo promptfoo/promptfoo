@@ -290,7 +290,48 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
-      tokenUsage: { numRequests: 3 },
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
+    });
+  });
+
+  it('preserves cached target usage without charging for the cached request', async () => {
+    mockedFetchWithProxy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            done: false,
+            question: 'What is your purpose?',
+            state: { currentQuestionIndex: 0, answers: [] },
+            tokenUsage: { total: 3, numRequests: 1 },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            done: true,
+            purpose: { purpose: 'Test purpose', limitations: null, tools: [], user: null },
+            state: { currentQuestionIndex: 1, answers: ['A test assistant'] },
+            tokenUsage: { total: 4, numRequests: 1 },
+          }),
+        ),
+      );
+    const target = createMockProvider({
+      id: 'cached-target',
+      response: {
+        output: 'A test assistant',
+        cached: true,
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      },
+    });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result?.tokenUsage).toMatchObject({
+      total: 17,
+      cached: 10,
+      numRequests: 3,
+      incurredTokenUsage: { total: 7, numRequests: 2 },
     });
   });
 
@@ -391,7 +432,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
-      tokenUsage: { numRequests: 1 },
+      tokenUsage: expect.objectContaining({ numRequests: 1 }),
     });
   });
 
@@ -532,7 +573,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
-      tokenUsage: { numRequests: 3 },
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -582,7 +623,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
-      tokenUsage: { numRequests: 3 },
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -732,7 +773,7 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
-      tokenUsage: { numRequests: 3 },
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 });

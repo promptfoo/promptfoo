@@ -13,13 +13,17 @@ import {
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
+  recordGenerationTokenUsage,
+  trackGenerationTokenUsage,
+} from '../../src/redteam/generationTokenUsage';
+import {
   calculateTotalTests,
   getTestCount,
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
-import { trackGenerationTokenUsage } from '../../src/redteam/providers/generationTokenUsage';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -171,13 +175,11 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Test prompt'],
         generationContext,
-        expect.any(Function),
       );
       expect(extractSystemPurpose).toHaveBeenCalledWith(
         expect.any(Object),
         ['Test prompt'],
         generationContext,
-        expect.any(Function),
       );
     });
 
@@ -208,13 +210,11 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
-        expect.any(Function),
       );
       expect(extractEntities).toHaveBeenCalledWith(
         expect.objectContaining({ id: expect.any(Function) }),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
-        expect.any(Function),
       );
     });
   });
@@ -309,21 +309,23 @@ describe('synthesize', () => {
       });
     });
 
-    it('tracks direct-remote plugin and strategy usage callbacks during synthesis', async () => {
-      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
-        trackTokenUsage({
+    it('tracks direct-remote plugin and strategy usage in the synthesis scope', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        recordGenerationTokenUsage(provider, {
           tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
           cached: false,
         });
         return [{ vars: { query: 'generated prompt' } }];
       });
-      const strategyAction = vi.fn().mockImplementation(async (testCases, _injectVar, config) => {
-        config.__trackGenerationTokenUsage({
-          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
-          cached: false,
+      const strategyAction = vi
+        .fn()
+        .mockImplementation(async (testCases, _injectVar, _config, _id, runtimeContext) => {
+          recordGenerationTokenUsage(runtimeContext.generationProviderSelection.provider, {
+            tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+            cached: false,
+          });
+          return testCases;
         });
-        return testCases;
-      });
       const pluginFindSpy = vi
         .spyOn(Plugins, 'find')
         .mockReturnValue({ action: pluginAction, key: 'contracts' });
@@ -358,38 +360,38 @@ describe('synthesize', () => {
     });
 
     it('tracks remote purpose, entities, plugin, and goal extraction usage during synthesis', async () => {
-      vi.mocked(extractSystemPurpose).mockImplementation(
-        async (_provider, _prompts, _context, trackTokenUsage) => {
-          trackTokenUsage?.({
-            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
-            cached: false,
-          });
-          return 'Test purpose';
-        },
-      );
-      vi.mocked(extractEntities).mockImplementation(
-        async (_provider, _prompts, _context, trackTokenUsage) => {
-          trackTokenUsage?.({
-            tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-            cached: false,
-          });
-          return ['entity'];
-        },
-      );
+      vi.mocked(extractSystemPurpose).mockImplementation(async (provider) => {
+        recordGenerationTokenUsage(provider, {
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          cached: false,
+        });
+        return 'Test purpose';
+      });
+      vi.mocked(extractEntities).mockImplementation(async (provider) => {
+        recordGenerationTokenUsage(provider, {
+          tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+          cached: false,
+        });
+        return ['entity'];
+      });
       const mockExtractGoal = vi.mocked(
         (await import('../../src/redteam/util')).extractGoalFromPrompt,
       );
       mockExtractGoal.mockImplementation(
-        async (_prompt, _purpose, _pluginId, _policy, _targetId, trackTokenUsage) => {
-          trackTokenUsage?.({
+        async (_prompt, _purpose, _pluginId, _policy, _targetId, provider) => {
+          expect(provider).toBeDefined();
+          if (!provider) {
+            throw new Error('Goal extraction did not receive the generation provider');
+          }
+          recordGenerationTokenUsage(provider, {
             tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
             cached: false,
           });
           return 'mocked goal';
         },
       );
-      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
-        trackTokenUsage({
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        recordGenerationTokenUsage(provider, {
           tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
           cached: false,
         });
@@ -500,7 +502,7 @@ describe('synthesize', () => {
       }
     });
 
-    it('should count live zero-usage and failed generation calls but not cache hits', async () => {
+    it('preserves explicit zero requests and separates cached usage from failed calls', async () => {
       const provider = {
         id: () => 'request-accounting-provider',
         callApi: vi
@@ -546,6 +548,7 @@ describe('synthesize', () => {
           numRequests: 3,
           prompt: 2,
           total: 12,
+          incurredTokenUsage: { total: 5, numRequests: 2 },
         });
       } finally {
         findSpy.mockRestore();
@@ -553,8 +556,8 @@ describe('synthesize', () => {
     });
 
     it('classifies cached direct-remote token totals without counting a live request', async () => {
-      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
-        trackTokenUsage({
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        recordGenerationTokenUsage(provider, {
           tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
           cached: true,
         });
@@ -577,12 +580,13 @@ describe('synthesize', () => {
           targetIds: ['test-provider'],
         });
 
-        expect(result.generationTokenUsage).toEqual({
+        expect(result.generationTokenUsage).toMatchObject({
           cached: 18,
-          completion: 0,
-          numRequests: 0,
-          prompt: 0,
+          completion: 7,
+          numRequests: 1,
+          prompt: 11,
           total: 18,
+          incurredTokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
         });
       } finally {
         findSpy.mockRestore();
@@ -590,8 +594,8 @@ describe('synthesize', () => {
     });
 
     it('derives cached direct-remote token totals from prompt and completion usage', async () => {
-      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
-        trackTokenUsage({
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        recordGenerationTokenUsage(provider, {
           tokenUsage: { prompt: 11, completion: 7, numRequests: 1 },
           cached: true,
         });
@@ -614,12 +618,13 @@ describe('synthesize', () => {
           targetIds: ['test-provider'],
         });
 
-        expect(result.generationTokenUsage).toEqual({
+        expect(result.generationTokenUsage).toMatchObject({
           cached: 18,
-          completion: 0,
-          numRequests: 0,
-          prompt: 0,
+          completion: 7,
+          numRequests: 1,
+          prompt: 11,
           total: 18,
+          incurredTokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
         });
       } finally {
         findSpy.mockRestore();
@@ -772,6 +777,12 @@ describe('synthesize', () => {
           maxCharsPerMessage: 12,
         }),
         'goat',
+        expect.objectContaining({
+          generationProviderSelection: expect.objectContaining({
+            provider: expect.any(Object),
+          }),
+          wrapGenerationProvider: expect.any(Function),
+        }),
       );
       expect(result.testCases).toEqual(
         expect.arrayContaining([
@@ -4343,13 +4354,13 @@ describe('Language configuration', () => {
       });
     });
 
-    it('should pass redteamProvider from cliState.config to strategy actions', async () => {
+    it('should pass the resolved request provider to strategy actions', async () => {
       // Import cliState to set up the redteam provider config
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
-      // Set up cliState with a mock redteam provider - this is the provider that should
-      // be passed to strategies for use by agentic providers (iterative, crescendo, etc.)
+      // Keep stale process-global config present to prove it does not replace the
+      // provider resolved for this synthesis request.
       cliState.config = {
         redteam: {
           provider: 'vertex:gemini-2.5-flash',
@@ -4366,13 +4377,17 @@ describe('Language configuration', () => {
 
         // Mock strategy that captures the config it receives
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4383,9 +4398,14 @@ describe('Language configuration', () => {
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
         const providersShared = await import('../../src/redteam/providers/shared');
-        const getProviderSpy = vi
-          .spyOn(providersShared.redteamProviderManager, 'getProvider')
-          .mockResolvedValue(mockProvider as any);
+        const getProviderSelectionSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProviderSelection')
+          .mockResolvedValue({
+            provider: mockProvider as any,
+            source: 'explicit',
+            localProviderSpec: 'openai:chat:gpt-4.1',
+            persistableId: 'openai:chat:gpt-4.1',
+          });
         const getGradingProviderSpy = vi
           .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
           .mockResolvedValue(mockProvider as any);
@@ -4399,17 +4419,27 @@ describe('Language configuration', () => {
             numTests: 1,
             plugins: [{ id: 'test-plugin', numTests: 1 }],
             prompts: ['Test prompt'],
+            provider: 'openai:chat:gpt-4.1',
             strategies: [{ id: 'jailbreak' }],
             targetIds: ['test-provider'],
           });
 
-          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(getProviderSelectionSpy).toHaveBeenCalledWith({
+            provider: 'openai:chat:gpt-4.1',
+          });
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+          expect(capturedConfig).not.toHaveProperty('redteamProvider');
+          expect(capturedConfig).not.toHaveProperty('__generationProvider');
+          expect(capturedRuntimeContext?.generationProviderSelection.provider.id()).toBe(
+            'mock-provider',
+          );
+          expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBe(
+            'openai:chat:gpt-4.1',
+          );
           expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
-          getProviderSpy.mockRestore();
+          getProviderSelectionSpy.mockRestore();
           getGradingProviderSpy.mockRestore();
           getMultilingualProviderSpy.mockRestore();
         }
@@ -4419,7 +4449,49 @@ describe('Language configuration', () => {
       }
     });
 
-    it('should pass redteamProvider as undefined when not configured in cliState', async () => {
+    it('keeps an explicit provider through local math-prompt generation when cache is present', async () => {
+      vi.mocked(loadYaml).mockImplementation((source) => JSON.parse(source));
+      const cachedProvider = {
+        id: () => 'cached-provider',
+        callApi: vi.fn().mockResolvedValue({ output: JSON.stringify({ encodedPrompt: 'cached' }) }),
+      };
+      const explicitProvider = {
+        id: () => 'explicit-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValue({ output: JSON.stringify({ encodedPrompt: 'explicit' }) }),
+      };
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return Array.prototype.find.call(Strategies, predicate);
+      });
+
+      await redteamProviderManager.setProvider(cachedProvider as any);
+      try {
+        const result = await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: explicitProvider as any,
+          strategies: [{ id: 'math-prompt', config: { mathConcepts: ['topology'] } }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(explicitProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(cachedProvider.callApi).not.toHaveBeenCalled();
+        expect(
+          result.testCases.some((testCase) => testCase.metadata?.strategyId === 'math-prompt'),
+        ).toBe(true);
+      } finally {
+        redteamProviderManager.clearProvider();
+      }
+    });
+
+    it('should pass the resolved default provider when no provider is configured', async () => {
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
@@ -4436,13 +4508,17 @@ describe('Language configuration', () => {
         });
 
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4459,14 +4535,16 @@ describe('Language configuration', () => {
 
         expect(mockStrategyAction).toHaveBeenCalled();
         expect(capturedConfig).toBeDefined();
-        // When not configured, redteamProvider should be undefined
-        expect(capturedConfig?.redteamProvider).toBeUndefined();
+        expect(capturedConfig).not.toHaveProperty('redteamProvider');
+        expect(capturedConfig).not.toHaveProperty('__generationProvider');
+        expect(capturedRuntimeContext?.generationProviderSelection.provider).toBeDefined();
+        expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBeUndefined();
       } finally {
         cliState.config = originalConfig;
       }
     });
 
-    it('should pass redteamProvider as object when configured as provider options', async () => {
+    it('should pass the resolved provider when configured with provider options', async () => {
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
@@ -4489,13 +4567,17 @@ describe('Language configuration', () => {
         });
 
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4505,9 +4587,13 @@ describe('Language configuration', () => {
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
         const providersShared = await import('../../src/redteam/providers/shared');
-        const getProviderSpy = vi
-          .spyOn(providersShared.redteamProviderManager, 'getProvider')
-          .mockResolvedValue(mockProvider as any);
+        const getProviderSelectionSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProviderSelection')
+          .mockResolvedValue({
+            provider: mockProvider as any,
+            source: 'explicit',
+            localProviderSpec: providerOptions,
+          });
         const getGradingProviderSpy = vi
           .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
           .mockResolvedValue(mockProvider as any);
@@ -4526,10 +4612,14 @@ describe('Language configuration', () => {
 
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          // Should pass the full provider options object
-          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+          expect(capturedConfig).not.toHaveProperty('redteamProvider');
+          expect(capturedConfig).not.toHaveProperty('__generationProvider');
+          expect(capturedRuntimeContext?.generationProviderSelection.provider.id()).toBe(
+            'mock-provider',
+          );
+          expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBeUndefined();
         } finally {
-          getProviderSpy.mockRestore();
+          getProviderSelectionSpy.mockRestore();
           getGradingProviderSpy.mockRestore();
           getMultilingualProviderSpy.mockRestore();
         }

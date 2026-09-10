@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -865,6 +865,12 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
+    const generation = {
+      id: options.generationRunId ?? randomUUID(),
+      generatedAt: new Date().toISOString(),
+      ...(hasGenerationUsage ? { tokenUsage: generationTokenUsage } : {}),
+    };
+
     let ret: Partial<UnifiedConfig> | undefined;
     if (options.output && options.output.endsWith('.burp')) {
       // Write in Burp Intruder compatible format
@@ -892,6 +898,8 @@ async function doGenerateRedteamInternal(
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const existingMetadata = { ...(existingYaml.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
@@ -911,6 +919,7 @@ async function doGenerateRedteamInternal(
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
           ...(hasGenerationUsage && { generationTokenUsage }),
+          generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -973,11 +982,14 @@ async function doGenerateRedteamInternal(
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
         ...(hasGenerationUsage && { generationTokenUsage }),
+        generation,
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1018,7 +1030,10 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
-          ...(hasGenerationUsage ? { metadata: { generationTokenUsage } } : {}),
+          metadata: {
+            ...(hasGenerationUsage ? { generationTokenUsage } : {}),
+            generation,
+          },
           tests: redteamTests,
         },
         'redteam.yaml',
