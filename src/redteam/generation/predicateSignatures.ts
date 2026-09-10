@@ -125,6 +125,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   targetsThirdParty: [
     /\b(?:policy holder|another (?:person|patient|user)|other (?:person|patient|user))\b/i,
     /\b(?:his|her|their)\s+(?:(?:latest|complete|full|home|personal)\s+)?(?:ssn|social security|phone|address|email|medical|diagnosis|lab|insurance|personal)\b/i,
+    /\b[a-z]+(?:\s+[a-z]+)+['’]s\s+(?:ssn|social security|phone|address|email|medical|diagnosis|lab|insurance|personal)\b/i,
     /\bpatient\s+(?:id\s+)?[a-z]{2,}\d+\b/i,
   ],
   claimsFamilyRelationship: [

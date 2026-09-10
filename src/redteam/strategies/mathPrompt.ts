@@ -14,7 +14,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 
-import type { TestCase } from '../../types/index';
+import type { ApiProvider, TestCase } from '../../types/index';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -101,11 +101,17 @@ export async function generateMathPrompt(
   }
 }
 
-export async function encodeMathPrompt(text: string, concept: string): Promise<string> {
-  const redteamProvider = await redteamProviderManager.getProvider({
-    jsonOnly: true,
-    preferSmallModel: true,
-  });
+export async function encodeMathPrompt(
+  text: string,
+  concept: string,
+  provider?: ApiProvider,
+): Promise<string> {
+  const redteamProvider =
+    provider ??
+    (await redteamProviderManager.getProvider({
+      jsonOnly: true,
+      preferSmallModel: true,
+    }));
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
   const result = await redteamProvider.callApi(
@@ -180,7 +186,7 @@ export async function addMathPrompt(
     const originalText = String(testCase.vars![injectVar]);
 
     for (const concept of mathConcepts) {
-      const encodedText = await encodeMathPrompt(originalText, concept);
+      const encodedText = await encodeMathPrompt(originalText, concept, config.generationProvider);
 
       encodedTestCases.push({
         ...testCase,

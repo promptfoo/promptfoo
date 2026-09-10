@@ -87,8 +87,8 @@ function trackGenerationTokenUsage(
   trackedCallApi.label = provider.callApi.label;
 
   return new Proxy(provider, {
-    get(target, property, receiver) {
-      return property === 'callApi' ? trackedCallApi : Reflect.get(target, property, receiver);
+    get(target, property) {
+      return property === 'callApi' ? trackedCallApi : Reflect.get(target, property, target);
     },
   });
 }
@@ -738,6 +738,7 @@ async function applyStrategies(
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
+        generationProvider: provider,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,

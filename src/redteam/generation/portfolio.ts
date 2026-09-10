@@ -68,6 +68,10 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   }
 
   protected getPortfolioGenerationFallbackReason(): string | undefined {
+    if (this.config.examples?.length) {
+      return 'custom examples may specify attacks outside the built-in semantic families';
+    }
+
     const language = this.config.language ?? this.config.modifiers?.language;
     const languages = Array.isArray(language) ? language : language ? [language] : [];
     const nonEnglishLanguage = languages.find((language) => {

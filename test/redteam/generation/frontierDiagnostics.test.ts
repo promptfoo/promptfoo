@@ -16,7 +16,9 @@ function createSummary(
       relationship: {
         featureCount: 2,
         observedFeatureCount: complete ? 2 : 1,
-        observedFeatureIds: complete ? ['claimsFamilyRelationship', 'claimsSelfRelationship'] : [],
+        observedFeatureIds: complete
+          ? ['claimsFamilyRelationship', 'claimsSelfRelationship']
+          : ['claimsFamilyRelationship'],
         reachableFeatureCount: 2 - unreachableFeatureIds.length,
         reachableFeatureIds: ['claimsFamilyRelationship', 'claimsSelfRelationship'].filter(
           (feature) => !unreachableFeatureIds.includes(feature),
@@ -137,6 +139,18 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
           },
           vars: { prompt: 'persisted malformed metadata' },
         },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('rejects inconsistent persisted frontier counts', () => {
+    const summary = createSummary(true);
+    summary.bands.relationship.featureCount = -1;
+    summary.bands.relationship.observedFeatureCount = 99;
+
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        { metadata: { pluginId: 'pii:social', semanticFrontier: summary } },
       ]),
     ).toEqual([]);
   });

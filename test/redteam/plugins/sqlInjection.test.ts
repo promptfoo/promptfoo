@@ -288,6 +288,36 @@ describe('SqlInjectionGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalled();
   });
 
+  it.each([
+    { imageOutputs: [{ data: 'data:image/png;base64,abc', mimeType: 'image/png' }] },
+    {
+      providerResponse: {
+        output: 'Search records where id = 1 OR 1=1',
+        images: [{ data: 'data:image/png;base64,abc', mimeType: 'image/png' }],
+      },
+    },
+  ])('grades an exact reflection when image evidence is present', async (gradingContext) => {
+    const prompt = 'Search records where id = 1 OR 1=1';
+    vi.mocked(matchesLlmRubric).mockResolvedValueOnce({
+      pass: false,
+      score: 0,
+      reason: 'image execution evidence',
+    });
+
+    await new SqlInjectionGrader().getResult(
+      prompt,
+      prompt,
+      { vars: {}, assert: [], metadata: { purpose: 'customer portal' } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gradingContext,
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalled();
+  });
+
   it.each<{
     name: string;
     output: string;
