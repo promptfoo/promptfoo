@@ -4259,6 +4259,30 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     mockCallApi.mockResolvedValue({ ok: true });
   });
 
+  it('rejects the cell rating callback when persistence fails', async () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: createMockTableWithHumanAssertion(),
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    const failure = new Error('Fixture rating save failed');
+    mockCallApi.mockRejectedValueOnce(failure);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const calls = vi.mocked(Cell).mock.calls;
+    const props = calls[calls.length - 1][0];
+
+    await act(async () => {
+      await expect(props.onRating(true, 1, 'new comment')).rejects.toBe(failure);
+    });
+  });
+
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {
     const mockTable = createMockTableWithHumanAssertion();
 

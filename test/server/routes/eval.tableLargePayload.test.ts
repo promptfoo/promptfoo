@@ -149,7 +149,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
 
     const placeholder = `[content omitted: ${oversized.length} characters]`;
     const largeCell = response.body.table.body[0].outputs[0];
-    expect(response.body.table.head.prompts[0].raw).toBe(placeholder);
+    expect(response.body.table.head.prompts[0].raw).toBe(oversized);
     expect(response.body.table.body[0].vars[0]).toBe(placeholder);
     expect(response.body.table.body[0].test.vars).toBeUndefined();
     expect(response.body.table.body[0].testIdx).toBe(0);
@@ -164,7 +164,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(largeCell.prompt).toBe('');
     expect(largeCell.text).toBe(placeholder);
     expect(largeCell.response.output).toBeUndefined();
-    expect(largeCell.response.prompt).toBeUndefined();
+    expect(largeCell.response.prompt).toBe(placeholder);
     expect(largeCell.response.images[0].data).toBeUndefined();
     expect(largeCell.metadata).toEqual({ comment: 'keep this' });
     expect(largeCell.testCase.vars).toBeUndefined();
@@ -229,32 +229,13 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(response.headers['x-promptfoo-response-truncated']).toBeUndefined();
   });
 
-  it('strips oversized table strings and preserves table shape when JSON serialization overflows', async () => {
+  it('returns 413 when the lean table still exceeds the serialization limit', async () => {
     mockNextPayloadStringifyRangeError(
       (value) => value !== null && typeof value === 'object' && 'table' in value,
     );
-
     const response = await request(app).get('/api/eval/large-eval/table?lean=true');
-
-    expect(response.status).toBe(200);
-    expect(response.headers['x-promptfoo-response-truncated']).toBe('true');
-    expect(Number(response.headers['x-promptfoo-truncated-fields'])).toBeGreaterThanOrEqual(0);
-    expect(response.body.table.body).toHaveLength(2);
-    expect(response.body.table.body[1].outputs[0].text).toBe(normal);
-
-    const placeholder = `[content omitted: ${oversized.length} characters]`;
-    expect(response.body.table.head.prompts[0].raw).toBe(placeholder);
-    expect(response.body.table.body[0].outputs[0].text).toBe(placeholder);
-    expect(response.body.table.body[0].outputs[0].prompt).toBe('');
-    expect(response.body.table.body[0].outputs[0].detail).toEqual({
-      available: true,
-      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
-    });
-    expect(response.body.table.body[0].outputs[0].metadata).toEqual({ comment: 'keep this' });
-    expect(response.body.table.body[0].outputs[0].metadata.inputVars).toBeUndefined();
-    expect(response.body.table.body[0].outputs[0].images[0].data).toBeUndefined();
-    expect(response.body.table.body[0].vars[0]).toBe(placeholder);
-    expect(response.body.table.body[0].test.vars).toBeUndefined();
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({ error: 'Eval table response is too large to serialize' });
   });
 
   it('returns full result detail from the detail endpoint', async () => {

@@ -12,7 +12,6 @@ export type OversizedStringStats = {
 
 type JsonResponseLogger = {
   warn: (message: string, context: Record<string, unknown>) => void;
-  error: (message: string, context: Record<string, unknown>) => void;
 };
 
 export function isJsonStringLengthError(error: unknown): error is RangeError {
@@ -101,15 +100,11 @@ export function sendJsonResponse<T>(
     beforeSend,
     evalId,
     logger,
-    maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT,
-    stripOversizedStringsOnRangeError = false,
     tooLargeMessage = 'Response payload is too large to serialize',
   }: {
     beforeSend?: () => void;
     evalId?: string;
     logger?: JsonResponseLogger;
-    maxStringLength?: number;
-    stripOversizedStringsOnRangeError?: boolean;
     tooLargeMessage?: string;
   } = {},
 ): void {
@@ -126,35 +121,8 @@ export function sendJsonResponse<T>(
     logger?.warn('[sendJsonResponse] JSON payload exceeded V8 string length limit', {
       error,
       evalId,
-      stripOversizedStringsOnRangeError,
     });
 
-    if (!stripOversizedStringsOnRangeError) {
-      sendTooLargeResponse(res, tooLargeMessage);
-      return;
-    }
-
-    const stats: OversizedStringStats = { oversizedStrings: 0, omittedCharacters: 0 };
-    const strippedPayload = stripOversizedStrings(payload, { maxStringLength, stats });
-
-    try {
-      const body = JSON.stringify(strippedPayload);
-      res.setHeader('X-Promptfoo-Response-Truncated', 'true');
-      res.setHeader('X-Promptfoo-Truncated-Fields', String(stats.oversizedStrings));
-      beforeSend?.();
-      sendSerializedJson(res, body);
-    } catch (fallbackError) {
-      if (!isJsonStringLengthError(fallbackError)) {
-        throw fallbackError;
-      }
-
-      logger?.error('[sendJsonResponse] Stripped JSON payload is still too large', {
-        error: fallbackError,
-        evalId,
-        oversizedStrings: stats.oversizedStrings,
-        omittedCharacters: stats.omittedCharacters,
-      });
-      sendTooLargeResponse(res, tooLargeMessage);
-    }
+    sendTooLargeResponse(res, tooLargeMessage);
   }
 }

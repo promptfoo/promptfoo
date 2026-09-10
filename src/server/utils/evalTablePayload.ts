@@ -35,6 +35,8 @@ type ImageLike = {
 };
 
 type ProviderResponseLike = {
+  prompt?: unknown;
+  metadata?: { redteamFinalPrompt?: string };
   cached?: boolean;
   tokenUsage?: unknown;
   isRefusal?: boolean;
@@ -48,14 +50,19 @@ type ProviderResponseLike = {
   images?: ImageLike[];
 };
 
+type AssertionMetric = {
+  type: string;
+  metric?: string;
+  weight?: number;
+  assert?: AssertionMetric[];
+};
+
 type TestCaseLike = object & {
   vars?: unknown;
   providerOutput?: unknown;
-  assert?: unknown;
+  assert?: AssertionMetric[];
   options?: unknown;
 };
-
-type PromptLike = object & { raw: string };
 
 type TableCellLike = {
   id?: string;
@@ -89,7 +96,7 @@ type TableRowLike = object & {
 };
 
 type TableLike = object & {
-  head: object & { prompts: PromptLike[] };
+  head: object;
   body: TableRowLike[];
 };
 
@@ -233,6 +240,14 @@ function trimProviderResponseForTable(
   const images = trimImagesForTable(response.images, maxStringLength);
 
   return {
+    ...(response.prompt !== undefined && {
+      prompt: trimForTable(response.prompt, maxStringLength),
+    }),
+    ...(response.metadata?.redteamFinalPrompt !== undefined && {
+      metadata: {
+        redteamFinalPrompt: trimForTable(response.metadata.redteamFinalPrompt, maxStringLength),
+      },
+    }),
     ...(response.cached != null && { cached: response.cached }),
     ...(response.tokenUsage !== undefined && { tokenUsage: response.tokenUsage }),
     ...(response.isRefusal != null && { isRefusal: response.isRefusal }),
@@ -251,15 +266,27 @@ function trimProviderResponseForTable(
   } as ProviderResponseLike;
 }
 
+function trimAssertionMetrics(assertions: AssertionMetric[]): AssertionMetric[] {
+  return assertions.map(({ type, metric, weight, assert }) => ({
+    type,
+    ...(metric !== undefined && { metric }),
+    ...(weight !== undefined && { weight }),
+    ...(assert && { assert: trimAssertionMetrics(assert) }),
+  }));
+}
+
 function trimTestCaseForTable(testCase: TestCaseLike, maxStringLength: number): TestCaseLike {
   const {
     vars: _vars,
     providerOutput: _providerOutput,
-    assert: _assert,
+    assert,
     options: _options,
     ...rest
   } = testCase;
-  return trimForTable(rest, maxStringLength) as TestCaseLike;
+  return {
+    ...trimForTable(rest, maxStringLength),
+    ...(assert && { assert: trimAssertionMetrics(assert) }),
+  };
 }
 
 export function trimTableCellForApi<T extends TableCellLike>(
@@ -321,10 +348,8 @@ export function trimEvalTableForApi<T extends TableLike>(
 ): T {
   return {
     ...table,
-    head: {
-      ...table.head,
-      prompts: table.head.prompts.map((prompt) => trimForTable(prompt, maxStringLength)),
-    },
+    // Header prompts appear once per column and are used by the View prompt dialog.
+    head: table.head,
     body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
   } as T;
 }

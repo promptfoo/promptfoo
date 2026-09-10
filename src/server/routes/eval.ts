@@ -455,10 +455,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
     evalId: id,
     logger,
-    // Legacy v3 clients PATCH the whole table back via saveManualRating; returning
-    // placeholder strings on overflow would silently overwrite stored content, so
-    // we return 413 instead and let the client surface the error.
-    stripOversizedStringsOnRangeError: useLeanTable,
     tooLargeMessage: 'Eval table response is too large to serialize',
   });
 });

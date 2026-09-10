@@ -79,10 +79,10 @@ describe('trimEvalTableForApi', () => {
     const trimmed = trimEvalTableForApi(table, { maxStringLength: 32 });
     const cell = trimmed.body[0].outputs[0];
 
-    expect(trimmed.head.prompts[0].raw).toBe(`[content omitted: ${huge.length} characters]`);
+    expect(trimmed.head.prompts[0].raw).toBe(huge);
     expect(trimmed.body[0].vars).toEqual([`[content omitted: ${huge.length} characters]`, 'small']);
     expect(trimmed.body[0].test.vars).toBeUndefined();
-    expect(trimmed.body[0].test.assert).toBeUndefined();
+    expect(trimmed.body[0].test.assert).toEqual([{ type: 'contains' }]);
     expect(trimmed.body[0].test.providerOutput).toBeUndefined();
     expect(trimmed.body[0].test.options).toBeUndefined();
     expect(trimmed.body[0].test.metadata?.testCaseId).toBe('tc-1');
@@ -98,7 +98,7 @@ describe('trimEvalTableForApi', () => {
       omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
     });
     expect(cell.testCase.vars).toBeUndefined();
-    expect(cell.testCase.assert).toBeUndefined();
+    expect(cell.testCase.assert).toEqual([{ type: 'contains' }]);
     expect(cell.testCase.metadata?.testCaseId).toBe('tc-1');
     expect(cell.metadata?.comment).toBe('comment');
     expect(cell.metadata?.inputVars).toBeUndefined();
@@ -115,7 +115,7 @@ describe('trimEvalTableForApi', () => {
     expect(cell.response?.error).toBeUndefined();
     expect(cell.response?.cached).toBe(true);
     expect(cell.response?.tokenUsage).toEqual({ total: 3, prompt: 2, completion: 1 });
-    expect(cell.response?.prompt).toBeUndefined();
+    expect(cell.response?.prompt).toBe(`[content omitted: ${huge.length} characters]`);
     expect(cell.response?.audio?.data).toBeUndefined();
     expect(cell.response?.audio?.transcript).toBe('transcript');
     expect(cell.response?.video?.url).toBe('storageRef:video.mp4');
@@ -124,6 +124,39 @@ describe('trimEvalTableForApi', () => {
     expect(cell.audio?.data).toBeUndefined();
     expect(cell.video?.url).toBe('storageRef:video.mp4');
     expect(cell.images?.[0].data).toBeUndefined();
+  });
+
+  it('keeps assertion metrics and weights without assertion payloads', () => {
+    const table = createEvaluateTable();
+    table.body[0].test.assert = [
+      { type: 'contains', value: huge, metric: 'accuracy', weight: 2 },
+      {
+        type: 'assert-set',
+        assert: [{ type: 'equals', value: huge, metric: 'accuracy', weight: 3 }],
+      },
+    ];
+    const trimmed = trimEvalTableForApi(table);
+    expect(trimmed.body[0].test.assert).toEqual([
+      { type: 'contains', metric: 'accuracy', weight: 2 },
+      { type: 'assert-set', assert: [{ type: 'equals', metric: 'accuracy', weight: 3 }] },
+    ]);
+  });
+
+  it('keeps provider-reported prompt text and the legacy prompt fallback', () => {
+    const cell = createEvaluateTable().body[0].outputs[0];
+    cell.response = createProviderResponse({
+      prompt: 'actual injected prompt',
+      metadata: { raw: huge },
+    });
+    expect(trimTableCellForApi(cell)?.response).toMatchObject({ prompt: 'actual injected prompt' });
+    expect(trimTableCellForApi(cell)?.response?.metadata).toBeUndefined();
+
+    cell.response = createProviderResponse({
+      metadata: { redteamFinalPrompt: 'legacy injected prompt', raw: huge },
+    });
+    expect(trimTableCellForApi(cell)?.response?.metadata).toEqual({
+      redteamFinalPrompt: 'legacy injected prompt',
+    });
   });
 
   it('preserves small inline media and external media references in the table payload', () => {
