@@ -7,7 +7,7 @@ import {
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
-} from '@promptfoo/contracts/validators/traceAssertionConfig';
+} from '@promptfoo/contracts';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
