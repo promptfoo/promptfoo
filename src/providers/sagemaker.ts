@@ -153,6 +153,7 @@ function credentialHelperInputs(...services: string[]): string[] {
 function profileCredentialInputs(
   profiles: Record<string, Record<string, string | undefined>>,
   name: string,
+  defaultChainEnvironment?: CredentialScope['environment'],
   visited = new Set<string>(),
 ): string[] | undefined {
   const data = profiles[name];
@@ -166,10 +167,27 @@ function profileCredentialInputs(
   }
   visited.add(name);
   if (data.role_arn && data.source_profile && data.credential_source === undefined) {
-    const source = profileCredentialInputs(profiles, data.source_profile, visited);
+    const source = profileCredentialInputs(
+      profiles,
+      data.source_profile,
+      defaultChainEnvironment,
+      visited,
+    );
     return source && [...credentialHelperInputs('STS'), ...source];
   }
   if ((data.role_arn || recursive) && data.credential_source && data.source_profile === undefined) {
+    // Metadata errors and missing Environment credentials can continue through the
+    // default chain. Before resolution, their nominal source cannot exclude fallback inputs.
+    // Explicit profiles use fromIni alone, so they keep source-specific pruning.
+    if (
+      defaultChainEnvironment &&
+      (data.credential_source !== 'Environment' ||
+        !(
+          defaultChainEnvironment.AWS_ACCESS_KEY_ID && defaultChainEnvironment.AWS_SECRET_ACCESS_KEY
+        ))
+    ) {
+      return undefined;
+    }
     const sources: Record<string, string[]> = {
       Environment: [
         'AWS_ACCESS_KEY_ID',
@@ -414,14 +432,12 @@ abstract class SageMakerGenericProvider {
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
         configFilepath: environment.AWS_CONFIG_FILE || undefined,
       });
-      const inputs = profileCredentialInputs(profiles, selectedProfile || 'default');
-      // A missing Environment source can continue to later default-chain providers.
-      // Explicit profiles use fromIni alone and have no such fallback.
-      const canFallThrough =
-        !profile &&
-        inputs?.includes('AWS_ACCESS_KEY_ID') &&
-        !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY);
-      if (inputs && !canFallThrough) {
+      const inputs = profileCredentialInputs(
+        profiles,
+        selectedProfile || 'default',
+        profile ? undefined : environment,
+      );
+      if (inputs) {
         const used = new Set([
           ...inputs,
           'AWS_CONFIG_FILE',

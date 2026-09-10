@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import https from 'node:https';
 import { createRequire } from 'node:module';
@@ -65,6 +66,15 @@ describe('SageMaker implicit profile fallback ownership', () => {
   let firstDispatched: ReturnType<typeof deferred>;
   let releaseFirst: ReturnType<typeof deferred>;
   let holdFirst: boolean;
+  let metadataRequests: http.RequestOptions[];
+
+  function useMetadataProfile() {
+    externalDataInterceptor.interceptFile(
+      '/synthetic-sage-fallback/config',
+      `[profile fallback]\nrole_arn = ${profileRole}\ncredential_source = Ec2InstanceMetadata\n`,
+    );
+    setEnvironment({ AWS_EC2_METADATA_SERVICE_ENDPOINT: 'http://synthetic-metadata.invalid' });
+  }
 
   function setEnvironment(values: Record<string, string | undefined>) {
     restores.push(mockProcessEnv(values));
@@ -86,6 +96,7 @@ describe('SageMaker implicit profile fallback ownership', () => {
     destroyed = new Set();
     sageRequests = [];
     stsRequests = [];
+    metadataRequests = [];
     unexpectedReads = 0;
     firstDispatched = deferred();
     releaseFirst = deferred();
@@ -155,6 +166,24 @@ describe('SageMaker implicit profile fallback ownership', () => {
         throw new Error('Unexpected network in fallback fixture');
       });
     }
+    vi.mocked(http.request).mockImplementation((options) => {
+      const requestOptions = options as http.RequestOptions;
+      expect(requestOptions.hostname).toBe('synthetic-metadata.invalid');
+      expect(requestOptions.method).toBe('PUT');
+      expect(requestOptions.path).toBe('/latest/api/token');
+      metadataRequests.push(requestOptions);
+      const request = Object.assign(new EventEmitter(), {
+        end: () => {
+          queueMicrotask(() => {
+            // Let the actual SDK httpRequest construct its continuable ProviderError.
+            request.emit('response', Object.assign(new EventEmitter(), { statusCode: 400 }));
+          });
+          return request;
+        },
+        destroy: vi.fn(),
+      });
+      return request as unknown as http.ClientRequest;
+    });
     const destroy = NodeHttpHandler.prototype.destroy;
     vi.spyOn(NodeHttpHandler.prototype, 'destroy').mockImplementation(function (this: HttpHandler) {
       destroyed.add(this);
@@ -307,6 +336,59 @@ describe('SageMaker implicit profile fallback ownership', () => {
     await loadProvider();
     await overlap(() => {}, ['FALLBACK_A', 'FALLBACK_A', 'FALLBACK_A'], true);
     expect(stsRequests).toHaveLength(2);
+  });
+
+  it('retains reachable fallback inputs after a continuable metadata failure', async () => {
+    useMetadataProfile();
+    await loadProvider();
+    await overlap(
+      () => setEnvironment({ AWS_ROLE_ARN: roleB, AWS_WEB_IDENTITY_TOKEN_FILE: tokenB }),
+      ['FALLBACK_A', 'FALLBACK_B', 'FALLBACK_B'],
+      false,
+    );
+    expect(metadataRequests).toHaveLength(3);
+    expect(stsRequests.map(({ params }) => params.get('Action'))).toEqual(
+      Array(3).fill('AssumeRoleWithWebIdentity'),
+    );
+    expect(stsRequests.map(({ params }) => params.get('RoleArn'))).toEqual([roleA, roleB, roleB]);
+    expect(stsRequests.map(({ params }) => params.get('WebIdentityToken'))).toEqual([
+      'synthetic-token-a',
+      'synthetic-token-b',
+      'synthetic-token-b',
+    ]);
+  });
+
+  it('reuses stable metadata fallback credentials without disrupting the active request', async () => {
+    useMetadataProfile();
+    await loadProvider();
+    await overlap(() => {}, ['FALLBACK_A', 'FALLBACK_A', 'FALLBACK_A'], true);
+    expect(metadataRequests).toHaveLength(2);
+    expect(stsRequests).toHaveLength(2);
+  });
+
+  it('does not continue an explicit metadata profile into web identity', async () => {
+    useMetadataProfile();
+    const selected = await loadProvider({ profile: 'fallback' });
+    expect(await selected.callApi('explicit metadata profile')).toMatchObject({
+      error: expect.stringContaining('EC2 Metadata token request returned error'),
+    });
+    expect(metadataRequests).toHaveLength(1);
+    expect(stsRequests).toHaveLength(0);
+    expect(sageRequests).toHaveLength(0);
+  });
+
+  it('keeps configured static credentials ahead of the metadata profile', async () => {
+    useMetadataProfile();
+    const selected = await loadProvider({
+      accessKeyId: 'CONFIG',
+      secretAccessKey: 'synthetic-config-secret',
+    });
+    expect(await selected.callApi('configured credentials')).toMatchObject({
+      output: 'synthetic fallback response',
+    });
+    expect(sageRequests[0].request.headers.authorization).toContain('Credential=CONFIG/');
+    expect(metadataRequests).toHaveLength(0);
+    expect(stsRequests).toHaveLength(0);
   });
 
   it('does not give an explicit profile the default chain web-identity fallback', async () => {
