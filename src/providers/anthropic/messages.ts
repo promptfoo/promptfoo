@@ -486,7 +486,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const result = await this.mcpClient!.callTool(
         toolUse.name,
         coerceMcpToolInput(toolUse.input),
-        ...(signal ? ([signal] as const) : ([] as const)),
+        signal,
       );
 
       if (isMcpErrorResult(result)) {

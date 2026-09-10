@@ -11,6 +11,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { asEvaluateResult } from '../../src/models/evalResult';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -35,62 +36,64 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
-  it('stops waiting for binary storage after evaluation cancellation', async () => {
-    const controller = new AbortController();
-    const started = createDeferred<void>();
-    const pendingStore = createDeferred<ProviderResponse>();
-    const extraction = vi
-      .spyOn(blobExtractor, 'extractAndStoreBinaryData')
-      .mockImplementationOnce(() => {
+  it.each(['provider transform', 'test transform', 'binary storage'])(
+    'retains a completed target when cancellation interrupts %s',
+    async (stage) => {
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pendingOperation = createDeferred<never>();
+      const wait = () => {
         started.resolve();
-        return pendingStore.promise;
-      });
-    const suite: TestSuite = {
-      providers: [
-        { id: () => 'binary-provider', callApi: vi.fn().mockResolvedValue({ output: 'ready' }) },
-      ],
-      prompts: [toPrompt('hello')],
-      tests: [{}],
-    };
-    const run = evaluate(suite, new Eval({}), { abortSignal: controller.signal });
-    try {
-      await started.promise;
-      controller.abort(new Error('cancelled storage'));
-      await run.catch(() => undefined);
-      expect(extraction).toHaveBeenCalled();
-    } finally {
-      pendingStore.resolve({ output: 'ready' });
-      extraction.mockRestore();
-    }
-  });
-
-  it('stops waiting for a pending response transform and skips later transforms on cancellation', async () => {
-    const controller = new AbortController();
-    const pendingTransform = createDeferred<string>();
-    const transformSpy = vi
-      .mocked(transform)
-      .mockImplementationOnce(() => pendingTransform.promise);
-    const provider: ApiProvider = {
-      id: () => 'transform-provider',
-      transform: 'provider transform',
-      callApi: vi.fn().mockResolvedValue({ output: 'ready' }),
-    };
-    const suite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('hello')],
-      tests: [{ options: { transform: 'test transform' } }],
-    };
-    const pending = evaluate(suite, new Eval({}), { abortSignal: controller.signal });
-    try {
-      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledOnce());
-      controller.abort(new Error('cancelled transform'));
-      await pending.catch(() => undefined);
-      expect(transformSpy).toHaveBeenCalledOnce();
-    } finally {
-      pendingTransform.resolve('ready');
-      transformSpy.mockRestore();
-    }
-  });
+        return pendingOperation.promise;
+      };
+      const extraction =
+        stage === 'binary storage'
+          ? vi.spyOn(blobExtractor, 'extractAndStoreBinaryData').mockImplementationOnce(wait)
+          : undefined;
+      const transformSpy =
+        stage === 'binary storage' ? undefined : vi.mocked(transform).mockImplementationOnce(wait);
+      const provider: ApiProvider = {
+        id: () => 'completed-target',
+        ...(stage === 'provider transform' && { transform: 'provider transform' }),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ready',
+          cost: 0.03,
+          incurredCost: 0.02,
+          tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
+        }),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('hello')],
+        tests: [stage === 'binary storage' ? {} : { options: { transform: 'test transform' } }],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const run = evaluate(suite, evalRecord, { abortSignal: controller.signal });
+      try {
+        await started.promise;
+        controller.abort(new Error('cancelled after target completed'));
+        await run.catch(() => undefined);
+        const results = await evalRecord.getResults();
+        expect(results).toHaveLength(1);
+        expect(asEvaluateResult(results[0])).toMatchObject({
+          response: { output: 'ready', tokenUsage: { total: 11, numRequests: 1 } },
+          cost: 0.03,
+          incurredCost: 0.02,
+          tokenUsage: { total: 11, numRequests: 1 },
+          success: false,
+          error: 'cancelled after target completed',
+          failureReason: ResultFailureReason.ERROR,
+        });
+        if (transformSpy) {
+          expect(transformSpy).toHaveBeenCalledOnce();
+        }
+      } finally {
+        pendingOperation.reject(new Error('fixture released'));
+        extraction?.mockRestore();
+        transformSpy?.mockRestore();
+      }
+    },
+  );
 
   it.each([false, true])(
     'isolates overlapping evaluation cleanup (shared provider: %s)',

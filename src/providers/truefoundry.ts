@@ -26,6 +26,7 @@ type TrueFoundryMCPServer = {
 };
 
 type TrueFoundryCompletionOptions = OpenAiCompletionOptions & {
+  task?: 'chat' | 'embedding';
   metadata?: TrueFoundryMetadata;
   loggingConfig?: TrueFoundryLoggingConfig;
   mcp_servers?: TrueFoundryMCPServer[];
@@ -387,7 +388,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
  *
  * @param providerPath - Provider path, e.g., "truefoundry:openai/gpt-4"
  * @param options - Provider options
- * @returns A TrueFoundry provider (chat or embedding based on model type)
+ * @returns A TrueFoundry provider selected by config.task, with legacy model-name inference
  */
 export function createTrueFoundryProvider(
   providerPath: string,
@@ -400,8 +401,15 @@ export function createTrueFoundryProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  // Determine if this is an embedding model based on model name
-  const isEmbeddingModel = modelName.toLowerCase().includes('embedding');
+  const task = options.config?.config?.task;
+  if (task !== undefined && task !== 'chat' && task !== 'embedding') {
+    throw new Error('TrueFoundry config.task must be "chat" or "embedding"');
+  }
+
+  // Keep legacy inference when task is omitted. Account and deployment names are opaque,
+  // so explicit task selection must not consume or rewrite any part of the model name.
+  const isEmbeddingModel =
+    task === 'embedding' || (task === undefined && modelName.toLowerCase().includes('embedding'));
 
   const providerOptions: TrueFoundryProviderOptions = {
     ...options.config,
