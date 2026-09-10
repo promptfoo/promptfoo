@@ -1,6 +1,6 @@
 ---
 title: 'Interface: CompletionTokenDetails'
-description: 'Detailed completion-token breakdown reported by reasoning-capable models. This generated page documents the supported promptfoo Node.js API contract, import.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 16
 ---
 

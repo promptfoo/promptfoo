@@ -1,6 +1,6 @@
 ---
 title: 'Interface: PluginConfig'
-description: 'Advanced plugin configuration carried on generated red-team test cases. This generated page documents the supported promptfoo Node.js API contract, import.'
+description: 'Advanced plugin configuration carried on generated red-team test cases. See supported imports, signatures, fields, examples, and usage details for this symbol.'
 sidebar_position: 29
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: PromptConfig'
-description: 'Prompt-local text decoration applied before provider execution. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
+description: 'Prompt-local text decoration applied before provider execution. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
 sidebar_position: 32
 ---
 

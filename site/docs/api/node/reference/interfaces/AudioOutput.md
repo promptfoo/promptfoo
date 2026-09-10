@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AudioOutput'
-description: 'Audio attachment returned by providers that produce or transform sound. This generated page documents the supported promptfoo Node.js API contract, import.'
+description: 'Audio attachment returned by providers that produce or transform sound. See supported imports, signatures, fields, examples, and usage details for this symbol.'
 sidebar_position: 9
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: EvaluateTableOutput'
-description: 'One provider output cell in an eval table. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
+description: 'One provider output cell in an eval table. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 21
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: LoadApiProviderContext'
-description: 'Optional context accepted by loadApiProvider(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
+description: 'Optional context accepted by loadApiProvider(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 26
 ---
 

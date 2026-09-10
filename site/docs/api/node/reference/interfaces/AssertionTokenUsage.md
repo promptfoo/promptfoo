@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AssertionTokenUsage'
-description: 'Token accounting attributed to model-graded assertions. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Token accounting attributed to model-graded assertions. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 6
 ---
 

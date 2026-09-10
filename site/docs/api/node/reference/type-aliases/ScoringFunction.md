@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ScoringFunction'
-description: 'Custom scorer used to aggregate named assertion scores for one test case. This generated page documents the supported promptfoo Node.js API contract, import.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 11
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Function: fetchWithCache()'
-description: "Fetch a URL through promptfoo's retrying cache wrapper. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant."
+description: "Fetch a URL through promptfoo's retrying cache wrapper. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol."
 sidebar_position: 4
 ---
 

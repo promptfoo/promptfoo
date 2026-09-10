@@ -14,8 +14,22 @@ import * as path from 'node:path';
 
 const REFERENCE_DIR = path.resolve('site/docs/api/node/reference');
 const README_PATH = path.join(REFERENCE_DIR, 'README.md');
-const DESCRIPTION_DETAIL =
-  ' This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application code.';
+const DESCRIPTION_DETAILS = [
+  ' This page documents supported imports, exact signatures, fields, and practical application examples for this Node.js API symbol.',
+  ' This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application code.',
+  ' See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.',
+  ' See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.',
+  ' See supported Node.js imports, exact signatures, fields, and application examples for this symbol.',
+  ' See the supported promptfoo Node.js API imports, signatures, fields, and application examples.',
+  ' See supported imports, signatures, fields, examples, and usage details for this symbol.',
+  ' See supported imports, signatures, fields, and examples for this symbol.',
+  ' See supported imports, signatures, and fields for this symbol.',
+  ' See supported imports, signatures, fields, and application examples.',
+  ' See supported imports and signatures for this symbol.',
+  ' See supported imports and signatures.',
+];
+const FALLBACK_DESCRIPTION =
+  'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.';
 const FRONTMATTER = `---
 title: Node.js API - Reference index
 sidebar_label: Reference index
@@ -85,13 +99,11 @@ function getDescription(markdown: string) {
 }
 
 function fitDescription(description: string) {
-  const expanded = `${description}${DESCRIPTION_DETAIL}`;
-  if (expanded.length <= 160) {
-    return expanded;
-  }
-  const truncated = expanded.slice(0, 159);
-  const sentence = `${truncated.slice(0, truncated.lastIndexOf(' ')).trimEnd()}.`;
-  return sentence.length >= 150 ? sentence : `${sentence.slice(0, -1)} API.`;
+  return (
+    DESCRIPTION_DETAILS.map((detail) => `${description}${detail}`).find(
+      (candidate) => candidate.length >= 150 && candidate.length <= 160,
+    ) ?? FALLBACK_DESCRIPTION
+  );
 }
 
 function getSymbolName(title: string) {

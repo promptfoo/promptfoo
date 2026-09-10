@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EvaluateProgressCallback'
-description: 'Progress callback invoked as rows finish during evaluation. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
+description: 'Progress callback invoked as rows finish during evaluation. See supported Node.js imports, exact signatures, fields, and application examples for this symbol.'
 sidebar_position: 4
 ---
 

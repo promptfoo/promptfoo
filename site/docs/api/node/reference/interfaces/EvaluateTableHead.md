@@ -1,6 +1,6 @@
 ---
 title: 'Interface: EvaluateTableHead'
-description: 'Header metadata for an eval table. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for API.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 20
 ---
 

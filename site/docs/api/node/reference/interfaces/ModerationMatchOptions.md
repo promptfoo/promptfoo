@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ModerationMatchOptions'
-description: 'Input passed to assertions.matchesModeration(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
+description: 'Input passed to assertions.matchesModeration(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 28
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ProviderConfig'
-description: 'Provider override accepted anywhere a single provider configuration is allowed. This generated page documents the supported promptfoo Node.js API contract,.'
+description: 'Provider override accepted anywhere a single provider configuration is allowed. See supported imports, signatures, fields, and examples for this symbol.'
 sidebar_position: 8
 ---
 

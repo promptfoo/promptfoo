@@ -1,6 +1,6 @@
 ---
 title: 'Function: isCacheEnabled()'
-description: 'Return whether the shared promptfoo cache is enabled. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Return whether the shared promptfoo cache is enabled. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 6
 ---
 

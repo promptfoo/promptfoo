@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TestCaseMetadata'
-description: 'Arbitrary metadata attached to a test case. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
+description: 'Arbitrary metadata attached to a test case. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 44
 ---
 

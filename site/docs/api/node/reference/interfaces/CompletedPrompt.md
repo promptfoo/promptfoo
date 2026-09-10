@@ -1,6 +1,6 @@
 ---
 title: 'Interface: CompletedPrompt'
-description: 'Prompt metadata attached to completed eval results. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Prompt metadata attached to completed eval results. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 15
 ---
 

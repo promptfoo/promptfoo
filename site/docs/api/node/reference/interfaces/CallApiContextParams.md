@@ -1,6 +1,6 @@
 ---
 title: 'Interface: CallApiContextParams'
-description: 'Runtime context passed to custom provider functions. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Runtime context passed to custom provider functions. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 11
 ---
 

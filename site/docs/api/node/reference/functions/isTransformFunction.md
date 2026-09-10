@@ -1,6 +1,6 @@
 ---
 title: 'Function: isTransformFunction()'
-description: 'Runtime type guard for TransformFunction values. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
+description: 'Runtime type guard for TransformFunction values. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 3
 ---
 

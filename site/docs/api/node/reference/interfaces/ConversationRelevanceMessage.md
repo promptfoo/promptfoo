@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ConversationRelevanceMessage'
-description: 'One user / assistant exchange used by conversation-relevance grading. This generated page documents the supported promptfoo Node.js API contract, import form,.'
+description: 'One user / assistant exchange used by conversation-relevance grading. See supported imports, signatures, fields, examples, and usage details for this symbol.'
 sidebar_position: 17
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Function: disableCache()'
-description: 'Disable the shared promptfoo cache for future calls. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Disable the shared promptfoo cache for future calls. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 2
 ---
 

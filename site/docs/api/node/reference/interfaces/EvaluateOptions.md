@@ -1,6 +1,6 @@
 ---
 title: 'Interface: EvaluateOptions'
-description: 'Runtime-only options accepted by evaluate(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
+description: 'Runtime-only options accepted by evaluate(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 18
 ---
 

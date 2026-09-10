@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProviders()'
-description: 'Load one or more providers from provider config input. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Load one or more providers from provider config input. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 5
 ---
 

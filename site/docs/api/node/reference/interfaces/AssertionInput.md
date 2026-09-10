@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AssertionInput'
-description: 'Assertion input accepted by runAssertion(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
+description: 'Assertion input accepted by runAssertion(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 3
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TransformPrompt'
-description: 'Conventional shape for TransformContext.prompt. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
+description: 'Conventional shape for TransformContext.prompt. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 48
 ---
 

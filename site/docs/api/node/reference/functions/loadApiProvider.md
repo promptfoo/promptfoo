@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProvider()'
-description: 'Load one provider by id or config-file reference. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
+description: 'Load one provider by id or config-file reference. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 4
 ---
 

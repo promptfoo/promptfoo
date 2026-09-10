@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TestCase'
-description: 'Author-facing test case configuration accepted by eval suites. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
+description: 'Author-facing test case configuration accepted by eval suites. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
 sidebar_position: 43
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: StrategyConfig'
-description: 'Advanced strategy configuration carried on generated red-team test cases. This generated page documents the supported promptfoo Node.js API contract, import.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 42
 ---
 

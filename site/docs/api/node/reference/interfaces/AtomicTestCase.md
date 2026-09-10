@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AtomicTestCase'
-description: 'Fully materialized test case used during evaluation. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Fully materialized test case used during evaluation. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 8
 ---
 

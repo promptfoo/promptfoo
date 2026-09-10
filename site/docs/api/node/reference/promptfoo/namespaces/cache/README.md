@@ -1,6 +1,6 @@
 ---
 title: 'cache'
-description: 'Cache helpers exposed through the Node.js package. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Cache helpers exposed through the Node.js package. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 1
 ---
 

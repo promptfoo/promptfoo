@@ -1,6 +1,6 @@
 ---
 title: 'Interface: RunAssertionOptions'
-description: 'Options for runAssertion(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application code.'
+description: 'Options for runAssertion(). This page documents supported imports, exact signatures, fields, and practical application examples for this Node.js API symbol.'
 sidebar_position: 40
 ---
 

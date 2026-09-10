@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AssertionTestContext'
-description: 'Test-case context accepted by low-level assertion APIs. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
+description: 'Test-case context accepted by low-level assertion APIs. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 5
 ---
 
