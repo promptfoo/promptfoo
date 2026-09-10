@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
@@ -425,7 +428,9 @@ describe('handleToolCallF1', () => {
     it.each([
       ['```json', '```'],
       ['~~~json', '~~~'],
+      ['```json', ' ```'],
       ['   ```json', '   ````'],
+      ['   ```json', '```'],
       ['````json', '```\n~~~\n````'],
       ['```json', '~~~\n```'],
       ['```json', '```json\n```'],
@@ -477,15 +482,85 @@ describe('handleToolCallF1', () => {
       },
     );
 
-    it('bounds parsing work for nested invalid JSON candidates', () => {
+    it.each([
+      ['```json', '    ```', '', '```'],
+      ['  - Example:\n    ```json', '        ```', '    ', '    ```'],
+    ])('keeps over-indented markers inside %s fences', (opening, marker, indent, closing) => {
+      const output = [
+        opening,
+        marker,
+        `${indent}{"type":"tool_use","name":"delete_account"}`,
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each(['- ', '12. '])('recognizes a fence after a %s list marker', (list) => {
+      const indent = ' '.repeat(list.length);
+      const output = [
+        `${list}\`\`\`json`,
+        `${indent}{"type":"tool_use","name":"delete_account"}`,
+        `${indent}\`\`\``,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('recovers unexpected calls from long malformed wrappers', () => {
+      const output = [
+        '{',
+        'x'.repeat(2_000),
+        '{"type":"tool_use","name":"delete_account"}',
+        '}',
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(2 / 3);
+      expect(result.reason).toContain('Called: [delete_account, get_weather]');
+    });
+
+    it('bounds parsing work for large nested invalid JSON candidates', () => {
       const output = `${'{\n'.repeat(1_000)}${'}\n'.repeat(1_000)}`;
       const parse = vi.spyOn(JSON, 'parse');
       const result = handleToolCallF1(createParams(output, ['get_weather']));
 
       expect(result.score).toBe(0);
-      // One whole-output attempt and non-overlapping embedded candidates.
+      // One whole-output attempt plus a linear budget for embedded candidates.
       const parsedCharacters = parse.mock.calls.reduce((total, [value]) => total + value.length, 0);
-      expect(parsedCharacters).toBeLessThanOrEqual(2 * output.length);
+      expect(parsedCharacters).toBeLessThanOrEqual(5 * output.length);
+      expect(result).toMatchObject({ pass: false, reason: expect.stringContaining('work limit') });
+    });
+
+    it.each([false, true])('fails explicitly on exhausted work with inverse=%s', (inverse) => {
+      const output =
+        '{"type":"tool_use","name":"get_weather"}\n' + '{\n'.repeat(1_000) + '}\n'.repeat(1_000);
+      const params = {
+        ...createParams(output, ['get_weather']),
+        inverse,
+        assertion: { type: 'tool-call-f1' as const, threshold: 0 },
+      };
+
+      expect(handleToolCallF1(params)).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('work limit'),
+      });
+      expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('work limit'),
+      });
     });
 
     it('recovers a call after many unmatched opening braces', () => {
@@ -494,6 +569,44 @@ describe('handleToolCallF1', () => {
 
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
+
+    it('streams many JSON blocks within a small heap', () => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          '--max-old-space-size=128',
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '--eval',
+          String.raw`
+            import { handleToolCallF1 } from './src/assertions/toolCallF1.ts';
+            for (const prefix of ['', '{\n']) {
+              const output = prefix + '{"type":"tool_use","name":"book_flight"}\n' +
+                '{}\n'.repeat(1_250_000) +
+                '{"type":"tool_use","name":"get_weather"}';
+              const result = handleToolCallF1({
+                assertion: { type: 'tool-call-f1' },
+                output,
+                renderedValue: ['book_flight', 'get_weather'],
+                inverse: false,
+              });
+              if (!result.pass || result.score !== 1) {
+                throw new Error('Lost an early or late tool call');
+              }
+            }
+          `,
+        ],
+        {
+          cwd: fileURLToPath(new URL('../..', import.meta.url)),
+          encoding: 'utf8',
+          timeout: 60_000,
+        },
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+    }, 75_000);
 
     it('should handle Anthropic output with only one tool call in string', () => {
       const output = `I'll help you with that.

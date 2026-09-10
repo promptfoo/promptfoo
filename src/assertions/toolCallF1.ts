@@ -2,46 +2,75 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function* extractJsonBlocks(text: string): Generator<unknown> {
-  const MAX_JSON_CANDIDATES = 10_000;
-  const MAX_NESTED_RECOVERY_LENGTH = 1_024;
-  const candidates = new Map<number, { end: number; endsLine: boolean } | undefined>();
-  const openings: number[] = [];
+type JsonDelimiter = {
+  char: '{' | '[' | '}' | ']';
+  index: number;
+  startsLine: boolean;
+  endsLine: boolean;
+};
+
+function columnWidth(text: string): number {
+  let column = 0;
+  for (const char of text) {
+    column += char === '\t' ? 4 - (column % 4) : 1;
+  }
+  return column;
+}
+
+function* jsonDelimiters(text: string): Generator<JsonDelimiter | null> {
   let inString = false;
   let escaped = false;
   let fence = '';
-  let fenceIndent = '';
-  let offset = 0;
+  let fenceContainer = 0;
+  const containers: number[] = [];
+  let lineStart = 0;
 
-  // Record balanced ranges once, including blocks inside unfinished candidates.
-  for (const line of text.split('\n')) {
-    const lineStart = offset;
-    offset += line.length + 1;
-    const content = line.trimEnd();
-    const marker = /^([ \t]*)(`{3,}|~{3,})/.exec(content);
-    if (marker) {
-      if (!fence) {
-        fenceIndent = marker[1];
-        fence = marker[2];
-        openings.length = 0;
-      } else if (
-        marker[1] === fenceIndent &&
-        marker[2][0] === fence[0] &&
-        marker[2].length >= fence.length &&
+  while (lineStart < text.length) {
+    const offset = lineStart;
+    const newline = text.indexOf('\n', lineStart);
+    const lineEnd = newline < 0 ? text.length : newline;
+    const content = text.slice(lineStart, lineEnd).trimEnd();
+    lineStart = lineEnd + 1;
+    const firstContent = content.search(/\S/);
+    const indent = columnWidth(content.slice(0, Math.max(0, firstContent)));
+    if (fence && content && indent < fenceContainer) {
+      fence = '';
+      yield null;
+    }
+    if (fence) {
+      const marker = /^[ \t]*(`{3,}|~{3,})/.exec(content);
+      if (
+        marker &&
+        indent <= fenceContainer + 3 &&
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
         !content.slice(marker[0].length).trim()
       ) {
         fence = '';
       }
       continue;
     }
-    if (fence) {
+
+    while (content && containers.length && indent < containers[containers.length - 1]) {
+      containers.pop();
+    }
+    const list = /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(content);
+    if (list) {
+      containers.push(columnWidth(list[0]));
+    }
+    const container = containers[containers.length - 1] ?? 0;
+    const fenceText = list ? content.slice(list[0].length) : content;
+    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(fenceText);
+    if (marker && (list || indent <= container + 3)) {
+      fence = marker[1];
+      fenceContainer = container;
+      yield null;
       continue;
     }
 
-    const firstContent = content.search(/\S/);
     for (let column = 0; column < content.length; column++) {
       const char = content[column];
-      const index = lineStart + column;
+      const index = offset + column;
       if (inString) {
         if (escaped) {
           escaped = false;
@@ -55,51 +84,99 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
 
       if (char === '"') {
         inString = true;
-      } else if (char === '{' || char === '[') {
-        openings.push(index);
-        if (column === firstContent) {
-          if (candidates.size >= MAX_JSON_CANDIDATES) {
-            candidates.delete(candidates.keys().next().value!);
-          }
-          candidates.set(index, undefined);
-        }
-      } else if (char === '}' || char === ']') {
-        const start = openings.pop();
-        if (start === undefined || text[start] !== (char === '}' ? '{' : '[')) {
-          openings.length = 0;
-        } else if (candidates.has(start)) {
-          candidates.set(start, { end: index + 1, endsLine: column === content.length - 1 });
-        }
+      } else if (char === '{' || char === '[' || char === '}' || char === ']') {
+        yield {
+          char,
+          index,
+          startsLine: column === firstContent,
+          endsLine: column === content.length - 1,
+        };
       }
     }
 
     // JSON strings cannot span literal newlines.
     if (inString) {
-      openings.length = 0;
       inString = false;
       escaped = false;
+      yield null;
+    }
+  }
+}
+
+class ToolCallParseError extends Error {}
+
+function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
+  // Pop complete pairs so independent blocks do not accumulate in memory.
+  const unmatched: number[] = [];
+  let stackStart = 0;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
+      stackStart = unmatched.length;
+    } else if (token.char === '{' || token.char === '[') {
+      unmatched.push(token.index);
+    } else if (
+      unmatched.length > stackStart &&
+      text[unmatched[unmatched.length - 1]] === (token.char === '}' ? '{' : '[')
+    ) {
+      unmatched.pop();
+    } else {
+      unmatched.push(token.index);
+      stackStart = unmatched.length;
     }
   }
 
-  // Parse non-overlapping ranges, even when a balanced candidate is invalid JSON.
-  let end = 0;
-  for (const [start, candidate] of candidates) {
-    if (start < end || !candidate) {
+  // Yield disjoint blocks; nested recovery skips the enclosing root.
+  let nextUnmatched = 0;
+  let depth = 0;
+  let start = -1;
+  let startDepth = 0;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
       continue;
     }
-    if (!candidate.endsLine) {
-      end = candidate.end;
+    if (token.index === unmatched[nextUnmatched]) {
+      nextUnmatched++;
       continue;
     }
-    try {
-      const parsed = JSON.parse(text.slice(start, candidate.end));
-      end = candidate.end;
-      yield parsed;
-    } catch {
-      // Delimiter balancing does not validate JSON syntax.
-      if (candidate.end - start > MAX_NESTED_RECOVERY_LENGTH) {
-        end = candidate.end;
+    if (token.char === '{' || token.char === '[') {
+      if (start < 0 && token.startsLine && (!skipRoot || token.index > 0)) {
+        start = token.index;
+        startDepth = depth;
       }
+      depth++;
+      continue;
+    }
+    depth--;
+    if (start >= 0 && depth === startDepth) {
+      if (token.endsLine) {
+        yield text.slice(start, token.index + 1);
+      }
+      start = -1;
+    }
+  }
+}
+
+function* extractJsonBlocks(text: string): Generator<unknown> {
+  const pending = [jsonBlocks(text)];
+  let remaining = 4 * text.length;
+  while (pending.length) {
+    const next = pending[pending.length - 1].next();
+    if (next.done) {
+      pending.pop();
+      continue;
+    }
+    const block = next.value;
+    if (block.length > remaining) {
+      throw new ToolCallParseError(
+        'Tool Call F1 could not finish parsing malformed output within its work limit',
+      );
+    }
+    remaining -= block.length;
+    try {
+      yield JSON.parse(block);
+    } catch {
+      // Each rescan is paid for by the failed parse, keeping total work linear.
+      pending.push(jsonBlocks(block, true));
     }
   }
 }
@@ -124,27 +201,20 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
-  // Handle string output - try to parse as JSON and recursively extract
   if (typeof output === 'string') {
-    // First, try parsing the entire string as JSON
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(output);
-      const parsedNames = extractToolNames(parsed);
-      for (const name of parsedNames) {
-        names.add(name);
+      parsed = JSON.parse(output);
+    } catch {
+      // Providers join serialized calls at line boundaries.
+      for (const block of extractJsonBlocks(output)) {
+        for (const name of extractToolNames(block)) {
+          names.add(name);
+        }
       }
       return names;
-    } catch {
-      // Not valid JSON as a whole; look for embedded JSON values.
     }
-
-    // Providers join serialized calls at line boundaries.
-    for (const block of extractJsonBlocks(output)) {
-      for (const name of extractToolNames(block)) {
-        names.add(name);
-      }
-    }
-    return names;
+    return extractToolNames(parsed);
   }
 
   if (typeof output !== 'object') {
@@ -308,7 +378,15 @@ export const handleToolCallF1 = ({
   }
 
   const expected = new Set(expectedTools);
-  const actual = extractToolNames(output);
+  let actual: Set<string>;
+  try {
+    actual = extractToolNames(output);
+  } catch (error) {
+    if (!(error instanceof ToolCallParseError)) {
+      throw error;
+    }
+    return { pass: false, score: 0, reason: error.message, assertion };
+  }
 
   // Compute F1 components using set intersection
   const intersection = [...expected].filter((t) => actual.has(t)).length;
