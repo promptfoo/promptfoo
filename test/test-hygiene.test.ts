@@ -136,12 +136,6 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Python extension-hook smoke coverage requires an available Python interpreter',
   },
   {
-    file: 'redteam/plugins/codingAgent.test.ts',
-    kind: 'skipIf',
-    linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
-    reason: 'Host-side unreadable-file sandbox coverage depends on Unix permissions',
-  },
-  {
     file: 'examples/integrationLangchain.test.ts',
     kind: 'skip',
     linePattern: /const itPy = PYTHON_PATH \? it : it\.skip;/,

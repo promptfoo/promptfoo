@@ -6,6 +6,7 @@ import {
 } from '../../constants/codingAgents';
 import { RedteamGraderBase, type RedteamGradingContext } from '../base';
 import { getCodingAgentEvidence } from '../codingAgent/evidence';
+import { enrichCodingAgentGradingContext } from '../codingAgent/graders';
 
 import type {
   ApiProvider,
@@ -201,7 +202,7 @@ export class HarnessGrader extends RedteamGraderBase {
       renderedValue,
       additionalRubric,
       true,
-      gradingContext,
+      enrichCodingAgentGradingContext(gradingContext),
     );
   }
 }

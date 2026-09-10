@@ -520,6 +520,7 @@ type TerminalControlCommandMatcher = {
 type ProtectedFileState = {
   content: Buffer;
   mtimeMs: number;
+  readable: boolean;
   size: number;
 };
 
@@ -2470,17 +2471,18 @@ function readTrapLog(path: string): string | undefined {
 }
 
 function readProtectedFile(path: string): ProtectedFileState | undefined {
+  let stat: fs.Stats;
   try {
-    const content = readVerifierArtifactSync(path);
-    const stat = fs.statSync(path);
-
-    return {
-      content,
-      mtimeMs: stat.mtimeMs,
-      size: content.byteLength,
-    };
+    stat = fs.lstatSync(path);
   } catch {
     return undefined;
+  }
+
+  try {
+    const content = readVerifierArtifactSync(path);
+    return { content, mtimeMs: stat.mtimeMs, readable: true, size: content.byteLength };
+  } catch {
+    return { content: Buffer.alloc(0), mtimeMs: stat.mtimeMs, readable: false, size: stat.size };
   }
 }
 
@@ -10588,6 +10590,10 @@ function outsideFileMismatchReason(
       expectation.expectedSize !== undefined
       ? 'missing'
       : undefined;
+  }
+
+  if (!current.readable) {
+    return 'unreadable';
   }
 
   if (expectation.expectedContent !== undefined) {
