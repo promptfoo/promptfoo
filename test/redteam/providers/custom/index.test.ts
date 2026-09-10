@@ -5,6 +5,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
+import type { ProviderResponse } from '../../../../src/types/providers';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -326,6 +327,124 @@ describe('CustomProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     expect(result.metadata?.sessionId).toBe('response-session-id');
+  });
+
+  describe.each(['normal', 'unblocking'] as const)('%s target error provenance', (path) => {
+    it.each([
+      { name: 'projects the selected tool error', marked: true, later: 'none' },
+      { name: 'retains the stored tool origin after success', marked: true, later: 'success' },
+      {
+        name: 'does not borrow the origin of a later success',
+        marked: false,
+        later: 'marked success',
+      },
+      {
+        name: 'clears the stored origin when a later unmarked error is selected',
+        marked: true,
+        later: 'error',
+      },
+    ] as const)('$name', async ({ marked, later }) => {
+      const firstError = marked
+        ? 'Tool lookup failed: downstream 429 rate limit'
+        : 'Target inference failed: HTTP 503';
+      const laterError = 'Target rejected the later request';
+      const childMetadata = {
+        http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+        headers: { 'retry-after': '60' },
+        rateLimitKind: 'rate_limit',
+        arbitraryTargetMetadata: 'belongs to the child',
+      };
+      const responses: ProviderResponse[] = [
+        {
+          output: 'First target output',
+          error: firstError,
+          metadata: { ...childMetadata, ...(marked ? { errorOrigin: 'tool' } : {}) },
+        },
+      ];
+      if (later !== 'none') {
+        responses.push({
+          output: 'Later target output',
+          ...(later === 'error' ? { error: laterError } : {}),
+          metadata: {
+            ...childMetadata,
+            ...(later === 'marked success' ? { errorOrigin: 'tool' } : {}),
+          },
+        });
+      }
+      const targetResponses: ProviderResponse[] = [];
+      for (const response of responses) {
+        if (path === 'unblocking' && response.error) {
+          targetResponses.push({ output: 'Please provide the example reference number.' });
+          vi.mocked(tryUnblocking).mockResolvedValueOnce({
+            success: true,
+            unblockingPrompt: 'The example reference is 123.',
+          });
+        } else if (!response.error) {
+          vi.mocked(tryUnblocking).mockResolvedValueOnce({ success: false });
+        }
+        targetResponses.push(response);
+      }
+      for (const response of targetResponses) {
+        mockTargetProvider.callApi.mockResolvedValueOnce({
+          ...response,
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        });
+      }
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Say hello.',
+          rationaleBehindJailbreak: 'Harmless result projection fixture',
+          lastResponseSummary: 'Continue the greeting.',
+        }),
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+      });
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Ask for a greeting.',
+        maxTurns: responses.length,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
+      const result = await provider.callApi('Say hello.', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Say hello.' },
+        prompt: { raw: '{{objective}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledTimes(responses.length);
+      expect(tryUnblocking).toHaveBeenCalledTimes(
+        targetResponses.length - responses.filter((response) => response.error).length,
+      );
+      expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(
+        later === 'success' || later === 'marked success' ? 2 : 0,
+      );
+      expect(result.error).toBe(later === 'error' ? laterError : firstError);
+      expect(result.output).toBe(responses[responses.length - 1].output);
+      if (marked && later !== 'error') {
+        expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+      } else {
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+      }
+      for (const key of Object.keys(childMetadata)) {
+        expect(result.metadata).not.toHaveProperty(key);
+      }
+      expect(result.metadata?.customRoundsCompleted).toBe(responses.length);
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.redteamHistory).toHaveLength(
+        later === 'success' || later === 'marked success' ? 1 : 0,
+      );
+      expect(result.tokenUsage).toMatchObject({
+        total: targetResponses.length * 5,
+        prompt: targetResponses.length * 3,
+        completion: targetResponses.length * 2,
+        numRequests: targetResponses.length,
+      });
+    });
   });
 
   describe('Unblocking functionality', () => {

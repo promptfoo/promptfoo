@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { CallApiContextParams } from '../../../src/types/index';
+import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/logger', () => ({
@@ -12,7 +12,8 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
@@ -74,6 +75,70 @@ describe('RedteamIterativeImageProvider', () => {
   it('should have correct ID', () => {
     const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
+  });
+
+  it.each([
+    { label: 'selected tool error', error: 'lookup: downstream 429 rate limit', origin: 'tool' },
+    { label: 'unmarked target error', error: 'target 429 rate limit', origin: undefined },
+    { label: 'non-tool target error', error: 'target 429 rate limit', origin: 'provider' },
+    { label: 'successful marked target', error: undefined, origin: 'tool' },
+  ])('projects only selected tool-error origin for $label', async ({ error, origin }) => {
+    // External provider metadata may contain an unknown origin marker.
+    const originMetadata: Record<string, unknown> = origin ? { errorOrigin: origin } : {};
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    const { getEnvInt } = await import('../../../src/envars');
+    const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
+    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'Hello',
+      ...(error ? { error } : {}),
+      metadata: {
+        ...originMetadata,
+        http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+        rateLimit: { remaining: 0 },
+        targetOnly: 'must stay on the target',
+      },
+      tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+    });
+
+    try {
+      const provider = new RedteamIterativeProvider({});
+      const result: ProviderResponse = await provider.callApi('Say hello', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Say hello' },
+        prompt: { raw: '{{goal}}', label: 'greeting' },
+        injectVar: 'goal',
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      // Errors and plain text without an image URL reach the final builder without vision calls.
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBe(error);
+      expect(result.metadata?.errorOrigin).toBe(error && origin === 'tool' ? 'tool' : undefined);
+      expect(result.metadata).not.toHaveProperty('http');
+      expect(result.metadata).not.toHaveProperty('rateLimit');
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'rendered prompt' });
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 2,
+        completion: 3,
+        total: 5,
+        numRequests: 1,
+      });
+    } finally {
+      vi.mocked(getTargetResponse).mockReset();
+      vi.mocked(getEnvInt).mockReset();
+      if (previousGetEnvInt) {
+        vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
+      }
+    }
   });
 
   it('should throw error when originalProvider is not set', async () => {

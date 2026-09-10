@@ -12,6 +12,11 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
@@ -336,13 +341,13 @@ describe('callback failures selected before real tool-span completion', () => {
     expect(f.ends).toHaveLength(0);
   });
 
-  async function chatFixture(text: string, abortOnCompletion = true) {
+  async function chatFixture(text: string, abortOnCompletion = true, cached = false) {
     const f = watchTool();
     const reason = Object.assign(new Error('caller observed tool completion'), {
       name: 'AbortError',
     });
     const failure = Object.assign(new Error(text), { name: 'AbortException' });
-    const policy = abortOnCompletion ? f.abortAfterEnd(reason) : Promise.resolve();
+    let policy = Promise.resolve();
     const laterCallback = vi.fn(() => 'must not run');
     const callback = vi.fn(async () => {
       expect(trace.getActiveSpan()?.isRecording()).toBe(true);
@@ -378,6 +383,7 @@ describe('callback failures selected before real tool-span completion', () => {
           apiBaseUrl: 'https://callback.fixture.test/v1',
           apiKey: 'fixture-key',
           maxRetries: 0,
+          cost: 0.25,
           functionToolCallbacks: { lookup: callback, later: laterCallback },
         },
       },
@@ -387,15 +393,30 @@ describe('callback failures selected before real tool-span completion', () => {
     const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
     registries.push(registry);
     const wrapped = wrapProviderWithRateLimiting(raw, registry);
+    let warmResponse: Awaited<ReturnType<ApiProvider['callApi']>> | undefined;
     const result = await withCacheNamespace(randomUUID(), () =>
-      withCacheEnabled(false, () =>
-        inParent(() =>
+      withCacheEnabled(cached, async () => {
+        if (cached) {
+          // An ordinary completed callback fallback retains the real model cache
+          // entry. Warming has no cancellation policy or observed tool span.
+          const observer = onToolEnd;
+          onToolEnd = undefined;
+          try {
+            warmResponse = await inParent(() => raw.callApi('fixture'));
+          } finally {
+            onToolEnd = observer;
+          }
+          expect(warmResponse.cached).toBe(false);
+          expect(warmResponse.error).toBeUndefined();
+        }
+        policy = abortOnCompletion ? f.abortAfterEnd(reason) : Promise.resolve();
+        return inParent(() =>
           f.capture(wrapped.callApi('fixture', undefined, { abortSignal: f.controller.signal })),
-        ),
-      ),
+        );
+      }),
     );
     await policy;
-    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledTimes(cached ? 2 : 1);
     expect(laterCallback).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledOnce();
     return {
@@ -404,6 +425,7 @@ describe('callback failures selected before real tool-span completion', () => {
       failure,
       reason,
       data,
+      warmResponse,
       toolCalls,
       registry,
       key: getRateLimitKey(raw),
@@ -420,6 +442,10 @@ describe('callback failures selected before real tool-span completion', () => {
       expect(f.error).toBeUndefined();
       expect(f.value).toEqual({
         error: `API error: ${String(f.failure)}: ${JSON.stringify(f.data)}`,
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        cost: 1.25,
+        cached: false,
+        latencyMs: expect.any(Number),
         metadata: {
           errorOrigin: 'tool',
           http: {
@@ -443,6 +469,48 @@ describe('callback failures selected before real tool-span completion', () => {
       expect(f.controller.signal.reason).toBe(f.reason);
     },
   );
+
+  it('keeps completed cached model accounting after an independent callback failure', async () => {
+    const f = await chatFixture('Downstream callback returned 429 rate limit', true, true);
+    expect(f.error).toBeUndefined();
+    expect(f.value).toMatchObject({
+      error: `API error: ${String(f.failure)}: ${JSON.stringify(f.data)}`,
+      tokenUsage: { total: 5, cached: 5 },
+      cached: true,
+      cost: 0,
+      latencyMs: f.warmResponse?.latencyMs,
+      metadata: { errorOrigin: 'tool' },
+    });
+    expect(f.events).toEqual(['tool span ended', 'caller abort', 'operation fulfilled']);
+    expect(f.ends).toHaveLength(1);
+    expect(f.ends[0]).toMatchObject({ signalAborted: false, operationSettled: false });
+    const usage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(usage, f.warmResponse);
+    accumulateResponseTokenUsage(usage, f.value);
+    expect(usage).toMatchObject({ total: 10, cached: 5, numRequests: 2 });
+    expect(usage.incurredTokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+    const tracker = TokenUsageTracker.getInstance();
+    const trackingId = randomUUID();
+    try {
+      tracker.trackResponseUsage(trackingId, f.warmResponse);
+      tracker.trackResponseUsage(trackingId, f.value);
+      expect(tracker.getProviderUsage(trackingId)).toMatchObject({
+        total: 5,
+        prompt: 2,
+        completion: 3,
+        cached: 5,
+        numRequests: 1,
+      });
+    } finally {
+      tracker.resetProviderUsage(trackingId);
+    }
+    expect(f.registry.getMetrics()[f.key]).toMatchObject({
+      rateLimitHits: 0,
+      activeRequests: 0,
+      queueDepth: 0,
+      retriedRequests: 0,
+    });
+  });
 
   it('keeps the ordinary uncancelled Chat callback fallback', async () => {
     const f = await chatFixture('ordinary callback failure', false);

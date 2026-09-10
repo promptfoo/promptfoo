@@ -1049,6 +1049,9 @@ export class HydraProvider implements ApiProvider {
           ? { error: lastTargetResponse.error }
           : {}),
       metadata: {
+        ...(!failClosedError &&
+          lastTargetResponse?.error &&
+          lastTargetResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
         ...strategyMetadata,

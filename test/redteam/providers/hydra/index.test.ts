@@ -1090,6 +1090,147 @@ describe('HydraProvider', () => {
     });
   });
 
+  describe.each([
+    {
+      strategyName: 'Hydra',
+      strategyId: 'hydra',
+      providerId: 'promptfoo:redteam:hydra',
+      taskId: 'hydra-decision',
+      metadataPrefix: 'hydra',
+    },
+    {
+      strategyName: 'Goblin',
+      strategyId: 'goblin',
+      providerId: 'promptfoo:redteam:goblin',
+      taskId: 'goblin-decision',
+      metadataPrefix: 'goblin',
+    },
+  ] as const)('$strategyName selected target error provenance', (providerOptions) => {
+    beforeEach(() => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Say hello',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    });
+
+    it.each(['tool', 'http', 'target-local', undefined] as const)(
+      'projects only the selected tool marker from target origin %s',
+      async (errorOrigin) => {
+        // Preserve the external provider payload, including unknown markers.
+        const originMetadata: Record<string, unknown> = errorOrigin ? { errorOrigin } : {};
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          metadata: {
+            ...originMetadata,
+            http: {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '60' },
+            },
+            rateLimit: { retryAfterMs: 60000 },
+            targetOnly: 'private target metadata',
+          },
+        });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual([
+          { role: 'user', content: 'Say hello' },
+        ]);
+        expect(result.error).toBe('Lookup service returned 429 rate limit');
+        if (errorOrigin === 'tool') {
+          expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+        } else {
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+        }
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+      },
+    );
+
+    it('clears the prior tool marker when a later successful target response is selected', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Lookup service returned 429 rate limit',
+          metadata: { errorOrigin: 'tool' },
+        })
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps %s independent of a prior target marker in the zero-probe builder contract',
+      async (selectedError) => {
+        const agentError = 'Agent decision service unavailable';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        // A target may explicitly report no executed probes. This exercises the
+        // builder's fail-closed selection, not a completed Chat cancellation.
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { numRequests: 0 },
+          metadata: { errorOrigin: 'tool' },
+        });
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
+      },
+    );
+  });
+
   describe('callApi() - conversation history', () => {
     it('should build conversation history correctly', async () => {
       mockAgentProvider.callApi

@@ -795,6 +795,8 @@ export class CrescendoProvider implements ApiProvider {
       ...(lastResponse.error ? { error: lastResponse.error } : {}),
       prompt: finalPrompt,
       metadata: {
+        ...(lastResponse.error &&
+          lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,

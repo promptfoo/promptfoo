@@ -11,6 +11,11 @@ import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrappe
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
@@ -19,6 +24,7 @@ import type { ApiProvider } from '../../src/types/providers';
 const gateway = 'https://thrown-tool-quota.fixture.test';
 const toolName = 'lookup';
 const usage = { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 };
+const completedUsage = { prompt: 2, completion: 3, total: 5, numRequests: 1 };
 const modelPayload = {
   choices: [
     {
@@ -268,6 +274,7 @@ describe('disconnected MCP tool failures and target model quota', () => {
           apiBaseUrl: `${gateway}/v1`,
           apiKey: 'fixture-key',
           maxRetries: 0,
+          cost: 0.25,
           mcp: {
             enabled: true,
             servers: [
@@ -421,10 +428,41 @@ describe('disconnected MCP tool failures and target model quota', () => {
     };
   }
 
+  function expectCompletedAccounting(f: Awaited<ReturnType<typeof fixture>>) {
+    expect.soft(f.value).toMatchObject({
+      tokenUsage: completedUsage,
+      cost: 1.25,
+      cached: false,
+      // Fake Date remains fixed through the completed native Response fetch.
+      latencyMs: 0,
+    });
+    expect.soft(f.value?.tokenUsage).toEqual(completedUsage);
+
+    // Exercise the same response-aware accounting consumers as the evaluator,
+    // using the actual returned diagnostic rather than a copied usage object.
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, f.value);
+    const expected = { ...createEmptyTokenUsage(), ...completedUsage };
+    expect.soft(accounting).toEqual(expected);
+
+    const tracker = TokenUsageTracker.getInstance();
+    const trackingId = `${f.key}:completed-tool-accounting:${randomUUID()}`;
+    try {
+      tracker.trackResponseUsage(trackingId, f.value);
+      expect.soft(tracker.getProviderUsage(trackingId)).toEqual(expected);
+    } finally {
+      tracker.resetProviderUsage(trackingId);
+    }
+  }
+
   function expectToolOrigin(f: Awaited<ReturnType<typeof fixture>>) {
     expect.soft(f.error).toBeUndefined();
     expect.soft(f.value).toEqual({
       error: `API error: Error: ${f.disconnected}: ${JSON.stringify(modelPayload)}`,
+      tokenUsage: completedUsage,
+      cost: 1.25,
+      cached: false,
+      latencyMs: 0,
       metadata: {
         errorOrigin: 'tool',
         http: {
@@ -440,6 +478,7 @@ describe('disconnected MCP tool failures and target model quota', () => {
         },
       },
     });
+    expectCompletedAccounting(f);
   }
 
   async function finishQueuedSurvivor(f: Awaited<ReturnType<typeof fixture>>, delay = 0) {
@@ -506,6 +545,7 @@ describe('disconnected MCP tool failures and target model quota', () => {
 
   it('retains the ordinary uncancelled disconnected-tool output and metadata', async () => {
     const f = await fixture({ abortOnCompletion: false });
+    expectCompletedAccounting(f);
     expect(f.error).toBeUndefined();
     expect(f.value?.error).toBeUndefined();
     expect(f.value).toMatchObject({

@@ -588,6 +588,8 @@ async function runRedteamConversation({
       (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
     prompt: targetPrompt || undefined,
     metadata: {
+      ...(lastResponse?.error &&
+        lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' as const }),
       finalIteration,
       highestScore,
       redteamHistory,

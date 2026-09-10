@@ -675,6 +675,9 @@ export async function runMetaAgentRedteam({
         ? { error: lastResponse.error }
         : {}),
     metadata: {
+      ...(!failClosedError &&
+        lastResponse?.error &&
+        lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
       finalIteration,
       vulnerabilityAchieved,
       // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)

@@ -658,6 +658,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     let errorOrigin: 'tool' | undefined;
+    let completedModelAccounting:
+      | Pick<ProviderResponse, 'tokenUsage' | 'cost' | 'cached' | 'latencyMs'>
+      | undefined;
     try {
       const refusal =
         completedRefusal ??
@@ -690,6 +693,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
       const providerMetadata = this.getProviderResponseMetadata(data);
+      completedModelAccounting = {
+        tokenUsage: getTokenUsage(data, cached),
+        cost,
+        cached,
+        latencyMs,
+      };
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
@@ -1004,6 +1013,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        ...(errorOrigin === 'tool' && completedModelAccounting),
         metadata: {
           ...(errorOrigin && { errorOrigin }),
           http: {

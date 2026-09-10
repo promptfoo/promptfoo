@@ -330,6 +330,7 @@ export class CustomProvider implements ApiProvider {
 
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
+    let lastTargetErrorOrigin: 'tool' | undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -444,6 +445,8 @@ export class CustomProvider implements ApiProvider {
         }
         if (lastResponse.error) {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
+          lastTargetErrorOrigin =
+            lastResponse.metadata?.errorOrigin === 'tool' ? 'tool' : undefined;
           logger.info(
             `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
               lastResponse,
@@ -510,6 +513,8 @@ export class CustomProvider implements ApiProvider {
 
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
+            lastTargetErrorOrigin =
+              lastResponse.metadata?.errorOrigin === 'tool' ? 'tool' : undefined;
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -680,6 +685,7 @@ export class CustomProvider implements ApiProvider {
       output: lastResponse.output,
       prompt: finalPrompt,
       metadata: {
+        ...(lastTargetError && lastTargetErrorOrigin === 'tool' && { errorOrigin: 'tool' }),
         redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,

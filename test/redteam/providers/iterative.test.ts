@@ -10,7 +10,7 @@ import {
 } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn());
@@ -148,6 +148,74 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
+    it.each([
+      { label: 'selected tool error', error: 'lookup: downstream 429 rate limit', origin: 'tool' },
+      { label: 'unmarked target error', error: 'target 429 rate limit', origin: undefined },
+      { label: 'non-tool target error', error: 'target 429 rate limit', origin: 'provider' },
+      { label: 'successful marked target', error: undefined, origin: 'tool' },
+    ])('projects only selected tool-error origin for $label', async ({ error, origin }) => {
+      // External provider metadata may contain an unknown origin marker.
+      const originMetadata: Record<string, unknown> = origin ? { errorOrigin: origin } : {};
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'A greeting' },
+            previousBestResponse: { rating: 0, explanation: 'None' },
+          }),
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Hello',
+        ...(error ? { error } : {}),
+        metadata: {
+          ...originMetadata,
+          http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+          rateLimit: { remaining: 0 },
+          targetOnly: 'must stay on the target',
+        },
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+      });
+
+      try {
+        const result: ProviderResponse = await runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          injectVar: 'goal',
+          numIterations: 1,
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(error ? 1 : 2);
+        expect(result.output).toBe('Hello');
+        expect(result.error).toBe(error);
+        expect(result.metadata?.errorOrigin).toBe(error && origin === 'tool' ? 'tool' : undefined);
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toMatchObject({ finalIteration: 1 });
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          numRequests: 1,
+        });
+      } finally {
+        mockGetTargetResponse.mockReset();
+      }
+    });
+
     it('skips trace retrieval when an iterative target response came from cache', async () => {
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
       const test: AtomicTestCase = { metadata: { tracing: { enabled: true } } };

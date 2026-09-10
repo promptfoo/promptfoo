@@ -1280,6 +1280,8 @@ async function runRedteamConversation({
       (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
+      ...(finalTargetResponse.error &&
+        finalTargetResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
       highestScore: maxScore,
       redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],

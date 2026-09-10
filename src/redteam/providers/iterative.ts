@@ -829,6 +829,8 @@ export async function runRedteamConversation({
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     prompt: bestInjectVar,
     metadata: {
+      ...(lastResponse?.error &&
+        lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
       finalIteration,
       highestScore,
       redteamHistory: previousOutputs,
