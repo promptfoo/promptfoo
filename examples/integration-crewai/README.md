@@ -20,12 +20,12 @@ cd integration-crewai
 This example requires the following:
 
 1. **Python 3.10+**
-2. **Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)**
-3. **OpenAI API Key** - You MUST have a valid OpenAI API key to run this example
+2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
+3. **Provider credentials** - The default model requires a valid OpenAI API key
 
 ## Environment Setup
 
-You need to set the OpenAI API key. Choose one of these methods:
+For the default OpenAI model, set the OpenAI API key. Choose one of these methods:
 
 ### Option 1: Environment Variable (Recommended)
 
@@ -64,6 +64,13 @@ npm install -g promptfoo
 - `agent.py`: Contains the CrewAI agent setup and promptfoo provider interface
 - `promptfooconfig.yaml`: Configures prompts, providers, and tests for evaluation
 
+Set `providers[0].config.model` to a CrewAI model ID such as `openai/gpt-4.1`.
+The provider passes it to `LLM(model=...)` through the agent's `llm` field. CrewAI
+uses a slash between provider and model names.
+CrewAI resolves credentials for the selected provider. If you choose another
+provider, install its required CrewAI provider dependencies and set its credentials,
+such as `ANTHROPIC_API_KEY` for Anthropic.
+
 ### Note on Reliability
 
 When using a real LLM, you may notice that the agent's output is not always reliable, especially for more complex queries. For example, the agent may fail to return valid JSON or may not return a response at all. This is a common challenge when working with LLMs.
@@ -86,6 +93,6 @@ promptfoo view
 
 If you see authentication errors:
 
-- Ensure your OpenAI API key is set correctly
+- Ensure the API key for your selected provider is set correctly
 - Verify the key is valid and has sufficient quota
 - Check that the environment variable is accessible to the Python process

@@ -372,7 +372,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-) {
+): Promise<void> {
   const app = createApp();
 
   const httpServer = http.createServer(app);
