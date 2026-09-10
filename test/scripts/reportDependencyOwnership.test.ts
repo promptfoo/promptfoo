@@ -650,6 +650,28 @@ describe('dependency ownership report', () => {
     expect(report.undeclaredUsages).toEqual([]);
   });
 
+  it.each(['js', 'jsx', 'mjs', 'cjs'])('resolves extensionless %s source aliases', (extension) => {
+    write(`internal/shared.${extension}`, 'export {};');
+    write(`internal/nested/index.${extension}`, 'export {};');
+    write('src/index.ts', "import '@internal/shared'; import '@internal/nested';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      aliases: { ...config.aliases, '@internal': 'internal' },
+      layers: [{ name: 'runtime', roots: ['src', 'internal'], allowedDependencies: [] }],
+    });
+    expect(report.undeclaredUsages).toEqual([]);
+  });
+
+  it.each(['ts', 'tsx', 'mts', 'cts'])('ignores JSDoc dependencies in %s source', (extension) => {
+    write(
+      `src/index.${extension}`,
+      "/** @type {import('example-type').Thing} */\n/** @import { Thing } from 'example-import' */\nexport type Actual = import('actual-type').Thing;",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'actual-type' }),
+    ]);
+  });
+
   it('distinguishes bare packages from node-only builtins in workspaces', () => {
     write(
       'packages/contracts/src/index.ts',
