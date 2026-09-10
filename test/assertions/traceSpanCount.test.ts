@@ -409,23 +409,21 @@ describe('handleTraceSpanCount', () => {
     );
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-    1.5,
-  ])('should reject invalid count bounds (%s)', (min) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-span-count', value: { pattern: '*', min } },
-      renderedValue: { pattern: '*', min },
-      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
+    'should reject invalid count bounds (%s)',
+    (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-span-count', value: { pattern: '*', min } },
+        renderedValue: { pattern: '*', min },
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+      };
 
-    expect(() => handleTraceSpanCount(params)).toThrow(
-      'trace-span-count assertion min must be a finite non-negative integer',
-    );
-  });
+      expect(() => handleTraceSpanCount(params)).toThrow(
+        'trace-span-count assertion min must be a finite non-negative integer',
+      );
+    },
+  );
 
   it('should reject max bounds below min bounds', () => {
     const params: AssertionParams = {

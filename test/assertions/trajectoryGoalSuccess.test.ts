@@ -404,23 +404,23 @@ describe('handleTrajectoryGoalSuccess', () => {
     );
   });
 
-  it.each([
-    Number.POSITIVE_INFINITY,
-    '1000',
-  ])('throws when timeoutMs is not a finite number (%s)', async (timeoutMs) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: {
-        type: 'trajectory:goal-success',
-        value: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
-      },
-      renderedValue: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
-    };
+  it.each([Number.POSITIVE_INFINITY, '1000'])(
+    'throws when timeoutMs is not a finite number (%s)',
+    async (timeoutMs) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          type: 'trajectory:goal-success',
+          value: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+        },
+        renderedValue: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+      };
 
-    await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
-      'trajectory:goal-success timeoutMs must be a finite positive number',
-    );
-  });
+      await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
+        'trajectory:goal-success timeoutMs must be a finite positive number',
+      );
+    },
+  );
 
   it('throws when the assertion value does not include a goal', async () => {
     const params: AssertionParams = {

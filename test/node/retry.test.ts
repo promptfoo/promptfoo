@@ -264,6 +264,208 @@ describe('retryCommand', () => {
       'Skipping result with invalid promptIdx: 99',
       expect.objectContaining({ resultId: 'invalid-prompt-result' }),
     );
+    expect(prompts[0].metrics).not.toHaveProperty('incurredCost');
+  });
+
+  it.each([
+    {
+      label: 'cached result without actual cost',
+      costs: [{ logical: 0.5, incurred: 0, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result without incurred cost',
+      costs: [{ logical: 0.5, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'fresh legacy result before a cached result',
+      costs: [
+        { logical: 0.25, cached: false },
+        { logical: 0.5, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'fresh legacy result after a cached result',
+      costs: [
+        { logical: 0.5, incurred: 0, cached: true },
+        { logical: 0.25, cached: false },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'legacy cached result before a newer cached result',
+      costs: [
+        { logical: 0.5, cached: true },
+        { logical: 0.25, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result after a newer cached result',
+      costs: [
+        { logical: 0.25, incurred: 0, cached: true },
+        { logical: 0.5, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'partially incurred composite result',
+      costs: [{ logical: 0.5, incurred: 0.25, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0.25,
+    },
+  ])(
+    'preserves logical and incurred cost when retrying a $label',
+    async ({ costs, expectedLogicalCost, expectedIncurredCost }) => {
+      const prompts = [{}] as any[];
+      const evalRecord = createEval({
+        persisted: true,
+        prompts,
+        fetchResultsBatched: vi.fn(async function* () {
+          yield costs.map(({ logical, incurred, cached }, index) => ({
+            id: `retried-result-${index}`,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            cost: logical,
+            namedScores: {},
+            response: {
+              cached,
+              ...(incurred !== undefined && { incurredCost: incurred }),
+            },
+          })) as any[];
+        }),
+      });
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(prompts[0].metrics).toMatchObject({
+        cost: expectedLogicalCost,
+        incurredCost: expectedIncurredCost,
+      });
+      expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
+    },
+  );
+
+  it.each([
+    {
+      label: 'cached target and fresh grader',
+      response: {
+        cached: true,
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        cached: 100,
+        numRequests: 1,
+        assertions: { total: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 37, numRequests: 1 },
+        },
+      },
+    },
+    {
+      label: 'fresh target and cached grader',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 37, prompt: 23, completion: 14, cached: 37, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: { total: 37, cached: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 0, numRequests: 0 },
+        },
+      },
+    },
+    {
+      label: 'mixed cached and fresh graders',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: {
+          total: 60,
+          prompt: 38,
+          completion: 22,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+          incurredTokenUsage: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: {
+          total: 60,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+        },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 23,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+    },
+  ])('preserves logical and incurred accounting when retrying $label', async (scenario) => {
+    const prompts = [{}] as any[];
+    const evalRecord = createEval({
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'retried-result',
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            namedScores: {},
+            response: scenario.response,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'passed',
+              ...scenario.gradingResult,
+            },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    expect(prompts[0].metrics.tokenUsage).toMatchObject(scenario.expected);
   });
 
   it('logs and rethrows metric recalculation and persistence failures', async () => {

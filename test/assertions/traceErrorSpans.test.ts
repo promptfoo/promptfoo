@@ -619,46 +619,43 @@ describe('handleTraceErrorSpans', () => {
     expect(result.reason).toContain('error budget was not satisfied');
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-    1.5,
-  ])('should reject invalid max_count values (%s)', (max_count) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-error-spans', value: { max_count } },
-      renderedValue: { max_count },
-      assertionValueContext: {
-        ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
-      },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
+    'should reject invalid max_count values (%s)',
+    (max_count) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-error-spans', value: { max_count } },
+        renderedValue: { max_count },
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: mockTraceDataWithErrors,
+        },
+      };
 
-    expect(() => handleTraceErrorSpans(params)).toThrow(
-      'trace-error-spans assertion max_count must be a finite non-negative integer',
-    );
-  });
+      expect(() => handleTraceErrorSpans(params)).toThrow(
+        'trace-error-spans assertion max_count must be a finite non-negative integer',
+      );
+    },
+  );
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-  ])('should reject invalid max_percentage values (%s)', (max_percentage) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-error-spans', value: { max_percentage } },
-      renderedValue: { max_percentage },
-      assertionValueContext: {
-        ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
-      },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    'should reject invalid max_percentage values (%s)',
+    (max_percentage) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-error-spans', value: { max_percentage } },
+        renderedValue: { max_percentage },
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: mockTraceDataWithErrors,
+        },
+      };
 
-    expect(() => handleTraceErrorSpans(params)).toThrow(
-      'trace-error-spans assertion max_percentage must be a finite non-negative number',
-    );
-  });
+      expect(() => handleTraceErrorSpans(params)).toThrow(
+        'trace-error-spans assertion max_percentage must be a finite non-negative number',
+      );
+    },
+  );
 
   it('should reject percentages above 100', () => {
     const params: AssertionParams = {
