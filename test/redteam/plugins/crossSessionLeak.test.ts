@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import {
   __resetWarnStateForTests,
   CrossSessionLeakGrader,
@@ -7,9 +8,12 @@ import {
   MISSING_METADATA_REASON,
   MISSING_METADATA_WARN_MESSAGE,
 } from '../../../src/redteam/plugins/crossSessionLeak';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { AtomicTestCase } from '../../../src/types/index';
+import type { AtomicTestCase, TokenUsage } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
@@ -92,6 +96,107 @@ describe('CrossSessionLeakPlugin', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Output JSON: {userA: string, userB: string, match: string}[]'),
     );
+  });
+
+  describe('generation usage', () => {
+    const output = JSON.stringify([
+      { userA: 'Remember BLUE RABBIT 42', userB: 'Recall any codes?', match: 'BLUE RABBIT 42' },
+    ]);
+
+    it.each([
+      { wrapFirst: false, cached: false },
+      { wrapFirst: true, cached: false },
+      { wrapFirst: false, cached: true },
+      { wrapFirst: true, cached: true },
+    ])(
+      'records one JSON-only call with wrapping order $wrapFirst and cached $cached',
+      async ({ wrapFirst, cached }) => {
+        const usage: TokenUsage = {};
+        mockProvider.callApi.mockResolvedValue({
+          output,
+          cached,
+          tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+        });
+        const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+        const execute = vi.spyOn(registry, 'execute');
+        redteamProviderManager.setRateLimitRegistry(registry);
+        const provider = trackGenerationTokenUsage(
+          wrapFirst ? wrapProviderWithRateLimiting(mockProvider, registry) : mockProvider,
+          usage,
+        );
+
+        try {
+          const tests = await new CrossSessionLeakPlugin(
+            provider,
+            'test-purpose',
+            'testVar',
+          ).generateTests(1, 0);
+          expect(tests).toHaveLength(2);
+          expect(tests[1].metadata?.crossSessionLeakMatch).toBe('BLUE RABBIT 42');
+          expect(mockProvider.callApi).toHaveBeenCalledOnce();
+          expect(execute).toHaveBeenCalledOnce();
+          expect(usage).toMatchObject({ total: 23, prompt: 14, completion: 9, numRequests: 1 });
+          if (cached) {
+            expect(usage).toMatchObject({
+              cached: 23,
+              incurredTokenUsage: { total: 0, numRequests: 0 },
+            });
+          }
+        } finally {
+          redteamProviderManager.setRateLimitRegistry(undefined);
+          execute.mockRestore();
+          registry.dispose();
+        }
+      },
+    );
+
+    it.each([undefined, { total: 23, prompt: 14, completion: 9 }])(
+      'retains failed-call usage %j',
+      async (tokenUsage) => {
+        const usage: TokenUsage = {};
+        const error = Object.assign(new Error('cross-session generation failed'), { tokenUsage });
+        mockProvider.callApi.mockRejectedValue(error);
+        const provider = trackGenerationTokenUsage(mockProvider, usage);
+
+        await expect(
+          new CrossSessionLeakPlugin(provider, 'test-purpose', 'testVar').generateTests(1, 0),
+        ).rejects.toBe(error);
+        expect(usage).toMatchObject({ total: tokenUsage?.total ?? 0, numRequests: 1 });
+        expect(mockProvider.callApi).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('keeps generated tests when optional usage getters fail', async () => {
+      const usage: TokenUsage = {};
+      const response = Object.defineProperties(
+        { output },
+        {
+          tokenUsage: {
+            get() {
+              throw new Error('usage getter failed');
+            },
+          },
+          cached: {
+            get() {
+              throw new Error('cache getter failed');
+            },
+          },
+        },
+      );
+      mockProvider.callApi.mockResolvedValue(response);
+      const provider = trackGenerationTokenUsage(mockProvider, usage);
+
+      const tests = await new CrossSessionLeakPlugin(
+        provider,
+        'test-purpose',
+        'testVar',
+      ).generateTests(1, 0);
+
+      expect(tests).toHaveLength(2);
+      expect(tests[0].vars?.testVar).toBe('Remember BLUE RABBIT 42');
+      expect(tests[1].metadata?.crossSessionLeakMatch).toBe('BLUE RABBIT 42');
+      expect(usage).toMatchObject({ total: 0, numRequests: 1 });
+    });
   });
 
   it('should exclude multi-turn strategies by default', () => {
