@@ -1557,7 +1557,7 @@ describe('HydraProvider', () => {
 
       expect(mockTargetProvider.callApi).toHaveBeenCalled();
       expect(result.error).toBeUndefined();
-      expect(result.tokenUsage?.numRequests).toBe(0);
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
   });
 

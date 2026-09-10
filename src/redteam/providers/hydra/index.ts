@@ -1012,6 +1012,7 @@ export class HydraProvider implements ApiProvider {
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
+    totalTokenUsage.numRequests = targetProbeCount;
     const roundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
     const failClosedError =
       targetProbeCount === 0

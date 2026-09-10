@@ -15,6 +15,21 @@ vi.mock('./EvalSelectorDialog', () => ({ default: () => null }));
 vi.mock('./EvalSelectorKeyboardShortcut', () => ({ default: () => null }));
 vi.mock('./store', () => ({ useTableStore: vi.fn() }));
 
+function renderHeader() {
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <EvalHeader
+          recentEvals={[]}
+          onRecentEvalSelected={vi.fn()}
+          activeView="results"
+          onActiveViewChange={vi.fn()}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+}
+
 describe('EvalHeader', () => {
   beforeEach(() => {
     vi.mocked(fetchUserEmail).mockResolvedValue(null);
@@ -32,19 +47,29 @@ describe('EvalHeader', () => {
   });
 
   it('preserves an explicit zero probe count for a fully cached evaluation', () => {
-    render(
-      <TooltipProvider>
-        <MemoryRouter>
-          <EvalHeader
-            recentEvals={[]}
-            onRecentEvalSelected={vi.fn()}
-            activeView="results"
-            onActiveViewChange={vi.fn()}
-          />
-        </MemoryRouter>
-      </TooltipProvider>,
-    );
+    renderHeader();
 
     expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES0');
+  });
+
+  it('adds probe counts from every prompt', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { redteam: {} },
+      totalResultsCount: 12,
+      stats: null,
+      table: {
+        head: {
+          prompts: [
+            { provider: 'first', metrics: { tokenUsage: { numRequests: 2 } } },
+            { provider: 'second', metrics: { tokenUsage: { numRequests: 3 } } },
+          ],
+        },
+      },
+      setAuthor: vi.fn(),
+    } as ReturnType<typeof useTableStore>);
+
+    renderHeader();
+
+    expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES5');
   });
 });
