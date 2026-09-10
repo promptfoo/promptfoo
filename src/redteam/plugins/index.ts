@@ -439,9 +439,14 @@ function createPluginFactory<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
       );
+      const plugin = new PluginClass(provider, purpose, injectVar, configWithDefaults as T);
+      const processedTestCases =
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.postprocessRemoteTests(testCases)
+          : testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
-      return testCases.map((testCase) => ({
+      return processedTestCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
