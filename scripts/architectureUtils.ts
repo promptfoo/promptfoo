@@ -50,7 +50,8 @@ export interface LayerConfig {
 const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
-const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
+const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cjs'];
+const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
   '.mjs': ['.mts'],
@@ -385,7 +386,7 @@ export function resolveInternalModule(
   const candidates = [
     unresolvedPath,
     ...runtimeSourceCandidates,
-    ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...SOURCE_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
   ];
 
@@ -395,7 +396,7 @@ export function resolveInternalModule(
       if (
         sourceRoots.some((root) => isWithinRoot(relativeCandidate, root)) &&
         !relativeCandidate.split('/').includes('node_modules') &&
-        TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
+        SOURCE_EXTENSIONS.includes(path.extname(relativeCandidate))
       ) {
         return relativeCandidate;
       }

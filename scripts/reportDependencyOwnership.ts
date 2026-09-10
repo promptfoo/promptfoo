@@ -470,7 +470,7 @@ export function reportDependencyOwnership(
     )) {
       add(reference, reference.specifier, 'type', reference.dependency);
     }
-    for (const comment of result.comments) {
+    for (const comment of /\.(?:jsx?|mjs|cjs)$/.test(file) ? result.comments : []) {
       if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
         continue;
       }
