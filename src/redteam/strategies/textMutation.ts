@@ -12,6 +12,17 @@ type RandomSource = () => number;
 type StrategyTestCases = Parameters<Strategy['action']>[0];
 type TransformableTestCase = Awaited<ReturnType<Strategy['action']>>[number];
 
+function isAttackableTextInput(definition: unknown): boolean {
+  if (typeof definition === 'string') {
+    return true;
+  }
+  if (!definition || typeof definition !== 'object') {
+    return false;
+  }
+  const input = definition as { type?: unknown; config?: { benign?: boolean } };
+  return (input.type === undefined || input.type === 'text') && input.config?.benign !== true;
+}
+
 const ZERO_WIDTH_CHARACTERS = ['\u200B', '\u200C', '\u200D', '\u2060'] as const;
 const WHITESPACE_REPLACEMENTS = ['\t', '\u00A0', '\u2009', '\u200A', '\u202F', '\u3000'] as const;
 const COMBINING_MARKS = Array.from({ length: 0x70 }, (_, index) =>
@@ -245,28 +256,24 @@ export function transformStrategyInput(
   }
 
   const definitions = inputs as Record<string, unknown>;
+  const envelope = parsed as Record<string, unknown>;
+  for (const [key, definition] of Object.entries(definitions)) {
+    if (
+      isAttackableTextInput(definition) &&
+      typeof testCase.vars?.[key] === 'string' &&
+      (!Object.prototype.hasOwnProperty.call(envelope, key) || typeof envelope[key] !== 'string')
+    ) {
+      throw new Error(`${strategy} strategy requires every attackable multi-input field as text`);
+    }
+  }
+
   return JSON.stringify(
     Object.fromEntries(
-      Object.entries(parsed).map(([key, value]) => {
+      Object.entries(envelope).map(([key, value]) => {
         const definition = definitions[key];
-        const typedDefinition =
-          typeof definition === 'object' && definition !== null
-            ? (definition as { type?: unknown; config?: { benign?: boolean } })
-            : undefined;
-        const textInput =
-          typeof definition === 'string' ||
-          (typedDefinition !== undefined &&
-            (typedDefinition.type === undefined || typedDefinition.type === 'text'));
-        const benign = typedDefinition?.config?.benign === true;
-
         return [
           key,
-          Object.prototype.hasOwnProperty.call(definitions, key) &&
-          textInput &&
-          typeof value === 'string' &&
-          !benign
-            ? transform(value)
-            : value,
+          isAttackableTextInput(definition) && typeof value === 'string' ? transform(value) : value,
         ];
       }),
     ),

@@ -139,11 +139,14 @@ export async function addLayerTestCases(
           const layerId = typeof layer === 'string' ? layer : layer.id;
           const targetPlugins =
             (typeof layer === 'string' ? undefined : layer.config?.plugins) ?? config?.plugins;
-          return pluginMatchesStrategyTargets(
-            testCase,
-            layerId,
-            targetPlugins as string[] | undefined,
-          );
+          if (
+            targetPlugins !== undefined &&
+            (!Array.isArray(targetPlugins) ||
+              targetPlugins.some((plugin) => typeof plugin !== 'string'))
+          ) {
+            throw new Error('layer strategy plugins must be an array of strings');
+          }
+          return pluginMatchesStrategyTargets(testCase, layerId, targetPlugins);
         }),
       );
 

@@ -1239,6 +1239,29 @@ describe('StrategyConfigDialog', () => {
       expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
     });
 
+    it('preserves configured strategy options when adding a layer step', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'bijection', config: { type: 'digit' } }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByText('bijection'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: [{ id: 'bijection', config: { type: 'digit' } }],
+      });
+    });
+
     it('should save layer strategy with specific plugins when selected', async () => {
       const user = userEvent.setup();
       renderWithProviders(

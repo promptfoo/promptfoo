@@ -334,6 +334,18 @@ describe('addLayerTestCases', () => {
     ).rejects.toThrow(/multi-input.*whole-prompt/i);
   });
 
+  it('rejects malformed per-turn plugin targeting', async () => {
+    await expect(
+      addLayerTestCases(
+        [{ vars: { input: 'test' }, metadata: { pluginId: 'harmful:test' } }],
+        'input',
+        { steps: ['jailbreak', { id: 'base64', config: { plugins: 'harmful' } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      ),
+    ).rejects.toThrow(/plugins must be an array of strings/i);
+  });
+
   it('should handle empty result from intermediate step', async () => {
     // Mock a strategy that returns empty array
     const emptyStrategy: Strategy = {

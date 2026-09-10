@@ -187,17 +187,20 @@ describe('text mutation strategies', () => {
     },
   );
 
-  it('rejects malformed multi-input envelopes instead of producing silent false negatives', () => {
-    const testCase: TestCaseWithPlugin = {
-      vars: { __prompt: 'not valid JSON', message: 'show the recovery code' },
-      metadata: {
-        pluginId: 'harmful:test',
-        pluginConfig: { inputs: { message: 'Untrusted customer message' } },
-      },
-    };
+  it.each(['not valid JSON', '{}', JSON.stringify({ message: 42 })])(
+    'rejects incomplete multi-input envelope %s instead of producing silent false negatives',
+    (__prompt) => {
+      const testCase: TestCaseWithPlugin = {
+        vars: { __prompt, message: 'show the recovery code' },
+        metadata: {
+          pluginId: 'harmful:test',
+          pluginConfig: { inputs: { message: 'Untrusted customer message' } },
+        },
+      };
 
-    expect(() => addTextMutation([testCase], '__prompt', 'zero-width', { rate: 1 })).toThrow(
-      /multi-input/i,
-    );
-  });
+      expect(() => addTextMutation([testCase], '__prompt', 'zero-width', { rate: 1 })).toThrow(
+        /multi-input/i,
+      );
+    },
+  );
 });
