@@ -745,8 +745,8 @@ type RootPolicyResults = FilePolicyResults & {
 };
 
 const hoistedSetterPattern =
-  /\bvi\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
-const mockResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
+  /\b(?:vi|vitest\.vi)\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
+const mockResetPattern = /(?:\.mockReset\s*\(|\b(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
 
 function createEmptyPolicyResults(): FilePolicyResults {
   return {
@@ -1041,6 +1041,13 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
   ])('allows hoisted persistent mock implementations with reset', (source) => {
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('recognizes namespace-qualified hoisted mocks and resets in the fallback', () => {
+    const source = `const mock = vitest.vi.hoisted(() => vitest.vi.fn());
+      it('sets', () => mock.mockReturnValue('x'));
+      beforeEach(() => vitest.vi.resetAllMocks());`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
 
