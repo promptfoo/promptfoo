@@ -41,6 +41,7 @@ import {
   type SemanticFrontierDiagnostic,
   summarizeSemanticFrontierDiagnosticsFromTests,
 } from './generation/frontierDiagnostics';
+import { accumulateGenerationResponseTokenUsage } from './generation/tokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -54,7 +55,6 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { accumulateGenerationResponseTokenUsage } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,

@@ -56,14 +56,11 @@ import {
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { summarizeSemanticFrontierDiagnosticsFromTests } from '../generation/frontierDiagnostics';
+import { accumulateGenerationTokenUsage } from '../generation/tokenUsage';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import {
-  accumulateGenerationTokenUsage,
-  PartialGenerationError,
-  ProbeLimitExceededError,
-} from '../types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';

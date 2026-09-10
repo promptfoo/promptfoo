@@ -528,6 +528,7 @@ export abstract class RedteamGraderBase {
       Boolean(gradingContext?.redteamHistory?.length) ||
       Boolean(gradingContext?.conversationHistory?.length) ||
       Boolean(gradingContext?.conversationTranscript?.trim()) ||
+      Boolean(gradingContext?.providerResponse?.raw) ||
       gradingContext?.wasExfiltrated !== undefined ||
       gradingContext?.exfilCount !== undefined ||
       Boolean(gradingContext?.exfilRecords?.length);

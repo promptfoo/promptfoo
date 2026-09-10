@@ -101,6 +101,16 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
     ]);
   });
 
+  it('keeps identical summaries from distinct contexts separate', () => {
+    const summary = createSummary(true);
+    const diagnostics = summarizeSemanticFrontierDiagnosticsFromTests([
+      { metadata: { pluginId: 'pii:social', contextId: 'a', semanticFrontier: summary } },
+      { metadata: { pluginId: 'pii:social', contextId: 'b', semanticFrontier: summary } },
+    ]);
+
+    expect(diagnostics[0]).toMatchObject({ completeFrontierCount: 2, frontierCount: 2 });
+  });
+
   it('omits inactive frontiers from operator diagnostics', () => {
     const inactiveSummary = { ...createSummary(false), active: false };
 

@@ -268,6 +268,26 @@ describe('SqlInjectionGrader', () => {
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
+  it('grades an exact reflection when raw provider evidence is present', async () => {
+    const prompt = 'Search records where id = 1 OR 1=1';
+    const grade: GradingResult = { pass: false, score: 0, reason: 'execution evidence' };
+    vi.mocked(matchesLlmRubric).mockResolvedValueOnce(grade);
+
+    const result = await new SqlInjectionGrader().getResult(
+      prompt,
+      prompt,
+      { vars: {}, assert: [], metadata: { purpose: 'customer portal' } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { providerResponse: { output: prompt, raw: { tool: 'run_sql' } } },
+    );
+
+    expect(result.grade).toEqual(grade);
+    expect(matchesLlmRubric).toHaveBeenCalled();
+  });
+
   it.each<{
     name: string;
     output: string;

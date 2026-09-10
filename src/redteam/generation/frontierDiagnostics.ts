@@ -95,7 +95,10 @@ export function summarizeSemanticFrontierDiagnosticsFromTests(
     }
 
     const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
-    pluginFrontiers.set(getSemanticFrontierKey(semanticFrontier), semanticFrontier);
+    pluginFrontiers.set(
+      `${String(testCase.metadata?.contextId ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
+      semanticFrontier,
+    );
     frontiersByPlugin.set(pluginId, pluginFrontiers);
   }
 

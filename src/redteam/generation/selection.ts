@@ -5,7 +5,7 @@ export type SemanticBandSelectionConfig = {
   weights: Record<string, number>;
 };
 
-function normalizePrompt(prompt: string): string {
+export function normalizePrompt(prompt: string): string {
   return prompt.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 

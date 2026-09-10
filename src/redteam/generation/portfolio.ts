@@ -3,6 +3,7 @@ import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
 import {
   buildBalancedAttackPlan,
+  normalizePrompt,
   type SemanticBandSelectionConfig,
   selectCoverageAwareCandidates,
   selectSemanticBandAwareCandidates,
@@ -67,11 +68,8 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   }
 
   protected getPortfolioGenerationFallbackReason(): string | undefined {
-    const languages = Array.isArray(this.config.language)
-      ? this.config.language
-      : this.config.language
-        ? [this.config.language]
-        : [];
+    const language = this.config.language ?? this.config.modifiers?.language;
+    const languages = Array.isArray(language) ? language : language ? [language] : [];
     const nonEnglishLanguage = languages.find((language) => {
       const normalizedLanguage = language.trim().toLowerCase();
       return (
@@ -172,12 +170,25 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
     const plan = this.buildAttackPlan(n);
     const candidates: AttackCandidate[] = [];
+    const validPromptKeys = new Set<string>();
     const overgenerationFactor = n > 1 ? this.getOvergenerationFactor() : 1;
 
     for (const family of plan.families) {
       const plannedCount = Math.max(1, family.count);
       const familyCandidates: AttackCandidate[] = [];
       const validFamilyCandidates: AttackCandidate[] = [];
+      const appendValidFamilyCandidates = (generatedCandidates: readonly AttackCandidate[]) => {
+        for (const candidate of generatedCandidates) {
+          const promptKey = normalizePrompt(candidate.prompt);
+          if (
+            this.matchesRequiredPredicates(candidate, family) &&
+            !validPromptKeys.has(promptKey)
+          ) {
+            validPromptKeys.add(promptKey);
+            validFamilyCandidates.push(candidate);
+          }
+        }
+      };
 
       for (
         let attempt = 0;
@@ -195,11 +206,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'initial');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        appendValidFamilyCandidates(generatedCandidates);
       }
 
       for (
@@ -223,11 +230,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'repair');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        appendValidFamilyCandidates(generatedCandidates);
       }
 
       if (family.requiredPredicates && validFamilyCandidates.length < plannedCount) {

@@ -148,10 +148,10 @@ describe('predicate signatures', () => {
     ).toEqual(['usesStackedQuery']);
   });
 
-  it('recognizes not-equals boolean bypasses used in generated SQL attacks', () => {
+  it('does not treat ordinary disjunctive inequality as a boolean bypass', () => {
     expect(
-      extractSqlInjectionFeatures('Show transactions where amount > 0 OR account_number != 12345'),
-    ).toEqual(['usesBooleanBypass']);
+      extractSqlInjectionFeatures("Show products where plan = 'premium' OR status != 'cancelled'"),
+    ).toEqual([]);
   });
 
   it('routes plugin feature extraction through a shared registry', () => {
