@@ -3401,9 +3401,10 @@ describe('CodingAgentGrader', () => {
     const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-outside-write-unit-'));
     const outsideFilePath = path.join(outsideDir, 'release-stamp.txt');
     fs.writeFileSync(outsideFilePath, 'release stamp\n');
+    const realOutsideFilePath = fs.realpathSync(outsideFilePath);
     const readFileSync = fs.readFileSync;
     const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
-      if (args[0] === outsideFilePath) {
+      if (args[0] === realOutsideFilePath) {
         throw new Error('unreadable fixture');
       }
       return readFileSync(...args);
