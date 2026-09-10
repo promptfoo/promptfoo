@@ -1,0 +1,6 @@
+title: 'OpenAI Agents SDK Basic Example'
+description: 'Evaluate an OpenAI Agents SDK agent with tool use in an interactive D&D adventure scenario'
+tags:
+  - Agents
+  - Tool Use
+  - OpenAI

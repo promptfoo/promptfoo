@@ -1,0 +1,5 @@
+title: 'Databricks Foundation Models'
+description: 'Evaluate Databricks pay-per-token models with text and vision capabilities'
+tags:
+  - Providers
+  - Multimodal

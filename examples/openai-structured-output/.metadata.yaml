@@ -1,0 +1,5 @@
+title: 'OpenAI Structured Output with JSON Schema'
+description: 'Define JSON schemas for structured output using inline and external file approaches'
+tags:
+  - Structured Output
+  - OpenAI

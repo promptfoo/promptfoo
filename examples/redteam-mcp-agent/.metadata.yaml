@@ -1,0 +1,6 @@
+title: 'Red Team a ReAct Agent with MCP Tools'
+description: 'Security test a custom OpenAI ReAct agent that connects to MCP servers, including a deliberately malicious server for testing'
+tags:
+  - Red Teaming
+  - Agents
+  - MCP

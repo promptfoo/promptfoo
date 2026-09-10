@@ -1,0 +1,5 @@
+title: 'OpenAI Function Calling'
+description: 'Test OpenAI function calls with inline and external function definitions'
+tags:
+  - Tool Use
+  - OpenAI

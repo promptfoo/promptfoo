@@ -1,0 +1,4 @@
+title: 'Factuality and Closed QA Evaluation'
+description: 'Evaluate LLM responses for factual accuracy using factuality and closed QA assertion types'
+tags:
+  - Evaluation

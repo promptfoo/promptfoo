@@ -1,0 +1,6 @@
+title: 'Anthropic Provider'
+description: 'Anthropic Claude examples including structured JSON outputs, strict tool use, and web search/fetch tools.'
+tags:
+  - Providers
+  - Tool Use
+  - Structured Output

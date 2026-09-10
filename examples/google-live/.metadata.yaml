@@ -1,0 +1,7 @@
+title: 'Google Live API with Gemini'
+description: 'Low-latency bidirectional interactions with Gemini via WebSocket, including multi-turn conversations and function calling'
+tags:
+  - Providers
+  - Tool Use
+  - Multi-turn
+  - Python

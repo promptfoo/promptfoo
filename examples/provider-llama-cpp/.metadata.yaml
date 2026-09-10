@@ -1,0 +1,4 @@
+title: 'llama.cpp Local Model Server'
+description: 'Evaluate a local llama.cpp model with multiple prompt formats and relevance assertions'
+tags:
+  - Providers
