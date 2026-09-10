@@ -226,9 +226,9 @@ function discoverFiles(
     for (const file of globSync(`${root}dist/**/*.d.{ts,mts,cts}`, {
       cwd: repoRoot,
       nodir: true,
-      ignore: ['**/node_modules/**', '**/dist/test/**', ...configuredIgnores],
+      ignore: ['**/node_modules/**', ...configuredIgnores],
     }).map(normalizePath)) {
-      if (manifestFor(file, manifests) !== manifest || isTestFile(file)) {
+      if (manifestFor(file, manifests) !== manifest || isTestFile(file.slice(root.length))) {
         continue;
       }
       files.add(file);
@@ -415,9 +415,10 @@ export function reportDependencyOwnership(
       node: Pick<Node, 'start'>,
       specifier: string,
       kind: Reference['kind'],
-      dependency = getPackageName(specifier),
+      dependency?: string,
     ) => {
       const fileSpecifier = specifier.split(/[?#]/, 1)[0];
+      dependency ??= getPackageName(fileSpecifier);
       const declaredDependency =
         dependency !== undefined &&
         sections.some((section) =>
@@ -489,7 +490,7 @@ export function reportDependencyOwnership(
         (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
       );
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\s+[\s\S]*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\b(?:(?![\r\n\u2028\u2029][ \t]*@)[\s\S])*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
       )) {
         const start = tag.index + tag[0].indexOf('@');
         const parsed = parseSync('jsdoc.ts', body.slice(start + 1, tag.index + tag[0].length));
@@ -536,6 +537,13 @@ export function reportDependencyOwnership(
         }
       }
     }
+    const externalModule =
+      result.module.hasModuleSyntax ||
+      result.program.body.some(
+        (node) =>
+          node.type === 'TSImportEqualsDeclaration' &&
+          node.moduleReference.type === 'TSExternalModuleReference',
+      );
     new Visitor({
       ImportDeclaration(node) {
         add(
@@ -569,6 +577,11 @@ export function reportDependencyOwnership(
       },
       TSImportType(node) {
         add(node, node.source.value, 'type');
+      },
+      TSModuleDeclaration(node) {
+        if (externalModule && node.id.type === 'Literal') {
+          add(node, node.id.value, 'type');
+        }
       },
       TSImportEqualsDeclaration(node) {
         if (node.moduleReference.type === 'TSExternalModuleReference') {
