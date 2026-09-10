@@ -420,6 +420,7 @@ describe('dependency ownership report', () => {
       'src/index.ts',
       "import type { A } from 'types'; import 'runtime'; import 'optional'; import 'peer'; import 'missing';",
     );
+    write('src/other.ts', "import 'runtime';");
     json('architecture/dependency-ownership.json', {
       manifestOwners: { 'package.json': 'root' },
       annotations: [
@@ -433,7 +434,10 @@ describe('dependency ownership report', () => {
       ],
     });
     const report = reportDependencyOwnership(root, config);
-    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual(['missing']);
+    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual([
+      'missing',
+      'runtime',
+    ]);
     expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['missing']);
   });
 
@@ -460,6 +464,21 @@ describe('dependency ownership report', () => {
         manifest: 'src/app/package.json',
       }),
     ]);
+  });
+
+  it('keeps declared packages visible when their scope overlaps a source alias', () => {
+    json('src/app/package.json', {
+      name: 'app',
+      private: true,
+      dependencies: { '@promptfoo/sdk': '1' },
+    });
+    write('src/app/src/index.ts', "import '@promptfoo/sdk';");
+
+    expect(
+      reportDependencyOwnership(root, config).declarations.find(
+        (entry) => entry.dependency === '@promptfoo/sdk',
+      )?.references,
+    ).toEqual([expect.objectContaining({ file: 'src/app/src/index.ts' })]);
   });
 
   it('allows package self references without a circular manifest dependency', () => {

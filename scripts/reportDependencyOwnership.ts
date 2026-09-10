@@ -358,6 +358,9 @@ export function reportDependencyOwnership(
     const layer = getLayerForFile(file, sourceConfig);
     const aliases = [...Object.keys(config.aliases ?? {}), ...(ledger.aliases[manifest] ?? [])];
     const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
+    const declaredDependencies = new Set(
+      sections.flatMap((section) => Object.keys(packages.get(manifest)?.[section] ?? {})),
+    );
     const add = (
       node: Pick<Node, 'start'>,
       specifier: string,
@@ -370,7 +373,8 @@ export function reportDependencyOwnership(
         !dependency ||
         dependency === packages.get(manifest)?.name ||
         (aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) &&
-          !packageNames.includes(dependency)) ||
+          !packageNames.includes(dependency) &&
+          !declaredDependencies.has(dependency)) ||
         specifier === 'src' ||
         specifier.startsWith('src/') ||
         specifier.includes(':')
@@ -541,20 +545,24 @@ export function reportDependencyOwnership(
       const pkg = packages.get(manifest)!;
       if (
         manifest !== 'package.json' ||
-        validAnnotations.some(
-          (entry) =>
-            entry.manifest === manifest &&
-            entry.dependency === dependency &&
-            entry.disposition === 'build',
-        ) ||
         ['dependencies', 'optionalDependencies', 'peerDependencies'].some((section) =>
           Object.hasOwn(pkg[section as Section] ?? {}, dependency),
         )
       ) {
         return [];
       }
+      const buildEvidence = new Set(
+        validAnnotations
+          .filter(
+            (entry) =>
+              entry.manifest === manifest &&
+              entry.dependency === dependency &&
+              entry.disposition === 'build',
+          )
+          .flatMap((entry) => entry.evidence),
+      );
       const runtimeReferences = references.filter(
-        (ref) => ref.scope === 'source' && ref.kind !== 'type',
+        (ref) => ref.scope === 'source' && ref.kind !== 'type' && !buildEvidence.has(ref.file),
       );
       return runtimeReferences.length > 0 ? [{ dependency, references: runtimeReferences }] : [];
     })
@@ -588,6 +596,7 @@ export function reportDependencyOwnership(
     });
   return {
     schemaVersion: 1,
+    manifestOwners: ledger.manifestOwners,
     rows,
     declarations,
     undeclaredUsages,
@@ -620,7 +629,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const manifest of report.coverage.manifests) {
       const entries = report.declarations.filter((entry) => entry.manifest === manifest);
       console.log(
-        `- ${manifest}: ${entries[0]?.owner ?? 'unassigned'} (${entries.length} declarations)`,
+        `- ${manifest}: ${report.manifestOwners[manifest] ?? 'unassigned'} (${entries.length} declarations)`,
       );
     }
     console.log('\nRoot source imports outside runtime dependencies:');
