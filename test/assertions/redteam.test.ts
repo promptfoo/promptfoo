@@ -19,8 +19,13 @@ describe('handleRedteam', () => {
     { tracing: { includeInGrading: false }, metadata: {}, include: false },
     { tracing: {}, metadata: { tracing: { includeInGrading: false } }, include: false },
     {
-      tracing: { strategies: { goat: { includeInGrading: false } } },
+      tracing: { strategies: { goat: { includeInGrading: false }, iterative: {} } },
       metadata: { strategyId: 'goat' },
+      include: false,
+    },
+    {
+      tracing: { strategies: { goat: {}, iterative: { includeInGrading: false } } },
+      metadata: { strategyId: 'jailbreak' },
       include: false,
     },
     {

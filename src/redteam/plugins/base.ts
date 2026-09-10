@@ -410,7 +410,7 @@ function redactTraceEvidence(text: string): string {
     )
     .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
-      /(^|\s)((?:--?(?:api[-_]?key|password|token|secret)|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
+      /(^|\s)((?:--?(?:api[-_]?key|password|proxy-user|secret|token|user)|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
     )
     .replace(
@@ -512,8 +512,10 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
           24,
         )
       : actions;
+  const insights = gradingContext?.traceContext?.insights ?? [];
   return [
     truncateTraceEvidence(redactTraceEvidence(traceSummary), 4_000),
+    ...insights.map((insight) => truncateTraceEvidence(redactTraceEvidence(insight), 600)),
     ...selected,
     ...(actions.length > selected.length
       ? [`[${actions.length - selected.length} tool actions omitted]`]

@@ -2,6 +2,7 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
+import { getAttackProviderFullId } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
@@ -61,7 +62,13 @@ function createInitialGradingContext({
 
   if (
     assertionValueContext.trace &&
-    resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? '', test }).includeInGrading
+    resolveTracingOptions({
+      strategyId: getAttackProviderFullId(test.metadata?.strategyId ?? '').replace(
+        'promptfoo:redteam:',
+        '',
+      ),
+      test,
+    }).includeInGrading
   ) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
