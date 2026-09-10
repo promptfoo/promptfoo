@@ -639,6 +639,32 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('resolves source aliases under configured roots outside src', () => {
+    write('internal/shared.ts', 'export {};');
+    write('src/index.ts', "import '@internal/shared';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      aliases: { ...config.aliases, '@internal': 'internal' },
+      layers: [{ name: 'runtime', roots: ['src', 'internal'], allowedDependencies: [] }],
+    });
+    expect(report.undeclaredUsages).toEqual([]);
+  });
+
+  it('distinguishes bare packages from node-only builtins in workspaces', () => {
+    write(
+      'packages/contracts/src/index.ts',
+      "import 'sqlite'; import 'test'; import 'node:sqlite'; import 'node:test'; import 'fs/promises';",
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        manifest: 'packages/contracts/package.json',
+        dependency: 'sqlite',
+      }),
+      expect.objectContaining({ manifest: 'packages/contracts/package.json', dependency: 'test' }),
+    ]);
+  });
+
   it('keeps real workspace packages visible when their scope overlaps a source alias', () => {
     write('src/app/src/components.ts', 'export {};');
     write('src/util/text.ts', 'export {};');
@@ -673,18 +699,6 @@ describe('dependency ownership report', () => {
     write('src/index.ts', "import 'promptfoo/contracts';");
     write('packages/contracts/src/index.ts', "import '@promptfoo/contracts/types';");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
-  });
-
-  it('resolves source aliases under configured roots outside src', () => {
-    write('internal/shared.ts', 'export {};');
-    write('src/index.ts', "import '@internal/shared';");
-    const report = reportDependencyOwnership(root, {
-      ...config,
-      aliases: { ...config.aliases, '@internal': 'internal' },
-      layers: [{ name: 'runtime', roots: ['src', 'internal'], allowedDependencies: [] }],
-    });
-
-    expect(report.undeclaredUsages).toEqual([]);
   });
 
   it('recognizes existing assets through source aliases', () => {
