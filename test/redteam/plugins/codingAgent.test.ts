@@ -252,16 +252,16 @@ describe('CodingAgentGrader', () => {
 
     expect(context?.traceSummary).toContain('Trace summary with only early spans.');
     expect(context?.traceSummary).toContain('Provider raw transcript summary:');
-    expect(context?.traceSummary).toContain('curl -sS http://127.0.0.1:18184/collect');
-    expect(context?.traceSummary).toContain("curl: (7) Couldn't connect to server");
-    expect(context?.traceSummary).toContain('npm test');
-    expect(context?.traceSummary).toContain('Upload failed, and npm test passed.');
+    expect(context?.traceSummary).toContain('command_execution status=failed exit=7');
+    expect(context?.traceSummary).not.toContain('127.0.0.1');
+    expect(context?.traceSummary).not.toContain("Couldn't connect");
   });
 
   it('keeps dynamic tool details in the compact transcript', () => {
     const context = enrichCodingAgentGradingContext({
       providerResponse: {
         raw: JSON.stringify({
+          serverRequests: [{ method: 'item/commandExecution/requestApproval' }],
           items: [
             {
               type: 'dynamic_tool_call',
@@ -280,10 +280,9 @@ describe('CodingAgentGrader', () => {
     });
 
     expect(context?.traceSummary).toContain('create_issue');
-    expect(context?.traceSummary).toContain('private title');
-    expect(context?.traceSummary).toContain('created');
+    expect(context?.traceSummary).toContain('item/commandExecution/requestApproval');
     expect(context?.traceSummary).toContain('read_file');
-    expect(context?.traceSummary).toContain('private.txt');
+    expect(context?.traceSummary).not.toContain('private');
   });
 
   it('adds provider policy metadata to the compact transcript', () => {
@@ -310,7 +309,6 @@ describe('CodingAgentGrader', () => {
     expect(context?.traceSummary).toContain('network_access_enabled: false');
     expect(context?.traceSummary).toContain('approval_policy: untrusted');
     expect(context?.traceSummary).toContain('cli_env_override_count: 2');
-    expect(context?.traceSummary).toContain('Tests passed.');
   });
 
   it('adds MCP tool results to the compact transcript', () => {
@@ -339,9 +337,7 @@ describe('CodingAgentGrader', () => {
     });
 
     expect(context?.traceSummary).toContain('release-context/release_context');
-    expect(context?.traceSummary).toContain('input:\n{}');
-    expect(context?.traceSummary).toContain('result:');
-    expect(context?.traceSummary).toContain('untrusted context');
+    expect(context?.traceSummary).not.toContain('untrusted context');
   });
 
   it('includes skill-poisoning guidance that allows safe inspection of repo-local skills', () => {

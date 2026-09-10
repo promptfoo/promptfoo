@@ -266,15 +266,7 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
   }
 
   if (type === 'command_execution') {
-    const command = getString(object.command);
-    const output = getString(object.aggregated_output);
-    return [
-      header.join(' '),
-      command ? `$ ${truncateForJudge(command, 500)}` : undefined,
-      output ? `output:\n${truncateForJudge(output)}` : 'output: <empty>',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return header.join(' ');
   }
 
   if (type === 'file_change') {
@@ -295,27 +287,25 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
   if (type === 'mcp_tool_call' || type === 'dynamic_tool_call' || type === 'function_call') {
     const server = getString(object.server);
     const tool = getString(object.tool) ?? getString(object.name);
-    const input = object.arguments ?? object.args ?? object.input;
-    const result = object.result ?? object.output ?? object.response ?? object.content_items;
-    const error = object.error;
-
-    return [
-      header.join(' '),
-      [server, tool].filter(Boolean).join('/') || undefined,
-      input === undefined ? undefined : `input:\n${truncateForJudge(safeStringify(input))}`,
-      result === undefined ? undefined : `result:\n${truncateForJudge(safeStringify(result))}`,
-      error === undefined ? undefined : `error:\n${truncateForJudge(safeStringify(error))}`,
-    ]
+    return [header.join(' '), [server, tool].filter(Boolean).join('/') || undefined]
       .filter(Boolean)
       .join('\n');
   }
 
-  const text = getString(object.text);
-  if (text) {
-    return [header.join(' '), truncateForJudge(text)].join('\n');
-  }
-
   return header.join(' ');
+}
+
+function summarizeServerRequestsForJudge(rawObject: Record<string, unknown> | undefined) {
+  const requests = Array.isArray(rawObject?.serverRequests) ? rawObject.serverRequests : [];
+  const summaries = requests
+    .slice(0, 20)
+    .map((request, index) => {
+      const object = getObject(request);
+      const method = getString(object?.method) ?? getString(object?.type);
+      return method ? `${index + 1}. ${method}` : undefined;
+    })
+    .filter(Boolean);
+  return summaries.length ? ['Provider approval requests:', ...summaries].join('\n') : undefined;
 }
 
 function summarizeProviderPolicyForJudge(
@@ -352,14 +342,9 @@ function summarizeProviderTranscriptForJudge(
       ? rawObject.output
       : undefined;
   const policySummary = summarizeProviderPolicyForJudge(providerResponse, rawObject);
-  const finalResponse =
-    getString(rawObject?.finalResponse) ??
-    getString(providerResponse?.output) ??
-    (providerResponse?.raw && typeof providerResponse.raw !== 'string'
-      ? getString((getObject(providerResponse.raw) ?? {}).output)
-      : undefined);
+  const serverRequestSummary = summarizeServerRequestsForJudge(rawObject);
 
-  if (!items?.length && !finalResponse && !policySummary) {
+  if (!items?.length && !policySummary && !serverRequestSummary) {
     return undefined;
   }
 
@@ -371,8 +356,8 @@ function summarizeProviderTranscriptForJudge(
   const transcript = [
     'Provider raw transcript summary:',
     policySummary,
+    serverRequestSummary,
     itemSummary,
-    finalResponse ? `Final response:\n${truncateForJudge(finalResponse)}` : undefined,
   ]
     .filter(Boolean)
     .join('\n\n');

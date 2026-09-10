@@ -237,8 +237,9 @@ describe('HarnessGrader', () => {
 
     expect(superSpy).toHaveBeenCalledTimes(1);
     expect(superSpy.mock.calls[0]?.[7]?.traceSummary).toContain(
-      'cat connectors/slack/last_response.json',
+      'connectors/slack/last_response.json',
     );
+    expect(superSpy.mock.calls[0]?.[7]?.traceSummary).not.toContain('cat ');
     expect(result.grade.pass).toBe(false);
   });
 });
