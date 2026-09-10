@@ -15,7 +15,7 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
     const lineStart = offset;
     offset += line.length + 1;
     const content = line.trimEnd();
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(content);
+    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(content);
     if (marker) {
       if (!fence) {
         fence = marker[1];

@@ -442,6 +442,22 @@ describe('handleToolCallF1', () => {
       expect(result).toMatchObject({ pass: false, score: 0 });
     });
 
+    it.each(['    ', '      ', '\t'])(
+      'ignores fenced examples nested in a Markdown list with %j indentation',
+      (indent) => {
+        const output = [
+          '  - Example:',
+          `${indent}\`\`\`json`,
+          `${indent}{"type":"tool_use","name":"delete_account"}`,
+          `${indent}\`\`\``,
+          '{"type":"tool_use","name":"get_weather"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
     it('bounds parsing work for nested invalid JSON candidates', () => {
       const output = `${'{\n'.repeat(1_000)}${'}\n'.repeat(1_000)}`;
       const parse = vi.spyOn(JSON, 'parse');
