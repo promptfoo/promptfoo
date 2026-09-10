@@ -41,7 +41,7 @@ tests:
         value: 'Paris'
 ```
 
-By default, the Atlas Cloud provider sends chat requests to `https://api.atlascloud.ai/v1/chat/completions`. Atlas Cloud's image and video APIs use separate endpoints and asynchronous prediction handling; the `atlascloud:` provider implements the chat API.
+The default `apiBaseUrl` is `https://api.atlascloud.ai/v1`; promptfoo appends `/chat/completions` when sending chat requests. Atlas Cloud's image and video APIs use separate endpoints and asynchronous prediction handling; the `atlascloud:` provider implements the chat API.
 
 ## Configuration Options
 
@@ -86,7 +86,7 @@ providers:
   - atlascloud:deepseek-v3
 ```
 
-The provider forwards your configured model ID unchanged. Keep existing gateway IDs when they are available for your account; this example is not a migration rule for other aliases.
+The provider forwards your configured model ID unchanged. You can use any chat ID available to your Atlas Cloud account.
 
 ## Example
 

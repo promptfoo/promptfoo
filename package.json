@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.2",
+  "version": "0.123.0",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -213,7 +213,7 @@
       ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.110.1",
+    "webpack": "5.110.3",
     "dompurify": "3.4.14",
     "monaco-editor": {
       ".": "0.56.0",
@@ -349,7 +349,7 @@
     "chokidar": "5.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "csv-parse": "^7.0.0",
