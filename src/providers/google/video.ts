@@ -285,7 +285,7 @@ export function validateResolution(
 function calculateVeoCost(
   model: string,
   resolution: GoogleVideoResolution,
-  durationSeconds: GoogleVideoDuration,
+  generatedDurationSeconds: number,
 ): number | undefined {
   if (!model.includes('veo-3.1')) {
     return undefined;
@@ -294,7 +294,7 @@ function calculateVeoCost(
   const modelTier = model.includes('lite') ? 'lite' : model.includes('fast') ? 'fast' : 'standard';
   const pricePerSecond = VEO_3_1_VIDEO_WITH_AUDIO_PRICES[modelTier][resolution];
 
-  return pricePerSecond === undefined ? undefined : pricePerSecond * durationSeconds;
+  return pricePerSecond === undefined ? undefined : pricePerSecond * generatedDurationSeconds;
 }
 
 interface GoogleVideoProviderOptions {
@@ -1303,11 +1303,12 @@ export class GoogleVideoProvider implements ApiProvider {
       .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     const output = `[Video: ${ellipsizedPrompt}](${blobRef.uri})`;
+    const generatedDurationSeconds = isVideoExtension ? 7 : durationSeconds;
 
     return {
       output,
       cached: false,
-      cost: calculateVeoCost(model, resolution, durationSeconds),
+      cost: calculateVeoCost(model, resolution, generatedDurationSeconds),
       latencyMs,
       video: {
         id: operationName,
@@ -1326,7 +1327,9 @@ export class GoogleVideoProvider implements ApiProvider {
         model,
         aspectRatio,
         resolution,
-        ...(isVideoExtension ? { extensionSeconds: 7 } : { durationSeconds }),
+        ...(isVideoExtension
+          ? { extensionSeconds: generatedDurationSeconds }
+          : { durationSeconds }),
         blobHash: blobRef.hash,
         ...(sourceVideoUri ? { sourceVideoUri } : {}),
       },

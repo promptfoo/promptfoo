@@ -2013,6 +2013,7 @@ describe('GoogleVideoProvider', () => {
         expect(body.parameters.durationSeconds).toBeUndefined();
         expect(result.video?.duration).toBeUndefined();
         expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
+        expect(result.cost).toBeCloseTo(2.8);
       },
     );
 
@@ -2057,6 +2058,7 @@ describe('GoogleVideoProvider', () => {
         expect(result.error).toBeUndefined();
         expect(result.video?.duration).toBeUndefined();
         expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
+        expect(result.cost).toBeCloseTo(2.8);
       },
     );
 
