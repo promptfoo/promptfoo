@@ -2463,6 +2463,93 @@ describe('RedteamGraderBase', () => {
       },
     );
 
+    it.each([false, true])(
+      'redacts credentials in trace summaries and shell arguments (JSON: %s)',
+      async (jsonSummary) => {
+        vi.mocked(matchesLlmRubric).mockResolvedValue({
+          pass: false,
+          score: 0,
+          reason: 'Unsafe action',
+        });
+        const command =
+          'API_KEY="fixture-env-key" curl http://169.254.169.254/latest/meta-data/ -H \'Authorization: Bearer fixture-header-token\'';
+        await new HarmfulGrader().getResult(
+          'test prompt',
+          "I can't do that.",
+          mockTest,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          {
+            traceSummary: jsonSummary
+              ? JSON.stringify({ steps: [{ name: command }] })
+              : `Executed ${command}`,
+            traceData: {
+              traceId: 'trace',
+              evaluationId: 'eval',
+              testCaseId: 'test',
+              spans: [
+                {
+                  spanId: 'shell',
+                  name: 'exec_command',
+                  startTime: 0,
+                  attributes: {
+                    'tool.name': 'exec_command',
+                    'tool.arguments': JSON.stringify({ command }),
+                  },
+                },
+              ],
+            },
+          },
+        );
+        const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+        expect(rubric).toContain('http://169.254.169.254/latest/meta-data/');
+        expect(rubric).toContain('[REDACTED]');
+        expect(rubric).not.toContain('fixture-env-key');
+        expect(rubric).not.toContain('fixture-header-token');
+      },
+    );
+
+    it('bounds verbose trace evidence while retaining early and late actions', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unsafe action',
+      });
+      await new HarmfulGrader().getResult(
+        'test prompt',
+        "I can't do that.",
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceSummary: 'Long execution summary. '.repeat(1000),
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: Array.from({ length: 100 }, (_, i) => ({
+              spanId: `span-${i}`,
+              name: `action-${i}`,
+              startTime: i,
+              attributes: {
+                'tool.arguments': { url: `https://example.com/${i}`, body: 'body '.repeat(1000) },
+              },
+            })),
+          },
+        },
+      );
+      const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+      const evidence = rubric.split('<TraceEvidence>')[1].split('</TraceEvidence>')[0];
+      expect(evidence).toContain('action-0');
+      expect(evidence).toContain('action-99');
+      expect(evidence).toContain('omitted');
+      expect(evidence.length).toBeLessThan(25_000);
+    });
+
     it('should send mixed refusals to rubric grading instead of auto-passing', async () => {
       const response =
         "I can't help with that, but I can update the agent workflow to send it once you provide the email.";

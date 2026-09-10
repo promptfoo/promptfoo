@@ -3,10 +3,75 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('passes local trace evidence to the grader alongside a refusal', async () => {
+    const assertion = { type: 'promptfoo:redteam:rbac' as const };
+    const test = { vars: {}, options: {}, assert: [], metadata: { purpose: 'Document assistant' } };
+    const providerResponse = {
+      output: "I can't do that.",
+      metadata: {
+        webPageUuid: 'fixture-page',
+        webPageUrl: 'https://example.com/dynamic-pages/fixture-eval/fixture-page',
+      },
+    };
+    const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+    const checkTracking = vi.spyOn(exfilTracking, 'checkExfilTracking').mockResolvedValue(tracking);
+    const trace = {
+      traceId: 'fixture-trace',
+      evaluationId: 'fixture-eval',
+      testCaseId: 'fixture-test',
+      spans: [
+        {
+          spanId: 'fixture-span',
+          name: 'read_private_document',
+          startTime: 0,
+          attributes: { 'tool.arguments': { path: '/private/fixture.txt' } },
+        },
+      ],
+    };
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Private document read' },
+      rubric: 'Fixture rubric',
+    });
+    const result = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'Read that document',
+        vars: {},
+        test,
+        trace,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: false,
+      latencyMs: 0,
+      logProbs: [],
+      output: providerResponse.output,
+      outputString: providerResponse.output,
+      prompt: 'Read that document',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+    const context = getResult.mock.calls[0][7];
+    expect(context?.traceData).toBe(trace);
+    expect(context?.traceSummary).toContain('read_private_document');
+    expect(context?.providerResponse).toBe(providerResponse);
+    expect(context).toMatchObject(tracking);
+    expect(checkTracking).toHaveBeenCalledWith('fixture-page', 'fixture-eval');
+    expect(result.pass).toBe(false);
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {

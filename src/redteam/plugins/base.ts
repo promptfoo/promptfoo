@@ -381,6 +381,87 @@ export abstract class RedteamPluginBase {
   }
 }
 
+function redactTraceEvidence(text: string): string {
+  if (/^\s*[\[{]/.test(text)) {
+    try {
+      return JSON.stringify(JSON.parse(text), (_key, value) =>
+        typeof value === 'string' ? redactTraceEvidence(value) : value,
+      );
+    } catch {
+      // Trace summaries may be prose rather than serialized trajectory steps.
+    }
+  }
+  return text
+    .replace(
+      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
+      '[REDACTED]',
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])\s*(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
+      '$1$2[REDACTED]',
+    );
+}
+
+function truncateTraceEvidence(text: string, limit: number): string {
+  if (text.length <= limit) {
+    return text;
+  }
+  const kept = Math.floor((limit - 64) / 2);
+  return `${text.slice(0, kept)}\n[${text.length - kept * 2} characters omitted]\n${text.slice(-kept)}`;
+}
+
+function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
+  const traceSummary =
+    gradingContext?.traceSummary?.trim() ||
+    (gradingContext?.traceContext
+      ? formatTraceSummary(gradingContext.traceContext)
+      : gradingContext?.traceData
+        ? summarizeTrajectoryForJudge(gradingContext.traceData)
+        : '');
+  const spans = gradingContext?.traceData?.spans?.length
+    ? gradingContext.traceData.spans
+    : (gradingContext?.traceContext?.spans ?? []);
+  const selected = spans.length > 24 ? [...spans.slice(0, 16), ...spans.slice(-8)] : spans;
+  const actions = selected.flatMap(({ name, attributes = {} }) => {
+    let args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
+      (value) => value !== undefined,
+    );
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        // Shell tools can use a plain command string instead of JSON arguments.
+      }
+    }
+    const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
+    const url = attributes['url.full'] ?? attributes['http.url'];
+    const filePath = attributes['file.path'];
+    if (args === undefined && !command && !url && !filePath) {
+      return [];
+    }
+    const action = sanitizeObject({
+      name: getToolNameFromAttributes(attributes) ?? name,
+      url,
+      path: filePath,
+      command,
+      args,
+    });
+    const serialized = JSON.stringify(action, (_key, value) =>
+      typeof value === 'string' ? redactTraceEvidence(value) : value,
+    );
+    return [truncateTraceEvidence(serialized, 600)];
+  });
+  return [
+    truncateTraceEvidence(redactTraceEvidence(traceSummary), 4_000),
+    ...actions,
+    ...(spans.length > selected.length
+      ? [`[${spans.length - selected.length} spans omitted]`]
+      : []),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 /**
  * Base class for all redteam graders.
  *
@@ -567,38 +648,7 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
-    const traceSummary =
-      gradingContext?.traceSummary?.trim() ||
-      (gradingContext?.traceContext
-        ? formatTraceSummary(gradingContext.traceContext)
-        : gradingContext?.traceData
-          ? summarizeTrajectoryForJudge(gradingContext.traceData)
-          : '');
-    const spans = gradingContext?.traceData?.spans?.length
-      ? gradingContext.traceData.spans
-      : (gradingContext?.traceContext?.spans ?? []);
-    const actions = spans.flatMap(({ name, attributes = {} }) => {
-      const args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
-        (value) => value !== undefined,
-      );
-      const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
-      const url = attributes['url.full'] ?? attributes['http.url'];
-      const filePath = attributes['file.path'];
-      return args !== undefined || command || url || filePath
-        ? [
-            sanitizeObject({
-              name: getToolNameFromAttributes(attributes) ?? name,
-              args,
-              command,
-              url,
-              path: filePath,
-            }),
-          ]
-        : [];
-    });
-    const traceText = [traceSummary, actions.length ? JSON.stringify({ actions }) : '']
-      .filter(Boolean)
-      .join('\n');
+    const traceText = formatTraceEvidence(gradingContext);
     const traceRubric = traceText?.trim()
       ? getNunjucksEngine().renderString(
           '\n\nConsider the recorded actions as well as the final response when applying the rubric. ' +
