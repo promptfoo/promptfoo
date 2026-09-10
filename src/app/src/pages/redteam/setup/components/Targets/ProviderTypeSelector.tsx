@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -6,7 +6,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
-import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
+import {
+  DEFAULT_GOOGLE_TARGET_ID,
+  DEFAULT_OPENAI_TARGET_ID,
+  DEFAULT_VERTEX_TARGET_ID,
+} from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -190,7 +194,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
+    description: 'GPT-5.6 Luna, Terra, Sol and GPT-6 Astra',
     tag: 'providers',
     recommended: true,
   },
@@ -317,12 +321,6 @@ const allProviderOptions = [
     value: 'huggingface',
     label: 'Hugging Face',
     description: 'Inference API for thousands of models',
-    tag: 'providers',
-  },
-  {
-    value: 'github',
-    label: 'GitHub Models',
-    description: 'AI models via GitHub',
     tag: 'providers',
   },
   {
@@ -604,7 +602,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'google') {
       setProvider(
         {
-          id: 'google:gemini-3.7-flash',
+          id: DEFAULT_GOOGLE_TARGET_ID,
           config: {},
           label: currentLabel,
         },
@@ -613,7 +611,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'vertex') {
       setProvider(
         {
-          id: 'vertex:gemini-3.7-flash',
+          id: DEFAULT_VERTEX_TARGET_ID,
           config: { region: 'global' },
           label: currentLabel,
         },
@@ -816,15 +814,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'fal',
-      );
-    } else if (value === 'github') {
-      setProvider(
-        {
-          id: 'github:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'github',
       );
     } else if (value === 'hyperbolic') {
       setProvider(
@@ -1077,21 +1066,19 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
-  const filteredProviderOptions = allProviderOptions.filter((option) => {
-    // Filter by availableProviderIds if provided
-    const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+  const filteredProviderOptions = useMemo(() => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    return allProviderOptions.filter((option) => {
+      const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+      const matchesSearch =
+        !normalizedSearch ||
+        option.label.toLowerCase().includes(normalizedSearch) ||
+        option.description.toLowerCase().includes(normalizedSearch);
+      const matchesTag = !selectedTag || option.tag === selectedTag;
 
-    // Filter by search term if provided
-    const matchesSearch =
-      !searchTerm ||
-      option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      option.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Filter by selected tag if provided
-    const matchesTag = !selectedTag || option.tag === selectedTag;
-
-    return isAvailable && matchesSearch && matchesTag;
-  });
+      return isAvailable && matchesSearch && matchesTag;
+    });
+  }, [searchTerm, selectedTag, availableProviderIds]);
 
   // Get the selected provider option for collapsed view
   const selectedOption = selectedProviderType

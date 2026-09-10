@@ -14,13 +14,15 @@ import type {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  ...['claude-fable-5', 'claude-mythos-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1e6, // $10 / MTok
-      output: 50 / 1e6, // $50 / MTok
-    },
-  })),
+  ...['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 10 / 1e6, // $10 / MTok
+        output: 50 / 1e6, // $50 / MTok
+      },
+    }),
+  ),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
@@ -34,14 +36,14 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
-  // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
+  // levels. The launch pricing ($2/$10) became permanent on August 10, 2026;
+  // Anthropic canceled the previously announced September price increase. The full 1M
   // context bills at this flat rate — prompt size never changes the per-token price.
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6, // $3 / MTok
-      output: 15 / 1e6, // $15 / MTok
+      input: 2 / 1e6, // $2 / MTok
+      output: 10 / 1e6, // $10 / MTok
     },
   })),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
@@ -77,34 +79,30 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude 4.6 models
-  ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
+  ...['claude-sonnet-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
+  ...['claude-opus-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...[
-    'claude-opus-4-1',
-    'claude-opus-4-1-20250805',
-    'claude-opus-4-20250514',
-    'claude-opus-4-0',
-    'claude-opus-4-latest',
-  ].map((model) => ({
+  // Both are retired on the Anthropic API. The rates stay because Bedrock still serves
+  // Opus 4.1, and cost attribution on historical evals needs them.
+  ...['claude-opus-4-1-20250805', 'claude-opus-4-20250514'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6, // $15 / MTok
@@ -114,10 +112,8 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
+    // Retired on the Anthropic API; still served by Bedrock in every region.
     'claude-sonnet-4-20250514',
-    'claude-sonnet-4-0',
-    'claude-sonnet-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -125,7 +121,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
@@ -148,40 +144,38 @@ export const ANTHROPIC_MODELS = [
       output: 0.024 / 1000,
     },
   })),
-  ...['claude-3-haiku-20240307', 'claude-3-haiku-latest'].map((model) => ({
+  ...['claude-3-haiku-20240307'].map((model) => ({
     id: model,
     cost: {
       input: 0.00025 / 1000,
       output: 0.00125 / 1000,
     },
   })),
-  ...['claude-3-opus-20240229', 'claude-3-opus-latest'].map((model) => ({
+  ...['claude-3-opus-20240229'].map((model) => ({
     id: model,
     cost: {
       input: 0.015 / 1000,
       output: 0.075 / 1000,
     },
   })),
-  ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
+  ...['claude-3-5-haiku-20241022'].map((model) => ({
     id: model,
     cost: {
       input: 0.8 / 1e6,
       output: 4 / 1e6,
     },
   })),
-  ...[
-    'claude-3-5-sonnet-20240620',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-sonnet-latest',
-    'claude-3-7-sonnet-20250219',
-    'claude-3-7-sonnet-latest',
-  ].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 15 / 1e6,
-    },
-  })),
+  // Retired on the Anthropic API; still served by Bedrock (3.5 Sonnet in APAC, 3.7 Sonnet in
+  // eu-west-2 and ap-south-1), so the rates stay for cost attribution there.
+  ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219'].map(
+    (model) => ({
+      id: model,
+      cost: {
+        input: 3 / 1e6,
+        output: 15 / 1e6,
+      },
+    }),
+  ),
 ];
 
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
@@ -191,6 +185,7 @@ export const ANTHROPIC_MODELS = [
 // `claude-sonnet-5x` is not Sonnet 5) while still matching dated snapshots like
 // `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
 const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
@@ -218,9 +213,11 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  forcedToolChoiceUnsupported?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5, Sonnet 5), so
+   * requests that never set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -242,6 +239,14 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
+    warningName: 'Claude Fable 5.1 and Claude Mythos 5.1',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+  },
+  {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
@@ -258,10 +263,15 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
   },
+  // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
+  // thinking blocks and bills thinking tokens against `max_tokens` (verified live — an
+  // omitted block returned `['thinking', 'text']` with `thinking_tokens: 59`). Opus 4.7/4.8
+  // are the models where omitting it means no thinking at all.
   {
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -305,6 +315,10 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
 /** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, not `claude-sonnet-50`). */
 export function isClaudeSonnet5Model(modelId: string): boolean {
   return CLAUDE_SONNET_5_PATTERN.test(modelId);
+}
+
+export function isForcedToolChoiceUnsupportedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'forcedToolChoiceUnsupported');
 }
 
 /**
@@ -413,7 +427,7 @@ export function clampMaxTokensForThinkingBudget(
   if (thinking?.type !== 'enabled' || !thinking.budget_tokens) {
     return maxTokens;
   }
-  return maxTokens < thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
+  return maxTokens <= thinking.budget_tokens ? thinking.budget_tokens + 1024 : maxTokens;
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
@@ -639,17 +653,20 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1 and 10% on other models.
+ * Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
   cacheCreation: number,
+  modelId = '',
 ): number {
+  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId) ? 0.025 : 0.1;
   return (
     uncachedInputTokens * baseInputRate +
-    cacheRead * baseInputRate * 0.1 +
+    cacheRead * baseInputRate * cacheReadMultiplier +
     cacheCreation * baseInputRate * 1.25
   );
 }
@@ -663,7 +680,13 @@ export function calculateAnthropicCost(
   cacheCreationTokens?: number,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
-  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  // Bedrock has an independent price table. Keep its existing Sonnet 5 estimate
+  // until the AWS rate is reconciled separately from native Claude pricing.
+  const pricingModels =
+    pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
+      ? [{ id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }]
+      : ANTHROPIC_MODELS;
+  const modelInfo = pricingModels.find((model) => model.id === pricingModelName);
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -703,7 +726,7 @@ export function calculateAnthropicCost(
     const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
     const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
     return withRegionalPremium(
-      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation, pricingModelName) +
         completionTokens * outputCost,
     );
   }
@@ -714,7 +737,7 @@ export function calculateAnthropicCost(
       effectiveConfig,
       promptTokens,
       completionTokens,
-      ANTHROPIC_MODELS,
+      pricingModels,
     ),
   );
 }
