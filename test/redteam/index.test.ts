@@ -1259,11 +1259,7 @@ describe('synthesize', () => {
         (testCase) => testCase.metadata?.strategyId === 'jailbreak:composite',
       );
       expect(strategyTestCase?.vars?.document).toBe(attack);
-      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
-        metadata: [],
-        unsafeRenderVars: [MULTI_INPUT_VAR, 'document', 'question'],
-        vars: [],
-      });
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toBeUndefined();
     });
 
     it('should fall back to base strategy ID for custom variants', async () => {

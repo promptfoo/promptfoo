@@ -710,6 +710,7 @@ function validateRemoteRedteamAssertions(
   testCases: unknown[],
   locallyDefinedAssertionTypes: ReadonlySet<string> = new Set(),
   config: PluginConfig = {},
+  injectVar = 'testVar',
 ): void {
   const unsupportedAssertionTypes = new Set<string>();
   const allowedRedteamAssertionTypes = getAllowedRemoteRedteamAssertionTypes(key);
@@ -727,6 +728,13 @@ function validateRemoteRedteamAssertions(
         'expected a non-empty top-level `assert` array',
       );
     }
+    if (assertions.length > MAX_REMOTE_ASSERTION_SET_ASSERTIONS) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `expected \`assert\` to contain at most ${MAX_REMOTE_ASSERTION_SET_ASSERTIONS} assertions`,
+      );
+    }
 
     collectUnsupportedRemoteRedteamAssertionTypes(
       key,
@@ -737,10 +745,38 @@ function validateRemoteRedteamAssertions(
       config,
     );
     validateIndirectPromptInjectionTestCase(key, testCase, assertions, config);
+    validateRagPoisoningTestCase(key, testCase, assertions, config, injectVar);
   }
 
   if (unsupportedAssertionTypes.size > 0) {
     throw new UnsupportedRemoteRedteamAssertionsError(key, Array.from(unsupportedAssertionTypes));
+  }
+}
+
+function validateRagPoisoningTestCase(
+  key: string,
+  testCase: Record<string, unknown>,
+  assertions: unknown[],
+  config: PluginConfig,
+  injectVar: string,
+): void {
+  if (key !== 'rag-poisoning') {
+    return;
+  }
+  const prompt = (testCase.vars as Record<string, unknown> | undefined)?.[injectVar];
+  for (const assertion of getAssertionsByType(assertions, 'promptfoo:redteam:rag-poisoning')) {
+    const value = assertion.value;
+    if (
+      typeof value === 'string' &&
+      config.intendedResults?.includes(value) &&
+      (typeof prompt !== 'string' || !prompt.includes(value))
+    ) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'promptfoo:redteam:rag-poisoning',
+        'expected `value` to appear in the generated attack prompt',
+      );
+    }
   }
 }
 
@@ -1152,8 +1188,17 @@ function normalizeRemoteTestCases(
   testCases: unknown[],
   injectVar: string,
   config: PluginConfig,
+  requestedCount: number,
 ): TestCase[] {
   validateRemoteTestCaseObjects(key, testCases);
+  const maximumCount = key === 'cross-session-leak' ? requestedCount * 2 : requestedCount;
+  if (testCases.length > maximumCount) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      `expected at most ${maximumCount} generated test cases`,
+    );
+  }
   validateRemoteCrossSessionLeakPairs(key, testCases, injectVar);
   const declaredInputNames = Object.keys(config.inputs ?? {});
   const allowedVariableNames = new Set([
@@ -1276,7 +1321,7 @@ async function fetchRemoteTestCases(
   }
 
   logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-  return normalizeRemoteTestCases(key, ret, injectVar, config);
+  return normalizeRemoteTestCases(key, ret, injectVar, config, n);
 }
 
 function createPluginFactory<T extends PluginConfig>(
@@ -1318,7 +1363,13 @@ function createPluginFactory<T extends PluginConfig>(
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
       );
-      validateRemoteRedteamAssertions(key, testCases, new Set(), configWithDefaults ?? {});
+      validateRemoteRedteamAssertions(
+        key,
+        testCases,
+        new Set(),
+        configWithDefaults ?? {},
+        injectVar,
+      );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({

@@ -126,6 +126,18 @@ describe('remote generated test provenance', () => {
       expect(getRemoteGeneratedTestProvenance(updated)?.vars).toEqual(['prompt', 'wrapped']);
     });
 
+    it('marks nested transform outputs that contain remote content as remote-derived', () => {
+      const updated = propagateRemoteGeneratedVarProvenance(codingAgentMetadata(), ['wrapped'], {
+        varsBeforeTransform: { prompt: 'remote attack payload' },
+        varsAfterTransform: {
+          prompt: 'remote attack payload',
+          wrapped: { hosts: ['remote attack payload'] },
+        },
+      });
+
+      expect(getRemoteGeneratedTestProvenance(updated)?.vars).toEqual(['prompt', 'wrapped']);
+    });
+
     it('stays conservative and marks every changed var when transform vars are unavailable', () => {
       const updated = propagateRemoteGeneratedVarProvenance(codingAgentMetadata(), [
         'secretEnvValue',

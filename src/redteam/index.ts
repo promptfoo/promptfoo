@@ -47,7 +47,9 @@ import {
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
 import {
+  getChangedVarNames,
   getRemoteGeneratedTestProvenance,
+  propagateRemoteGeneratedVarProvenance,
   type RemoteGeneratedTestProvenance,
   setRemoteGeneratedTestProvenance,
 } from './remoteTestProvenance';
@@ -120,6 +122,7 @@ function collectStrategyRemoteProvenance(
 
 function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
   metadata: T,
+  varsBeforeStrategy: TestCase['vars'],
   vars: TestCase['vars'],
   source: StrategyRemoteProvenance,
 ): T {
@@ -127,11 +130,21 @@ function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
   const provenance =
     getRemoteGeneratedTestProvenance(metadata) ??
     (typeof pluginId === 'string' ? source.byPlugin.get(pluginId) : source.fallback);
-  const strategyVarNames = Object.keys(vars ?? {});
-  return setRemoteGeneratedTestProvenance(metadata, {
-    metadata: provenance?.metadata ?? [],
-    unsafeRenderVars: strategyVarNames,
-    vars: provenance?.vars.length ? strategyVarNames : [],
+  if (!provenance) {
+    return metadata;
+  }
+  const propagated = propagateRemoteGeneratedVarProvenance(
+    setRemoteGeneratedTestProvenance(metadata, provenance),
+    getChangedVarNames(varsBeforeStrategy ?? {}, vars ?? {}),
+    {
+      varsAfterTransform: vars ?? {},
+      varsBeforeTransform: varsBeforeStrategy ?? {},
+    },
+  );
+  const updated = getRemoteGeneratedTestProvenance(propagated)!;
+  return setRemoteGeneratedTestProvenance(propagated, {
+    ...updated,
+    unsafeRenderVars: Object.keys(vars ?? {}),
   });
 }
 
@@ -804,7 +817,7 @@ async function applyStrategies(
             }),
             ...getMaterializedMultiInputPromptMetadata(vars),
           };
-          metadata = propagateStrategyRemoteProvenance(metadata, vars, remoteProvenance);
+          metadata = propagateStrategyRemoteProvenance(metadata, t.vars, vars, remoteProvenance);
 
           return {
             ...t,

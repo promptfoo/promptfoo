@@ -102,7 +102,11 @@ function collectRemoteOriginValues(
  * otherwise the coding-agent verifier drops them from its trusted evidence controls and a
  * genuine leak passes unnoticed.
  */
-function isValueDerivedFromRemoteContent(value: unknown, remoteOriginValues: unknown[]): boolean {
+function isValueDerivedFromRemoteContent(
+  value: unknown,
+  remoteOriginValues: unknown[],
+  seen = new Set<unknown>(),
+): boolean {
   for (const remoteValue of remoteOriginValues) {
     if (deepEqual(value, remoteValue)) {
       return true;
@@ -116,7 +120,14 @@ function isValueDerivedFromRemoteContent(value: unknown, remoteOriginValues: unk
       return true;
     }
   }
-  return false;
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  const nestedValues = Array.isArray(value) ? value : Object.values(value);
+  return nestedValues.some((nested) =>
+    isValueDerivedFromRemoteContent(nested, remoteOriginValues, seen),
+  );
 }
 
 export function propagateRemoteGeneratedVarProvenance<T extends Record<string, unknown>>(

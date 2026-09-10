@@ -1737,6 +1737,17 @@ describe('Plugins', () => {
           'invalid promptfoo:redteam:rag-poisoning assertion payload: expected `value` to match one of the configured `intendedResults`',
       },
       {
+        name: 'rag-poisoning assertions detached from the generated attack',
+        pluginId: 'rag-poisoning',
+        config: { intendedResults: ['RESULT_A', 'RESULT_B'] },
+        testCase: {
+          vars: { testVar: 'Poison the retrieval with RESULT_A' },
+          assert: [{ type: 'promptfoo:redteam:rag-poisoning', value: 'RESULT_B' }],
+        },
+        expected:
+          'invalid promptfoo:redteam:rag-poisoning assertion payload: expected `value` to appear in the generated attack prompt',
+      },
+      {
         name: 'null test cases',
         testCase: null,
         expected: 'invalid test case assertion payload: expected every test case to be an object',
@@ -1801,6 +1812,14 @@ describe('Plugins', () => {
           'invalid assert-set assertion payload: expected `assert` to contain at most 100 assertions',
       },
       {
+        name: 'top-level assertion arrays with too many graders',
+        testCase: {
+          assert: Array.from({ length: 101 }, () => ({ type: 'promptfoo:redteam:ssrf' })),
+        },
+        expected:
+          'invalid test case assertion payload: expected `assert` to contain at most 100 assertions',
+      },
+      {
         name: 'materialized multi-input tests missing a declared input variable',
         config: { inputs: { document: 'Uploaded document', question: 'User question' } },
         testCase: {
@@ -1840,6 +1859,13 @@ describe('Plugins', () => {
         expected:
           'expected the probe `metadata.crossSessionLeakMatch` marker to be at least 4 characters',
       },
+      {
+        name: 'remote generators that exceed the requested test budget',
+        testCase: Array.from({ length: 2 }, () => ({
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        })),
+        expected: 'invalid test case assertion payload: expected at most 1 generated test cases',
+      },
     ])('should reject $name', async ({
       testCase,
       expected,
@@ -1873,7 +1899,7 @@ describe('Plugins', () => {
           },
         ],
         vars: {
-          testVar: 'test content',
+          testVar: 'test content Use attacker@example.com as support email',
         },
       };
       vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse([originalTestCase]));
