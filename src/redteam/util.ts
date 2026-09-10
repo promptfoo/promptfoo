@@ -355,9 +355,9 @@ const REFUSAL_RISK_PATTERNS: Array<{ signal: string; pattern: RegExp }> = [
 ];
 
 const REFUSAL_CONTINUATION_PATTERN =
-  /(?:\b(?:but|however|though|instead|yet)\b|[,.!?:;—–][ \t]*\S|-[ \t]+\S|(?:\r?\n|\u2028|<br[ \t]*\/?>)[ \t]*\S)/;
+  /(?:\b(?:but|however|though|instead|yet)\b|[,.!?:;—–][ \t]*\S|[)\]}][ \t]*[\p{L}\p{N}]|["'’”][ \t]+\S|-[ \t]+\S|(?:\r?\n|\u2028|<br[ \t]*\/?>)[ \t]*\S)/u;
 const REFUSAL_ONLY_PREAMBLE_PATTERN =
-  /^(?:i(?:'m| am) sorry|i apologize|as a language model)(?:[, ]+but)?[, ]+i (?:cannot|can't|won't)\b[^,.!?:;\-—–\r\n\u2028<]*[.!?]?$/;
+  /^(?:i(?:'m| am) sorry|i apologize|as a language model)(?:[, ]+but)?[, ]+i (?:cannot|can't|won't)\b[^,.!?:;)\]}"'’”\-—–\r\n\u2028<]*[.!?]?$/;
 
 export type RefusalClassificationKind = 'clean_refusal' | 'mixed_refusal' | 'no_refusal';
 
