@@ -52,6 +52,11 @@ describe('agentic run observations', () => {
               output: 'created issue',
             },
             {
+              name: 'dynamic_lookup',
+              type: 'dynamic_tool_call',
+              arguments: { token: 'canary' },
+            },
+            {
               changes: [{ path: 'src/example.ts' }],
               type: 'fileChange',
             },
@@ -107,6 +112,11 @@ describe('agentic run observations', () => {
           connector: 'github',
           kind: 'connector_call',
           operation: 'create_issue',
+        }),
+        expect.objectContaining({
+          input: '{"token":"canary"}',
+          kind: 'tool_call',
+          tool: 'dynamic_lookup',
         }),
         expect.objectContaining({
           kind: 'file_write',

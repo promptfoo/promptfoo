@@ -316,6 +316,34 @@ describe('OTLPReceiver', () => {
       expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
     });
 
+    it('drops malformed OTLP JSON event collections', async () => {
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '4'.repeat(32),
+                      spanId: '4444444444444444',
+                      name: 'malformed events',
+                      startTimeUnixNano: '1000000000',
+                      events: {},
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([]);
+    });
+
     it('should accept json with a charset content type', async () => {
       const otlpRequest = {
         resourceSpans: [
@@ -795,6 +823,27 @@ describe('OTLPReceiver', () => {
                         { key: 'authorization', value: { stringValue: 'Bearer secret-token' } },
                         { key: 'safe', value: { stringValue: 'visible' } },
                       ],
+                      events: [
+                        {
+                          name: 'Bearer nested-token',
+                          timeUnixNano: '1500000000',
+                          attributes: [
+                            {
+                              key: 'payload',
+                              value: {
+                                kvlistValue: {
+                                  values: [
+                                    {
+                                      key: 'authorization',
+                                      value: { stringValue: 'Bearer nested-token' },
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      ],
                     },
                   ],
                 },
@@ -814,6 +863,7 @@ describe('OTLPReceiver', () => {
               authorization: '[REDACTED]',
               safe: 'visible',
             }),
+            events: [expect.objectContaining({ name: '[REDACTED]' })],
           }),
         ],
         {

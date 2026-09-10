@@ -307,6 +307,9 @@ function observationMentionsTool(observation: AgentObservation, toolName: string
 }
 
 function observationsShareSpan(a: AgentObservation, b: AgentObservation): boolean {
+  if (a.source === 'trace-event' && b.source === 'trace-event') {
+    return false;
+  }
   if (a.spanId || b.spanId) {
     return Boolean(a.spanId && b.spanId && a.spanId === b.spanId);
   }
@@ -347,7 +350,7 @@ function controlRunsBeforeTool(
 }
 
 function toolInvocationKey(observation: AgentObservation, index: number): string {
-  if (observation.spanId) {
+  if (observation.spanId && observation.source !== 'trace-event') {
     return `span:${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? ''}`;
   }
 
@@ -361,9 +364,24 @@ function toolInvocationKey(observation: AgentObservation, index: number): string
 }
 
 function uniqueToolInvocations(observations: AgentObservation[]): AgentObservation[] {
+  const spanInvocations = new Set(
+    observations
+      .filter((observation) => observation.source !== 'trace-event' && observation.spanId)
+      .map(
+        (observation) => `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}`,
+      ),
+  );
   const seen = new Set<string>();
   return observations
     .filter((observation, index) => {
+      if (
+        observation.source === 'trace-event' &&
+        spanInvocations.has(
+          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}`,
+        )
+      ) {
+        return false;
+      }
       const key = toolInvocationKey(observation, index);
       if (seen.has(key)) {
         return false;

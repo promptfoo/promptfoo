@@ -728,7 +728,12 @@ function toolObservationFromProviderRawItem(
   type: string | undefined,
   itemNumber: number,
 ): AgentObservation | undefined {
-  if (type !== 'mcp_tool_call' && type !== 'mcpToolCall' && type !== 'dynamicToolCall') {
+  if (
+    type !== 'mcp_tool_call' &&
+    type !== 'mcpToolCall' &&
+    type !== 'dynamicToolCall' &&
+    type !== 'dynamic_tool_call'
+  ) {
     return undefined;
   }
   const server = getString(item.server);

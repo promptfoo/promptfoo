@@ -126,7 +126,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -142,7 +141,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -158,7 +156,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -174,7 +171,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -190,7 +186,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -206,7 +201,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -222,7 +216,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -238,7 +231,6 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',

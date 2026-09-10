@@ -371,14 +371,27 @@ export class OTLPReceiver {
     // credential into an error message) must be scrubbed too — otherwise the secret leaks
     // through a span field the operator believes `redactAttributes` covers.
     const redactedSourceValues = new Set<string>();
+    const collectRedactedSourceValues = (value: unknown, key?: string): void => {
+      if (key && this.shouldRedactAttribute(key, redactAttributePatterns)) {
+        if (typeof value === 'string') {
+          redactedSourceValues.add(value);
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item) => collectRedactedSourceValues(item));
+      } else if (value && typeof value === 'object') {
+        Object.entries(value).forEach(([nestedKey, nestedValue]) =>
+          collectRedactedSourceValues(nestedValue, nestedKey),
+        );
+      }
+    };
     for (const attributeSet of [
       attributes,
       ...(span.events ?? []).map((event) => event.attributes ?? {}),
     ]) {
       for (const [key, value] of Object.entries(attributeSet)) {
-        if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-          redactedSourceValues.add(value);
-        }
+        collectRedactedSourceValues(value, key);
       }
     }
     // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
@@ -735,7 +748,7 @@ export class OTLPReceiver {
               startTime, // Convert to ms
               endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
               attributes,
-              events: (span.events ?? []).map((event) => ({
+              events: (Array.isArray(span.events) ? span.events : []).map((event) => ({
                 name: event.name,
                 timestamp: event.timeUnixNano ? Number(event.timeUnixNano) / 1_000_000 : startTime,
                 attributes: this.parseAttributes(event.attributes),

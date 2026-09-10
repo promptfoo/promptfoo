@@ -13,13 +13,11 @@ function appendJsonObject(objects: object[], value: string, start: number, end: 
 
 /** Extract strict JSON objects embedded in unstructured text. */
 export function extractJsonObjects(value: string): object[] {
-  if (value.length > MAX_JSON_LENGTH) {
-    return [];
-  }
+  value = value.slice(0, MAX_JSON_LENGTH);
 
   const objects: object[] = [];
-  let start = -1;
-  let depth = 0;
+  const nestedObjects: object[] = [];
+  const starts: number[] = [];
   let escaped = false;
   let inString = false;
 
@@ -33,17 +31,22 @@ export function extractJsonObjects(value: string): object[] {
       } else if (character === '"') {
         inString = false;
       }
-    } else if (character === '"' && depth > 0) {
+    } else if (character === '"' && starts.length > 0) {
       inString = true;
     } else if (character === '{') {
-      if (depth++ === 0) {
-        start = index;
+      starts.push(index);
+    } else if (character === '}' && starts.length > 0) {
+      const start = starts.pop()!;
+      if (starts.length === 0) {
+        appendJsonObject(objects, value, start, index);
+        nestedObjects.length = 0;
+      } else if (starts.length === 1) {
+        appendJsonObject(nestedObjects, value, start, index);
       }
-    } else if (character === '}' && depth > 0 && --depth === 0) {
-      appendJsonObject(objects, value, start, index);
     }
   }
 
+  objects.push(...nestedObjects);
   return objects;
 }
 
@@ -68,7 +71,7 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       } else {
         pending.push(nested);
       }
-    } else if (typeof next === 'string' && next.trim() && next.length <= MAX_JSON_LENGTH) {
+    } else if (typeof next === 'string' && next.trim()) {
       try {
         pending.push(JSON.parse(next));
       } catch {
