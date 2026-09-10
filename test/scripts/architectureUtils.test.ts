@@ -125,6 +125,18 @@ describe('resolveInternalModule', () => {
       );
     });
 
+    it.each([
+      ['.js', '.ts'],
+      ['.mjs', '.mts'],
+      ['.cjs', '.cts'],
+    ])('prefers %s source substitution %s over an existing runtime file', (runtime, source) => {
+      write(`src/shared${runtime}`);
+      write(`src/shared${source}`);
+      expect(resolveInternalModule(repoRoot, `src/index${source}`, `./shared${runtime}`)).toBe(
+        `src/shared${source}`,
+      );
+    });
+
     it('returns undefined for non-existent internal paths', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
     });

@@ -376,8 +376,8 @@ export function resolveInternalModule(
     SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION[runtimeExtension] ?? []
   ).map((extension) => `${unresolvedPath.slice(0, -runtimeExtension.length)}${extension}`);
   const candidates = [
-    unresolvedPath,
     ...runtimeSourceCandidates,
+    unresolvedPath,
     ...SOURCE_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
   ];
