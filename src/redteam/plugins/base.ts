@@ -36,6 +36,16 @@ import type {
 import type { RedteamGradingContext } from '../grading/types';
 
 export type { RedteamGradingContext } from '../grading/types';
+export type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  PluginConfig,
+  ResultSuggestion,
+  TestCase,
+};
 
 /**
  * Abstract base class for creating plugins that generate test cases.

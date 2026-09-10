@@ -4,17 +4,18 @@ import {
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
   HARNESS_PREFLIGHT_PLUGINS,
 } from '../../constants/codingAgents';
-import { RedteamGraderBase, type RedteamGradingContext } from '../base';
+import {
+  type ApiProvider,
+  type AssertionValue,
+  type AtomicTestCase,
+  type GradingResult,
+  RedteamGraderBase,
+  type RedteamGradingContext,
+  type ResultSuggestion,
+} from '../base';
 import { getCodingAgentEvidence } from '../codingAgent/evidence';
 import { enrichCodingAgentGradingContext } from '../codingAgent/graders';
 
-import type {
-  ApiProvider,
-  AssertionValue,
-  AtomicTestCase,
-  GradingResult,
-  ResultSuggestion,
-} from '../../../types/index';
 import type { HarnessPlugin } from '../../constants/codingAgents';
 import type { RedteamAssertionTypes } from '../../types';
 

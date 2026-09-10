@@ -8,9 +8,8 @@ import {
   HARNESS_PREFLIGHT_PLUGINS,
 } from '../../constants/codingAgents';
 import { formatTargetManifest, getManifestStrings } from '../../targetManifest';
-import { RedteamPluginBase } from '../base';
+import { type Assertion, type PluginConfig, RedteamPluginBase, type TestCase } from '../base';
 
-import type { Assertion, PluginConfig, TestCase } from '../../../types/index';
 import type { CodingAgentPlugin, HarnessPlugin } from '../../constants/codingAgents';
 
 export const LOCAL_CODING_AGENT_PLUGIN_IDS = [
