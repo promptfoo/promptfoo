@@ -108,10 +108,22 @@ describe('resolveInternalModule', () => {
       );
     });
 
-    it('maps .jsx specifiers to .tsx source files', () => {
+    it('prefers .tsx over .ts for .jsx specifiers', () => {
+      write('src/foo.ts');
       write('src/foo.tsx');
       expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.jsx')).toBe('src/foo.tsx');
     });
+
+    it.each([false, true])(
+      'resolves .ts for .jsx with runtime file present=%s',
+      (runtimeExists) => {
+        write('src/foo.ts');
+        if (runtimeExists) {
+          write('src/foo.jsx');
+        }
+        expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.jsx')).toBe('src/foo.ts');
+      },
+    );
 
     it('maps .mjs specifiers to .mts source files', () => {
       write('src/foo.mts');

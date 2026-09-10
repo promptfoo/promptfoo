@@ -326,7 +326,9 @@ export function reportDependencyOwnership(
     ...config,
     layers: config.layers.map((layer) => ({
       ...layer,
-      roots: layer.roots.map((root) => normalizePath(root).replace(/\/+$/, '')),
+      roots: layer.roots.map((root) =>
+        path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
+      ),
     })),
   };
   const configuredRoots = sourceConfig.layers.flatMap((layer) => layer.roots);
@@ -334,7 +336,9 @@ export function reportDependencyOwnership(
     repoRoot,
     manifests,
     configuredRoots,
-    (config.ignoredRoots ?? []).map((root) => normalizePath(root).replace(/\/+$/, '')),
+    (config.ignoredRoots ?? []).map((root) =>
+      path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
+    ),
   );
 
   const usages = new Map<string, Reference[]>();

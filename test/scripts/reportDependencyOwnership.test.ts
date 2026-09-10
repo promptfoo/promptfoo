@@ -234,7 +234,12 @@ describe('dependency ownership report', () => {
     }
     const report = reportDependencyOwnership(root, {
       ...config,
-      ignoredRoots: ['src/ignored/', 'src/app/src/excluded', 'tools/ignored', 'dist/src/ignored'],
+      ignoredRoots: [
+        './src/ignored/',
+        'src/app/src/excluded',
+        'tools/../tools/ignored',
+        'dist/src/ignored',
+      ],
       layers: [...config.layers, { name: 'tools', roots: ['tools'], allowedDependencies: [] }],
     });
     expect(report.coverage.sourceFiles).toBe(1);
@@ -390,6 +395,23 @@ describe('dependency ownership report', () => {
     expect(
       report.declarations.find((entry) => entry.dependency === 'shared')?.references[0].line,
     ).toBe(4);
+  });
+
+  it.each(['./tools/', 'tools/../tools/'])('classifies normalized source root %s', (sourceRoot) => {
+    json('package.json', { dependencies: { shared: '1' }, devDependencies: { runtime: '1' } });
+    write('tools/index.ts', "import 'shared'; import 'runtime';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [{ name: 'runtime', roots: [sourceRoot], allowedDependencies: [] }],
+    });
+    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual(['runtime']);
+    expect(report.rows).toContainEqual({
+      dependency: 'shared',
+      kind: 'dependency',
+      owner: 'runtime',
+      layers: 'runtime',
+      files: 1,
+    });
   });
 
   it('discovers configured production roots outside conventional source directories', () => {
