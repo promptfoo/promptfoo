@@ -6,9 +6,10 @@ prompts:
   - 'What is {{a}} plus {{b}}?'
 
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:gpt-5.6-terra
     config:
-      temperature: 0
+      reasoning:
+        effort: none
       max_output_tokens: 100
       tool_choice: auto
       tools:

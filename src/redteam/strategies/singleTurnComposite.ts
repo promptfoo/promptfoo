@@ -1,26 +1,23 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
+import type { StrategyRuntimeContext } from './types';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> & { n?: number; modelFamily?: string },
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -53,7 +50,6 @@ async function generateCompositePrompts(
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
-        email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
         ...(inputs && { inputs }),
@@ -76,21 +72,11 @@ async function generateCompositePrompts(
       interface CompositeGenerationResponse {
         error?: string;
         modifiedPrompts?: string[];
-        tokenUsage?: unknown;
       }
 
-      const { data } = await trackGenerationFetch(
-        () =>
-          fetchWithCache<CompositeGenerationResponse>(
-            getRemoteGenerationUrl(),
-            {
-              method: 'POST',
-              headers: getRemoteGenerationHeaders(),
-              body: JSON.stringify(payload),
-            },
-            getRequestTimeoutMs(),
-          ),
-        config.__trackGenerationTokenUsage,
+      const { data } = await postRemoteGenerationTask<CompositeGenerationResponse>(
+        payload,
+        runtimeContext,
       );
 
       logger.debug(
@@ -151,12 +137,18 @@ export async function addCompositeTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Composite jailbreak strategy'));
   }
 
-  const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);
+  const compositeTestCases = await generateCompositePrompts(
+    testCases,
+    injectVar,
+    config,
+    runtimeContext,
+  );
   if (compositeTestCases.length === 0) {
     logger.warn('No composite  jailbreak test cases were generated');
   }

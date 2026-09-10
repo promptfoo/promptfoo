@@ -38,6 +38,35 @@ shared.
 promptfoo redteam run --tag ci.run-id="$CI_RUN_ID" --tag git.sha="$GIT_SHA"
 ```
 
+### Generation token accounting
+
+Generated configurations include `metadata.generation`, which identifies when the test suite was
+created and, when available, records the model requests and tokens used to create it:
+
+```yaml
+metadata:
+  generation:
+    id: 4d2f4d7f-9b99-4a51-85c5-7fc5f6c03f88
+    generatedAt: '2026-08-17T12:00:00.000Z'
+    tokenUsage:
+      total: 1200
+      prompt: 900
+      completion: 300
+      numRequests: 4
+```
+
+Generation usage includes extraction, test generation, and strategy calls that report usage.
+Failed provider calls still increment `numRequests` when their token counts are unavailable.
+Cached responses remain in the logical totals; `incurredTokenUsage` records only newly consumed
+tokens and requests when these differ. Provider-side prompt caching still counts the model request.
+Generation failures retain observed usage in the CLI log, and preview and discovery responses include
+their observed usage in `tokenUsage`.
+
+`promptfoo redteam run` attributes generation tokens to the evaluation only when it generated the
+suite during that run. Running an existing generated suite does not charge its historical
+generation usage again. `metadata.generationAccounting` is reserved for internally persisted
+current-run accounting and should not be added to reusable configurations.
+
 ## Configuration Structure
 
 The red team configuration uses the following YAML structure:

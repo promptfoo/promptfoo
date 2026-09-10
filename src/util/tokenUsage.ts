@@ -15,11 +15,9 @@ import {
  *
  * For new implementations, use the OTEL-based tracing infrastructure:
  * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
- * - Use `getTokenUsageFromTrace()` from `src/util/tokenUsageCompat.ts` for per-trace usage
  * - Token usage is automatically captured as GenAI semantic convention span attributes
  *
  * @see src/tracing/genaiTracer.ts for the new tracing implementation
- * @see src/util/tokenUsageCompat.ts for the compatibility layer
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
@@ -59,7 +57,7 @@ export class TokenUsageTracker {
    */
   public trackResponseUsage(
     providerId: string,
-    response: { tokenUsage?: TokenUsage } | undefined,
+    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
   ): void {
     if (!response) {
       return;
@@ -79,7 +77,12 @@ export class TokenUsageTracker {
     }
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     const updated = { ...current };
-    accumulateResponseTokenUsage(updated, { tokenUsage });
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, { cached: response.cached, tokenUsage });
+    accumulateTokenUsage(updated, {
+      ...(accounting.incurredTokenUsage ?? accounting),
+      cached: accounting.cached,
+    });
     this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${tokenUsage?.total ?? 0}, cached=${tokenUsage?.cached ?? 0}`,

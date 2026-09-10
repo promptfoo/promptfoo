@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { trackGenerationTokenUsage } from '../../src/redteam/generationTokenUsage';
 import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
@@ -158,27 +159,93 @@ describe('extractGoalFromPrompt', () => {
       status: 200,
       statusText: 'OK',
       headers: {},
-      data: {
-        intent: 'test goal',
-        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-      },
+      data: { intent: 'test goal' },
       deleteFromCache: async () => {},
     });
 
-    const trackTokenUsage = vi.fn();
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test goal');
+  });
+
+  it('records token usage from fresh goal extraction requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'tracked goal', tokenUsage: { total: 17, prompt: 10, completion: 7 } },
+      deleteFromCache: async () => {},
+    });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
     const result = await extractGoalFromPrompt(
       'test prompt',
       'test purpose',
       undefined,
       undefined,
       undefined,
-      trackTokenUsage,
+      provider,
     );
-    expect(result).toBe('test goal');
-    expect(trackTokenUsage).toHaveBeenCalledWith({
-      tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-      cached: false,
+
+    expect(result).toBe('tracked goal');
+    expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
+  });
+
+  it('preserves cached goal extraction usage without incurring it again', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'cached goal', tokenUsage: { total: 17, numRequests: 1 } },
+      deleteFromCache: async () => {},
     });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(usage).toMatchObject({
+      total: 17,
+      cached: 17,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
+  });
+
+  it('counts failed goal extraction requests without reported token usage', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('goal extraction timed out'));
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(result).toBeNull();
+    expect(usage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('should return null on HTTP error', async () => {
@@ -214,29 +281,6 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('test prompt', 'test purpose');
     expect(result).toBeNull();
-  });
-
-  it.each([
-    new Error('network connection failed'),
-    Object.assign(new Error('goal extraction timed out'), { name: 'TimeoutError' }),
-  ])('should track a failed goal extraction request for %s', async (error) => {
-    vi.mocked(fetchWithCache).mockRejectedValue(error);
-    const trackTokenUsage = vi.fn();
-
-    const result = await extractGoalFromPrompt(
-      'test prompt',
-      'test purpose',
-      undefined,
-      undefined,
-      undefined,
-      trackTokenUsage,
-    );
-
-    expect(result).toBeNull();
-    expect(trackTokenUsage).toHaveBeenCalledExactlyOnceWith({
-      tokenUsage: undefined,
-      cached: false,
-    });
   });
 
   it('should handle empty prompt and purpose', async () => {

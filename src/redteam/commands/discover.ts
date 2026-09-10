@@ -19,7 +19,7 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import { trackGenerationResponseTokenUsage } from '../providers/generationTokenUsage';
+import { trackGenerationResponseTokenUsage } from '../generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -324,10 +324,7 @@ export async function doTargetPurposeDiscovery(
             vars: { sessionId },
             bustCache: true,
           });
-          trackGenerationResponseTokenUsage(discoveryTokenUsage, {
-            tokenUsage: targetResponse.tokenUsage,
-            cached: false,
-          });
+          trackGenerationResponseTokenUsage(discoveryTokenUsage, targetResponse);
 
           if (targetResponse.error) {
             const errorMessage = `Error from target: ${targetResponse.error}`;

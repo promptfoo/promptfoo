@@ -7,8 +7,9 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
+import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
-import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -19,7 +20,6 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import type {
   ApiProvider,
   CallApiOptionsParams,
-  PluginActionParams,
   ProviderResponse,
   RemoteGenerationContext,
 } from '../../types/index';
@@ -47,6 +47,7 @@ interface PromptfooMcpMaterializationOptions {
  * @param task - The type of task to perform ('purpose' or 'entities').
  * @param prompts - An array of prompts to process.
  * @param generationContext - Resolved target context for routing the remote task.
+ * @param provider - Optional tracked generation provider used to account for the remote request.
  * @returns A Promise that resolves to either a string or an array of strings, depending on the task.
  * @throws Will throw an error if the remote generation fails.
  *
@@ -60,12 +61,13 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
-  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
+  provider?: ApiProvider,
 ): Promise<string | string[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteGeneration should never be called when remote generation is disabled',
   );
+  let responseRecorded = false;
   try {
     const body = {
       task,
@@ -75,24 +77,31 @@ export async function fetchRemoteGeneration(
       ...remoteGenerationContextPayload(generationContext),
     };
 
-    const response = await trackGenerationFetch(
-      () =>
-        fetchWithCache(
-          getRemoteGenerationUrl(),
-          {
-            method: 'POST',
-            headers: getRemoteGenerationHeaders(),
-            body: JSON.stringify(body),
-          },
-          getRequestTimeoutMs(),
-          'json',
-        ),
-      trackTokenUsage,
+    const response = await fetchWithCache(
+      getRemoteGenerationUrl(),
+      {
+        method: 'POST',
+        headers: getRemoteGenerationHeaders(),
+        body: JSON.stringify(body),
+      },
+      getRequestTimeoutMs(),
+      'json',
     );
+
+    if (provider) {
+      recordGenerationTokenUsage(provider, {
+        tokenUsage: (response.data as { tokenUsage?: ProviderResponse['tokenUsage'] })?.tokenUsage,
+        cached: response.cached,
+      });
+      responseRecorded = true;
+    }
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
     return parsedResponse.result;
   } catch (error) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+    }
     logger.warn(`Error using remote generation for task '${task}': ${error}`);
     throw error;
   }
@@ -101,7 +110,9 @@ export async function fetchRemoteGeneration(
 export async function materializeMcpToolCallRemote(
   options: PromptfooMcpMaterializationOptions,
   callApiOptions?: CallApiOptionsParams,
-): Promise<{ prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined> {
+): Promise<
+  { cached?: boolean; prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined
+> {
   if (!shouldGenerateRemote()) {
     return undefined;
   }
@@ -149,6 +160,7 @@ export async function materializeMcpToolCallRemote(
     }
 
     return {
+      cached: response.cached,
       prompt: stringifyMcpToolCall(toolCall),
       tokenUsage: response.data.tokenUsage,
     };

@@ -12,7 +12,7 @@ import {
   normalizeInputDefinition,
 } from '../types/shared';
 
-import type { ApiProvider, PluginActionParams } from '../types/index';
+import type { ApiProvider } from '../types/index';
 
 const SVG_WIDTH = 1200;
 const SVG_LINE_HEIGHT = 32;
@@ -30,7 +30,6 @@ export type InputMaterializationContext = {
   pluginId?: string;
   provider?: ApiProvider;
   purpose?: string;
-  trackTokenUsage?: PluginActionParams['trackTokenUsage'];
 };
 
 export type MaterializedInputMetadata = {
@@ -726,27 +725,9 @@ export async function materializeInputValueWithMetadata(
 
   let output: unknown;
   try {
-    const response = await context.provider.callApi(
+    ({ output } = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
-    );
-    output = response.output;
-    let tokenUsage: unknown;
-    let cached = false;
-    try {
-      tokenUsage = response.tokenUsage;
-    } catch {
-      tokenUsage = undefined;
-    }
-    try {
-      cached = Boolean(response.cached);
-    } catch {
-      cached = false;
-    }
-    try {
-      context.trackTokenUsage?.({ tokenUsage, cached });
-    } catch (error) {
-      logger.debug('[inputVariables] Failed to track DOCX wrapper token usage', { error });
-    }
+    ));
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,
@@ -808,18 +789,6 @@ export function materializeInputValue(
     default:
       return value;
   }
-}
-
-export function materializeInputVariables(
-  variables: Record<string, string>,
-  inputs: Inputs,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(variables).map(([key, value]) => {
-      const definition = inputs[key];
-      return [key, definition ? materializeInputValue(value, definition) : value];
-    }),
-  );
 }
 
 export async function materializeInputVariablesWithMetadata(

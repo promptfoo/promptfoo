@@ -94,29 +94,6 @@ describe('likert strategy', () => {
     expect(result[0]?.assert?.[0].metric).toBe('test-metric/Likert');
   });
 
-  it('reports usage from remote Likert generation', async () => {
-    const trackGenerationTokenUsage = vi.fn();
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
-        modifiedPrompts: ['modified prompt'],
-        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-
-    const result = await addLikertTestCases(testCases, 'prompt', {
-      __trackGenerationTokenUsage: trackGenerationTokenUsage,
-    });
-
-    expect(result).toHaveLength(1);
-    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
-      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-      cached: false,
-    });
-  });
-
   it('should handle API errors gracefully', async () => {
     const mockResponse = {
       data: {
@@ -148,21 +125,12 @@ describe('likert strategy', () => {
   });
 
   it('should handle network errors', async () => {
-    const trackGenerationTokenUsage = vi.fn();
-    const networkError = Object.assign(new Error('Network error'), {
-      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-    });
+    const networkError = new Error('Network error');
     vi.mocked(fetchWithCache).mockRejectedValue(networkError);
 
-    const result = await addLikertTestCases(testCases, 'prompt', {
-      __trackGenerationTokenUsage: trackGenerationTokenUsage,
-    });
+    const result = await addLikertTestCases(testCases, 'prompt', {});
 
     expect(result).toHaveLength(0);
-    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
-      tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-      cached: false,
-    });
     expect(logger.error).toHaveBeenCalledWith(`Error in Likert generation: ${networkError}`);
   });
 
@@ -198,5 +166,51 @@ describe('likert strategy', () => {
       },
       expect.any(Number),
     );
+  });
+
+  it('does not serialize strategy config into the remote payload', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { modifiedPrompts: ['modified'] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addLikertTestCases(testCases, 'prompt', {
+      env: { CANARY: 'env-secret' },
+      apiKey: 'config-secret',
+      headers: { Authorization: 'Bearer header-secret' },
+    });
+
+    const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+    expect(requestBody).toBeTypeOf('string');
+    expect(requestBody).not.toContain('env-secret');
+    expect(requestBody).not.toContain('config-secret');
+    expect(requestBody).not.toContain('header-secret');
+    expect(JSON.parse(requestBody as string)).toMatchObject({
+      task: 'jailbreak:likert',
+      prompt: 'test prompt 1',
+      index: 0,
+    });
+  });
+
+  it('forwards targetId without serializing unrelated config', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { modifiedPrompts: ['modified'] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addLikertTestCases(testCases, 'prompt', {
+      targetId: 'cloud-target-123',
+      env: { CANARY: 'secret' },
+    });
+
+    const body = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({ targetId: 'cloud-target-123' });
+    expect(body).not.toContain('CANARY');
+    expect(body).not.toContain('secret');
   });
 });

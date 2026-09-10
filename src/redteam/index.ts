@@ -37,14 +37,10 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { trackGenerationErrorTokenUsage, trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
-import {
-  trackGenerationErrorTokenUsage,
-  trackGenerationResponseTokenUsage,
-  trackGenerationTokenUsage,
-} from './providers/generationTokenUsage';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -65,11 +61,10 @@ import {
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
+import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
-  PluginActionParams,
   Policy,
   RedteamGenerationContext,
   RedteamPluginObject,
@@ -600,13 +595,12 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
-  provider: ApiProvider,
+  providerSelection: RedteamProviderSelection,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
-  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -683,15 +677,17 @@ async function applyStrategies(
       {
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-        // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
-        redteamProvider: cliState.config?.redteam?.provider,
-        // Generation-time strategies that load a specialized local provider must remain in usage totals.
-        __wrapGenerationProvider: wrapGenerationProvider,
-        __trackGenerationTokenUsage: trackTokenUsage,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
+      {
+        // Keep every local strategy phase on the provider already selected for this synthesis run.
+        // The source tells strategies whether the choice was explicit or an implicit default.
+        generationProviderSelection: providerSelection,
+        // Specialized local providers still need to contribute to generation usage totals.
+        wrapGenerationProvider,
+      },
     );
 
     // Filter out null/undefined
@@ -722,7 +718,7 @@ async function applyStrategies(
           const { inputMaterialization, vars } = await rematerializeStrategyInputVars(
             t,
             injectVar,
-            provider,
+            providerSelection.provider,
             purpose,
             materializationIndex,
           );
@@ -959,19 +955,17 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
 }
 
-/**
- * Synthesizes test cases based on provided options.
- * @param options - The options for test case synthesis.
- * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
- */
-export async function synthesize(options: SynthesizeOptions): Promise<{
+type SynthesizeResult = {
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
   generationTokenUsage?: TokenUsage;
-}> {
+};
+
+/** Synthesizes test cases and preserves usage when generation fails. */
+export async function synthesize(options: SynthesizeOptions): Promise<SynthesizeResult> {
   const generationTokenUsage: TokenUsage = {
     cached: 0,
     completion: 0,
@@ -1013,14 +1007,7 @@ async function synthesizeInternal(
     testGenerationInstructions,
   }: SynthesizeOptions,
   generationTokenUsage: TokenUsage,
-): Promise<{
-  purpose: string;
-  entities: string[];
-  testCases: TestCaseWithPlugin[];
-  injectVar: string;
-  failedPlugins: FailedPluginInfo[];
-  generationTokenUsage?: TokenUsage;
-}> {
+): Promise<SynthesizeResult> {
   // Add abort check helper
   const checkAbort = () => {
     if (abortSignal?.aborted) {
@@ -1108,12 +1095,16 @@ async function synthesizeInternal(
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const providerForGeneration = await redteamProviderManager.getProvider({
+  const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
-  const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
-  const trackTokenUsage: PluginActionParams['trackTokenUsage'] = (response) => {
-    trackGenerationResponseTokenUsage(generationTokenUsage, response);
+  const redteamProvider = trackGenerationTokenUsage(
+    providerSelection.provider,
+    generationTokenUsage,
+  );
+  const trackedProviderSelection = {
+    ...providerSelection,
+    provider: redteamProvider,
   };
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
@@ -1370,12 +1361,7 @@ async function synthesizeInternal(
   }
   const purpose =
     purposeOverride ||
-    (await extractSystemPurpose(
-      redteamProvider,
-      prompts,
-      redteamGenerationContext,
-      trackTokenUsage,
-    ));
+    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1384,7 +1370,7 @@ async function synthesizeInternal(
   }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts, redteamGenerationContext, trackTokenUsage);
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -1429,7 +1415,6 @@ async function synthesizeInternal(
           delayMs: delay || 0,
           targetId: cloudTargetId,
           redteamGenerationContext,
-          trackTokenUsage,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1528,7 +1513,7 @@ async function synthesizeInternal(
               plugin.id,
               policy,
               cloudTargetId,
-              trackTokenUsage,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1667,7 +1652,7 @@ async function synthesizeInternal(
               plugin.id,
               policy,
               cloudTargetId,
-              trackTokenUsage,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1728,13 +1713,12 @@ async function synthesizeInternal(
       pluginTestCases,
       [retryStrategy],
       injectVar,
-      redteamProvider,
+      trackedProviderSelection,
       purpose,
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
-      trackTokenUsage,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1755,13 +1739,12 @@ async function synthesizeInternal(
       pluginTestCases,
       nonBasicStrategies,
       injectVar,
-      redteamProvider,
+      trackedProviderSelection,
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
-      trackTokenUsage,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

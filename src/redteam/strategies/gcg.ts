@@ -1,20 +1,17 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 export const CONCURRENCY = 10;
 
@@ -22,6 +19,7 @@ async function generateGcgPrompts(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> & { n?: number },
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -56,31 +54,20 @@ async function generateGcgPrompts(
         query: testCase.vars[injectVar],
         ...(config.n && { n: config.n }),
         ...remoteGenerationContextPayload(config.targetId),
-        email: getUserEmail(),
       };
 
       interface GCGGenerationResponse {
         error?: string;
         responses?: string[];
-        tokenUsage?: unknown;
       }
 
-      const { data, status, statusText } = await trackGenerationFetch(
-        () =>
-          fetchWithCache<GCGGenerationResponse>(
-            getRemoteGenerationUrl(),
-            {
-              method: 'POST',
-              headers: getRemoteGenerationHeaders({
-                'x-promptfoo-silent': 'true',
-              }),
-              body: JSON.stringify(payload),
-            },
-            getRequestTimeoutMs(),
-            'json',
-            true,
-          ),
-        config.__trackGenerationTokenUsage,
+      const { data, status, statusText } = await postRemoteGenerationTask<GCGGenerationResponse>(
+        payload,
+        runtimeContext,
+        {
+          headers: { 'x-promptfoo-silent': 'true' },
+          bustCache: true,
+        },
       );
 
       logger.debug('[GCG] Got generation result', {
@@ -155,6 +142,7 @@ export async function addGcgTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (!isLoggedIntoCloud()) {
     throw new Error(
@@ -166,7 +154,7 @@ export async function addGcgTestCases(
     throw new Error(getRemoteGenerationExplicitlyDisabledError('GCG strategy'));
   }
 
-  const gcgTestCases = await generateGcgPrompts(testCases, injectVar, config);
+  const gcgTestCases = await generateGcgPrompts(testCases, injectVar, config, runtimeContext);
   if (gcgTestCases.length === 0) {
     logger.warn('No GCG test cases were generated');
   }
