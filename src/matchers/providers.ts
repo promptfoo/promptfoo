@@ -53,7 +53,7 @@ export function callGradingProvider<T extends ProviderResponse>(
   label: string,
   invoke: (
     context: CallApiContextParams | undefined,
-    onResponseHeaders?: (headers: Record<string, string>) => void,
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
   ) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
@@ -64,7 +64,7 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const callProvider = (
-    onResponseHeaders?: (headers: Record<string, string>) => void,
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
   ): Promise<T> => {
     const invokeProvider = (context: CallApiContextParams | undefined) =>
       onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);

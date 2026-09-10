@@ -123,9 +123,9 @@ export function wrapProviderWithRateLimiting(
             onResponseHeaders
               ? {
                   ...options,
-                  onResponseHeaders: (headers) => {
-                    onResponseHeaders(headers);
-                    options?.onResponseHeaders?.(headers);
+                  onResponseHeaders: (...args) => {
+                    onResponseHeaders(...args);
+                    options?.onResponseHeaders?.(...args);
                   },
                 }
               : options,

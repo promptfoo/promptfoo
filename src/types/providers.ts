@@ -119,10 +119,14 @@ export interface CallApiOptionsParams {
    */
   abortSignal?: AbortSignal;
   /**
-   * @internal Notify the scheduler of a completed successful HTTP response
-   * before provider post-processing, which may still be cancelled.
+   * @internal Notify the scheduler before cancellable post-processing or a
+   * selected target-fetch backoff. Backoff observations retain their original
+   * quota deadline even when a coalesced consumer joins later.
    */
-  onResponseHeaders?: (headers: Record<string, string>) => void;
+  onResponseHeaders?: (
+    headers: Record<string, string>,
+    backoff?: { headers: Record<string, string>; status: number; resetAt: number },
+  ) => void;
 }
 
 export interface ApiProvider extends MinimalApiProvider {

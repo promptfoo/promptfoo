@@ -26,6 +26,12 @@ import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
+export type FetchRateLimitObservation = {
+  headers: Record<string, string>;
+  status: number;
+  resetAt: number;
+};
+
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
 // with different request-scoped concurrency caps do not evict each other.
@@ -413,8 +419,18 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
+  if (!signal?.aborted) {
+    onRateLimitBackoff?.(
+      Object.freeze({
+        headers: Object.freeze(Object.fromEntries(response.headers.entries())),
+        status: response.status,
+        resetAt: Date.now() + waitTime,
+      }),
+    );
+  }
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
@@ -602,6 +618,7 @@ async function handleRateLimitedResponse(
   attempt: number,
   maxRetries: number,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -641,7 +658,7 @@ async function handleRateLimitedResponse(
   logger.debug(
     `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response, signal);
+  await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
 function formatFetchErrorMessage(error: unknown): string {
@@ -664,6 +681,7 @@ export async function fetchWithRetries(
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
@@ -687,7 +705,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal, onRateLimitBackoff);
         continue;
       }
 

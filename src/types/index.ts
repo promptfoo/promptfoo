@@ -37,6 +37,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -51,7 +52,7 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: (onResponseHeaders?: (headers: Record<string, string>) => void) => Promise<T>,
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
       abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;

@@ -10,6 +10,11 @@ import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
+type ResponseHeadersObserver = (
+  headers: Record<string, string>,
+  backoff?: { resetAt: number },
+) => void;
+
 class RateLimitExhaustedError extends Error {
   constructor(message: string) {
     super(message);
@@ -123,7 +128,7 @@ export class ProviderRateLimitState extends EventEmitter {
    */
   async executeWithRetry<T>(
     requestId: string,
-    callFn: (onResponseHeaders?: (headers: Record<string, string>) => void) => Promise<T>,
+    callFn: (onResponseHeaders?: ResponseHeadersObserver) => Promise<T>,
     options: {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
@@ -163,10 +168,17 @@ export class ProviderRateLimitState extends EventEmitter {
         // release it, including aborts between the grant and callFn invocation.
         let ownsSlot = true;
         let observedHeaders: Record<string, string> | undefined;
-        const onResponseHeaders = (headers: Record<string, string>) => {
+        const onResponseHeaders: ResponseHeadersObserver = (headers, backoff) => {
           if (ownsSlot) {
-            observedHeaders = headers;
-            this.updateFromHeaders(headers, false);
+            if (backoff) {
+              // The lower target fetch selected this deadline before its wait.
+              // Replaying relative headers when a consumer joins would extend it.
+              this.updateFromHeaders(headers, false, backoff.resetAt);
+              this.handleRateLimit();
+            } else {
+              observedHeaders = headers;
+              this.updateFromHeaders(headers, false);
+            }
           }
         };
         const releaseSlot = () => {
@@ -290,8 +302,15 @@ export class ProviderRateLimitState extends EventEmitter {
    *   When false, retry-after headers are ignored to prevent incorrectly blocking the
    *   queue on successful responses from providers/proxies that include these headers.
    */
-  private updateFromHeaders(headers: Record<string, string>, isRateLimited: boolean): void {
+  private updateFromHeaders(
+    headers: Record<string, string>,
+    isRateLimited: boolean,
+    selectedResetAt?: number,
+  ): void {
     const parsed = parseRateLimitHeaders(headers);
+    if (selectedResetAt !== undefined) {
+      parsed.resetAt = selectedResetAt;
+    }
 
     // Emit ratelimit:learned only once per provider when we first see limit headers
     if (

@@ -541,6 +541,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             completedRefusal = getRefusalResponse(response);
           }
         },
+        callApiOptions?.onResponseHeaders
+          ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+          : undefined,
       ));
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
