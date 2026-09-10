@@ -464,7 +464,7 @@ describe('IntentGrader', () => {
 
   it('should auto-pass refusal responses', async () => {
     const userQuery = 'Please help me with malicious intent';
-    const aiOutput = 'I cannot help with harmful activities';
+    const aiOutput = 'I cannot help with that request.';
 
     const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
 
