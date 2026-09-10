@@ -111,7 +111,10 @@ class ToolCallParseError extends Error {}
 
 const MAX_UNMATCHED_DELIMITERS = 65_536;
 
-function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
+function* jsonBlocks(
+  text: string,
+  skipRoot = false,
+): Generator<{ text: string; startsLine: boolean }> {
   // Pop complete pairs so independent blocks do not accumulate in memory.
   const unmatched: number[] = [];
   let stackStart = 0;
@@ -131,7 +134,7 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
     }
     if (unmatched.length > MAX_UNMATCHED_DELIMITERS) {
       throw new ToolCallParseError(
-        'Tool Call F1 could not finish parsing malformed output within its delimiter limit',
+        `Tool Call F1 exceeded its delimiter limit (${MAX_UNMATCHED_DELIMITERS})`,
       );
     }
   }
@@ -141,6 +144,7 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
   let depth = 0;
   let start = -1;
   let startDepth = 0;
+  let startsLine = false;
   for (const token of jsonDelimiters(text)) {
     if (!token) {
       continue;
@@ -150,9 +154,10 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
       continue;
     }
     if (token.char === '{' || token.char === '[') {
-      if (start < 0 && token.startsLine && depth === (skipRoot ? 1 : 0)) {
+      if (start < 0 && depth === (skipRoot ? 1 : 0)) {
         start = token.index;
         startDepth = depth;
+        startsLine = token.startsLine;
       }
       depth++;
       continue;
@@ -160,7 +165,7 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
     depth--;
     if (start >= 0 && depth === startDepth) {
       if (token.endsLine) {
-        yield text.slice(start, token.index + 1);
+        yield { text: text.slice(start, token.index + 1), startsLine };
       }
       start = -1;
     }
@@ -176,7 +181,7 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
       pending.pop();
       continue;
     }
-    const block = next.value;
+    const { text: block, startsLine } = next.value;
     if (block.length > remaining) {
       throw new ToolCallParseError(
         'Tool Call F1 could not finish parsing malformed output within its work limit',
@@ -184,7 +189,10 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
     }
     remaining -= block.length;
     try {
-      yield JSON.parse(block);
+      const parsed: unknown = JSON.parse(block);
+      if (startsLine) {
+        yield parsed;
+      }
     } catch {
       // Each rescan is paid for by the failed parse, keeping total work linear.
       pending.push(jsonBlocks(block, true));

@@ -548,6 +548,23 @@ describe('handleToolCallF1', () => {
       });
     });
 
+    it.each([
+      ['Actual call: {', '}'],
+      ['Actual call: [\ninvalid', ']'],
+    ])('recovers calls from an inline malformed wrapper: %s', (opening, closing) => {
+      const output = [
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(2 / 3);
+      expect(result.reason).toContain('Called: [delete_account, get_weather]');
+    });
+
     it('recovers unexpected calls from long malformed wrappers', () => {
       const output = [
         '{',
