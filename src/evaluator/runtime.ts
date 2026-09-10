@@ -102,7 +102,7 @@ export interface EvaluatorRuntime<
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
-  /** Without a selector, all requested generated prompts are evaluated without interaction. */
+  /** Approves generated variants. Required when generateSuggestions is enabled. */
   selectPrompt?(prompt: string): Promise<boolean>;
   createProgressReporters?(
     total: number,
