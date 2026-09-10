@@ -353,7 +353,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const billingModelName = modelName.endsWith('/chat-latest')
+      ? modelName.replace(/^openai\//, '')
+      : (modelName.split('/').pop() ?? modelName);
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,

@@ -63,6 +63,35 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
+  it.each([
+    ['chat-latest', undefined, 0.02],
+    ['openai/chat-latest', undefined, 0.02],
+    ['vendor/chat-latest', undefined, undefined],
+    ['chat-latest', 'vendor/chat-latest', undefined],
+    ['vendor/model', 'openai/chat-latest', 0.02],
+  ])('prices only the recognized chat-latest alias: %s / %s', async (model, override, cost) => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        status: 'completed',
+        output: [
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+        ],
+        usage: { input_tokens: 1000, output_tokens: 500, total_tokens: 1500 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider(model, {
+      config: { apiKey: 'fixture', passthrough: override ? { model: override } : undefined },
+    });
+    const result = await provider.callApi('Test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBe(cost);
+    const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0]![1]!.body as string);
+    expect(body.model).toBe(override ?? model);
+  });
+
   it('should format and call the responses API correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

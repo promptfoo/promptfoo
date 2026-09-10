@@ -62,6 +62,33 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiChatCompletionProvider', () => {
+    it.each([
+      ['chat-latest', undefined, 0.02],
+      ['openai/chat-latest', undefined, 0.02],
+      ['vendor/chat-latest', undefined, undefined],
+      ['chat-latest', 'vendor/chat-latest', undefined],
+      ['vendor/model', 'openai/chat-latest', 0.02],
+    ])('prices only the recognized chat-latest alias: %s / %s', async (model, override, cost) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: { apiKey: 'fixture', passthrough: override ? { model: override } : undefined },
+      });
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBe(cost);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+      expect(body.model).toBe(override ?? model);
+    });
+
     beforeEach(() => {
       vi.clearAllMocks();
     });
