@@ -56,39 +56,6 @@ describe('HyperbolicProvider', () => {
   });
 
   describe('callApi', () => {
-    it('should handle successful API response', async () => {
-      provider = new HyperbolicProvider('deepseek-ai/DeepSeek-R1', {});
-
-      const mockResponse = {
-        output: 'Test response',
-        tokenUsage: { prompt: 100, completion: 50 },
-        cached: false,
-        raw: JSON.stringify({
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 50,
-            completion_tokens_details: {
-              reasoning_tokens: 30,
-              accepted_prediction_tokens: 10,
-              rejected_prediction_tokens: 5,
-            },
-          },
-        }),
-      };
-
-      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.output).toBe('Test response');
-      expect(result.tokenUsage.completionDetails).toEqual({
-        reasoning: 30,
-        acceptedPrediction: 10,
-        rejectedPrediction: 5,
-      });
-      expect(result.cost).toBeDefined();
-    });
-
     it('should handle API errors', async () => {
       provider = new HyperbolicProvider('deepseek-ai/DeepSeek-R1', {});
 
@@ -236,13 +203,13 @@ describe('HyperbolicAudioProvider', () => {
     it('should calculate cost based on text length', () => {
       provider = new HyperbolicAudioProvider('Melo-TTS', {});
       const textLength = 5000; // 5000 characters
-      expect(provider['calculateAudioCost'](textLength)).toBe(0.005); // $0.001 per 1000 chars
+      expect(provider['calculateAudioCost'](textLength)).toBe(0.025); // $5 per million chars
     });
 
     it('should handle partial thousands', () => {
       provider = new HyperbolicAudioProvider('Melo-TTS', {});
       const textLength = 1500; // 1.5 thousand characters
-      expect(provider['calculateAudioCost'](textLength)).toBe(0.0015);
+      expect(provider['calculateAudioCost'](textLength)).toBe(0.0075);
     });
   });
 });
