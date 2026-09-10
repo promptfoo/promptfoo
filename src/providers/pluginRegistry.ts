@@ -208,9 +208,8 @@ export class ProviderPluginRegistry {
       const factories = await plugin.loadPromise;
       if (
         !Array.isArray(factories) ||
-        !Array.from({ length: factories.length }, (_, index) =>
-          isProviderFactory(factories[index]),
-        ).every(Boolean)
+        factories.length !== Object.keys(factories).length ||
+        !factories.every(isProviderFactory)
       ) {
         throw new TypeError(`Provider plugin '${plugin.manifest.name}' returned invalid factories`);
       }
