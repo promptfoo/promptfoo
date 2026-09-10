@@ -145,23 +145,21 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSize('1024x1792')).toEqual({ valid: true });
     });
 
-    it.each([
-      '1920x1080',
-      '1080x1920',
-    ] as const)('should accept 1080p creation size %s for sora-2-pro', (size) => {
-      expect(validateVideoSize(size, 'sora-2-pro')).toEqual({ valid: true });
-    });
+    it.each(['1920x1080', '1080x1920'] as const)(
+      'should accept 1080p creation size %s for sora-2-pro',
+      (size) => {
+        expect(validateVideoSize(size, 'sora-2-pro')).toEqual({ valid: true });
+      },
+    );
 
-    it.each([
-      '1792x1024',
-      '1024x1792',
-      '1920x1080',
-      '1080x1920',
-    ] as const)('should reject pro-only size %s for sora-2', (size) => {
-      const result = validateVideoSize(size, 'sora-2');
-      expect(result.valid).toBe(false);
-      expect(result.message).toContain('sora-2');
-    });
+    it.each(['1792x1024', '1024x1792', '1920x1080', '1080x1920'] as const)(
+      'should reject pro-only size %s for sora-2',
+      (size) => {
+        const result = validateVideoSize(size, 'sora-2');
+        expect(result.valid).toBe(false);
+        expect(result.message).toContain('sora-2');
+      },
+    );
 
     it('should reject invalid size', () => {
       // Cast to test runtime validation with invalid values
@@ -1594,41 +1592,44 @@ describe('OpenAiVideoProvider', () => {
     it.each([
       ['character', { characters: [{ id: 'char-private' }] }],
       ['file reference', { input_reference: { file_id: 'file-private' } }],
-    ])('should bypass the persistent video cache for a project-scoped %s without a project discriminator', async (_label, asset) => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          organization: 'org-shared',
-          ...asset,
-          download_thumbnail: false,
-          download_spritesheet: false,
-        },
-      });
-      mockFetchWithProxy
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ id: 'video_private_asset', status: 'queued' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            id: 'video_private_asset',
-            status: 'completed',
-            progress: 100,
-          }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          arrayBuffer: async () => new ArrayBuffer(100),
+    ])(
+      'should bypass the persistent video cache for a project-scoped %s without a project discriminator',
+      async (_label, asset) => {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKey: 'test-key',
+            organization: 'org-shared',
+            ...asset,
+            download_thumbnail: false,
+            download_spritesheet: false,
+          },
         });
+        mockFetchWithProxy
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ id: 'video_private_asset', status: 'queued' }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              id: 'video_private_asset',
+              status: 'completed',
+              progress: 100,
+            }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () => new ArrayBuffer(100),
+          });
 
-      const result = await provider.callApi('Animate a private asset');
+        const result = await provider.callApi('Animate a private asset');
 
-      expect(result.error).toBeUndefined();
-      expect(result.cached).toBe(false);
-      expect(fsPromises.readFile).not.toHaveBeenCalled();
-      expect(fsPromises.writeFile).not.toHaveBeenCalled();
-    });
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(fsPromises.readFile).not.toHaveBeenCalled();
+        expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      },
+    );
 
     it('should bypass the persistent video cache for an authenticated custom gateway without a tenant scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
@@ -1814,36 +1815,39 @@ describe('OpenAiVideoProvider', () => {
       'Bearer short-lived-token',
       'Basic dXNlcjpwdw==',
       'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
-    ])('should not persist videos with the credential-valued routing header %s', async (credential) => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
-          download_thumbnail: false,
-          download_spritesheet: false,
-        },
-      });
-      mockFetchWithProxy
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ id: 'video_route', status: 'queued' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ id: 'video_route', status: 'completed' }),
-        })
-        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+    ])(
+      'should not persist videos with the credential-valued routing header %s',
+      async (credential) => {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKey: 'test-key',
+            headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+            download_thumbnail: false,
+            download_spritesheet: false,
+          },
+        });
+        mockFetchWithProxy
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ id: 'video_route', status: 'queued' }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ id: 'video_route', status: 'completed' }),
+          })
+          .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
 
-      const result = await provider.callApi('Routed video');
+        const result = await provider.callApi('Routed video');
 
-      expect(result.error).toBeUndefined();
-      expect(result.cached).toBe(false);
-      expect(fsPromises.readFile).not.toHaveBeenCalled();
-      expect(fsPromises.writeFile).not.toHaveBeenCalled();
-      expect(generateVideoCacheKey).toHaveBeenCalledWith(
-        expect.objectContaining({ inputReference: null, cacheScope: undefined }),
-      );
-    });
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(fsPromises.readFile).not.toHaveBeenCalled();
+        expect(fsPromises.writeFile).not.toHaveBeenCalled();
+        expect(generateVideoCacheKey).toHaveBeenCalledWith(
+          expect.objectContaining({ inputReference: null, cacheScope: undefined }),
+        );
+      },
+    );
 
     it.each([
       '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
@@ -1967,67 +1971,67 @@ describe('OpenAiVideoProvider', () => {
       });
     });
 
-    it.each([
-      'file:///path/to/image.png',
-      'FILE:///path/to/image.png',
-    ])('should read and wrap %s as a data URL', async (inputReference) => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', input_reference: inputReference },
-      });
+    it.each(['file:///path/to/image.png', 'FILE:///path/to/image.png'])(
+      'should read and wrap %s as a data URL',
+      async (inputReference) => {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: { apiKey: 'test-key', input_reference: inputReference },
+        });
 
-      // Mock storage
-      const mockStorage = {
-        exists: vi.fn().mockResolvedValue(false),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
+        // Mock storage
+        const mockStorage = {
+          exists: vi.fn().mockResolvedValue(false),
+        };
+        mockGetMediaStorage.mockReturnValue(mockStorage);
 
-      vi.mocked(fsPromises.readFile).mockImplementation(async (filePath) => {
-        if (String(filePath) === '/path/to/image.png') {
-          return Buffer.from('fake image data');
-        }
-        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-      });
+        vi.mocked(fsPromises.readFile).mockImplementation(async (filePath) => {
+          if (String(filePath) === '/path/to/image.png') {
+            return Buffer.from('fake image data');
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        });
 
-      // Setup mocks for success
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_from_file', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_from_file', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+        // Setup mocks for success
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_from_file', status: 'queued' }),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_from_file', status: 'completed', progress: 100 }),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(100),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(50),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(75),
+        });
 
-      // Mock storage
-      mockStoreMedia.mockResolvedValue({
-        ref: { provider: 'local', key: 'video/abc.mp4', contentHash: 'abc', metadata: {} },
-        deduplicated: false,
-      });
+        // Mock storage
+        mockStoreMedia.mockResolvedValue({
+          ref: { provider: 'local', key: 'video/abc.mp4', contentHash: 'abc', metadata: {} },
+          deduplicated: false,
+        });
 
-      await provider.callApi('Animate this file');
+        await provider.callApi('Animate this file');
 
-      // Verify the file was read
-      expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/image.png');
+        // Verify the file was read
+        expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/image.png');
 
-      // Verify the request body includes base64 encoded data
-      const expectedBase64 = Buffer.from('fake image data').toString('base64');
-      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
-      expect(JSON.parse(request.body).input_reference).toEqual({
-        image_url: `data:image/png;base64,${expectedBase64}`,
-      });
-    });
+        // Verify the request body includes base64 encoded data
+        const expectedBase64 = Buffer.from('fake image data').toString('base64');
+        const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+        expect(JSON.parse(request.body).input_reference).toEqual({
+          image_url: `data:image/png;base64,${expectedBase64}`,
+        });
+      },
+    );
 
     it.each([
       [
@@ -2056,34 +2060,37 @@ describe('OpenAiVideoProvider', () => {
         { image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==' },
       ],
       ['an uploaded file ID', { file_id: 'file_123' }, { file_id: 'file_123' }],
-    ])('should encode %s input_reference in the documented JSON shape', async (_label, input, expected) => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', input_reference: input as any },
-      });
+    ])(
+      'should encode %s input_reference in the documented JSON shape',
+      async (_label, input, expected) => {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: { apiKey: 'test-key', input_reference: input as any },
+        });
 
-      mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(false) });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_ref', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_ref', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(10),
-      });
-      mockStoreMedia.mockResolvedValue({
-        ref: { provider: 'local', key: 'video/ref.mp4', contentHash: 'ref', metadata: {} },
-        deduplicated: false,
-      });
+        mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(false) });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_ref', status: 'queued' }),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_ref', status: 'completed', progress: 100 }),
+        });
+        mockFetchWithProxy.mockResolvedValue({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(10),
+        });
+        mockStoreMedia.mockResolvedValue({
+          ref: { provider: 'local', key: 'video/ref.mp4', contentHash: 'ref', metadata: {} },
+          deduplicated: false,
+        });
 
-      await provider.callApi('Animate this image');
+        await provider.callApi('Animate this image');
 
-      const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
-      expect(JSON.parse(request.body).input_reference).toEqual(expected);
-    });
+        const request = mockFetchWithProxy.mock.calls[0][1] as { body: string };
+        expect(JSON.parse(request.body).input_reference).toEqual(expected);
+      },
+    );
 
     it.each([
       [

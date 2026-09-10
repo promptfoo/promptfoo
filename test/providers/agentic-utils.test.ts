@@ -7,6 +7,7 @@ import {
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
+  isAgenticGradingProvider,
   isAgenticProvider,
   resolveAgenticWorkingDir,
 } from '../../src/providers/agentic-utils';
@@ -42,6 +43,8 @@ describe('agentic-utils', () => {
     it.each([
       'openai:codex-sdk',
       'openai:codex-sdk:gpt-5.5',
+      'openai:codex-security',
+      'openai:codex-security:gpt-5.6-sol',
       'openai:codex-app-server:gpt-5.5',
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
@@ -58,6 +61,20 @@ describe('agentic-utils', () => {
       expect(isAgenticProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
       expect(isAgenticProvider(provider('anthropic:messages:claude-opus-4-6'))).toBe(false);
     });
+
+    it('recognizes coding-agent runtimes that can return rubric grading verdicts', () => {
+      expect(isAgenticGradingProvider(provider('openai:codex-sdk'))).toBe(true);
+      expect(isAgenticGradingProvider(provider('anthropic:claude-agent-sdk'))).toBe(true);
+      expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
+    });
+
+    it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(
+      'does not classify security scanner %s as a rubric grading provider',
+      (id) => {
+        expect(isAgenticProvider(provider(id))).toBe(true);
+        expect(isAgenticGradingProvider(provider(id))).toBe(false);
+      },
+    );
   });
 
   describe('getCachedResponse', () => {

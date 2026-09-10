@@ -46,6 +46,7 @@ describe('LocalSpanExporter', () => {
       startTime: [number, number];
       endTime: [number, number];
       attributes: Record<string, unknown>;
+      resourceAttributes: Record<string, unknown>;
       status: { code: number; message?: string };
     }> = {},
   ): ReadableSpan {
@@ -69,7 +70,7 @@ describe('LocalSpanExporter', () => {
       kind: 2, // CLIENT
       links: [],
       events: [],
-      resource: { attributes: {} },
+      resource: { attributes: overrides.resourceAttributes ?? {} },
       instrumentationLibrary: { name: 'test' },
       duration: [0, 700000000],
       ended: true,
@@ -230,7 +231,7 @@ describe('LocalSpanExporter', () => {
     it('should include span attributes', async () => {
       const span = createMockSpan({
         attributes: {
-          'gen_ai.system': 'openai',
+          'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
         },
@@ -244,9 +245,40 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
-              'gen_ai.system': 'openai',
+              'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
+            },
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('preserves resource attributes and lets span attributes override matching keys', async () => {
+      const span = createMockSpan({
+        resourceAttributes: {
+          'service.name': 'configured-promptfoo-service',
+          'service.version': '1.2.3',
+          'deployment.environment': 'resource',
+        },
+        attributes: {
+          'deployment.environment': 'span',
+          'gen_ai.provider.name': 'openai',
+        },
+      });
+
+      await exportSpans([span]);
+
+      expect(mockAddSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({
+            attributes: {
+              'service.name': 'configured-promptfoo-service',
+              'service.version': '1.2.3',
+              'deployment.environment': 'span',
+              'gen_ai.provider.name': 'openai',
             },
           }),
         ],
