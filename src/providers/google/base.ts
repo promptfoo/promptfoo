@@ -617,18 +617,26 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   }
 
   /**
-   * Execute explicitly configured callbacks from native function-call parts.
+   * Execute explicitly configured callbacks from native parts or parseable JSON envelopes.
    */
   protected async executeFunctionToolCallbacks(
     output: ProviderResponse['output'],
     config: GoogleProviderConfig,
     toolsDisabled: boolean,
   ): Promise<ProviderResponse['output']> {
-    if (toolsDisabled || !Array.isArray(output)) {
+    if (toolsDisabled) {
       return output;
     }
 
-    const parts = output;
+    let parsedOutput = output;
+    if (typeof output === 'string') {
+      try {
+        parsedOutput = JSON.parse(output);
+      } catch {
+        return output;
+      }
+    }
+    const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
     const { toolConfig } = resolveGoogleToolConfig(config);
     const streamsFunctionCallArguments =
       config.streaming === true &&

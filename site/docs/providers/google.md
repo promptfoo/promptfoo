@@ -58,7 +58,7 @@ Specify the API key directly in your configuration:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       apiKey: your_api_key_here
 ```
@@ -69,10 +69,10 @@ If you need to explicitly reference an environment variable in your config, use 
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
+  - id: google:gemini-3.8-flash # Uses GOOGLE_API_KEY env var
     config:
       # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
-      temperature: 0.7
+      maxOutputTokens: 1024
 ```
 
 ### 3. Verify Authentication
@@ -80,7 +80,7 @@ providers:
 Test your setup with a simple prompt:
 
 ```bash
-promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-2.5-flash
+promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-3.8-flash
 ```
 
 ## Configuration Options
@@ -94,7 +94,7 @@ Example with custom host:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       apiHost: custom.googleapis.com
       apiBaseUrl: https://custom.googleapis.com
@@ -114,7 +114,7 @@ Create a simple `promptfooconfig.yaml`:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
-  - google:gemini-2.5-flash
+  - google:gemini-3.8-flash
 
 prompts:
   - 'Write a haiku about {{topic}}'
@@ -141,7 +141,7 @@ Compare different Gemini models:
 providers:
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-3.6-flash
+  - google:gemini-3.7-flash
   - google:gemini-3.5-flash-lite
 
 prompts:
@@ -162,10 +162,10 @@ tests:
 ```yaml
 # Reference environment variables in your config
 providers:
-  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
+  - id: google:gemini-3.8-flash # Uses GOOGLE_API_KEY env var
     config:
       # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
-      temperature: '{{ env.TEMPERATURE | default(0.7) }}' # Default to 0.7 if not set
+      maxOutputTokens: '{{ env.MAX_OUTPUT_TOKENS | default(1024) }}'
 ```
 
 ## Troubleshooting
@@ -787,7 +787,7 @@ providers:
 | MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
 | HIGH    | More tokens for deep reasoning.                            |
 
-Defaults vary by model: Gemini 3.6 Flash and Gemini 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
+Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
 #### Gemini 2.5 Models (thinkingBudget)
 
@@ -921,6 +921,22 @@ providers:
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples
+
+### Gemini 3.8 Flash
+
+The latest stable Flash model, released September 2, 2026, supports a 1M-token context window and `LOW`, `MEDIUM` (default), or `HIGH` thinking. `MINIMAL` and `thinkingBudget` are unsupported. [Model details](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash).
+
+```yaml
+providers:
+  - id: google:gemini-3.8-flash
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+```
+
+Gemini 3.7 Flash remains supported with the same thinking levels and token pricing.
 
 ### Gemini 3.6 Flash
 
@@ -1247,7 +1263,7 @@ providers:
 :::info
 Search grounding works with most recent Gemini models including:
 
-- Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
+- Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and Gemini 3.5 Flash-Lite
 - Gemini 3.5 Flash
 - Gemini 3.1 Pro and Gemini 3 Flash
 - Gemini 2.5 Flash, Flash-Lite, and Pro models
@@ -1375,7 +1391,7 @@ Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support the preview Computer Use tool
 
 ```yaml
 providers:
-  - id: google:gemini-3.6-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - computerUse:

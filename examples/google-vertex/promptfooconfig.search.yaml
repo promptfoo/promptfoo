@@ -6,8 +6,8 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: vertex:gemini-3.6-flash
-    label: gemini-3.6-flash-search
+  - id: vertex:gemini-3.8-flash
+    label: gemini-3.8-flash-search
     config:
       region: global
       maxOutputTokens: 1024

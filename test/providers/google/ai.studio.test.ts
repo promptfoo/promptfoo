@@ -1637,8 +1637,8 @@ describe('AIStudioChatProvider', () => {
       expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
-    it('does not execute a callback from JSON in a text part', async () => {
-      const callback = vi.fn().mockResolvedValue('should not run');
+    it('executes an explicitly mapped JSON callback from a text part', async () => {
+      const callback = vi.fn().mockResolvedValue('mapped result');
       const text = JSON.stringify({ functionCall: { name: 'get_weather', args: {} } });
       provider = new AIStudioChatProvider('gemini-3.6-flash', {
         config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
@@ -1650,8 +1650,8 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
 
-      expect(response.output).toBe(text);
-      expect(callback).not.toHaveBeenCalled();
+      expect(response.output).toBe('mapped result');
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
     });
 
     it.each([false, true])(

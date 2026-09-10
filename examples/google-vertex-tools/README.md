@@ -13,7 +13,7 @@ cd google-vertex-tools
 
 This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with:
 
-- Function calling and tool declarations
+- Function calling and tool declarations with Gemini 3.8 Flash
 - Streamed function-call arguments and callback execution with local implementations
 - Different configuration approaches (YAML vs JavaScript)
 
@@ -60,7 +60,7 @@ Uses external tool definitions and validates function calls without execution:
 - `promptfooconfig.yaml` - YAML configuration with external tools
 - `tools.json` - Function definitions for weather lookup
 
-The basic config selects `gemini-3.5-flash` on the `global` endpoint for the target and text grader. Its semantic assertion uses Vertex `text-embedding-005`; this cloud model is separate from the native Gemini embedding namespace.
+The basic config selects `gemini-3.8-flash` on the `global` endpoint for the target and text grader. Its semantic assertion uses Vertex `text-embedding-005`; this cloud model is separate from the native Gemini embedding namespace.
 
 ### Function Callbacks (`promptfooconfig-callback.mjs`)
 

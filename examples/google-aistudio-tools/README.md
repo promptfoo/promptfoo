@@ -40,7 +40,7 @@ promptfoo eval -c promptfooconfig.yaml
 
 The search grounding configuration (`promptfooconfig.search.yaml`) demonstrates:
 
-- Using Gemini 3.6 Flash with Google Search as a tool
+- Using Gemini 3.8 Flash with Google Search as a tool
 - Using Gemini 3.5 Flash-Lite with thinking capabilities and Search grounding
 - Comparing a stable Gemini 2.5 model with the new models
 - Testing queries that benefit from real-time web information
@@ -98,7 +98,7 @@ When using Search grounding in your own applications:
 
 This example demonstrates three approaches to search:
 
-1. **Search as a tool** (Gemini 3.6 Flash): Allows the model to decide when to use search
+1. **Search as a tool** (Gemini 3.8 Flash): Allows the model to decide when to use search
 
    ```yaml
    tools:

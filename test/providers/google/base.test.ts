@@ -519,22 +519,30 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('executeFunctionToolCallbacks()', () => {
-    it('preserves JSON text without executing a callback', async () => {
-      const callback = vi.fn().mockResolvedValue('trusted callback result');
-      const provider = new TestGoogleProvider('gemini-3.6-flash');
+    it.each(['object', 'array'] as const)(
+      'executes an explicitly mapped JSON %s envelope',
+      async (form) => {
+        const callback = vi.fn().mockResolvedValue('trusted callback result');
+        const provider = new TestGoogleProvider('gemini-3.6-flash');
 
-      const output = JSON.stringify({
-        functionCall: { name: 'test_function', args: { value: 1 } },
-      });
-      const result = await provider['executeFunctionToolCallbacks'](
-        output,
-        { functionToolCallbacks: { test_function: callback } },
-        false,
-      );
+        const envelope = {
+          functionCall: { id: 'json-call', name: 'test_function', args: { value: 1 } },
+        };
+        const output = JSON.stringify(form === 'array' ? [envelope] : envelope);
+        const result = await provider['executeFunctionToolCallbacks'](
+          output,
+          { functionToolCallbacks: { test_function: callback } },
+          false,
+        );
 
-      expect(callback).not.toHaveBeenCalled();
-      expect(result).toBe(output);
-    });
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"value":1}');
+        expect(result).toBe('trusted callback result');
+        expect(withGenAIToolSpan).toHaveBeenCalledWith(
+          { name: 'test_function', arguments: '{"value":1}', callId: 'json-call' },
+          expect.any(Function),
+        );
+      },
+    );
 
     it('retains the native function call ID in tool tracing', async () => {
       const callback = vi.fn().mockResolvedValue('done');

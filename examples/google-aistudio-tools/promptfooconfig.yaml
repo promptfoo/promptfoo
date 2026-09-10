@@ -8,7 +8,7 @@ prompts:
   - What is the weather in {{location}}?
 
 providers:
-  - id: 'google:gemini-2.5-flash'
+  - id: 'google:gemini-3.8-flash'
     config:
       tools: file://tools.json
 
@@ -18,7 +18,7 @@ defaultTest:
     provider:
       embedding: 'google:embedding:gemini-embedding-001'
       text:
-        id: 'google:gemini-2.5-flash'
+        id: 'google:gemini-3.8-flash'
         config:
           tools: [] # Keep grading separate from the target's weather tool.
 

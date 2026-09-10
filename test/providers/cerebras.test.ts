@@ -192,6 +192,26 @@ describe('Cerebras provider', () => {
       ).toBeUndefined();
     });
 
+    it('should keep credentials and headers out of passthrough', async () => {
+      // Regression: the whole config was spread into `passthrough`, so a configured
+      // apiKey was serialized into the request body and custom headers never became
+      // HTTP headers.
+      const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
+        config: {
+          config: {
+            apiKey: 'CEREBRAS-SECRET',
+            headers: { 'X-Tenant': 'acme' },
+            temperature: 0.5,
+          },
+        },
+      });
+
+      const config = (provider as OpenAiChatCompletionProvider).config;
+      expect(config.passthrough).toEqual({ temperature: 0.5 });
+      expect(config.apiKey).toBe('CEREBRAS-SECRET');
+      expect(config.headers).toEqual({ 'X-Tenant': 'acme' });
+    });
+
     it('should pass through arbitrary passthrough config', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         config: {

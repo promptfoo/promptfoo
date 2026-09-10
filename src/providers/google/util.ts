@@ -337,10 +337,10 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
 }
 
 /**
- * Current Gemini Flash models no longer support manual sampling controls,
- * candidate counts, or frequency/presence penalties.
+ * Current Gemini Flash models ignore sampling parameters and reject penalties
+ * and candidate counts. Remove typed and passthrough spellings.
  */
-export function removeDeprecatedGeminiGenerationParams<T extends Record<string, unknown>>(
+export function removeDeprecatedGeminiGenerationParams<T>(
   modelName: string,
   generationConfig: T,
 ): T {
@@ -352,7 +352,15 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
     return generationConfig;
   }
 
-  const sanitized = { ...generationConfig };
+  if (
+    !generationConfig ||
+    typeof generationConfig !== 'object' ||
+    Array.isArray(generationConfig)
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig } as Record<string, unknown>;
   for (const field of [
     'temperature',
     'topP',

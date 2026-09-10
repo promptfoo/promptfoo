@@ -105,6 +105,16 @@ export function getWeather(args) {
     );
   }
 
+  function useResponseForm(form: string) {
+    const parts =
+      form === 'native'
+        ? [functionCall]
+        : [{ text: JSON.stringify(form === 'JSON array' ? [functionCall] : functionCall) }];
+    fetchMock.mockImplementation(async () =>
+      Response.json({ candidates: [{ content: { parts } }] }),
+    );
+  }
+
   function expectRequest(route: string) {
     const [url, options] = fetchMock.mock.calls.at(-1)!;
     expect(String(url)).toContain('models/gemini-2.5-pro:');
@@ -152,17 +162,21 @@ export function getWeather(args) {
       expect((await call(provider, { basePath: promptDir })).output).toBe('provider:Boston:1');
     });
 
-    it('uses a prompt-owned callback directory and distinguishes identical references', async () => {
-      const provider = await load({ basePath: providerDir });
-      expect((await call(provider)).output).toBe('provider:Boston:1');
-      expect(
-        (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
-      ).toBe('prompt:Boston:1');
-      expect(
-        (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
-      ).toBe('prompt:Boston:2');
-      expect((await call(provider)).output).toBe('provider:Boston:2');
-    });
+    it.each(['native', 'JSON object', 'JSON array'])(
+      'uses the owning callback directory for %s and distinguishes identical references',
+      async (form) => {
+        useResponseForm(form);
+        const provider = await load({ basePath: providerDir });
+        expect((await call(provider)).output).toBe('provider:Boston:1');
+        expect(
+          (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
+        ).toBe('prompt:Boston:1');
+        expect(
+          (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
+        ).toBe('prompt:Boston:2');
+        expect((await call(provider)).output).toBe('provider:Boston:2');
+      },
+    );
 
     it('uses the provider directory when a prompt-owned callback omits basePath', async () => {
       const provider = await load({ basePath: providerDir });
@@ -228,19 +242,23 @@ export function getWeather(args) {
     });
   });
 
-  it('retains ownership and directory isolation in the standalone GoogleProvider', async () => {
-    const provider = new GoogleProvider('gemini-2.5-pro', {
-      config: {
-        vertexai: false,
-        apiKey: 'test-callback-key',
-        basePath: providerDir,
-        tools,
-        functionToolCallbacks: callbacks,
-      },
-    });
-    expect((await call(provider, { basePath: promptDir })).output).toBe('provider:Boston:1');
-    expect(
-      (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
-    ).toBe('prompt:Boston:1');
-  });
+  it.each(['native', 'JSON object', 'JSON array'])(
+    'retains standalone callback ownership for %s',
+    async (form) => {
+      useResponseForm(form);
+      const provider = new GoogleProvider('gemini-2.5-pro', {
+        config: {
+          vertexai: false,
+          apiKey: 'test-callback-key',
+          basePath: providerDir,
+          tools,
+          functionToolCallbacks: callbacks,
+        },
+      });
+      expect((await call(provider, { basePath: promptDir })).output).toBe('provider:Boston:1');
+      expect(
+        (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
+      ).toBe('prompt:Boston:1');
+    },
+  );
 });

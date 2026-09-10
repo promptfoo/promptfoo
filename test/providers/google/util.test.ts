@@ -3149,6 +3149,35 @@ describe('util', () => {
 
   describe('removeDeprecatedGeminiGenerationParams', () => {
     it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ])('removes unsupported sampling and penalty parameters for %s', (modelName) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams(modelName, {
+          temperature: 0.5,
+          topP: 0.5,
+          top_p: 0.5,
+          topK: 10,
+          top_k: 10,
+          candidateCount: 2,
+          candidate_count: 2,
+          presencePenalty: 0.5,
+          presence_penalty: 0.5,
+          frequencyPenalty: 0.5,
+          frequency_penalty: 0.5,
+          maxOutputTokens: 128,
+        }),
+      ).toEqual({ maxOutputTokens: 128 });
+    });
+
+    it('preserves generation parameters for other Gemini models', () => {
+      const config = { presencePenalty: 0.5, frequencyPenalty: 0.5 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
+    });
+    it.each([
       'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.6-flash',
@@ -3412,6 +3441,35 @@ describe('util', () => {
       // Expected: (1000 * 1.5 + 500 * 9.0) / 1M = (1500 + 4500) / 1M = 0.006
       expect(cost).toBeCloseTo(0.006, 10);
     });
+
+    it.each([
+      ['gemini-3.5-flash', false, 'standard', 0.00096],
+      ['gemini-3.5-flash', false, 'priority', 0.001728],
+      ['gemini-3.5-flash', false, 'flex', 0.000482],
+      ['gemini-3.5-flash', true, 'flex', 0.00048],
+      ['gemini-3.1-flash-lite', false, 'priority', 0.000576],
+      ['gemini-3.1-flash-lite', false, 'flex', 0.00016],
+      ['gemini-3.1-flash-lite', true, 'priority', 0.000576],
+      ['gemini-3.1-flash-lite', true, 'flex', 0.00016],
+    ] as const)(
+      'matches published audio and cache rates for %s (Vertex: %s, tier: %s)',
+      (modelName, isVertex, serviceTier, expectedCost) => {
+        const cost = calculateGoogleCost(
+          modelName,
+          { service_tier: serviceTier },
+          1000,
+          0,
+          isVertex,
+          1000,
+          0,
+          0,
+          0,
+          400,
+          400,
+        );
+        expect(cost).toBeCloseTo(expectedCost, 12);
+      },
+    );
 
     describe('Gemini Flash introductory pricing', () => {
       it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
@@ -3970,7 +4028,7 @@ describe('util', () => {
     });
 
     it.each(['gemini-3.1-flash-lite'])(
-      'should preserve the %s audio-input rate at priority tier',
+      'should apply the published %s audio-input rate at priority tier',
       (modelId) => {
         const cost = calculateGoogleCost(
           modelId,
@@ -4019,6 +4077,8 @@ describe('util', () => {
     );
 
     it.each([
+      ['gemini-3.5-flash', 1.5, 0.15, 0.15, 1.5, 9],
+      ['gemini-3.1-flash-lite', 0.25, 0.025, 0.05, 0.5, 1.5],
       ['gemini-flash-latest', 0.75, 0.075, 0.075, 0.75, 3.75],
       ['gemini-flash-lite-latest', 0.3, 0.03, 0.03, 0.3, 2.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
@@ -4357,6 +4417,20 @@ describe('util', () => {
       // gemini-flash-lite-latest serves gemini-3.5-flash-lite: input=0.3/1M, output=2.5/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    // Keep the fallback alias estimates aligned with the current model catalog.
+    it.each([
+      ['gemini-flash-latest', 'gemini-3.8-flash'],
+      ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'],
+      ['gemini-pro-latest', 'gemini-3.1-pro-preview'],
+    ])('should price the %s alias exactly like %s', (alias, resolvedModel) => {
+      const aliasEntry = GOOGLE_MODELS.find((model) => model.id === alias);
+      const resolvedEntry = GOOGLE_MODELS.find((model) => model.id === resolvedModel);
+
+      expect(aliasEntry, `${alias} must be in the catalog`).toBeDefined();
+      expect(resolvedEntry, `${resolvedModel} must be in the catalog`).toBeDefined();
+      expect({ ...aliasEntry, id: resolvedModel }).toEqual(resolvedEntry);
     });
 
     it('should return undefined for shutdown models without retained historical pricing', () => {

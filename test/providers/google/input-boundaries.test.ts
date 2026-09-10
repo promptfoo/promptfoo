@@ -88,13 +88,15 @@ describe('Google media and tool-policy input boundaries', () => {
       : loadApiProvider(`${route === 'Studio' ? 'google' : 'vertex'}:${model}`, { options });
   }
 
-  function requestBody(route: Route) {
+  function requestBody(route: Route, streaming = false) {
+    const action =
+      streaming && route === 'Vertex Express' ? 'streamGenerateContent' : 'generateContent';
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(String(url)).toBe(
       route === 'Vertex Express'
-        ? `https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:generateContent`
-        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        ? `https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:${action}`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}`,
     );
     expect(options?.method).toBe('POST');
     const headers = new Headers(options?.headers);
@@ -139,11 +141,15 @@ describe('Google media and tool-policy input boundaries', () => {
     });
 
     it.each([
-      ['ANY', 'NONE', true],
-      ['NONE', 'ANY', false],
+      ['ANY', 'NONE', true, 'native'],
+      ['NONE', 'ANY', false, 'native'],
+      ['ANY', 'NONE', true, 'JSON object'],
+      ['NONE', 'ANY', false, 'JSON object'],
+      ['ANY', 'NONE', true, 'JSON array'],
+      ['NONE', 'ANY', false, 'JSON array'],
     ] as const)(
-      'uses winning passthrough %s over explicit %s for tools and callbacks',
-      async (mode, explicitMode, enabled) => {
+      'uses winning passthrough %s over explicit %s (enabled: %s, form: %s)',
+      async (mode, explicitMode, enabled, form) => {
         const marker = path.join(temporaryDirectory, 'loaded.txt');
         await writeFile(
           path.join(temporaryDirectory, 'tools.mjs'),
@@ -163,8 +169,23 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
           toolConfig: { functionCallingConfig: { mode: explicitMode } },
           passthrough: { toolConfig: { functionCallingConfig: { mode } } },
         });
+        const originalOutput =
+          form === 'native'
+            ? [functionCall]
+            : JSON.stringify(form === 'JSON array' ? [functionCall] : functionCall);
         fetchMock.mockImplementation(async () =>
-          Response.json({ candidates: [{ content: { parts: [functionCall] } }] }),
+          Response.json({
+            candidates: [
+              {
+                content: {
+                  parts:
+                    typeof originalOutput === 'string'
+                      ? [{ text: originalOutput }]
+                      : originalOutput,
+                },
+              },
+            ],
+          }),
         );
         const response = await withCacheEnabled(false, () => provider.callApi('Weather'));
         expect(response.error).toBeUndefined();
@@ -184,8 +205,83 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
         } else {
           expect(() => readFileSync(marker)).toThrow();
           expect(callback).not.toHaveBeenCalled();
-          expect(response.output).toEqual([functionCall]);
+          expect(response.output).toEqual(originalOutput);
         }
+      },
+    );
+    it.each([
+      [
+        'valid partial argument',
+        { partialArgs: [{ jsonPath: '$.location', stringValue: 'Boston' }] },
+        true,
+      ],
+      [
+        'out-of-bounds array index',
+        { partialArgs: [{ jsonPath: '$.items[10001]', stringValue: 'Boston' }] },
+        false,
+      ],
+      ['incomplete argument JSON', { args: '{' }, false],
+    ] as const)('validates streamed JSON envelopes: %s', async (_name, fragment, executes) => {
+      const callback = vi.fn(async () => 'streamed:Boston');
+      const provider = await load(route, {
+        streaming: true,
+        toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        functionToolCallbacks: { get_weather: callback },
+      });
+      const output = JSON.stringify([{ functionCall: { name: 'get_weather', ...fragment } }]);
+      fetchMock.mockImplementation(async () =>
+        Response.json([{ candidates: [{ content: { parts: [{ text: output }] } }] }]),
+      );
+      const response = await withCacheEnabled(false, () => provider.callApi('Weather'));
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(executes ? 'streamed:Boston' : output);
+      if (executes) {
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"location":"Boston"}');
+      } else {
+        expect(callback).not.toHaveBeenCalled();
+      }
+      expect(requestBody(route, true).toolConfig).toEqual({
+        functionCallingConfig: { streamFunctionCallArguments: true },
+      });
+    });
+
+    it.each([
+      ['plain text', 'Weather is sunny', false],
+      ['malformed JSON', '{"functionCall":', false],
+      ['unknown name', JSON.stringify({ functionCall: { name: 'unknown', args: {} } }), false],
+      ['non-string name', JSON.stringify({ functionCall: { name: 42, args: {} } }), false],
+      [
+        'malformed arguments',
+        JSON.stringify({ functionCall: { name: 'get_weather', args: '{' } }),
+        false,
+      ],
+      [
+        'unconfigured argument stream',
+        JSON.stringify({
+          functionCall: {
+            name: 'get_weather',
+            partialArgs: [{ jsonPath: '$.location', stringValue: 'Boston' }],
+          },
+        }),
+        true,
+      ],
+    ] as const)(
+      'preserves %s without executing a JSON callback',
+      async (_name, output, hasError) => {
+        const callback = vi.fn(async () => 'must not execute');
+        const provider = await load(route, { functionToolCallbacks: { get_weather: callback } });
+        fetchMock.mockImplementation(async () =>
+          Response.json({ candidates: [{ content: { parts: [{ text: output }] } }] }),
+        );
+        const response = await withCacheEnabled(false, () => provider.callApi('Weather'));
+        if (hasError) {
+          expect(response.error).toContain('Streamed function-call arguments require');
+        } else {
+          expect(response.error).toBeUndefined();
+          expect(response.output).toBe(output);
+        }
+        expect(callback).not.toHaveBeenCalled();
+        requestBody(route);
       },
     );
   });

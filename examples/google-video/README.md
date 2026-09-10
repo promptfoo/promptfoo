@@ -97,3 +97,4 @@ downloads the output to its blob store and preserves the returned `gs://` object
 - `google:video:*` uses Google AI Studio by default and auto-detects Vertex AI when project-based auth is configured
 - Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` for explicit Vertex AI routing
 - Gemini API extensions use 720p output and an 8-second request setting, whether `durationSeconds` is omitted or configured. Vertex extension requests omit `durationSeconds`, including when configured. Both APIs add a fixed 7 seconds to the source video.
+- Google AI Studio does not accept Vertex operation IDs for extension

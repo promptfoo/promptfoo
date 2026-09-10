@@ -274,11 +274,11 @@ Vertex video extensions add a fixed 7 seconds to the source video. Promptfoo omi
 Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
-- Output context: up to 65K tokens for Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
+- Output context: up to 65K tokens for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - Supports: Text, code, images, audio, video, and PDF inputs
 - Features: System instructions, structured JSON output, function calling, thinking, code execution, URL context, and grounding with Google Search or Google Maps
 
-Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support standard, Flex, Priority, and Batch inference plus context caching. Computer Use is not currently supported for these models on Vertex AI.
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support standard, Flex, Priority, and Batch inference plus context caching. Computer Use is available in preview for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite. Promptfoo forwards tool declarations and responses; the application supplies the action loop. See Google's [supported models and Computer Use guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/computer-use).
 
 Native Gemini prompts can reference multimodal content stored in Google Cloud Storage. For example, to evaluate a PDF:
 
@@ -1094,7 +1094,7 @@ Thinking levels for Gemini 3 Flash:
 | MEDIUM  | Balanced approach for moderate complexity.                 |
 | HIGH    | More tokens for deep reasoning.                            |
 
-Gemini 3.6 Flash defaults to `MEDIUM`; Gemini 3.5 Flash-Lite defaults to `MINIMAL`. Use `MEDIUM` or `HIGH` for Flash-Lite tool-heavy, multi-step tasks. Both models ignore `temperature`, `topP`, and `topK`, and Promptfoo omits those fields and `candidateCount`. Prompts must not end with a prefilled `model` turn; preserve matching function names, function-call IDs when returned, and thought signatures when evaluating multi-turn tool use. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
+Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash default to `MEDIUM`; Gemini 3.5 Flash-Lite defaults to `MINIMAL`. Use `MEDIUM` or `HIGH` for Flash-Lite tool-heavy, multi-step tasks. These Flash models ignore `temperature`, `topP`, and `topK`, and Promptfoo omits those fields and `candidateCount`. Prompts must not end with a prefilled `model` turn; preserve matching function names, function-call IDs when returned, and thought signatures when evaluating multi-turn tool use. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
 Thinking levels for Gemini 3 Pro:
 
