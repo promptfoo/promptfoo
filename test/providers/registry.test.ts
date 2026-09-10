@@ -2,8 +2,8 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
-import { MCPProvider } from '../../src/providers/mcp';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
