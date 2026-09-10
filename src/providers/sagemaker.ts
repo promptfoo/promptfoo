@@ -544,6 +544,18 @@ abstract class SageMakerGenericProvider {
       this.runtimeDefaultsStates.set(runtimeRegion, defaults);
     }
     const defaultsState = defaults;
+    // Resolve before later SDK imports can delay this request's selected defaults.
+    defaultsState.provider ??= smithyConfig.resolveDefaultsModeConfig({ region: runtimeRegion });
+    const defaultsMode = await defaultsState.provider();
+    if (
+      defaultsInputs.some((value, index) => value !== process.env[DEFAULTS_ENV_VARS[index]]) &&
+      this.runtimeDefaultsStates.get(runtimeRegion) === defaultsState
+    ) {
+      // Keep this request's result, but do not retain it under inputs that changed
+      // during discovery. A newer same-region selection owns its own state.
+      this.runtimeDefaultsStates.delete(runtimeRegion);
+    }
+    this.assertRuntimeGeneration(generation);
     let entry = this.#runtimeInitializations.find(
       (candidate) =>
         candidate.endpoint.url === endpoint.url &&
@@ -566,7 +578,6 @@ abstract class SageMakerGenericProvider {
           const { loadConfigsForDefaultMode } = await import('@smithy/core/client').catch(
             importError,
           );
-          const { resolveDefaultsModeConfig } = smithyConfig;
           this.assertRuntimeGeneration(generation);
           if (
             this.#retainedCredentials &&
@@ -595,12 +606,12 @@ abstract class SageMakerGenericProvider {
               chain({ ...options, callerClientConfig });
             credentials = isolated;
           }
-          defaultsState.provider ??= resolveDefaultsModeConfig({ region: runtimeRegion });
-          const defaultsMode = await defaultsState.provider();
           const retryStrategy = await retryState.provider?.();
           this.assertRuntimeGeneration(generation);
           const client = new SageMakerRuntimeClient({
             region: runtimeRegion,
+            endpoint: endpoint.url,
+            ignoreConfiguredEndpointUrls: true,
             systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
             useFipsEndpoint: endpoint.useFipsEndpoint,
             useDualstackEndpoint: endpoint.useDualstackEndpoint,
