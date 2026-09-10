@@ -247,7 +247,7 @@ export async function applyRuntimeTransforms(
         ...layerConfig,
         ...remoteGenerationContextPayload(context?.targetId),
       });
-      for (const generated of result) {
+      for (const [index, generated] of result.entries()) {
         const metadata = generated.metadata ?? {};
         accumulateResponseTokenUsage(
           totalTokenUsage,
@@ -259,7 +259,7 @@ export async function applyRuntimeTransforms(
           {
             tokenUsage: subtractTokenUsage(
               metadata.providerTokenUsage as TokenUsage | undefined,
-              previousProviderTokenUsage,
+              index === 0 ? previousProviderTokenUsage : undefined,
             ),
           },
           { countAsRequest: false },

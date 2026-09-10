@@ -28,13 +28,15 @@ describe('matchesSelectBest', () => {
       reason: 'Output selected as the best: choose the best output',
     });
     expect(result.filter((item) => item.pass)).toHaveLength(1);
-    expect(result[0].tokensUsed).toMatchObject({
+    expect(result[10].tokensUsed).toMatchObject({
       total: 7,
       prompt: 3,
       completion: 4,
       numRequests: 1,
     });
-    expect(result.slice(1).every((item) => item.tokensUsed === undefined)).toBe(true);
+    expect(
+      result.filter((_item, index) => index !== 10).every((item) => item.tokensUsed === undefined),
+    ).toBe(true);
   });
 
   it('should return independent failure results for invalid verdicts', async () => {

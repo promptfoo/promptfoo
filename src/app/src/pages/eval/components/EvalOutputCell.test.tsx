@@ -1043,6 +1043,10 @@ describe('EvalOutputCell', () => {
           completion: 22,
           total: 33,
         },
+        response: {
+          output: 'response',
+          tokenUsage: { prompt: 2, completion: 3, total: 5 },
+        },
       },
     };
 
@@ -1051,6 +1055,7 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Probes:')).toBeInTheDocument();
     expect(screen.getByText('Non-grading tokens:')).toBeInTheDocument();
     expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
+    expect(screen.getByText('30')).toBeInTheDocument();
   });
 
   it('shows zero probes for a red-team provider error without usage data', () => {

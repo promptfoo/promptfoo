@@ -263,6 +263,7 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   }
 
   const { assertions: _assertions, numRequests: _numRequests, ...tokenTotals } = parsed.data;
+  tokenTotals.total ??= (tokenTotals.prompt ?? 0) + (tokenTotals.completion ?? 0);
   const hasTokenTotals =
     Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
     Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);

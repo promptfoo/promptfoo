@@ -1581,7 +1581,7 @@ function EvalOutputCell({
     <span>{WHOLE_NUMBER_FORMATTER.format(gradingTokenUsage.total)}</span>
   ) : undefined;
   const tokPerSecDisplay = getTokensPerSecondDisplay({
-    tokenUsage,
+    tokenUsage: output.response?.tokenUsage ?? tokenUsage,
     latencyMs: output.latencyMs,
   });
   const costDisplay = getCostDisplay(output.cost);

@@ -114,16 +114,23 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
-  const generationCarrierSql = sql`NOT EXISTS (
-    SELECT 1 FROM eval_results AS earlier
-    WHERE earlier.eval_id = eval_results.eval_id
-      AND json_extract(earlier.test_case, '$.metadata.providerTokenUsage') IS NOT NULL
-      AND (earlier.prompt_idx < eval_results.prompt_idx
-        OR (earlier.prompt_idx = eval_results.prompt_idx AND earlier.test_idx < eval_results.test_idx))
-  )`;
+  const generationCarrierSql = sql`generation_usage_rank = 1`;
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
   const basicMetricsQuery = sql`
+    WITH filtered_results AS (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (
+          PARTITION BY eval_id
+          ORDER BY
+            CASE WHEN json_extract(test_case, '$.metadata.providerTokenUsage') IS NULL THEN 1 ELSE 0 END,
+            prompt_idx,
+            test_idx
+        ) AS generation_usage_rank
+      FROM eval_results
+      WHERE ${whereSql}
+    )
     SELECT
       prompt_idx,
       COUNT(DISTINCT test_idx) as total_count,
@@ -167,8 +174,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
           ELSE 0
         END
       ) as num_requests
-    FROM eval_results
-    WHERE ${whereSql}
+    FROM filtered_results
     GROUP BY prompt_idx
     ORDER BY prompt_idx
   `;

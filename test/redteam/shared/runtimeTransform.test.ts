@@ -210,6 +210,40 @@ describe('runtimeTransform', () => {
       });
     });
 
+    it('keeps independent fan-out usage after subtracting the carrier ledger', async () => {
+      const firstLayer: Strategy = {
+        id: 'first',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((testCase) => ({
+            ...testCase,
+            metadata: { providerTokenUsage: { total: 5, prompt: 3, completion: 2 } },
+          })),
+        ),
+      };
+      const fanOutLayer: Strategy = {
+        id: 'fan-out',
+        action: vi.fn(async ([testCase]: TestCaseWithPlugin[]) => [
+          {
+            ...testCase,
+            metadata: { providerTokenUsage: { total: 12, prompt: 7, completion: 5 } },
+          },
+          {
+            ...testCase,
+            metadata: { providerTokenUsage: { total: 7, prompt: 4, completion: 3 } },
+          },
+        ]),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['first', 'fan-out'],
+        [firstLayer, fanOutLayer],
+      );
+
+      expect(result.tokenUsage).toMatchObject({ total: 19, prompt: 11, completion: 8 });
+    });
+
     it('should extract audio data from data URL', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['audio'], mockStrategies);
 

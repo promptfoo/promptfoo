@@ -340,6 +340,13 @@ describe('tokenUsageUtils', () => {
       expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
       expect(target.total).toBe(0);
     });
+
+    it('derives a missing generation total from reported components', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { prompt: 4, completion: 3 })).toBe(true);
+      expect(target).toMatchObject({ total: 7, prompt: 4, completion: 3 });
+    });
   });
 
   describe('accumulateAssertionTokenUsage', () => {

@@ -70,19 +70,20 @@ export async function matchesSelectBest(
 
   const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
   return outputs.map((_output, index) => {
+    const usage = index === verdict ? { tokensUsed } : {};
     if (index === verdict) {
       return {
         pass: true,
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
-        ...(index === 0 ? { tokensUsed } : {}),
+        ...usage,
       };
     } else {
       return {
         pass: false,
         score: 0,
         reason: `Output not selected: ${criteria}`,
-        ...(index === 0 ? { tokensUsed } : {}),
+        ...usage,
       };
     }
   });
