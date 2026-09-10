@@ -3,7 +3,12 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  appendOpenAiApiPath,
+  formatOpenAiError,
+  getTokenUsage,
+  isOpenAiErrorOnlyResponse,
+} from './openai/util';
 import { getRequestTimeoutMs, isCallerAbortError, throwIfAborted } from './shared';
 import type OpenAI from 'openai';
 
@@ -256,6 +261,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
+      }
+      // Cache coalescing can complete this diagnostic before a shared caller aborts.
+      // Usable choices and all other processing retain their cancellation checks.
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
       }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {

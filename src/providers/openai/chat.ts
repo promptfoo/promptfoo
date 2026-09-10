@@ -38,6 +38,7 @@ import {
   assertOpenAiApiModel,
   formatOpenAiError,
   getTokenUsage,
+  isOpenAiErrorOnlyResponse,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -643,16 +644,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       // A completed error-only envelope is independent of caller cancellation.
       // Nonempty choices retain their existing success/refusal precedence.
-      if (
-        data !== null &&
-        typeof data === 'object' &&
-        !Array.isArray(data) &&
-        data.error !== null &&
-        typeof data.error === 'object' &&
-        !Array.isArray(data.error) &&
-        typeof data.error.message === 'string' &&
-        (data.choices == null || (Array.isArray(data.choices) && data.choices.length === 0))
-      ) {
+      if (isOpenAiErrorOnlyResponse(data)) {
         return {
           error: formatOpenAiError({
             ...data,
