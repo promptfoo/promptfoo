@@ -23,7 +23,7 @@ providers:
       audio:
         output:
           voice: marin
-      responseWindowMs: 15000
+      responseWindowMs: 30000
       delegation:
         type: responses
         responses:
@@ -72,11 +72,11 @@ Audio is accepted only in the final user message. Supply prior history as text m
 
 ## Capture duration
 
-Promptfoo streams audio in 20 ms frames at the configured sample rate, followed by `responseWindowMs` of silence (default: 10 seconds). It then sends `session.close` and waits for final usage. The input clip plus response window may total at most five minutes.
+Promptfoo streams audio in 20 ms frames at the configured sample rate, followed by `responseWindowMs` of silence (default: 30 seconds). It then sends `session.close` and waits for final usage. The input clip plus response window may total at most five minutes.
 
 Live has no authoritative speech-completed event. The response window is a fixed recording window and may cut off speech. Increase it for long replies or backend work. Backend completion and transcript gaps do not end the capture early. Output audio contains the received samples; transcript timestamps are on the session timeline and do not establish playback timing.
 
-`websocketTimeout` controls startup (default: 30 seconds); `closeTimeoutMs` controls finalization (default: 15 seconds). `REQUEST_TIMEOUT_MS` limits the whole request. Cancellation and eval shutdown release active sockets. Live responses are not cached.
+`websocketTimeout` controls startup (default: 30 seconds); `closeTimeoutMs` controls finalization (default: 15 seconds). These timeouts plus the capture duration must fit within `REQUEST_TIMEOUT_MS` (default: five minutes). Increase it for a full five-minute capture. Cancellation and eval shutdown release active sockets. Live responses are not cached.
 
 ## Backend delegation
 
@@ -101,7 +101,7 @@ Omitting delegation selects client mode. If Live requests backend work without a
 
 ## Results and cost
 
-`output` is the assistant transcript, concatenated exactly as received. `audio` contains WAV for PCM16 or the original G.711 bytes. `metadata.transcript` retains both speakers' fragments and `start_ms`/`end_ms` timestamps, including overlap.
+`output` is the assistant transcript, concatenated exactly as received. `audio` contains playable PCM16 WAV at the session's sample rate, including decoded G.711 responses. `metadata.transcript` retains both speakers' fragments and `start_ms`/`end_ms` timestamps, including overlap. The request count includes the Live session and each completed backend response.
 
 `metadata.voiceSeconds` is the latest cumulative usage snapshot. `metadata.finalUsageConfirmed` is true only when `session.closed` supplies valid final usage. A dropped connection preserves partial output and observed usage, and reports an error.
 
