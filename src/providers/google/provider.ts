@@ -737,7 +737,11 @@ export class GoogleProvider extends GoogleGenericProvider {
         },
       };
 
-      response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+      try {
+        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+      } catch (error) {
+        return { ...response, output: undefined, error: String(error) };
+      }
 
       return response;
     } catch (err) {
