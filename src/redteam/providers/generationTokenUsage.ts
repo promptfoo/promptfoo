@@ -135,11 +135,6 @@ export function trackGenerationTokenUsage(
   trackedCallApi.label = provider.callApi.label;
 
   const trackedProvider = Object.create(provider) as ApiProvider;
-  Object.defineProperty(trackedProvider, 'callApi', {
-    configurable: true,
-    value: trackedCallApi,
-    writable: true,
-  });
   Object.defineProperty(trackedProvider, GENERATION_TOKEN_USAGE_TRACKED, {
     configurable: true,
     enumerable: true,
