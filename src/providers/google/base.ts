@@ -702,10 +702,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       return output;
     }
 
+    const normalizedOutput = streamsFunctionCallArguments
+      ? restoreStreamedFunctionCallParts(parts, functionCalls)
+      : output;
     if (!config.functionToolCallbacks) {
-      return streamsFunctionCallArguments
-        ? restoreStreamedFunctionCallParts(parts, functionCalls)
-        : output;
+      return normalizedOutput;
     }
 
     const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
@@ -715,7 +716,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         typeof functionName !== 'string' ||
         !Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)
       ) {
-        return output;
+        return normalizedOutput;
       }
       try {
         const args =
@@ -724,12 +725,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
             : (functionCall.args ?? {});
         preparedCalls.push({ functionName, args: JSON.stringify(args), callId: functionCall.id });
       } catch {
-        return output;
+        return normalizedOutput;
       }
     }
 
     if (preparedCalls.length === 0) {
-      return output;
+      return normalizedOutput;
     }
 
     const results = [];
@@ -737,13 +738,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       try {
         results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch {
-        // executeFunctionCallback already logs the error. Preserve the original
+        // executeFunctionCallback already logs the error. Preserve normalized
         // model output when a callback cannot be executed.
-        return output;
+        return normalizedOutput;
       }
     }
     if (results.length === 1) {
-      return results[0] ?? output;
+      return results[0] ?? normalizedOutput;
     }
     return results
       .map((result) => {

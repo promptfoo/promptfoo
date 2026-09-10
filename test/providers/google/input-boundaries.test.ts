@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { renderPrompt } from '../../../src/evaluatorHelpers';
-import { loadApiProvider } from '../../../src/providers';
+import { loadApiProvider, loadApiProviders } from '../../../src/providers';
 import { GoogleProvider } from '../../../src/providers/google/provider';
 import { geminiFormatAndSystemInstructions } from '../../../src/providers/google/util';
 import telemetry from '../../../src/telemetry';
@@ -89,6 +89,10 @@ describe('Google media and tool-policy input boundaries', () => {
         ...config,
       },
     };
+    if (providerPrefix === 'palm') {
+      const [provider] = await loadApiProviders([{ id: `palm:${model}`, config: options.config }]);
+      return provider;
+    }
     return route === 'standalone'
       ? new GoogleProvider(model, options)
       : loadApiProvider(
