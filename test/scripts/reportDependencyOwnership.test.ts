@@ -84,6 +84,31 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('keeps unaudited packages out of root ownership under configured source roots', () => {
+    json('package.json', {
+      dependencies: { shared: '1' },
+      workspaces: ['src/app', 'packages/contracts'],
+    });
+    write('src/runtime.ts', "import 'shared'; import 'missing-root';");
+    write('packages/unowned/index.ts', "import 'shared';");
+    write('internal/runtime.ts', "import 'shared';");
+    for (const directory of ['packages/owned', 'internal/owned']) {
+      json(`${directory}/package.json`, { dependencies: { foreign: '1' } });
+      write(`${directory}/src/index.ts`, "import 'foreign'; import 'shared';");
+    }
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [
+        { name: 'runtime', roots: ['src', 'packages', 'internal'], allowedDependencies: [] },
+      ],
+    });
+    expect(report.rows).toEqual([
+      { dependency: 'shared', kind: 'dependency', owner: 'runtime', layers: 'runtime', files: 3 },
+    ]);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['missing-root']);
+    expect(report.coverage.sourceFiles).toBe(3);
+  });
+
   it.each([
     { patterns: ['packages/*', '!packages/skip'], included: ['contracts'] },
     { patterns: ['!packages/skip', 'packages/*'], included: ['contracts'] },
@@ -223,6 +248,7 @@ describe('dependency ownership report', () => {
       devDependencies: { '@types/node': '1', '@types/acme__client': '1' },
     });
     json('src/app/package.json', { name: 'app', devDependencies: { vite: '1' } });
+    write('node_modules/@types/acme__client/index.d.ts', 'export interface Client {}');
     write(
       'src/app/src/env.d.ts',
       [
@@ -293,6 +319,7 @@ describe('dependency ownership report', () => {
 
   it('reports an undeclared @types package for a referenced runtime dependency', () => {
     json('package.json', { dependencies: { foo: '1' } });
+    write('node_modules/@types/foo/index.d.ts', 'export interface Foo {}');
     write('src/env.d.ts', '/// <reference types="foo" />');
 
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
@@ -307,6 +334,49 @@ describe('dependency ownership report', () => {
       expect.objectContaining({ dependency: 'jsdoc-types' }),
     ]);
   });
+
+  it('attributes type directives to installed DefinitelyTyped packages without declarations', () => {
+    json('package.json', { dependencies: { shared: '1' } });
+    json('node_modules/shared/package.json', { name: 'shared', main: 'index.js' });
+    write('node_modules/shared/index.js', 'module.exports = {};');
+    json('node_modules/@types/shared/package.json', { name: '@types/shared', types: 'index.d.ts' });
+    write('node_modules/@types/shared/index.d.ts', 'export interface Shared {}');
+    write('src/env.d.ts', '/// <reference types="shared" />');
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: '@types/shared',
+        references: [expect.objectContaining({ specifier: 'shared', kind: 'type' })],
+      }),
+    ]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual(
+      [],
+    );
+  });
+
+  it.each(['absent', 'stub'])(
+    'ignores an %s DefinitelyTyped entry when a package supplies types',
+    (entry) => {
+      json('package.json', {
+        dependencies: { shared: '1' },
+        devDependencies: { '@types/shared': '1' },
+      });
+      json('node_modules/shared/package.json', { name: 'shared', types: 'index.d.ts' });
+      write('node_modules/shared/index.d.ts', 'export interface Shared {}');
+      if (entry === 'stub') {
+        json('node_modules/@types/shared/package.json', { name: '@types/shared' });
+      }
+      write('src/env.d.ts', '/// <reference types="shared" />');
+      const report = reportDependencyOwnership(root, config);
+      expect(report.undeclaredUsages).toEqual([]);
+      expect(report.declarations.find((item) => item.dependency === 'shared')?.references).toEqual([
+        expect.objectContaining({ specifier: 'shared', kind: 'type' }),
+      ]);
+      expect(
+        report.declarations.find((item) => item.dependency === '@types/shared')?.references,
+      ).toEqual([]);
+    },
+  );
 
   it('preserves exact computed expressions after long Unicode prefixes', () => {
     write(
@@ -513,6 +583,31 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).runtimeDeclarationGaps).toEqual([]);
   });
 
+  it('exempts only the source files named by a reviewed build annotation', () => {
+    json('package.json', { devDependencies: { builder: '1' } });
+    write('src/schema.ts', "import 'builder';");
+    write('src/server.ts', "import 'builder';");
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root/runtime' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'builder',
+          disposition: 'build',
+          reason: 'Only the schema generator loads this module.',
+          evidence: ['./src/schema.ts'],
+        },
+      ],
+    });
+    const report = reportDependencyOwnership(root, config);
+    expect(report.runtimeDeclarationGaps).toEqual([
+      { dependency: 'builder', references: [expect.objectContaining({ file: 'src/server.ts' })] },
+    ]);
+    expect(
+      report.declarations.find((entry) => entry.dependency === 'builder')?.references,
+    ).toHaveLength(2);
+  });
+
   it('supports JSX in workspace JavaScript files', () => {
     write(
       'src/app/src/component.js',
@@ -526,6 +621,8 @@ describe('dependency ownership report', () => {
   });
 
   it('keeps real workspace packages visible when their scope overlaps a source alias', () => {
+    write('src/app/src/components.ts', 'export {};');
+    write('src/util/text.ts', 'export {};');
     write(
       'src/app/src/index.ts',
       "import '@app/components'; import '@promptfoo/util/text'; import '@promptfoo/contracts'; import 'node:fs'; import './local'; import '#internal'; import 'https://example.com/module.js';",
@@ -538,10 +635,37 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('keeps external packages visible when they share an architecture alias prefix', () => {
+    json('src/app/package.json', { devDependencies: { '@promptfoo/sdk': '1' } });
+    write('src/app/src/index.ts', "import '@promptfoo/sdk'; import '@promptfoo/missing';");
+    const report = reportDependencyOwnership(root, config);
+    expect(
+      report.declarations.find((entry) => entry.dependency === '@promptfoo/sdk')?.references,
+    ).toEqual([expect.objectContaining({ file: 'src/app/src/index.ts' })]);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: '@promptfoo/missing',
+        manifest: 'src/app/package.json',
+      }),
+    ]);
+  });
+
   it('allows package self references without a circular manifest dependency', () => {
     write('src/index.ts', "import 'promptfoo/contracts';");
     write('packages/contracts/src/index.ts', "import '@promptfoo/contracts/types';");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('recognizes existing assets through source aliases', () => {
+    write('src/app/src/assets/logo.svg', '<svg />');
+    write('src/app/src/assets/style.css', 'body {}');
+    write(
+      'src/app/src/index.ts',
+      "import '@app/assets/logo.svg'; import '@app/assets/style.css'; import '@app/missing/logo.svg';",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: '@app/missing' }),
+    ]);
   });
 
   it('records computed loaders without guessing that user paths are missing packages', () => {
@@ -596,6 +720,32 @@ describe('dependency ownership report', () => {
       expect.objectContaining({ kind: 'type', line: 6 }),
       expect.objectContaining({ kind: 'type', line: 9 }),
       expect.objectContaining({ kind: 'type', line: 10 }),
+    ]);
+  });
+
+  it('records JSDoc import declarations while ignoring prose and example tags', () => {
+    write(
+      'src/index.js',
+      [
+        "/** @import { Thing } from 'shared' */",
+        '/**',
+        " * @import * as API from 'missing-types'",
+        ' */',
+        "/** Example: @import { Thing } from 'prose' */",
+        "/** @example @import { Thing } from 'example' */",
+        "/** @import 'unsupported-tag' */",
+        'export {};',
+      ].join('\n'),
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
+      expect.objectContaining({ kind: 'type', line: 1 }),
+    ]);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'missing-types',
+        references: [expect.objectContaining({ kind: 'type', line: 3 })],
+      }),
     ]);
   });
 
@@ -671,6 +821,31 @@ describe('dependency ownership report', () => {
     expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual(
       [],
     );
+  });
+
+  it('rejects computed-loader evidence owned by a different manifest', () => {
+    write('src/app/src/loader.ts', 'import(candidate);');
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root/runtime' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'shared',
+          disposition: 'computed-loader',
+          reason: 'Incorrectly attributed loader.',
+          evidence: ['./src/app/src/loader.ts'],
+        },
+      ],
+    });
+    const report = reportDependencyOwnership(root, config);
+    expect(report.annotationErrors).toEqual([
+      'Computed-loader evidence belongs to src/app/package.json, not package.json: ./src/app/src/loader.ts',
+    ]);
+    expect(report.computedImports[0].fileAnnotations).toEqual([]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')).toMatchObject({
+      references: [],
+      annotations: [],
+    });
   });
 
   it('reports stale annotations, missing evidence, and unassigned workspace ownership', () => {

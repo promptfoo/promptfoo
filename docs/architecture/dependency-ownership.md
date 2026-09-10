@@ -36,6 +36,7 @@ The versioned JSON object contains:
   optional, or peer declaration. This preserves visibility of runtime packages
   accidentally declared only as development dependencies. Explicit type imports
   are separate evidence; app/site bundling profiles are not judged by this rule.
+  Reviewed build annotations exclude only references in their named evidence files.
 - `computedImports`: nonliteral `import`, `require`, and resolution calls, without
   guessing the names of packages supplied by users. `fileAnnotations` links
   reviewed computed-loader dependencies in that file; it does not claim every
@@ -46,9 +47,11 @@ The versioned JSON object contains:
 
 Reference scopes separate source, build, colocated test/story, and declaration
 files. Reference kinds distinguish explicit type imports, leading triple-slash type
-references, TypeScript-compatible JSDoc type tags, value-capable imports, dynamic imports, resolution calls, and manual
+references, TypeScript-compatible JSDoc type tags and `@import` declarations, value-capable imports, dynamic imports, resolution calls, and manual
 annotation evidence. Type references retain their written specifier; Node types
-and declared DefinitelyTyped packages are attributed to their `@types` declaration. A value-capable
+and installed DefinitelyTyped entries are attributed to their `@types` package.
+Installed type entries are checked along the referencing file's default Node lookup paths;
+custom compiler resolution settings are not interpreted. A value-capable
 TypeScript import might still be erased during compilation.
 
 ## Coverage and limits
@@ -66,6 +69,8 @@ within each workspace, plus configured architecture ignored roots. Workspace
 manifest discovery only excludes `node_modules` and explicit workspace exclusions;
 a workspace may itself live under a directory named `build` or `dist`. Tests outside those source roots, Markdown/MDX, CSS imports,
 package-script shell commands, and custom loader functions are not parsed.
+Files owned by a nested manifest outside the audited manifest list are excluded;
+they do not become root dependency evidence merely because a broad source root contains them.
 
 If `dist/` exists, emitted declaration files are also scanned and listed explicitly.
 Run a fresh build first when assessing public declaration dependencies. The report
@@ -73,8 +78,9 @@ does not determine which declaration files are reachable through public exports,
 and it cannot tell whether existing build output is stale. No emitted declaration
 files in `coverage` means no emitted declaration evidence was available.
 
-Static imports through known architecture aliases or documented virtual site
-aliases are excluded. Declared workspace package names take precedence over a
+Static imports that resolve to source or assets through architecture aliases, or match documented virtual site
+aliases, are excluded. A shared alias prefix alone does not hide an external package.
+Declared workspace package names take precedence over a
 broad source alias, so a future `@promptfoo/contracts` package still needs a
 manifest declaration. Framework aliases in the ledger must name actual virtual
 modules; do not hide ordinary transitive packages with an alias entry.
@@ -108,7 +114,7 @@ missing evidence make the command fail and exclude the invalid annotation from
 computed-import metadata, declaration annotations, and synthesized usage references.
 Evidence paths are review pointers, not automated proof that the explanation remains true.
 
-Computed-loader annotations add references with `kind: "annotation"` and
+Computed-loader evidence must belong to the annotation's manifest. These annotations add references with `kind: "annotation"` and
 `line: 0`. They remain distinct from parsed imports and do not change the root
 table's literal source count. Other annotations preserve installation/build
 reasons without pretending that a source import exists.
@@ -120,6 +126,6 @@ npm run deps:ownership -- --json --check
 ```
 
 `--check` fails on undeclared imports, root runtime declaration gaps, or unassigned
-manifests. Computed user-module loads do not fail strict checking. Existing workspace declaration debt is reported
-as-is; this command is not yet a repository-wide passing ratchet. Ordinary report
+manifests. Computed user-module loads do not fail strict checking. Strict checking is
+available locally but is not a required CI gate. Ordinary report
 mode remains descriptive, except that invalid annotations fail in either mode.

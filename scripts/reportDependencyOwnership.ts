@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +13,7 @@ import {
   getPackageName,
   normalizePath,
   readLayerConfig,
+  resolveInternalModule,
 } from './architectureUtils';
 
 import type { LayerConfig } from './architectureUtils';
@@ -139,6 +141,18 @@ function manifestFor(file: string, manifests: string[]): string {
   );
 }
 
+function nearestManifest(repoRoot: string, file: string): string {
+  let directory = path.posix.dirname(file);
+  while (directory !== '.' && path.posix.dirname(directory) !== directory) {
+    const manifest = `${directory}/package.json`;
+    if (fs.existsSync(path.join(repoRoot, manifest))) {
+      return manifest;
+    }
+    directory = path.posix.dirname(directory);
+  }
+  return 'package.json';
+}
+
 function isTestFile(file: string): boolean {
   return /(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)(?:\.d)?\.[^.]+$/.test(file);
 }
@@ -238,14 +252,16 @@ function discoverFiles(
     }
   }
 
+  for (const file of files) {
+    if (!manifests.includes(nearestManifest(repoRoot, file))) {
+      files.delete(file);
+      declarationFiles.delete(file);
+    }
+  }
   return { files, declarationFiles };
 }
 
-function leadingTypeReferences(
-  comments: Comment[],
-  firstStatement: number,
-  packages: Map<string, PackageJson>,
-) {
+function leadingTypeReferences(comments: Comment[], firstStatement: number, file: string) {
   const references: Array<{ start: number; specifier: string; dependency: string }> = [];
   // TypeScript directives are leading line comments, not AST imports. Ignore
   // lookalikes in strings/block comments and comments after the first statement.
@@ -270,19 +286,24 @@ function leadingTypeReferences(
       continue;
     }
     const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
-    const hasTypesDeclaration = [...packages.values()].some((pkg) =>
-      sections.some((section) => Object.hasOwn(pkg[section] ?? {}, typesPackage)),
-    );
-    const hasRuntimeDeclaration = [...packages.values()].some((pkg) =>
-      ['dependencies', 'optionalDependencies', 'peerDependencies'].some((section) =>
-        Object.hasOwn(pkg[section as Section] ?? {}, name),
-      ),
+    const typesSpecifier = typesPackage + specifier.slice(name.length);
+    const hasInstalledTypes = (createRequire(file).resolve.paths(typesSpecifier) ?? []).some(
+      (directory) => {
+        const candidate = path.join(directory, typesSpecifier);
+        if (fs.existsSync(`${candidate}.d.ts`)) {
+          return true;
+        }
+        const manifest = path.join(candidate, 'package.json');
+        const pkg = fs.existsSync(manifest)
+          ? (JSON.parse(fs.readFileSync(manifest, 'utf8')) as { types?: string; typings?: string })
+          : {};
+        return fs.existsSync(path.join(candidate, pkg.types ?? pkg.typings ?? 'index.d.ts'));
+      },
     );
     references.push({
       start: comment.start,
       specifier,
-      dependency:
-        name === 'node' || hasTypesDeclaration || hasRuntimeDeclaration ? typesPackage : name,
+      dependency: name === 'node' || hasInstalledTypes ? typesPackage : name,
     });
   }
   return references;
@@ -345,6 +366,12 @@ export function reportDependencyOwnership(
       if (!fs.existsSync(path.join(repoRoot, evidence))) {
         annotationErrors.push(`Missing annotation evidence: ${evidence}`);
       }
+      const owner = nearestManifest(repoRoot, path.posix.normalize(normalizePath(evidence)));
+      if (pkg && annotation.disposition === 'computed-loader' && owner !== annotation.manifest) {
+        annotationErrors.push(
+          `Computed-loader evidence belongs to ${owner}, not ${annotation.manifest}: ${evidence}`,
+        );
+      }
     }
     if (annotationErrors.length === errorCount) {
       validAnnotations.push({
@@ -374,7 +401,7 @@ export function reportDependencyOwnership(
     }
     const scope = scopeFor(file, manifest, configuredRoots);
     const layer = getLayerForFile(file, sourceConfig);
-    const aliases = [...Object.keys(config.aliases ?? {}), ...(ledger.aliases[manifest] ?? [])];
+    const aliases = ledger.aliases[manifest] ?? [];
     const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
     const add = (
       node: Pick<Node, 'start'>,
@@ -382,12 +409,20 @@ export function reportDependencyOwnership(
       kind: Reference['kind'],
       dependency = getPackageName(specifier),
     ) => {
+      const alias = Object.entries(config.aliases ?? {})
+        .sort(([left], [right]) => right.length - left.length)
+        .find(([prefix]) => specifier === prefix || specifier.startsWith(`${prefix}/`));
+      const aliasedFile = alias
+        ? path.resolve(repoRoot, alias[1] + specifier.slice(alias[0].length))
+        : undefined;
       // Workspace names remain dependencies and need declarations, even when a broad
       // source alias shares their scope (for example @promptfoo/*).
       if (
         !dependency ||
         dependency === packages.get(manifest)?.name ||
-        (aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) &&
+        ((aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) ||
+          (aliasedFile && fs.existsSync(aliasedFile) && fs.statSync(aliasedFile).isFile()) ||
+          resolveInternalModule(repoRoot, file, specifier, config.aliases)) &&
           !packageNames.includes(dependency)) ||
         specifier === 'src' ||
         specifier.startsWith('src/') ||
@@ -427,7 +462,7 @@ export function reportDependencyOwnership(
     for (const reference of leadingTypeReferences(
       result.comments,
       result.program.body[0]?.start ?? source.length,
-      packages,
+      path.resolve(repoRoot, file),
     )) {
       add(reference, reference.specifier, 'type', reference.dependency);
     }
@@ -441,9 +476,18 @@ export function reportDependencyOwnership(
         (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
       );
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\s+(?:\{[^}]*\}\s+from\s+)?['"]([^'"]+)['"]/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\s+[\s\S]*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
       )) {
-        add({ start: comment.start + (tag.index ?? 0) }, tag[1], 'type');
+        const start = tag.index + tag[0].indexOf('@');
+        const parsed = parseSync('jsdoc.ts', body.slice(start + 1, tag.index + tag[0].length));
+        const declaration = parsed.program.body[0];
+        if (
+          parsed.errors.length === 0 &&
+          parsed.program.body.length === 1 &&
+          declaration?.type === 'ImportDeclaration'
+        ) {
+          add({ start: comment.start + 2 + start }, declaration.source.value, 'type');
+        }
       }
       for (const tag of body.matchAll(
         /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum)\s*\{/g,
