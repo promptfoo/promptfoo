@@ -266,7 +266,7 @@ prompts:
   - 'Continue the camera movement toward the mountains'
 ```
 
-Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Existing configs may also pass a Vertex operation name such as `projects/.../operations/...` through `sourceVideo`, which promptfoo sends as `video.operationName`.
+Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Operation names such as `projects/.../operations/...` are not video inputs; promptfoo rejects them with instructions to supply the actual video.
 
 ## Model Capabilities
 
