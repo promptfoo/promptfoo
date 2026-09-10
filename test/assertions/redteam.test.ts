@@ -40,7 +40,7 @@ describe('handleRedteam', () => {
       grade: { pass: false, score: 0, reason: 'Private document read' },
       rubric: 'Fixture rubric',
     });
-    const result = await handleRedteam({
+    const params = {
       assertion,
       baseType: getAssertionBaseType(assertion),
       assertionValueContext: {
@@ -64,7 +64,8 @@ describe('handleRedteam', () => {
       renderedValue: undefined,
       test,
       valueFromScript: undefined,
-    });
+    };
+    const result = await handleRedteam(params);
     const context = getResult.mock.calls[0][7];
     expect(context?.traceData).toBe(trace);
     expect(context?.traceSummary).toContain('read_private_document');
@@ -72,6 +73,18 @@ describe('handleRedteam', () => {
     expect(context).toMatchObject(tracking);
     expect(checkTracking).toHaveBeenCalledWith('fixture-page', 'fixture-eval');
     expect(result.pass).toBe(false);
+
+    const optOutTest = {
+      ...test,
+      metadata: { ...test.metadata, tracing: { includeInGrading: false } },
+    };
+    await handleRedteam({
+      ...params,
+      test: optOutTest,
+      assertionValueContext: { ...params.assertionValueContext, test: optOutTest },
+    });
+    expect(getResult.mock.calls[1][7]).not.toHaveProperty('traceData');
+    expect(getResult.mock.calls[1][7]).not.toHaveProperty('traceSummary');
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {

@@ -2472,7 +2472,7 @@ describe('RedteamGraderBase', () => {
           reason: 'Unsafe action',
         });
         const command =
-          'API_KEY="fixture-env-key" curl http://169.254.169.254/latest/meta-data/ -H \'Authorization: Bearer fixture-header-token\'';
+          'API_KEY="fixture-env-key" ghp_fixturegithubtoken1234567890 xoxb-fixture-slack-token curl http://169.254.169.254/latest/meta-data/ -H \'Authorization: Bearer fixture-header-token\'';
         await new HarmfulGrader().getResult(
           'test prompt',
           "I can't do that.",
@@ -2508,6 +2508,8 @@ describe('RedteamGraderBase', () => {
         expect(rubric).toContain('[REDACTED]');
         expect(rubric).not.toContain('fixture-env-key');
         expect(rubric).not.toContain('fixture-header-token');
+        expect(rubric).not.toContain('fixturegithubtoken');
+        expect(rubric).not.toContain('fixture-slack-token');
       },
     );
 
@@ -2548,6 +2550,41 @@ describe('RedteamGraderBase', () => {
       expect(evidence).toContain('action-99');
       expect(evidence).toContain('omitted');
       expect(evidence.length).toBeLessThan(25_000);
+    });
+
+    it('retains actionable evidence from the middle of a long trace', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unsafe action',
+      });
+      await new HarmfulGrader().getResult(
+        'test prompt',
+        "I can't do that.",
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceSummary: 'generic summary',
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: Array.from({ length: 100 }, (_, i) => ({
+              spanId: `span-${i}`,
+              name: `span-${i}`,
+              startTime: i,
+              attributes:
+                i === 50 ? { 'tool.arguments': { url: 'https://middle.example.com' } } : {},
+            })),
+          },
+        },
+      );
+      expect(String(vi.mocked(matchesLlmRubric).mock.calls[0][0])).toContain(
+        'https://middle.example.com',
+      );
     });
 
     it('should send mixed refusals to rubric grading instead of auto-passing', async () => {

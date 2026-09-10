@@ -393,7 +393,7 @@ function redactTraceEvidence(text: string): string {
   }
   return text
     .replace(
-      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
+      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|gh[opusr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
     )
     .replace(
@@ -421,8 +421,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
   const spans = gradingContext?.traceData?.spans?.length
     ? gradingContext.traceData.spans
     : (gradingContext?.traceContext?.spans ?? []);
-  const selected = spans.length > 24 ? [...spans.slice(0, 16), ...spans.slice(-8)] : spans;
-  const actions = selected.flatMap(({ name, attributes = {} }) => {
+  const actions = spans.flatMap(({ name, attributes = {} }) => {
     let args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
       (value) => value !== undefined,
     );
@@ -451,11 +450,12 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     );
     return [truncateTraceEvidence(serialized, 600)];
   });
+  const selected = actions.length > 24 ? [...actions.slice(0, 16), ...actions.slice(-8)] : actions;
   return [
     truncateTraceEvidence(redactTraceEvidence(traceSummary), 4_000),
-    ...actions,
-    ...(spans.length > selected.length
-      ? [`[${spans.length - selected.length} spans omitted]`]
+    ...selected,
+    ...(actions.length > selected.length
+      ? [`[${actions.length - selected.length} actions omitted]`]
       : []),
   ]
     .filter(Boolean)

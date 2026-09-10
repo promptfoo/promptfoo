@@ -49,12 +49,20 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
 function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'>): RedteamGradingContext {
+  test,
+}: Pick<
+  AssertionParams,
+  'assertionValueContext' | 'providerResponse' | 'test'
+>): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
   };
 
-  if (assertionValueContext.trace) {
+  if (
+    assertionValueContext.trace &&
+    (test.metadata?.tracing as { includeInGrading?: boolean } | undefined)?.includeInGrading !==
+      false
+  ) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
   }
@@ -115,7 +123,11 @@ export const handleRedteam = async ({
   // captured assertion trace data. Keep raw trace data in-process for deterministic
   // graders; model-graded rubrics receive a compact summary and sanitized action fields.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  let gradingContext = createInitialGradingContext({
+    assertionValueContext,
+    providerResponse,
+    test,
+  });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);
