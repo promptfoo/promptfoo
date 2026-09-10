@@ -86,6 +86,9 @@ function getTerminalPollingErrorMessage(error: unknown): string | null {
     return null;
   }
   if (error instanceof ApiResponseError) {
+    if (error.status === 408 || error.status === 429 || error.status >= 500) {
+      return null;
+    }
     return error.status === 404
       ? 'Job was interrupted. Please try again.'
       : `Unable to check job status: ${error.message}`;
@@ -477,7 +480,7 @@ export default function Review({
       invalidatePolling();
       const generation = pollingGenerationRef.current;
 
-      const interval = window.setInterval(async () => {
+      const poll = async () => {
         try {
           const status = await callApiJson(
             ApiRoutes.Eval.GetJob,
@@ -533,17 +536,20 @@ export default function Review({
             // Fetch reports transient network failures as TypeError. Keep polling so a later
             // request can recover when connectivity returns.
             console.error('Error polling job status:', error);
+          } else {
+            invalidatePolling();
+            setIsRunning(false);
+            clearJob();
+            showToast(errorMessage, 'error');
             return;
           }
-
-          invalidatePolling();
-          setIsRunning(false);
-          clearJob();
-          showToast(errorMessage, 'error');
         }
-      }, 1000);
+        if (pollingGenerationRef.current === generation) {
+          pollIntervalRef.current = window.setTimeout(poll, 1000);
+        }
+      };
 
-      pollIntervalRef.current = interval;
+      pollIntervalRef.current = window.setTimeout(poll, 1000);
     },
     [clearJob, invalidatePolling, recordEvent, showToast, signalEvalCompleted],
   );

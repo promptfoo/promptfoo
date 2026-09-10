@@ -1562,8 +1562,6 @@ Application Details:
       { label: '400 response', status: 400, error: 'Invalid job request' },
       { label: '401 response', status: 401, error: 'Authentication required' },
       { label: '403 response', status: 403, error: 'Job access denied' },
-      { label: '500 response', status: 500, error: 'Job status failed' },
-      { label: 'non-JSON response', status: 502, error: null },
     ])('stops polling after an HTTP failure: $label', async ({ status, error }) => {
       timers.useFakeTimers();
       let jobRequests = 0;
@@ -1706,7 +1704,7 @@ Application Details:
       expect(jobRequests).toBe(2);
     });
 
-    it('retries a transient network polling error and handles the later completion', async () => {
+    it('retries a transient 500 polling error and handles the later completion', async () => {
       timers.useFakeTimers();
       let jobRequests = 0;
       vi.mocked(callApi).mockImplementation(async (url: string) => {
@@ -1730,7 +1728,11 @@ Application Details:
             } as Response;
           }
           if (jobRequests === 2) {
-            throw new TypeError('Network connection interrupted');
+            return {
+              ok: false,
+              status: 500,
+              json: async () => ({ error: 'Job status temporarily unavailable' }),
+            } as Response;
           }
           return {
             ok: true,
@@ -1781,7 +1783,7 @@ Application Details:
       expect(jobRequests).toBe(3);
     });
 
-    it('ignores a stale terminal response after a replacement polling session starts', async () => {
+    it('does not overlap a stalled polling request', async () => {
       timers.useFakeTimers();
       const stalledOldRequest = createDeferred<Response>();
       let statusRequests = 0;
@@ -1871,53 +1873,24 @@ Application Details:
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(oldJobRequests).toBe(3);
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Unable to check job status: Old polling session failed',
-        'error',
-      );
-
-      clickElement(screen.getByRole('button', { name: /run now/i }));
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(mockSetJob).toHaveBeenLastCalledWith(REPLACEMENT_JOB_ID);
+      expect(oldJobRequests).toBe(2);
+      expect(mockClearJob).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
-      act(() => {
-        timers.advanceBy(1000);
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(replacementJobRequests).toBe(1);
-      expect(screen.getByText('Replacement poll 1')).toBeInTheDocument();
 
       await act(async () => {
         stalledOldRequest.resolve({
           ok: true,
           json: async () => ({
-            status: 'complete',
-            result: null,
-            evalId: null,
-            logs: ['Stale old completion'],
+            status: 'in-progress',
+            progress: 2,
+            total: 3,
+            logs: ['Old job resumed'],
           }),
         } as Response);
         await Promise.resolve();
         await Promise.resolve();
       });
 
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(mockShowToast).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText('Stale old completion')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
       act(() => {
         timers.advanceBy(1000);
       });
@@ -1925,8 +1898,9 @@ Application Details:
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(replacementJobRequests).toBe(2);
-      expect(screen.getByText('Replacement poll 2')).toBeInTheDocument();
+      expect(oldJobRequests).toBe(3);
+      expect(mockClearJob).not.toHaveBeenCalled();
+      expect(screen.getByText('Old job resumed')).toBeInTheDocument();
     });
 
     it('should show completed state when returning to completed job', async () => {
