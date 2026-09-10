@@ -243,6 +243,78 @@ describe('SageMaker clock correction across idle cleanup', () => {
     expect(requests.at(-1)?.headers['x-amz-date']).toBe(signingDate(Date.now()));
   });
 
+  it.each([clockSkew, -clockSkew, 0])(
+    'keeps the learned %i ms correction when an older client settles after a newer seed',
+    async (offset) => {
+      const gate = () => {
+        let start!: () => void;
+        let release!: () => void;
+        return {
+          started: new Promise<void>((resolve) => {
+            start = resolve;
+          }),
+          held: new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+          start: () => start(),
+          release: () => release(),
+        };
+      };
+      const a = gate();
+      const b = gate();
+      const seed = offset === 0 ? clockSkew : 0;
+      const { provider, clients, requests } = createProvider(
+        (request) => {
+          const prompt = JSON.parse(String(request.body)).prompt;
+          return prompt === 'seed' || prompt === 'B' ? seed : offset;
+        },
+        async (request) => {
+          const prompt = JSON.parse(String(request.body)).prompt;
+          const pending = prompt === 'A' ? a : prompt === 'B' ? b : undefined;
+          if (pending) {
+            pending.start();
+            await pending.held;
+          }
+        },
+      );
+      if (offset === 0) {
+        expect(await provider.callApi('seed')).toMatchObject({
+          error: expect.stringContaining('Clock skew fixture'),
+        });
+      }
+      const callA = provider.callApi('A');
+      let callB: ReturnType<typeof provider.callApi> | undefined;
+      try {
+        await a.started;
+        vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+        callB = provider.callApi('B');
+        await b.started;
+        expect(clients.size).toBe(offset === 0 ? 3 : 2);
+        a.release();
+        expect(await callA).toMatchObject({ error: expect.stringContaining('Clock skew fixture') });
+        expect([...clients].at(-1)?.destroy).not.toHaveBeenCalled();
+        vi.stubEnv('AWS_DEFAULTS_MODE', 'in-region');
+        const before = requests.length;
+        expect(await provider.callApi('C')).toMatchObject({ output: 'offline response' });
+        expect(requests).toHaveLength(before + 1);
+        expect(requests.at(-1)?.headers['x-amz-date']).toBe(signingDate(Date.now() + offset));
+        expect([...clients].at(-2)?.destroy).not.toHaveBeenCalled();
+      } finally {
+        a.release();
+        b.release();
+        await callA;
+        if (callB) {
+          await expect(callB).resolves.toMatchObject({ output: 'offline response' });
+        }
+      }
+      expect(await provider.callApi('after idle')).toMatchObject({ output: 'offline response' });
+      expect(requests.at(-1)?.headers['x-amz-date']).toBe(signingDate(Date.now() + offset));
+      for (const client of clients) {
+        expect(client.destroy).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
   it('replaces a retained correction with zero when the host clock is corrected', async () => {
     let serverOffset = clockSkew;
     const { provider, clients, requests } = createProvider(() => serverOffset);

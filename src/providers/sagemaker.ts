@@ -268,9 +268,15 @@ interface RuntimeRetryState {
   provider?: SageMakerRuntimeClient['config']['retryStrategy'];
 }
 
+interface RuntimeEndpoint {
+  url: string | undefined;
+  useFipsEndpoint: boolean;
+  useDualstackEndpoint: boolean;
+}
+
 interface RuntimeInitialization {
   scope: CredentialScope;
-  endpoint: string | undefined;
+  endpoint: RuntimeEndpoint;
   retry: RuntimeRetryState;
   defaults: RuntimeDefaultsState;
   promise: Promise<SageMakerRuntimeClient>;
@@ -289,10 +295,10 @@ abstract class SageMakerGenericProvider {
   private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
   private readonly runtimeClients = new Map<SageMakerRuntimeClient, string>();
   private readonly runtimeClockOffsets = new Map<string, number>();
-  private readonly runtimeInitializations: RuntimeInitialization[] = [];
+  readonly #runtimeInitializations: RuntimeInitialization[] = [];
   private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
   private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
-  private retainedCredentials?: {
+  #retainedCredentials?: {
     scope: CredentialScope;
     provider: RuntimeConfigAwsCredentialIdentityProvider;
   };
@@ -451,10 +457,17 @@ abstract class SageMakerGenericProvider {
     return { region, profile, environment };
   }
 
-  private async getRuntimeEndpoint(): Promise<string | undefined> {
-    const { booleanSelector, CONFIG_PREFIX_SEPARATOR, loadConfig, SelectorType } = await import(
-      '@smithy/core/config'
-    );
+  private async getRuntimeEndpoint(): Promise<RuntimeEndpoint> {
+    const {
+      booleanSelector,
+      CONFIG_PREFIX_SEPARATOR,
+      loadConfig,
+      NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS,
+      NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
+      SelectorType,
+    } = await import('@smithy/core/config');
+    const useFipsEndpoint = await loadConfig(NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS)();
+    const useDualstackEndpoint = await loadConfig(NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS)();
     // Match the runtime SDK's configured HTTP endpoint precedence. This is separate
     // from both the SageMaker deployment name and the credential helpers' endpoints.
     const ignored = await loadConfig({
@@ -465,9 +478,9 @@ abstract class SageMakerGenericProvider {
       default: false,
     })();
     if (ignored) {
-      return undefined;
+      return { url: undefined, useFipsEndpoint, useDualstackEndpoint };
     }
-    return loadConfig({
+    const url = await loadConfig({
       environmentVariableSelector: (env) =>
         env.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME || env.AWS_ENDPOINT_URL || undefined,
       configFileSelector: (profile, config) => {
@@ -487,19 +500,7 @@ abstract class SageMakerGenericProvider {
       },
       default: undefined,
     })();
-  }
-
-  private getRuntimeClockOffset(region: string): number | undefined {
-    let offset = this.runtimeClockOffsets.get(region);
-    // Live clients can learn a correction before the pool becomes idle. The newest
-    // transport for this region inherits it, including a correction back to zero.
-    for (const [client, clientRegion] of this.runtimeClients) {
-      const current = client.config?.systemClockOffset;
-      if (clientRegion === region && typeof current === 'number' && Number.isFinite(current)) {
-        offset = current;
-      }
-    }
-    return offset;
+    return { url, useFipsEndpoint, useDualstackEndpoint };
   }
 
   /**
@@ -530,9 +531,11 @@ abstract class SageMakerGenericProvider {
       this.runtimeDefaultsStates.set(runtimeRegion, defaults);
     }
     const defaultsState = defaults;
-    let entry = this.runtimeInitializations.find(
+    let entry = this.#runtimeInitializations.find(
       (candidate) =>
-        candidate.endpoint === endpoint &&
+        candidate.endpoint.url === endpoint.url &&
+        candidate.endpoint.useFipsEndpoint === endpoint.useFipsEndpoint &&
+        candidate.endpoint.useDualstackEndpoint === endpoint.useDualstackEndpoint &&
         candidate.retry === retryState &&
         candidate.defaults === defaultsState &&
         sameCredentialScope(candidate.scope, scope),
@@ -564,12 +567,12 @@ abstract class SageMakerGenericProvider {
           );
           this.assertRuntimeGeneration(generation);
           if (
-            this.retainedCredentials &&
-            !sameCredentialScope(this.retainedCredentials.scope, scope)
+            this.#retainedCredentials &&
+            !sameCredentialScope(this.#retainedCredentials.scope, scope)
           ) {
-            this.retainedCredentials = undefined;
+            this.#retainedCredentials = undefined;
           }
-          const retainedCredentials = this.retainedCredentials?.provider;
+          const retainedCredentials = this.#retainedCredentials?.provider;
           let credentials =
             retainedCredentials ?? (await this.getCredentials(scope, scope.environment));
           if (!credentials) {
@@ -596,7 +599,9 @@ abstract class SageMakerGenericProvider {
           this.assertRuntimeGeneration(generation);
           const client = new SageMakerRuntimeClient({
             region: runtimeRegion,
-            systemClockOffset: this.getRuntimeClockOffset(runtimeRegion),
+            systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
+            useFipsEndpoint: endpoint.useFipsEndpoint,
+            useDualstackEndpoint: endpoint.useDualstackEndpoint,
             defaultsMode,
             maxAttempts,
             retryMode: 'adaptive',
@@ -608,12 +613,29 @@ abstract class SageMakerGenericProvider {
             },
             credentials,
           });
+          if (client.config) {
+            if (!this.runtimeClockOffsets.has(runtimeRegion)) {
+              this.runtimeClockOffsets.set(runtimeRegion, client.config.systemClockOffset ?? 0);
+            }
+            // Every owned transport shares the SDK's latest correction for this region.
+            // A client created before another learns must not restore its stale seed.
+            Object.defineProperty(client.config, 'systemClockOffset', {
+              enumerable: true,
+              configurable: true,
+              get: () => this.runtimeClockOffsets.get(runtimeRegion) ?? 0,
+              set: (offset: number) => {
+                if (Number.isFinite(offset)) {
+                  this.runtimeClockOffsets.set(runtimeRegion, offset);
+                }
+              },
+            });
+          }
           if (client.config?.retryStrategy) {
             retryState.provider = client.config.retryStrategy;
           }
           if (!(scope.accessKeyId && scope.secretAccessKey) && typeof credentials === 'function') {
             // Keep SDK credential memoization, including the default chain's background refresh.
-            this.retainedCredentials = {
+            this.#retainedCredentials = {
               scope,
               provider: scope.profile
                 ? (retainedCredentials ?? client.config.credentials)
@@ -625,16 +647,16 @@ abstract class SageMakerGenericProvider {
           return client;
         })(),
       };
-      this.runtimeInitializations.push(initialization);
+      this.#runtimeInitializations.push(initialization);
       entry = initialization;
     }
     let runtime: SageMakerRuntimeClient;
     try {
       runtime = await entry.promise;
     } catch (error) {
-      const index = this.runtimeInitializations.indexOf(entry);
+      const index = this.#runtimeInitializations.indexOf(entry);
       if (index !== -1) {
-        this.runtimeInitializations.splice(index, 1);
+        this.#runtimeInitializations.splice(index, 1);
       }
       throw error;
     }
@@ -685,15 +707,8 @@ abstract class SageMakerGenericProvider {
       controller.abort(new Error('SageMaker provider was shut down during the request'));
     }
     const clients = [...this.runtimeClients.keys()];
-    for (const [client, region] of this.runtimeClients) {
-      const offset = client.config?.systemClockOffset;
-      if (typeof offset === 'number' && Number.isFinite(offset)) {
-        // Keep the SDK's learned signing correction when only its transport is replaced.
-        this.runtimeClockOffsets.set(region, offset);
-      }
-    }
     this.runtimeClients.clear();
-    this.runtimeInitializations.length = 0;
+    this.#runtimeInitializations.length = 0;
     if (clients.includes(this.sagemakerRuntime)) {
       this.sagemakerRuntime = undefined;
     }

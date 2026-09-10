@@ -991,7 +991,11 @@ export async function doEval(
       for (const provider of providersToCleanup) {
         // Another watch run may start while an earlier provider's cleanup awaits.
         if (!activeProviderRuns.has(provider)) {
-          await provider.cleanup?.();
+          try {
+            await provider.cleanup?.();
+          } catch (error) {
+            logger.warn('Provider cleanup failed after evaluation.', { error });
+          }
         }
       }
     }

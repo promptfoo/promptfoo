@@ -2172,6 +2172,74 @@ describe('evalCommand', () => {
     },
   );
 
+  it.each(['success', 'error'])(
+    'preserves evaluation %s and later cleanup when provider cleanup rejects',
+    async (outcome) => {
+      const cleanupError = new Error('MCP initialization failed');
+      const evaluationError = new Error('primary evaluation failed');
+      const failingProvider = {
+        id: () => 'failing-cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      } satisfies ApiProvider;
+      const laterProvider = {
+        id: () => 'later-cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      } satisfies ApiProvider;
+      const config = { prompts: [], outputPath: ['cleanup-results.json'] } as UnifiedConfig;
+      vi.mocked(resolveConfigs)
+        .mockReset()
+        .mockResolvedValue({
+          config,
+          testSuite: { prompts: [], providers: [failingProvider, laterProvider] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(writeMultipleOutputs).mockReset().mockResolvedValue(undefined);
+      let completedEval: Eval | undefined;
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementation(async (_suite, evalRecord) => {
+          if (outcome === 'error') {
+            throw evaluationError;
+          }
+          completedEval = evalRecord as Eval;
+          return completedEval;
+        });
+
+      try {
+        const evaluation = doEval(
+          { write: false, table: false, share: false },
+          config,
+          undefined,
+          {},
+        );
+        if (outcome === 'error') {
+          await expect(evaluation).rejects.toBe(evaluationError);
+          expect(writeMultipleOutputs).not.toHaveBeenCalled();
+        } else {
+          const result = await evaluation;
+          expect(result).toBe(completedEval);
+          expect(writeMultipleOutputs).toHaveBeenCalledWith(
+            ['cleanup-results.json'],
+            completedEval,
+            null,
+          );
+        }
+        expect(failingProvider.cleanup).toHaveBeenCalledTimes(1);
+        expect(laterProvider.cleanup).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
+          error: cleanupError,
+        });
+      } finally {
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(resolveConfigs).mockReset();
+        vi.mocked(writeMultipleOutputs).mockReset();
+      }
+    },
+  );
+
   it('cleans up only its own providers when watch evaluations overlap', async () => {
     const makeRun = (name: string) => {
       const controller = new AbortController();
