@@ -79,6 +79,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'indirect-web-pwn': 3,
   jailbreak: 10,
   'jailbreak:composite': 5,
+  'jailbreak:goblin': 10,
   'jailbreak:hydra': 10,
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,

@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -111,6 +112,26 @@ describe('Entities Extractor', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Error using remote generation'),
     );
+  });
+
+  it('attributes remote entity extraction to the tracked generation provider', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'entities',
+        result: ['Tracked entity'],
+        tokenUsage: { total: 13, prompt: 8, completion: 5 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const usage = {};
+
+    await extractEntities(trackGenerationTokenUsage(provider, usage), ['prompt']);
+
+    expect(usage).toMatchObject({ total: 13, prompt: 8, completion: 5, numRequests: 1 });
   });
 
   it('should use local extraction when remote generation is disabled', async () => {

@@ -20,9 +20,8 @@ import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
-  createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
@@ -197,6 +196,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       namedScoresCount: Record<string, number>;
       namedScoreWeights?: Record<string, number>;
       cost: number;
+      incurredCost?: number;
     }
   >();
 
@@ -248,6 +248,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
+        const incurredCost =
+          result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
+        if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+          metrics.incurredCost =
+            (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+        }
         metrics.cost += result.cost || 0;
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {
@@ -271,20 +277,14 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
         // Update token usage
         if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
+          accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
         }
 
         // Update assertion token usage
         if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
+          accumulateGradingTokenUsage(metrics.tokenUsage, result.gradingResult.tokensUsed, {
+            cached: result.gradingResult.metadata?.cachedResponse,
+          });
         }
       }
 

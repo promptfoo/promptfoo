@@ -124,16 +124,6 @@ export function loadServerConfig(): ServerConfig {
 }
 
 /**
- * Clear the cached config and reload from file
- * Useful for hot-reloading configuration
- * @returns Newly loaded server configuration
- */
-export function reloadServerConfig(): ServerConfig {
-  cachedConfig = null;
-  return loadServerConfig();
-}
-
-/**
  * Get the list of available providers
  * Validates each provider against schema and filters out invalid ones
  * @returns Array of validated provider options
