@@ -1,6 +1,6 @@
 ---
 title: 'Interface: LoadApiProvidersOptions'
-description: 'Shared options for loading one or more providers.'
+description: 'Shared options for loading one or more providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 27
 ---
 

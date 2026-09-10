@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ProviderFunction'
-description: 'Function form accepted anywhere the Node.js API accepts a provider.'
+description: 'Function form accepted anywhere the Node.js API accepts a provider. This generated page documents the supported promptfoo Node.js API contract, import form,.'
 sidebar_position: 9
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ProviderOptions'
-description: 'Declarative provider configuration accepted by provider-loading APIs.'
+description: 'Declarative provider configuration accepted by provider-loading APIs. This generated page documents the supported promptfoo Node.js API contract, import form,.'
 sidebar_position: 37
 ---
 

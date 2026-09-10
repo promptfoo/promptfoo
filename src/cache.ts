@@ -754,7 +754,8 @@ async function prepareFetchResponse(
  * `'text'` returns the raw response body unchanged.
  * @param bustOrOptions - Skip the cache, or provide per-request cache options.
  * @param maxRetries - Maximum retry attempts on transient errors. Defaults to
- * the value of `PROMPTFOO_REQUEST_BACKOFF_MS` / built-in retry policy.
+ * the active retry context, or 4. `PROMPTFOO_REQUEST_BACKOFF_MS` controls the
+ * base delay between retries.
  * @returns Parsed response data plus cache and HTTP metadata.
  * @throws When `format` is `'json'` and the response body is not valid JSON.
  *

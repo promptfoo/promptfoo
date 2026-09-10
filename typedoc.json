@@ -4,13 +4,14 @@
   "plugin": ["typedoc-plugin-markdown"],
   "out": "site/docs/api/node/reference",
   "gitRevision": "main",
+  "sourceLinkTemplate": "https://github.com/promptfoo/promptfoo/blob/{gitRevision}/{path}#L{line}",
   "readme": "none",
   "excludeInternal": true,
   "excludeExternals": true,
   "excludePrivate": true,
   "excludeProtected": true,
   "validation": {
-    "notExported": false,
+    "notExported": true,
     "invalidLink": true,
     "notDocumented": false
   }

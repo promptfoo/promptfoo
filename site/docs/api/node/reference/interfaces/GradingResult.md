@@ -1,6 +1,6 @@
 ---
 title: 'Interface: GradingResult'
-description: 'Result returned by assertions and matcher helpers.'
+description: 'Result returned by assertions and matcher helpers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 23
 ---
 

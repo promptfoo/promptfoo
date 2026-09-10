@@ -1,6 +1,6 @@
 ---
 title: 'Function: isCacheEnabled()'
-description: 'Return whether the shared promptfoo cache is enabled.'
+description: 'Return whether the shared promptfoo cache is enabled. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 6
 ---
 
@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **isCacheEnabled**(): `boolean`
 
-Defined in: [cache.ts:940](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L940)
+Defined in: [cache.ts:941](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L941)
 
 Return whether the shared promptfoo cache is enabled.
 

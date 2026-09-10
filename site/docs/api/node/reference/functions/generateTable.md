@@ -1,6 +1,6 @@
 ---
 title: 'Function: generateTable()'
-description: 'Render eval table data as terminal-friendly text.'
+description: 'Render eval table data as terminal-friendly text. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 2
 ---
 

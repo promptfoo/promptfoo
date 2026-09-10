@@ -1,6 +1,6 @@
 ---
 title: 'Interface: GuardrailResponse'
-description: 'Guardrail outcome metadata returned by moderation-aware providers.'
+description: 'Guardrail outcome metadata returned by moderation-aware providers. This generated page documents the supported promptfoo Node.js API contract, import form,.'
 sidebar_position: 24
 ---
 

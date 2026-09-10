@@ -1,6 +1,6 @@
 ---
 title: 'Interface: EvaluateTable'
-description: 'Table-shaped eval output used by generateTable() and the web UI.'
+description: 'Table-shaped eval output used by generateTable() and the web UI. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 19
 ---
 

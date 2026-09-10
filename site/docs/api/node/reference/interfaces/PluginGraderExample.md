@@ -1,6 +1,6 @@
 ---
 title: 'Interface: PluginGraderExample'
-description: 'Example grader outcome used to calibrate plugin-specific red-team grading.'
+description: 'Example grader outcome used to calibrate plugin-specific red-team grading. This generated page documents the supported promptfoo Node.js API contract, import.'
 sidebar_position: 30
 ---
 

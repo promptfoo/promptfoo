@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TestCaseOptions'
-description: 'Additional per-test options merged with prompt, output, and grading behavior.'
+description: 'Additional per-test options merged with prompt, output, and grading behavior. This generated page documents the supported promptfoo Node.js API contract,.'
 sidebar_position: 45
 ---
 

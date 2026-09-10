@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ChatMessage'
-description: 'Chat message reported by providers for multi-turn prompts and transcripts.'
+description: 'Chat message reported by providers for multi-turn prompts and transcripts. This generated page documents the supported promptfoo Node.js API contract, import.'
 sidebar_position: 14
 ---
 

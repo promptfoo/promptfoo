@@ -1,6 +1,6 @@
 ---
 title: 'Interface: CallApiFunction()'
-description: 'Function signature used by custom providers.'
+description: 'Function signature used by custom providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
 sidebar_position: 12
 ---
 

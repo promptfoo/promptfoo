@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ProvidersConfig'
-description: 'Provider input accepted by evaluate() and loadApiProviders().'
+description: 'Provider input accepted by evaluate() and loadApiProviders(). This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 10
 ---
 

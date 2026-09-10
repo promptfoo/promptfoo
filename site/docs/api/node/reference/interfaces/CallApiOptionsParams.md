@@ -1,6 +1,6 @@
 ---
 title: 'Interface: CallApiOptionsParams'
-description: 'Per-request options passed to custom providers.'
+description: 'Per-request options passed to custom providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 13
 ---
 

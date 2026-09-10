@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: AssertionOrSet'
-description: 'Assertion entry accepted by test cases.'
+description: 'Assertion entry accepted by test cases. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
 sidebar_position: 1
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TransformContext'
-description: 'Metadata supplied to every transform invocation.'
+description: 'Metadata supplied to every transform invocation. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 47
 ---
 

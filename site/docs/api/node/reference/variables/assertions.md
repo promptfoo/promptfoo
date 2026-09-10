@@ -1,6 +1,6 @@
 ---
 title: 'Variable: assertions'
-description: 'Assertion helpers exposed through the Node.js package.'
+description: 'Assertion helpers exposed through the Node.js package. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 1
 ---
 

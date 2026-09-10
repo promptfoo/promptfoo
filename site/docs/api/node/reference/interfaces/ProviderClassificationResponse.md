@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ProviderClassificationResponse'
-description: 'Response returned by classification-capable providers.'
+description: 'Response returned by classification-capable providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 35
 ---
 

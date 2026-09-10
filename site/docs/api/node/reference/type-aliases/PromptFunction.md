@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: PromptFunction'
-description: 'Function form accepted anywhere the Node.js API accepts a prompt.'
+description: 'Function form accepted anywhere the Node.js API accepts a prompt. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 7
 ---
 

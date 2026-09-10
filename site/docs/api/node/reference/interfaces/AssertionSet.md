@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AssertionSet'
-description: 'Grouped assertions evaluated under one shared threshold.'
+description: 'Grouped assertions evaluated under one shared threshold. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 4
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Interface: Prompt'
-description: 'Normalized prompt record stored on eval results and passed to providers.'
+description: 'Normalized prompt record stored on eval results and passed to providers. This generated page documents the supported promptfoo Node.js API contract, import.'
 sidebar_position: 31
 ---
 

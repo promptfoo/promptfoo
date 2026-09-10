@@ -1,6 +1,6 @@
 ---
 title: "Type Alias: FetchWithCacheResult\\<T\\>"
-description: 'Metadata returned by fetchWithCache().'
+description: 'Metadata returned by fetchWithCache(). This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
 sidebar_position: 1
 ---
 

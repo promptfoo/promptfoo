@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ApiProvider'
-description: 'Provider object shape accepted by the Node.js API.'
+description: 'Provider object shape accepted by the Node.js API. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 1
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Function: disableCache()'
-description: 'Disable the shared promptfoo cache for future calls.'
+description: 'Disable the shared promptfoo cache for future calls. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 2
 ---
 
@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **disableCache**(): `void`
 
-Defined in: [cache.ts:894](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L894)
+Defined in: [cache.ts:895](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L895)
 
 Disable the shared promptfoo cache for future calls.
 

@@ -1,6 +1,6 @@
 ---
 title: 'Function: enableCache()'
-description: 'Enable the shared promptfoo cache.'
+description: 'Enable the shared promptfoo cache. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for API.'
 sidebar_position: 3
 ---
 
@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **enableCache**(): `void`
 
-Defined in: [cache.ts:875](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L875)
+Defined in: [cache.ts:876](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L876)
 
 Enable the shared promptfoo cache.
 

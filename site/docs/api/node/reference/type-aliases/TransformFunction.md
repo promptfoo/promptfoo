@@ -1,6 +1,6 @@
 ---
 title: "Type Alias: TransformFunction\\<TIn, TOut\\>"
-description: 'A function that transforms output or vars at various stages of the evaluation pipeline.'
+description: 'A function that transforms output or vars at various stages of the evaluation pipeline. This generated page documents the supported promptfoo Node.js API.'
 sidebar_position: 12
 ---
 

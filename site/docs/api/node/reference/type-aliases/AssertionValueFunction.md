@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: AssertionValueFunction'
-description: 'Function form accepted by JavaScript assertions.'
+description: 'Function form accepted by JavaScript assertions. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 2
 ---
 

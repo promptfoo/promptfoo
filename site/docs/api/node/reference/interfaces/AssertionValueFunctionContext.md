@@ -1,6 +1,6 @@
 ---
 title: 'Interface: AssertionValueFunctionContext'
-description: 'Runtime context passed to function-valued assertions.'
+description: 'Runtime context passed to function-valued assertions. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 7
 ---
 

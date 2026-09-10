@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ImageOutput'
-description: 'Image attachment returned by providers that produce images.'
+description: 'Image attachment returned by providers that produce images. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 25
 ---
 

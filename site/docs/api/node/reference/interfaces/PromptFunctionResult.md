@@ -1,6 +1,6 @@
 ---
 title: 'Interface: PromptFunctionResult'
-description: 'Result type for prompt functions.'
+description: 'Result type for prompt functions. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application.'
 sidebar_position: 33
 ---
 

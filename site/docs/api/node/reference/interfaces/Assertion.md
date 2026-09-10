@@ -1,6 +1,6 @@
 ---
 title: 'Interface: Assertion'
-description: 'Assertion configuration accepted by eval tests and low-level assertion APIs.'
+description: 'Assertion configuration accepted by eval tests and low-level assertion APIs. This generated page documents the supported promptfoo Node.js API contract,.'
 sidebar_position: 2
 ---
 

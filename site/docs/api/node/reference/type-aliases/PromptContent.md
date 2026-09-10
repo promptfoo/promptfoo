@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: PromptContent'
-description: 'Prompt payload accepted from function-valued prompts.'
+description: 'Prompt payload accepted from function-valued prompts. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 6
 ---
 

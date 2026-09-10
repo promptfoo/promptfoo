@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EvaluateTestSuite'
-description: 'Test-suite shape accepted by the Node.js evaluate() API.'
+description: 'Test-suite shape accepted by the Node.js evaluate() API. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 5
 ---
 

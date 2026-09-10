@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ProviderSimilarityResponse'
-description: 'Response returned by similarity-capable providers.'
+description: 'Response returned by similarity-capable providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 39
 ---
 

@@ -2,7 +2,7 @@
 title: Node.js API reference
 sidebar_label: Overview
 sidebar_position: 1
-description: Generated reference for promptfoo's supported Node.js API surface.
+description: Generated reference for promptfoo's supported Node.js API surface, including stable imports, exact signatures, and practical links for application developers.
 ---
 
 # Node.js API reference

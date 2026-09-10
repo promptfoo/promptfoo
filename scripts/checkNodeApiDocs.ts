@@ -105,8 +105,12 @@ function validateReferenceFrontmatter(rootDir: string, errors: string[]) {
     if (typeof frontmatter.title !== 'string' || frontmatter.title.length === 0) {
       errors.push(`${relativePath} must set a non-empty title`);
     }
-    if (typeof frontmatter.description !== 'string' || frontmatter.description.length === 0) {
-      errors.push(`${relativePath} must set a non-empty description`);
+    if (
+      typeof frontmatter.description !== 'string' ||
+      frontmatter.description.length < 150 ||
+      frontmatter.description.length > 160
+    ) {
+      errors.push(`${relativePath} must set a 150-160 character description`);
     }
   });
 }

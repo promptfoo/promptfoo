@@ -1,6 +1,6 @@
 ---
 title: 'Function: fetchWithCache()'
-description: "Fetch a URL through promptfoo's retrying cache wrapper."
+description: "Fetch a URL through promptfoo's retrying cache wrapper. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant."
 sidebar_position: 4
 ---
 
@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: [cache.ts:775](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L775)
+Defined in: [cache.ts:776](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L776)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 
@@ -67,7 +67,8 @@ Skip the cache, or provide per-request cache options.
 `number`
 
 Maximum retry attempts on transient errors. Defaults to
-the value of `PROMPTFOO_REQUEST_BACKOFF_MS` / built-in retry policy.
+the active retry context, or 4. `PROMPTFOO_REQUEST_BACKOFF_MS` controls the
+base delay between retries.
 
 ## Returns
 

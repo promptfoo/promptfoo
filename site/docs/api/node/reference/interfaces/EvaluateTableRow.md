@@ -1,6 +1,6 @@
 ---
 title: 'Interface: EvaluateTableRow'
-description: 'One row in an eval table.'
+description: 'One row in an eval table. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application code.'
 sidebar_position: 22
 ---
 

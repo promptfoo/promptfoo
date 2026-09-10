@@ -1,6 +1,6 @@
 ---
 title: 'Interface: TokenUsage'
-description: 'Token accounting reported by providers and graders.'
+description: 'Token accounting reported by providers and graders. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 46
 ---
 

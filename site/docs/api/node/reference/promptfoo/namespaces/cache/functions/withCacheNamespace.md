@@ -1,6 +1,6 @@
 ---
 title: 'Function: withCacheNamespace()'
-description: 'Run an async operation inside an isolated cache namespace.'
+description: 'Run an async operation inside an isolated cache namespace. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 7
 ---
 

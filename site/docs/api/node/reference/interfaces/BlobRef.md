@@ -1,6 +1,6 @@
 ---
 title: 'Interface: BlobRef'
-description: 'External blob reference used by media-capable provider responses.'
+description: 'External blob reference used by media-capable provider responses. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 10
 ---
 

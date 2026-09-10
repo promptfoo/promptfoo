@@ -1,6 +1,6 @@
 ---
 title: 'Interface: VideoOutput'
-description: 'Video attachment returned by providers that produce video.'
+description: 'Video attachment returned by providers that produce video. This generated page documents the supported promptfoo Node.js API contract, import form, and.'
 sidebar_position: 49
 ---
 

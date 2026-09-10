@@ -1,6 +1,6 @@
 ---
 title: 'Function: clearCache()'
-description: 'Clear the shared promptfoo cache.'
+description: 'Clear the shared promptfoo cache. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for application.'
 sidebar_position: 1
 ---
 
@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **clearCache**(): `Promise`\<`boolean`\>
 
-Defined in: [cache.ts:915](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L915)
+Defined in: [cache.ts:916](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L916)
 
 Clear the shared promptfoo cache.
 

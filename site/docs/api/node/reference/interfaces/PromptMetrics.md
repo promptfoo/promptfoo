@@ -1,6 +1,6 @@
 ---
 title: 'Interface: PromptMetrics'
-description: 'Aggregate metrics tracked for one completed prompt.'
+description: 'Aggregate metrics tracked for one completed prompt. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant.'
 sidebar_position: 34
 ---
 

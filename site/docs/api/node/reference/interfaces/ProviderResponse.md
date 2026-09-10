@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ProviderResponse'
-description: 'Response shape returned by custom providers.'
+description: 'Response shape returned by custom providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
 sidebar_position: 38
 ---
 

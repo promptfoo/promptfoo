@@ -1,6 +1,6 @@
 ---
 title: 'Function: getCache()'
-description: 'Return the active promptfoo cache instance.'
+description: 'Return the active promptfoo cache instance. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields for.'
 sidebar_position: 5
 ---
 

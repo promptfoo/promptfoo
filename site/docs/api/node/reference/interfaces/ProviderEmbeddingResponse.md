@@ -1,6 +1,6 @@
 ---
 title: 'Interface: ProviderEmbeddingResponse'
-description: 'Response returned by embedding-capable providers.'
+description: 'Response returned by embedding-capable providers. This generated page documents the supported promptfoo Node.js API contract, import form, and relevant fields.'
 sidebar_position: 36
 ---
 
