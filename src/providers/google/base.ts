@@ -18,6 +18,7 @@ import logger from '../../logger';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  resolveCallbackPath,
   wrapError,
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -320,6 +321,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /** References used to populate the callback cache, for prompt-level overrides. */
   protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
 
+  /** Effective owning directories for cached file callbacks, including CLI/cwd fallback. */
+  protected loadedFunctionCallbackBasePaths: Record<string, string | undefined> = {};
+
   /** Custom provider ID function */
   protected customId?: () => string;
 
@@ -507,9 +511,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @param fileRef - File reference in format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  protected async loadExternalFunction(fileRef: string): Promise<Function> {
+  protected async loadExternalFunction(fileRef: string, basePath?: string): Promise<Function> {
     try {
-      return await loadCallbackFromFileUrl(fileRef);
+      return await loadCallbackFromFileUrl(fileRef, { basePath });
     } catch (error) {
       if (error instanceof CallbackPathTraversalError) {
         throw error;
@@ -529,7 +533,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   protected async executeFunctionCallback(
     functionName: string,
     args: string,
-    config: CompletionOptions,
+    config: GoogleProviderConfig,
     callId?: string,
   ): Promise<any> {
     try {
@@ -538,6 +542,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
           ? callbacks[functionName]
           : undefined;
+      const callbackBasePath =
+        typeof callbackRef === 'string' && callbackRef.startsWith('file://')
+          ? resolveCallbackPath('.', config.basePath)
+          : undefined;
       let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
         this.loadedFunctionCallbacks,
         functionName,
@@ -545,7 +553,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         ? this.loadedFunctionCallbacks[functionName]
         : undefined;
 
-      if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
+      if (
+        this.loadedFunctionCallbackRefs[functionName] !== callbackRef ||
+        this.loadedFunctionCallbackBasePaths[functionName] !== callbackBasePath
+      ) {
         callback = undefined;
       }
 
@@ -554,7 +565,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await this.loadExternalFunction(callbackStr, callbackBasePath);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -579,10 +590,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           // Cache for future use
           this.loadedFunctionCallbacks[functionName] = callback;
           this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
           this.loadedFunctionCallbacks[functionName] = callback;
           this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         }
       }
 
@@ -608,7 +621,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   protected async executeFunctionToolCallbacks(
     output: ProviderResponse['output'],
-    config: CompletionOptions,
+    config: GoogleProviderConfig,
     toolsDisabled: boolean,
   ): Promise<ProviderResponse['output']> {
     if (toolsDisabled || !Array.isArray(output)) {

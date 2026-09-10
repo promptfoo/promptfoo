@@ -1062,7 +1062,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
     try {
       response.output = await this.executeFunctionToolCallbacks(
         response.output,
-        config,
+        {
+          ...config,
+          basePath:
+            promptConfig?.functionToolCallbacks === undefined
+              ? this.config.basePath
+              : promptBasePath,
+        },
         toolsDisabled,
       );
     } catch (err) {

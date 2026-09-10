@@ -554,7 +554,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       const audio = normalizeGeminiAudio(output);
 
       return {
-        output: await this.executeFunctionToolCallbacks(output, config, toolsDisabled),
+        output: await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        ),
         ...(audio && { audio }),
         tokenUsage,
         cost,

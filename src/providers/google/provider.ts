@@ -555,6 +555,8 @@ export class GoogleProvider extends GoogleGenericProvider {
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
+      const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+      const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
       // Normalize response: non-streaming returns single object, streaming returns array
       const normalizedData = Array.isArray(data) ? data : [data];
@@ -759,7 +761,17 @@ export class GoogleProvider extends GoogleGenericProvider {
         },
       };
 
-      response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+      response.output = await this.executeFunctionToolCallbacks(
+        output,
+        {
+          ...config,
+          basePath:
+            promptConfig?.functionToolCallbacks === undefined
+              ? this.config.basePath
+              : promptBasePath,
+        },
+        toolsDisabled,
+      );
 
       return response;
     } catch (err) {
