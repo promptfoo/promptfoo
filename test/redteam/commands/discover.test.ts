@@ -335,6 +335,56 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
+  it.each([
+    'target throw',
+    'target response',
+    'target without usage',
+    'remote status',
+    'remote body',
+  ])('retains earlier usage when discovery fails with %s', async (failure) => {
+    const question = (total: number) => ({
+      done: false,
+      question: 'What can you do?',
+      state: { currentQuestionIndex: 1, answers: [] },
+      tokenUsage: { total, numRequests: 1 },
+    });
+    mockedFetchWithProxy
+      .mockResolvedValueOnce(new Response(JSON.stringify(question(3))))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...question(5),
+            ...(failure.startsWith('remote') ? { error: 'Discovery unavailable' } : {}),
+          }),
+          { status: failure === 'remote status' ? 503 : 200 },
+        ),
+      );
+    const callApi = vi
+      .fn()
+      .mockResolvedValueOnce({ output: 'A test assistant', tokenUsage: { total: 10 } });
+    if (failure === 'target response') {
+      callApi.mockResolvedValueOnce({ error: 'Target unavailable', tokenUsage: { total: 2 } });
+    } else {
+      callApi.mockRejectedValueOnce(
+        Object.assign(
+          new Error('Target unavailable'),
+          failure === 'target without usage' ? {} : { tokenUsage: { total: 2 } },
+        ),
+      );
+    }
+
+    await expect(
+      doTargetPurposeDiscovery({ id: () => 'target', callApi }, undefined, true),
+    ).rejects.toMatchObject({
+      cause: expect.any(Error),
+      tokenUsage: {
+        total: failure.startsWith('remote') || failure === 'target without usage' ? 18 : 20,
+        numRequests: failure.startsWith('remote') ? 3 : 4,
+      },
+    });
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
+  });
+
   it('should include Cloud target context in discovery requests', async () => {
     mockedFetchWithProxy.mockResolvedValue(
       new Response(

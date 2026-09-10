@@ -19,7 +19,12 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import { trackGenerationResponseTokenUsage } from '../generationTokenUsage';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  trackGenerationErrorTokenUsage,
+  trackGenerationResponseTokenUsage,
+  trackGenerationTokenUsage,
+} from '../generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -170,22 +175,6 @@ function extractStringField(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
-  const rawText = (await response.text()).trim();
-  const fallback = rawText || response.statusText || 'Unknown error';
-  if (!rawText) {
-    return fallback;
-  }
-  try {
-    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
-    const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
-    return detail ?? fallback;
-  } catch {
-    // Not JSON — fall through to raw text.
-    return fallback;
-  }
-}
-
 const REMOTE_ERROR_HINTS: Record<number, string> = {
   400: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
   401: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
@@ -205,10 +194,22 @@ function getRemoteErrorHint(status: number): string | undefined {
 }
 
 async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
-  const detail = await getRemoteResponseErrorDetail(response);
+  const rawText = (await response.text()).trim();
+  let detail = rawText || response.statusText || 'Unknown error';
+  let tokenUsage: TokenUsage | undefined;
+  try {
+    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
+    detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error) ?? detail;
+    tokenUsage = getErrorTokenUsage(parsed);
+  } catch {
+    // Keep the raw response when the service did not return JSON.
+  }
   const hint = getRemoteErrorHint(response.status);
   const base = `Remote server returned HTTP ${response.status}: ${detail}`;
-  return new Error(hint ? `${base}\n${hint}` : base);
+  return Object.assign(
+    new Error(hint ? `${base}\n${hint}` : base),
+    tokenUsage ? { tokenUsage } : {},
+  );
 }
 
 /**
@@ -252,6 +253,7 @@ export async function doTargetPurposeDiscovery(
   });
   let turn = 0;
   const discoveryTokenUsage: TokenUsage = {};
+  const trackedTarget = trackGenerationTokenUsage(target, discoveryTokenUsage);
 
   try {
     while (!done && turn < MAX_TURN_COUNT) {
@@ -260,32 +262,38 @@ export async function doTargetPurposeDiscovery(
 
         logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
 
-        const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-          method: 'POST',
-          // Auth is injected centrally at the fetch layer for the configured cloud
-          // origin only, so the saved token is never sent to a custom
-          // PROMPTFOO_REMOTE_GENERATION_URL.
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(
-            TargetPurposeDiscoveryRequestSchema.parse({
-              state: {
-                currentQuestionIndex: state.currentQuestionIndex,
-                answers: state.answers,
-              },
-              task: 'target-purpose-discovery',
-              ...remoteGenerationContextPayload(targetId),
-              version: VERSION,
-              email: getUserEmail(),
-            }),
-          ),
-        });
+        let data: z.infer<typeof TargetPurposeDiscoveryTaskResponseSchema>;
+        try {
+          const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+            method: 'POST',
+            // Auth is injected centrally at the fetch layer for the configured cloud
+            // origin only, so the saved token is never sent to a custom
+            // PROMPTFOO_REMOTE_GENERATION_URL.
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(
+              TargetPurposeDiscoveryRequestSchema.parse({
+                state: {
+                  currentQuestionIndex: state.currentQuestionIndex,
+                  answers: state.answers,
+                },
+                task: 'target-purpose-discovery',
+                ...remoteGenerationContextPayload(targetId),
+                version: VERSION,
+                email: getUserEmail(),
+              }),
+            ),
+          });
 
-        if (!response.ok) {
-          throw await buildRemoteErrorFromResponse(response);
+          if (!response.ok) {
+            throw await buildRemoteErrorFromResponse(response);
+          }
+
+          const responseData = await response.json();
+          data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
+        } catch (error) {
+          trackGenerationErrorTokenUsage(discoveryTokenUsage, error);
+          throw error;
         }
-
-        const responseData = await response.json();
-        const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
         trackGenerationResponseTokenUsage(discoveryTokenUsage, {
           tokenUsage: data.tokenUsage,
           cached: false,
@@ -319,12 +327,11 @@ export async function doTargetPurposeDiscovery(
             ? await renderPrompt(prompt, { prompt: question }, {}, target)
             : question;
 
-          const targetResponse = await target.callApi(renderedPrompt, {
+          const targetResponse = await trackedTarget.callApi(renderedPrompt, {
             prompt: { raw: question, label: 'Target Discovery Question' },
             vars: { sessionId },
             bustCache: true,
           });
-          trackGenerationResponseTokenUsage(discoveryTokenUsage, targetResponse);
 
           if (targetResponse.error) {
             const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -370,6 +377,12 @@ export async function doTargetPurposeDiscovery(
     return normalizeTargetPurposeDiscoveryResult({
       ...discoveryResult,
       ...(Object.keys(discoveryTokenUsage).length > 0 ? { tokenUsage: discoveryTokenUsage } : {}),
+    });
+  } catch (error) {
+    trackGenerationErrorTokenUsage(discoveryTokenUsage, error, false);
+    throw Object.assign(new Error(error instanceof Error ? error.message : String(error)), {
+      cause: error,
+      tokenUsage: discoveryTokenUsage,
     });
   } finally {
     pbar?.stop();
@@ -541,6 +554,12 @@ export function discoverCommand(
           }
         }
       } catch (error) {
+        const tokenUsage = getErrorTokenUsage(error);
+        if (tokenUsage) {
+          logger.info(
+            `Observed discovery usage: ${tokenUsage.total ?? 0} tokens across ${tokenUsage.numRequests ?? 0} requests`,
+          );
+        }
         logger.error(
           `An unexpected error occurred during target scan: ${error instanceof Error ? error.message : String(error)}\n${
             error instanceof Error ? error.stack : ''

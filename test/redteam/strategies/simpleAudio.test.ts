@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 import { mockConsole } from '../../util/utils';
 
@@ -142,7 +143,7 @@ describe('audio strategy', () => {
   });
 
   describe('addAudioToBase64', () => {
-    it('reports usage from remote audio generation', async () => {
+    it('reports remote audio usage through the strategy registry', async () => {
       const usage: TokenUsage = {};
       const provider = trackGenerationTokenUsage(
         { id: () => 'audio-generator', callApi: vi.fn(async () => ({ output: 'unused' })) },
@@ -158,8 +159,8 @@ describe('audio strategy', () => {
         statusText: 'OK',
       });
 
-      const result = await addAudioToBase64(
-        [{ vars: { prompt: 'test' } }] as TestCase[],
+      const result = await Strategies.find((strategy) => strategy.id === 'audio')!.action(
+        [{ vars: { prompt: 'test' }, metadata: { pluginId: 'policy' } }],
         'prompt',
         {},
         'audio',
