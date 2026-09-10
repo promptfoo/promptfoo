@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-Live spoken answer evaluation
+
+prompts:
+  - 'What is the capital of France? Answer in one short sentence.'
+
+providers:
+  - id: openai:live:gpt-live-1
+    config:
+      instructions: Keep answers short. Delegate questions needing research to the backend.
+      audio:
+        output:
+          voice: marin
+      responseWindowMs: 15000
+      delegation:
+        type: responses
+        responses:
+          model: gpt-5.6-luna
+          instructions: Return concise, factual answers.
+
+tests:
+  - assert:
+      - type: contains
+        value: Paris

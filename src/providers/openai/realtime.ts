@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sanitizeUrlForLogging } from '../../util/sanitizer';
 import { hasHeaderOverride, OpenAiGenericProvider } from '.';
+import { convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
@@ -35,57 +36,6 @@ const REDACTED_TOOL_ERROR_OUTPUT = JSON.stringify({ error: 'Tool execution faile
 function formatCloseMessage(prefix: string, code: number, reason: Buffer | undefined): string {
   const reasonText = reason?.toString() ?? '';
   return `${prefix} (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`;
-}
-
-/**
- * Convert PCM16 audio data to WAV format for browser playback
- * @param pcmData Raw PCM16 audio data buffer
- * @param sampleRate Sample rate (default 24000 for gpt-realtime)
- * @returns WAV format buffer
- */
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
-  const numChannels = 1; // Mono
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = pcmData.length;
-  const fileSize = 36 + dataSize;
-
-  const wavHeader = Buffer.alloc(44);
-  let offset = 0;
-
-  // RIFF header
-  wavHeader.write('RIFF', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(fileSize, offset);
-  offset += 4;
-  wavHeader.write('WAVE', offset);
-  offset += 4;
-
-  // fmt chunk
-  wavHeader.write('fmt ', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(16, offset);
-  offset += 4; // chunk size
-  wavHeader.writeUInt16LE(1, offset);
-  offset += 2; // audio format (PCM)
-  wavHeader.writeUInt16LE(numChannels, offset);
-  offset += 2;
-  wavHeader.writeUInt32LE(sampleRate, offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(byteRate, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(blockAlign, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(bitsPerSample, offset);
-  offset += 2;
-
-  // data chunk
-  wavHeader.write('data', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(dataSize, offset);
-
-  return Buffer.concat([wavHeader, pcmData]);
 }
 
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
@@ -503,6 +453,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
+    if (modelName.startsWith('gpt-live-')) {
+      throw new Error(`Use openai:live:${modelName} for GPT-Live sessions.`);
+    }
     if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
         `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
