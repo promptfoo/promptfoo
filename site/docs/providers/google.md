@@ -277,6 +277,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ## Available Models
 
+Lyria music generation is not currently supported by promptfoo's Google providers.
+
 ### Chat and Multimodal Models
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities

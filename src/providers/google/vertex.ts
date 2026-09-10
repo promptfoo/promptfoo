@@ -763,10 +763,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const cacheBody =
       tierHeader === undefined ? body : { requestBody: body, serviceTierHeader: tierHeader };
     const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, cacheBody, apiHost);
+    // Arbitrary provider headers can select a tenant or contain secrets. Only the
+    // tier header is represented safely in this cache identity.
+    const useCache =
+      isCacheEnabled() &&
+      Object.keys(this.config.headers ?? {}).every(
+        (name) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+      );
 
     let response;
     let cachedResponse;
-    if (isCacheEnabled()) {
+    if (useCache) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -784,12 +791,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     if (response === undefined) {
       let data;
       let responseHeaders: unknown;
+      let requestedServiceTier: string | undefined;
       try {
         // Default to non-streaming (generateContent) since:
         // 1. Model Armor floor settings only work with non-streaming endpoint
         // 2. Promptfoo collects full responses for evaluation anyway
         // Set streaming: true to use streamGenerateContent if needed
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+        const requestHeaders = { ...tierHeaders, ...(await this.getAuthHeaders()) };
+        requestedServiceTier = Object.entries(requestHeaders).find(
+          ([name]) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+        )?.[1];
 
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
@@ -798,7 +810,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
           const res = await fetchWithProxy(url, {
             method: 'POST',
-            headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
+            headers: requestHeaders,
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
@@ -824,7 +836,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             url,
             method: 'POST',
             data: body,
-            headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
+            headers: requestHeaders,
             timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
@@ -1013,6 +1025,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           lastData.usageMetadata,
           this.getRegion(),
           actualServiceTier,
+          requestedServiceTier,
         );
         const audio = normalizeGeminiAudio(output);
         const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
@@ -1037,7 +1050,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           response.metadata = { ...response.metadata, ...grounding };
         }
 
-        if (isCacheEnabled()) {
+        if (useCache) {
           await cache.set(cacheKey, JSON.stringify(response));
         }
       } catch (err) {

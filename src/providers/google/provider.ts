@@ -448,8 +448,15 @@ export class GoogleProvider extends GoogleGenericProvider {
     let data: GeminiApiResponse;
     let cached = false;
     let responseHeaders: unknown;
+    let requestedServiceTier: string | undefined;
 
     try {
+      const vertexHeaders = this.isVertexMode
+        ? { ...tierHeaders, ...(await this.getAuthHeaders()) }
+        : undefined;
+      requestedServiceTier = Object.entries(vertexHeaders ?? {}).find(
+        ([name]) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+      )?.[1];
       if (this.isVertexMode && !this.isExpressMode()) {
         // Vertex AI OAuth mode
         const client = await this.getClientWithCredentials();
@@ -461,7 +468,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           url,
           method: 'POST',
           data: body,
-          headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
+          headers: vertexHeaders,
           timeout: getRequestTimeoutMs(),
         });
         data = res.data as GeminiApiResponse;
@@ -473,7 +480,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
         const res = await fetchWithProxy(url, {
           method: 'POST',
-          headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
+          headers: vertexHeaders,
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(getRequestTimeoutMs()),
         });
@@ -525,7 +532,14 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context, responseHeaders);
+    return this.parseGeminiResponse(
+      data,
+      cached,
+      config,
+      context,
+      responseHeaders,
+      requestedServiceTier,
+    );
   }
 
   /**
@@ -537,6 +551,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     config: CompletionOptions,
     context?: CallApiContextParams,
     responseHeaders?: unknown,
+    requestedServiceTier?: string,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
@@ -720,6 +735,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             lastData.usageMetadata,
             this.isVertexMode ? this.getRegion() : undefined,
             actualServiceTier,
+            requestedServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);

@@ -2180,6 +2180,8 @@ describe('util', () => {
           ['image/bmp', Buffer.from('BM..................')],
           ['image/tiff', Buffer.from('II*.................')],
           ['image/x-icon', Buffer.from('00000100010000000000000000000000', 'hex')],
+          ['image/avif', Buffer.from('....ftypavif........')],
+          ['image/x-canon-cr3', Buffer.from('....ftypcrx ........')],
           ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
           ['video/ogg', Buffer.from('OggS........\u0080theora...')],
           ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
@@ -2210,6 +2212,17 @@ describe('util', () => {
 
           expect(contents[0].parts).toEqual([{ text: base64Data }]);
         });
+
+        it.each(['avif', 'avis', 'crx '])(
+          'leaves the unsupported BMFF brand %s as text',
+          (brand) => {
+            // Synthetic sniffing-prefix fixture, not a complete or decodable media file.
+            const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
+            const { contents } = geminiFormatAndSystemInstructions(media, { media });
+
+            expect(contents[0].parts).toEqual([{ text: media }]);
+          },
+        );
 
         it('does not misclassify Matroska containers as WebM', () => {
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: matroskaBase64 }] }]);

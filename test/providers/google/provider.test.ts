@@ -1229,6 +1229,23 @@ describe('GoogleProvider', () => {
           actualTier: 'flex',
           cost: 0.000275,
         })),
+        ...(['OAuth', 'Express'] as const).flatMap((transport) =>
+          [
+            { requested: 'flex', configured: 'priority' as const, cost: 0.000275 },
+            { requested: 'priority', configured: 'flex' as const, cost: 0.00099 },
+          ].map(({ requested, configured, cost }) => ({
+            name: `${transport} explicit ${requested} header supplies the missing-traffic estimate`,
+            transport,
+            config: {
+              service_tier: configured,
+              headers: { 'x-VeRtEx-Ai-LlM-ShArEd-ReQuEsT-TyPe': requested },
+            },
+            // Prompt headers are not provider-owned transport configuration.
+            promptConfig: { headers: { 'X-Vertex-AI-LLM-Shared-Request-Type': configured } },
+            headerTier: requested,
+            cost,
+          })),
+        ),
         ...(['OAuth', 'Express'] as const).map((transport) => ({
           name: `${transport} Priority downgrade uses ON_DEMAND before billing`,
           transport,

@@ -598,6 +598,7 @@ export function calculateGoogleCost(
   cachedImagePromptTokens?: number,
   vertexRegion?: string,
   actualServiceTier?: GoogleServiceTier,
+  requestedServiceTier?: unknown,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -643,6 +644,7 @@ export function calculateGoogleCost(
 
   const serviceTier = normalizeGoogleServiceTier(
     actualServiceTier ??
+      (isVertexMode ? requestedServiceTier : undefined) ??
       (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier ??
       (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
       config.service_tier,
@@ -763,6 +765,7 @@ export function calculateGoogleCostFromUsage(
   usageMetadata: any,
   vertexRegion?: string,
   responseServiceTier?: unknown,
+  requestedServiceTier?: unknown,
 ): number | undefined {
   const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
   const toolPromptDetails =
@@ -807,6 +810,7 @@ export function calculateGoogleCostFromUsage(
       usageMetadata,
       isVertexMode,
     ),
+    requestedServiceTier,
   );
 }
 
@@ -1514,7 +1518,10 @@ export function loadFile(
   return fileContents;
 }
 
-function getMimeTypeFromFtypBrand(brand: string): string {
+function getMimeTypeFromFtypBrand(brand: string): string | undefined {
+  if (['avif', 'avis', 'crx '].includes(brand)) {
+    return undefined;
+  }
   if (['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand)) {
     return 'audio/mp4';
   } else if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
