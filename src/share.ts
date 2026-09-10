@@ -378,7 +378,11 @@ async function sendChunkWithRetry<T>(
   }
 
   // On retryable failures, split the chunk and retry each half
-  if (result.errorType === 'PAYLOAD_TOO_LARGE' || result.errorType === 'NETWORK_TIMEOUT') {
+  if (
+    result.errorType === 'PAYLOAD_TOO_LARGE' ||
+    result.errorType === 'NETWORK_TIMEOUT' ||
+    (itemName === 'trace' && result.errorType === 'UNKNOWN')
+  ) {
     // If we're already at minimum size, we cannot split further
     if (chunk.length <= config.minResultsPerChunk) {
       throw new Error(

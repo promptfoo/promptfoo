@@ -122,7 +122,7 @@ vi.mock('../src/util/cloud', () => ({
 }));
 
 vi.mock('../src/envars', () => ({
-  getEnvBool: vi.fn(),
+  getEnvBool: vi.fn((key: string) => key === 'IS_TESTING'),
   getEnvInt: vi.fn(),
   getEnvString: vi.fn().mockReturnValue(''),
   getEnvFloat: vi.fn(),
@@ -1005,7 +1005,7 @@ describe('createShareableUrl', () => {
       expect(traceBodies.map((body) => body.length)).toEqual([2, 1, 1]);
     });
 
-    it('continues a split trace chunk when the first singleton still fails', async () => {
+    it('continues a split trace chunk when the first singleton is invalid', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const padding = 'x'.repeat(300_000);
       const traces = ['bad', 'good'].map((traceId) => ({
@@ -1021,15 +1021,15 @@ describe('createShareableUrl', () => {
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
         .mockResolvedValueOnce({
           ok: false,
-          status: 413,
-          statusText: 'Payload Too Large',
-          text: () => Promise.resolve('split the chunk'),
+          status: 400,
+          statusText: 'Bad Request',
+          text: () => Promise.resolve('split invalid traces'),
         })
         .mockResolvedValueOnce({
           ok: false,
-          status: 413,
-          statusText: 'Payload Too Large',
-          text: () => Promise.resolve('bad trace remains too large'),
+          status: 400,
+          statusText: 'Bad Request',
+          text: () => Promise.resolve('bad trace remains invalid'),
         })
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
 

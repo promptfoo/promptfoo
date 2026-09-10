@@ -299,7 +299,7 @@ describe('share-time blob upload', () => {
     vi.mocked(uploadBlobRemote).mockImplementation(async () => {
       activeUploads += 1;
       maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      await Promise.resolve();
       activeUploads -= 1;
       return {
         deduplicated: false,

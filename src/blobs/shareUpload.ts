@@ -4,7 +4,7 @@ import { getShareAuthorizedBlob } from './index';
 import { type RemoteBlobUploadTarget, uploadBlobRemote } from './remoteUpload';
 
 export class RemoteBlobUploadCache extends Map<string, Promise<boolean>> {
-  readonly resultContexts = new Map<string, ShareBlobUploadContext[]>();
+  readonly resultContexts = new Map<string, Map<string, ShareBlobUploadContext>>();
 }
 interface ShareBlobUploadContext {
   localEvalId: string;
@@ -118,12 +118,10 @@ export function recordResultBlobRefsForShare(
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
   for (const hash of hashes) {
-    const contexts = cache.resultContexts.get(hash) ?? [];
+    const contexts = cache.resultContexts.get(hash) ?? new Map();
     const key = getUploadCacheKey(hash, context);
-    if (!contexts.some((candidate) => getUploadCacheKey(hash, candidate) === key)) {
-      contexts.push(context);
-      cache.resultContexts.set(hash, contexts);
-    }
+    contexts.set(key, context);
+    cache.resultContexts.set(hash, contexts);
   }
 }
 
@@ -132,7 +130,7 @@ export async function uploadRecordedResultBlobRefsForShare(
   target?: RemoteBlobUploadTarget,
 ): Promise<void> {
   for (const [hash, contexts] of cache.resultContexts) {
-    for (const context of contexts) {
+    for (const context of contexts.values()) {
       await uploadBlobForShare(hash, cache, context, target);
     }
   }
@@ -150,7 +148,7 @@ export async function uploadTraceBlobRefsForShare(
   });
   for (const hash of hashes) {
     const contexts = cache.resultContexts.get(hash);
-    for (const uploadContext of contexts?.length ? contexts : [context]) {
+    for (const uploadContext of contexts?.size ? contexts.values() : [context]) {
       await uploadBlobForShare(hash, cache, uploadContext, target);
     }
   }
