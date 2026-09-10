@@ -1345,6 +1345,19 @@ describe('ProviderConfigEditor', () => {
     expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
   });
 
+  it('should explain the retirement instead of editing a saved GitHub Models target', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'github:openai/gpt-5', config: {} }}
+        setProvider={vi.fn()}
+        providerType="github"
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('GitHub retired GitHub Models');
+    expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
+  });
+
   it('should render the raw provider editor for Open Interpreter targets', () => {
     renderWithProviders(
       <ProviderConfigEditor
