@@ -185,15 +185,29 @@ function normalizeJavascriptAssertionResult(
   }
 
   const pass = result.pass !== inverse;
+  // When the assertion is inverted (not-javascript) and the inversion flipped the
+  // outcome, preserve the custom reason from the GradingResult rather than
+  // replacing it with a generic message. A failing inverted assertion means the
+  // function returned true (the unwanted condition was met), so we prefix the
+  // original reason to make the failure clear to the reader.
+  let reason: string;
+  if (pass === result.pass) {
+    // Inversion did not change the outcome — keep the original reason as-is.
+    reason = result.reason;
+  } else if (pass) {
+    // Inversion turned a function-fail into a test-pass: assertion succeeded.
+    reason = result.reason || 'Assertion passed';
+  } else {
+    // Inversion turned a function-pass into a test-fail: surface the original
+    // reason so the user knows why the negated assertion failed.
+    reason = result.reason
+      ? `NOT: ${result.reason}`
+      : `Custom function returned ${result.pass ? 'true' : 'false'}`;
+  }
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
+    reason,
     assertion: normalizeResultAssertion(result.assertion, assertion),
   };
 }
