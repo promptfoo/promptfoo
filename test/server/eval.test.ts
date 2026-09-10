@@ -447,11 +447,7 @@ describe('eval routes', () => {
     it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
-      await setResultPromptRaws(eval_, [
-        'small prompt',
-        'long prompt '.repeat(10),
-        'medium prompt '.repeat(4),
-      ]);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
       mockTablePayloadRangeError((attempt) => attempt === 1);
 
@@ -468,17 +464,13 @@ describe('eval routes', () => {
       );
       expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(1);
       expect(prompts).toContain('small prompt');
-      expect(prompts).toContain('medium prompt '.repeat(4));
+      expect(prompts).toContain('x'.repeat(50));
     });
 
     it('strips per-cell prompts largest first until the response serializes', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
-      await setResultPromptRaws(eval_, [
-        'small prompt',
-        'long prompt '.repeat(10),
-        'medium prompt '.repeat(4),
-      ]);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
       mockTablePayloadRangeError((attempt) => attempt <= 2);
 

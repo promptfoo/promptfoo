@@ -1025,21 +1025,33 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  isEnvMap = false,
+  redactStringValues = true,
+): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
+    if (redactStringValues && key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+    } else if (redactStringValues && typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        key === 'env',
+        redactStringValues,
+      );
     }
   }
   return sanitized;
@@ -1048,14 +1060,20 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  isEnvMap = false,
+  redactStringValues = true,
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return redactStringValues ? sanitizeJsonString(obj, depth, maxDepth) : obj;
   }
 
   // Handle primitives and null/undefined
@@ -1070,7 +1088,9 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, false, redactStringValues),
+    );
   }
 
   // Handle class instances
@@ -1080,7 +1100,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, redactStringValues);
 }
 
 function hasSensitiveFields(value: unknown, seen = new WeakSet<object>()): boolean {
@@ -1124,6 +1144,8 @@ export function sanitizeObject(
   obj: any,
   options: {
     context?: string;
+    // Preserve arbitrary input text while still redacting secret-named fields.
+    redactStringValues?: boolean;
     redactErrorMessages?: boolean;
     omitCircularRefs?: boolean;
     throwOnError?: boolean;
@@ -1132,6 +1154,7 @@ export function sanitizeObject(
 ): any {
   const {
     context = 'object',
+    redactStringValues = true,
     redactErrorMessages = false,
     omitCircularRefs = false,
     throwOnError = false,
@@ -1148,7 +1171,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return redactStringValues ? sanitizeJsonString(obj, 0, maxDepth) : obj;
     }
 
     // Handle other primitives
@@ -1191,7 +1214,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj, 0, maxDepth, false, redactStringValues);
   } catch (error) {
     if (throwOnError) {
       throw error;

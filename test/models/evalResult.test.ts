@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -55,6 +58,63 @@ describe('EvalResult', () => {
     promptId: hashPrompt(mockPrompt),
     response: undefined,
   });
+
+  it.each(['single', 'batch', 'jsonl'])(
+    'preserves opaque inputs while redacting grader credentials for %s results',
+    async (boundary) => {
+      const opaqueInput = 'abcdef0123456789'.repeat(8);
+      const result = createEvaluateResult({
+        prompt: { raw: opaqueInput, label: 'fixture', config: { opaque: opaqueInput } },
+        testCase: {
+          vars: { image: opaqueInput, apiKey: 'vars-fixture' },
+          options: {
+            provider: { id: 'fixture', config: { opaque: opaqueInput } },
+          },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'llm-rubric',
+                  value: opaqueInput,
+                  provider: { id: 'fixture', config: { opaque: opaqueInput } },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const sanitized =
+        boundary === 'single'
+          ? await EvalResult.createFromEvaluateResult('opaque-fixture', result)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([result], 'opaque-fixture'))[0]
+            : sanitizeResultForJsonlArtifact({ ...result, vars: result.testCase.vars });
+
+      expect(sanitized.prompt.raw).toBe(opaqueInput);
+      expect(sanitized.prompt.config?.opaque).toBe('[REDACTED]');
+      expect(sanitized.testCase.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
+      expect(sanitized.testCase.options?.provider).toEqual({
+        id: 'fixture',
+        config: { opaque: '[REDACTED]' },
+      });
+      expect(sanitized.testCase.assert).toEqual([
+        {
+          type: 'assert-set',
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: opaqueInput,
+              provider: { id: 'fixture', config: { opaque: '[REDACTED]' } },
+            },
+          ],
+        },
+      ]);
+      if ('vars' in sanitized) {
+        expect(sanitized.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
+      }
+    },
+  );
 
   describe('sanitizeProvider', () => {
     it.each([

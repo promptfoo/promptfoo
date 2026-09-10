@@ -9,6 +9,8 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import {
   type ApiProvider,
+  type Assertion,
+  type AssertionSet,
   type AtomicTestCase,
   type EvaluateResult,
   type GradingResult,
@@ -158,7 +160,7 @@ function sanitizeForDb<T>(obj: T): T {
 
 // Test cases and prompts can carry resolved grader providers with credential-bearing
 // SDK clients. Traverse the full object depth and fail closed if serialization fails.
-function sanitizeForDbWithSecrets<T>(obj: T): T {
+function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -171,11 +173,62 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
       // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
       maxDepth: Number.POSITIVE_INFINITY,
       redactErrorMessages: true,
+      redactStringValues,
       throwOnError: true,
     }) as T;
   } catch {
     logger.debug('Unable to sanitize eval result field safely; omitting field contents');
     return (isArray ? [] : typeof obj === 'object' ? {} : null) as T;
+  }
+}
+
+function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion | AssertionSet {
+  if ('assert' in assertion) {
+    return { ...assertion, assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[] };
+  }
+  return { ...assertion, provider: sanitizeForDbWithSecrets(assertion.provider) };
+}
+
+// Prompt text and test inputs can contain legitimate hashes, base64, or JSON.
+// Apply value-based credential detection only to their provider-bearing fields.
+function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
+  if (!testCase) {
+    return testCase;
+  }
+  try {
+    const sanitized = sanitizeForDbWithSecrets(testCase, false);
+    if (testCase.provider) {
+      sanitized.provider = sanitizeProvider(testCase.provider);
+    }
+    if (testCase.options?.provider) {
+      sanitized.options!.provider = sanitizeForDbWithSecrets(testCase.options.provider);
+    }
+    if (testCase.assert) {
+      sanitized.assert = sanitizeForDbWithSecrets(
+        testCase.assert.map(sanitizeAssertionForDb),
+        false,
+      );
+    }
+    return sanitized;
+  } catch {
+    logger.debug('Unable to sanitize test case safely; omitting field contents');
+    return {} as AtomicTestCase;
+  }
+}
+
+function sanitizePromptForDb(prompt: Prompt): Prompt {
+  if (!prompt) {
+    return prompt;
+  }
+  try {
+    const sanitized = sanitizeForDbWithSecrets(prompt, false);
+    if (prompt.config) {
+      sanitized.config = sanitizeForDbWithSecrets(prompt.config);
+    }
+    return sanitized;
+  } catch {
+    logger.debug('Unable to sanitize prompt safely; omitting field contents');
+    return {} as Prompt;
   }
 }
 
@@ -533,8 +586,8 @@ export function sanitizeResultFieldsForDb(
   },
 ) {
   return {
-    testCase: sanitizeForDbWithSecrets(result.testCase),
-    prompt: sanitizeForDbWithSecrets(result.prompt),
+    testCase: sanitizeTestCaseForDb(result.testCase),
+    prompt: sanitizePromptForDb(result.prompt),
     provider: sanitizeProvider(result.provider),
     namedScores: sanitizeForDb(result.namedScores),
     ...redactSensitiveResultFieldsForDb({
@@ -592,7 +645,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
+            sanitizeTestCaseForDb(artifactResult.testCase as AtomicTestCase),
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
@@ -603,12 +656,12 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.vars === undefined
       ? {}
       : {
-          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
+          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars, false),
         }),
     ...(artifactResult.prompt
       ? {
           prompt: projectPrompt(
-            sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
+            sanitizePromptForDb(artifactResult.prompt as Prompt),
             shouldStripPromptText,
           ),
         }
@@ -656,13 +709,6 @@ export default class EvalResult {
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
-    const preSanitizeTestCase = {
-      ...testCase,
-      ...(testCase.provider && {
-        provider: sanitizeProvider(testCase.provider),
-      }),
-    };
-
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
       testIdx: result.testIdx,
@@ -679,10 +725,10 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
+      testCase: sanitizeTestCaseForDb(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt: sanitizeForDbWithSecrets(prompt),
+      prompt: sanitizePromptForDb(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,

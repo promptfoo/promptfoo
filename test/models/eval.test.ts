@@ -69,6 +69,12 @@ describe('evaluator', () => {
         provider: { id: 'fixture', config: { apiKey: 'grader-fixture' } },
       };
       result.prompt.config = { provider: { id: 'fixture', config: { apiKey: 'prompt-fixture' } } };
+      result.prompt.raw = 'x'.repeat(100);
+      result.testCase.vars = {
+        digest: 'abcdef0123456789'.repeat(4),
+        image: Buffer.from('fixture image bytes '.repeat(8)).toString('base64'),
+        apiKey: 'vars-fixture',
+      };
 
       if (method === 'create') {
         evaluation = await Eval.create({}, [], { results: [result] });
@@ -87,6 +93,11 @@ describe('evaluator', () => {
       expect(stored[0].provider.config).toEqual({ apiKey: '[REDACTED]', region: 'local' });
       expect(JSON.stringify(stored)).not.toContain('grader-fixture');
       expect(JSON.stringify(stored)).not.toContain('prompt-fixture');
+      expect(stored[0].prompt.raw).toBe(result.prompt.raw);
+      expect(stored[0].testCase.vars).toEqual({
+        ...result.testCase.vars,
+        apiKey: '[REDACTED]',
+      });
       expect(result.provider.config?.apiKey).toBe('provider-fixture');
     },
   );
