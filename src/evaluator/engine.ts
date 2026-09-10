@@ -39,14 +39,8 @@ import {
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from '../scheduler/providerCallQueue';
 import { generatePrompts } from '../suggestions';
 import telemetry from '../telemetry';
-import {
-  generateTraceContextIfNeeded,
-  isOtlpReceiverStarted,
-  startOtlpReceiverIfNeeded,
-  stopOtlpReceiverIfNeeded,
-} from '../tracing/evaluatorTracing';
-import { getDefaultOtelConfig } from '../tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from '../tracing/otelSdk';
+import { generateTraceContextIfNeeded } from '../tracing/evaluatorTracing';
+import { flushOtel } from '../tracing/otelSdk';
 import { isExternalTraceProvider } from '../tracing/providers';
 import { getActiveTraceparent } from '../tracing/spanRoles';
 import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from '../tracing/targetTracer';
@@ -129,6 +123,7 @@ import type {
   EvaluationStoreResult,
   EvaluatorResultWriter,
   EvaluatorRuntime,
+  EvaluatorTracingLifecycle,
   EvaluatorProgressBar as ProgressBarManager,
 } from './runtime';
 
@@ -4784,30 +4779,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
-    // Initialize OTEL SDK if tracing is enabled
-    // Check env flag, test suite level, and default test metadata
+    // Preserve suite, row metadata, and environment enablement for every runtime.
     const tracingEnabled =
       getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-    let otelInitialized = false;
-    let otlpReceiverAcquired = false;
-
-    let evaluationError: unknown;
+    let tracingLifecycle: EvaluatorTracingLifecycle | undefined;
+    let evaluationFailed = false;
     try {
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
       if (tracingEnabled) {
-        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-        const otelConfig = getDefaultOtelConfig();
-        initializeOtel(otelConfig);
-        otelInitialized = true;
+        if (!this.runtime.createTracingLifecycle) {
+          throw new Error('Tracing requires an EvaluatorRuntime.createTracingLifecycle adapter');
+        }
+        tracingLifecycle = this.runtime.createTracingLifecycle(this.testSuite, this.store.id);
+        await tracingLifecycle.start();
       }
 
       return await this._runEvaluation();
     } catch (error) {
-      evaluationError = error;
+      evaluationFailed = true;
       throw error;
     } finally {
       // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
@@ -4815,31 +4807,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // reads it back and the file handle is released promptly. allSettled so one writer's
       // close failure neither blocks cleanup nor masks another writer's error.
       const writerCloseResults = await Promise.allSettled(
-        this.fileWriters.map((writer) => writer.close()),
+        this.fileWriters.map(async (writer) => writer.close()),
       );
       const writerCloseErrors = writerCloseResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );
 
-      let cleanupError: unknown;
+      const cleanupErrors: unknown[] = [];
       try {
-        // Flush and shutdown OTEL SDK
-        if (otelInitialized) {
-          logger.debug('[Evaluator] Flushing OTEL spans...');
-          await flushOtel();
-          await shutdownOtel();
-        }
+        await tracingLifecycle?.close();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
 
-        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
-          // Add a delay to allow providers to finish exporting spans
-          logger.debug('[Evaluator] Waiting for span exports to complete...');
-          await sleep(3000);
-        }
-        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
+      try {
+        // Clean up Python worker pools to prevent resource leaks.
         await providerRegistry.shutdownAll();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
 
+      try {
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
           const metrics = this.rateLimitRegistry.getMetrics();
@@ -4868,14 +4856,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;
       } catch (error) {
-        cleanupError = error;
-        throw error;
+        cleanupErrors.push(error);
       } finally {
+        if (cleanupErrors.length > 0) {
+          logger.error('[Evaluator] Error during evaluation cleanup', { errors: cleanupErrors });
+        }
         if (writerCloseErrors.length > 0) {
           logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
           // Only surface a writer-close failure when nothing else failed, so the original
           // evaluation/cleanup error is never masked by a secondary I/O error.
-          if (evaluationError === undefined && cleanupError === undefined) {
+          if (!evaluationFailed && cleanupErrors.length === 0) {
             // When results persisted to the database, that copy is authoritative and the
             // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
             // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
@@ -4893,6 +4883,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
             );
           }
+        }
+        if (!evaluationFailed && cleanupErrors.length > 0) {
+          throw cleanupErrors[0];
         }
       }
     }

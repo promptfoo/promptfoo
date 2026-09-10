@@ -1,13 +1,17 @@
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests
-const mockRegister = vi.fn();
-const mockShutdown = vi.fn().mockResolvedValue(undefined);
-const mockForceFlush = vi.fn().mockResolvedValue(undefined);
-const mockAddSpanProcessor = vi.fn();
-const mockSetLogger = vi.fn();
+const { mockRegister, mockShutdown, mockForceFlush, mockAddSpanProcessor, mockSetLogger } =
+  vi.hoisted(() => ({
+    mockRegister: vi.fn(),
+    mockShutdown: vi.fn(),
+    mockForceFlush: vi.fn(),
+    mockAddSpanProcessor: vi.fn(),
+    mockSetLogger: vi.fn(),
+  }));
 
 // Track constructor calls
 let nodeTracerProviderCalls: unknown[] = [];
@@ -23,7 +27,11 @@ vi.mock('@opentelemetry/sdk-trace-node', () => {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
       }
-      register = mockRegister;
+      register(config: unknown) {
+        trace.setGlobalTracerProvider(this as never);
+        mockRegister(config);
+      }
+      getTracer = vi.fn();
       shutdown = mockShutdown;
       forceFlush = mockForceFlush;
       addSpanProcessor = mockAddSpanProcessor;
@@ -64,7 +72,8 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
   ATTR_SERVICE_VERSION: 'service.version',
 }));
 
-vi.mock('@opentelemetry/api', () => ({
+vi.mock('@opentelemetry/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@opentelemetry/api')>()),
   diag: {
     setLogger: mockSetLogger,
   },
@@ -103,13 +112,15 @@ vi.mock('../../src/tracing/localSpanExporter', () => ({
 describe('otelSdk', () => {
   // Module functions - will be re-imported in beforeEach
   let initializeOtel: typeof import('../../src/tracing/otelSdk').initializeOtel;
+  let acquireOtel: typeof import('../../src/tracing/otelSdk').acquireOtel;
   let shutdownOtel: typeof import('../../src/tracing/otelSdk').shutdownOtel;
   let flushOtel: typeof import('../../src/tracing/otelSdk').flushOtel;
   let isOtelInitialized: typeof import('../../src/tracing/otelSdk').isOtelInitialized;
 
   beforeEach(async () => {
     // Clear all mocks and call tracking
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    trace.disable();
     nodeTracerProviderCalls = [];
     otlpExporterCalls = [];
     localExporterCalls = [];
@@ -126,12 +137,15 @@ describe('otelSdk', () => {
     // Re-import the module
     const module = await import('../../src/tracing/otelSdk');
     initializeOtel = module.initializeOtel;
+    acquireOtel = module.acquireOtel;
     shutdownOtel = module.shutdownOtel;
     flushOtel = module.flushOtel;
     isOtelInitialized = module.isOtelInitialized;
   });
 
   afterEach(async () => {
+    await shutdownOtel();
+    trace.disable();
     vi.resetAllMocks();
   });
 
@@ -244,6 +258,124 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
       await expect(shutdownOtel()).resolves.toBeUndefined();
       expect(isOtelInitialized()).toBe(false);
+    });
+  });
+
+  describe('acquireOtel', () => {
+    it('does not initialize or acquire a disabled configuration', async () => {
+      const release = await acquireOtel({ ...defaultConfig, enabled: false });
+      await release();
+      expect(mockRegister).not.toHaveBeenCalled();
+      expect(mockShutdown).not.toHaveBeenCalled();
+    });
+
+    it('flushes each lease and retains the first configuration until the last release', async () => {
+      const releaseFirst = await acquireOtel(defaultConfig);
+      const releaseSecond = await acquireOtel({ ...defaultConfig, serviceName: 'second-service' });
+      expect(resourceCalls).toEqual([
+        { 'service.name': 'test-service', 'service.version': '1.0.0-test' },
+      ]);
+
+      await releaseFirst();
+      expect(mockForceFlush).toHaveBeenCalledTimes(1);
+      expect(mockShutdown).not.toHaveBeenCalled();
+      expect(isOtelInitialized()).toBe(true);
+
+      await releaseSecond();
+      expect(mockForceFlush).toHaveBeenCalledTimes(2);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('makes concurrent release calls idempotent', async () => {
+      const release = await acquireOtel(defaultConfig);
+      const first = release();
+      expect(release()).toBe(first);
+      await first;
+      await release();
+      expect(mockForceFlush).toHaveBeenCalledTimes(1);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it('still shuts down the final lease after a flush failure', async () => {
+      const release = await acquireOtel(defaultConfig);
+      mockForceFlush.mockRejectedValueOnce(new Error('Flush failed'));
+      await expect(release()).resolves.toBeUndefined();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('publishes the release promise before invoking exporter code', async () => {
+      const release = await acquireOtel(defaultConfig);
+      const releasing = release();
+      mockForceFlush.mockImplementationOnce(async () => {
+        expect(release()).toBe(releasing);
+      });
+      await releasing;
+      expect(mockForceFlush).toHaveBeenCalledTimes(1);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves ownership of an explicitly initialized SDK', async () => {
+      initializeOtel(defaultConfig);
+      const release = await acquireOtel(defaultConfig);
+      await release();
+      expect(mockForceFlush).toHaveBeenCalledOnce();
+      expect(mockShutdown).not.toHaveBeenCalled();
+      expect(isOtelInitialized()).toBe(true);
+    });
+
+    it('lets explicit initialization adopt an active evaluation SDK', async () => {
+      const release = await acquireOtel(defaultConfig);
+      initializeOtel(defaultConfig);
+      await release();
+      expect(mockShutdown).not.toHaveBeenCalled();
+      expect(isOtelInitialized()).toBe(true);
+    });
+
+    it('waits for final shutdown before acquiring the next SDK generation', async () => {
+      let finishShutdown!: () => void;
+      let startedShutdown!: () => void;
+      const shutdownStarted = new Promise<void>((resolve) => {
+        startedShutdown = resolve;
+      });
+      mockShutdown.mockImplementationOnce(() => {
+        startedShutdown();
+        return new Promise<void>((resolve) => {
+          finishShutdown = resolve;
+        });
+      });
+      const releaseFirst = await acquireOtel(defaultConfig);
+      const firstRelease = releaseFirst();
+      await shutdownStarted;
+
+      let acquiredSecond = false;
+      const secondAcquisition = acquireOtel(defaultConfig).then((release) => {
+        acquiredSecond = true;
+        return release;
+      });
+      await Promise.resolve();
+      expect(acquiredSecond).toBe(false);
+      expect(mockRegister).toHaveBeenCalledTimes(1);
+
+      finishShutdown();
+      await firstRelease;
+      const releaseSecond = await secondAcquisition;
+      expect(mockRegister).toHaveBeenCalledTimes(2);
+      await releaseFirst();
+      expect(isOtelInitialized()).toBe(true);
+      await releaseSecond();
+    });
+
+    it('does not let an old lease shut down a replacement SDK', async () => {
+      const releaseOld = await acquireOtel(defaultConfig);
+      await shutdownOtel();
+      const releaseNew = await acquireOtel(defaultConfig);
+      await releaseOld();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(isOtelInitialized()).toBe(true);
+      await releaseNew();
+      expect(mockShutdown).toHaveBeenCalledTimes(2);
     });
   });
 

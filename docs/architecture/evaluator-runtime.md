@@ -45,6 +45,41 @@ retain progress callbacks without taking over the terminal or process exit polic
 An explicit runtime can reject all suggestions with
 `PromptSuggestionsRejectedError`; the implementation never changes exit status.
 
+## Tracing lifecycle
+
+When the suite, default-test or test metadata, or `PROMPTFOO_TRACING_ENABLED`
+requests tracing, the engine requires the runtime's `createTracingLifecycle`
+factory. It receives the resolved suite and evaluation ID and returns `start()`
+and `close()` methods. An untraced evaluation never calls this factory. An explicit
+runtime without a tracing adapter receives an error instead of selecting Node
+services.
+
+The engine closes result writers before the tracing lifecycle, including when
+`start()` fails partway through. It then continues provider and scheduler cleanup.
+A secondary cleanup failure is logged without replacing the original evaluation
+error. Adapter implementations must release any resources acquired before a
+failed start.
+
+The default Node runtime supplies `src/node/tracingLifecycle.ts`. It keeps local
+OTLP receiver acquisition, SDK ownership, flushing, the existing export grace
+period, and receiver release together. SDK leases keep an evaluation-owned
+provider alive until its final evaluation completes. Repeated evaluations can
+register a fresh provider after shutdown. Cached tracers from Promptfoo's lifecycle
+provider follow its managed SDK generations and remain non-recording while no
+managed SDK is active. They retain that provider ownership when an application
+replaces the global provider; they do not migrate to the replacement SDK.
+Applications should obtain tracers from their host provider for host-owned spans,
+including spans created in host processor callbacks.
+
+A host-initialized SDK remains owned by the host; an externally registered SDK is
+borrowed without installing Promptfoo exporters or shutdown handlers. The external
+host remains responsible for flushing and shutting down its own SDK.
+
+This port controls hosting and cleanup. Row-level span creation, trace-store
+linkage, trace-aware assertion flushing, and local OTLP ingestion keep their
+existing call positions and dependencies. It does not establish a database-free
+or HTTP-free tracing profile.
+
 ## Scope of isolation
 
 The implementation has no direct imports of database models or default Node

@@ -63,6 +63,12 @@ export interface EvaluationStore<
   toEvaluateResult(result: TResult | EvaluateResult): EvaluateResult;
 }
 
+/** Per-evaluation lifecycle. close() must release resources even when start() rejects. */
+export interface EvaluatorTracingLifecycle {
+  start(): Promise<void>;
+  close(): Promise<void>;
+}
+
 export interface EvaluatorResultWriter {
   write(data: unknown): Promise<void>;
   close(): Promise<void>;
@@ -102,6 +108,12 @@ export interface EvaluatorRuntime<
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
+  /**
+   * Required when suite metadata or the environment requests tracing. Receives the resolved
+   * suite; omitted adapters never fall back to Node services. This controls lifecycle only:
+   * row spans, trace storage, and trace-aware assertions still use the existing tracing APIs.
+   */
+  createTracingLifecycle?(testSuite: TestSuite, evaluationId: string): EvaluatorTracingLifecycle;
   /** Approves generated variants. Required when generateSuggestions is enabled. */
   selectPrompt?(prompt: string): Promise<boolean>;
   createProgressReporters?(
