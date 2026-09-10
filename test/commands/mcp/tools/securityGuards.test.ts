@@ -1,7 +1,8 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const securityGuardMocks = vi.hoisted(() => ({
   doEval: vi.fn(),
@@ -14,7 +15,7 @@ const securityGuardMocks = vi.hoisted(() => ({
   synthesizeFromTestSuite: vi.fn(),
 }));
 
-vi.mock('../../../../src/commands/eval', () => ({
+vi.mock('../../../../src/node/doEval', () => ({
   doEval: securityGuardMocks.doEval,
 }));
 
@@ -100,8 +101,11 @@ function writeDefaultConfig(config: Record<string, unknown>) {
 }
 
 describe('MCP tool security guards', () => {
+  let workspace: string;
   beforeEach(() => {
     vi.resetAllMocks();
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-guard-workspace-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(workspace);
     securityGuardMocks.doEval.mockResolvedValue(undefined);
     securityGuardMocks.synthesizeFromTestSuite.mockResolvedValue([{ name: 'Ada' }]);
     securityGuardMocks.loadDefaultConfig.mockResolvedValue({
@@ -141,6 +145,11 @@ describe('MCP tool security guards', () => {
         id: 'mock-provider',
       },
     ]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(workspace, { recursive: true, force: true });
   });
 
   it('should reject generate_test_cases output paths outside the workspace', async () => {

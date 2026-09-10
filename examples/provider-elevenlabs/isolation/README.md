@@ -180,7 +180,7 @@ providers:
   - id: elevenlabs:alignment
     config:
       audioFile: '{{previousOutput.audio}}'
-      transcript: "Your transcript here"
+      transcript: 'Your transcript here'
 ```
 
 ## Related Examples

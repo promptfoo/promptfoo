@@ -1,6 +1,15 @@
-import path from 'path';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../../src/cliState';
+import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+vi.mock('../../../../src/telemetry', () => ({
+  default: { record: vi.fn() },
+}));
 
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
@@ -58,9 +67,104 @@ vi.mock('../../../../src/node/doEval', () => ({
 }));
 
 describe('runEvaluation tool', () => {
-  beforeEach(() => {
+  let workspace: string;
+  beforeEach(async () => {
     vi.clearAllMocks();
+    workspace = await mkdtemp(path.join(os.tmpdir(), 'mcp-eval-workspace-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+    await writeFile(path.join(workspace, 'test.yaml'), '{}');
+    const { resolveConfigs } = await import('../../../../src/util/config/load');
+    vi.mocked(resolveConfigs).mockReset().mockResolvedValue({
+      basePath: workspace,
+      config: {},
+      testSuite: {
+        prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
+        providers: [{ id: () => 'test-provider', callApi: vi.fn(async () => ({ output: 'fixture' })) }],
+        tests: [{ vars: { input: 'test' } }],
+      },
+    });
   });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it.each([false, true])(
+    'keeps the actual Anthropic provider when using its advertised filter (mixed: %s)',
+    async (mixed) => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      const actualConfig = await vi.importActual<typeof import('../../../../src/util/config/load')>(
+        '../../../../src/util/config/load',
+      );
+      vi.mocked(resolveConfigs).mockImplementationOnce(actualConfig.resolveConfigs);
+      const { runDbMigrations } = await import('../../../../src/migrate');
+      await runDbMigrations();
+      const callApi = vi
+        .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
+        .mockResolvedValue({ output: 'offline fixture' });
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      const tool = vi.fn();
+      registerRunEvaluationTool({ tool } as unknown as McpServer);
+      const [, schema, handler] = tool.mock.calls[0];
+      const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
+      expect(advertisedMatch).not.toBeNull();
+      const advertisedFilter = advertisedMatch![1];
+      const tempDir = await mkdtemp(path.join(workspace, 'mcp-provider-filter-'));
+      const originalState = {
+        basePath: cliState.basePath,
+        config: cliState.config,
+        selectedProviderConfigs: cliState.selectedProviderConfigs,
+      };
+      try {
+        const configPath = path.join(tempDir, 'config.json');
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            prompts: ['{{topic}}'],
+            providers: ['anthropic:messages:claude-sonnet-4-6', 'echo'],
+            tests: [
+              {
+                vars: { topic: 'offline fixture' },
+                assert: [{ type: 'equals', value: 'offline fixture' }],
+              },
+            ],
+          }),
+        );
+
+        const result = await handler({
+          configPath,
+          providerFilter: mixed ? ['echo', advertisedFilter] : advertisedFilter,
+          cache: false,
+          write: false,
+          share: false,
+        });
+        const response = JSON.parse(result.content[0].text);
+        const expectedProviders = mixed
+          ? ['anthropic:claude-sonnet-4-6', 'echo']
+          : ['anthropic:claude-sonnet-4-6'];
+
+        expect(result.isError).toBe(false);
+        expect(response.success).toBe(true);
+        expect(response.data.configuration.providers.ids).toEqual(expectedProviders);
+        expect(response.data.results.stats).toMatchObject({
+          successes: expectedProviders.length,
+          failures: 0,
+          errors: 0,
+        });
+        expect(callApi).toHaveBeenCalledTimes(1);
+        const actualProvider = callApi.mock.contexts[0] as AnthropicMessagesProvider;
+        expect(actualProvider).toBeInstanceOf(AnthropicMessagesProvider);
+        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-4-6');
+        expect(actualProvider.modelName).toBe('claude-sonnet-4-6');
+      } finally {
+        Object.assign(cliState, originalState);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   describe('result formatting', () => {
     it('should use shared formatter for pagination', async () => {

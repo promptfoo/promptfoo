@@ -12,7 +12,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -30,6 +30,7 @@ import {
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
+  sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -260,39 +261,51 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
   const firstLine = rawRequest.split('\n')[0];
+  // The first line can embed credentials in the request-target query string. These
+  // error paths surface via logger.error (always on) and the thrown message (persisted
+  // to result.error), so sanitize the line before interpolating it. Computed lazily:
+  // for a valid request line sanitizeUrl would otherwise console.warn on every call
+  // (the whole line is not a URL), so only pay it when an error actually fires.
+  const safeFirstLine = () => sanitizeUrl(firstLine);
 
   const firstSpace = firstLine.indexOf(' ');
   const method = firstLine.slice(0, firstSpace);
   if (!method || !http.METHODS.includes(method)) {
-    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    logger.error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
+    );
     throw new Error(
-      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
     );
   }
   const lastSpace = firstLine.lastIndexOf(' ');
   if (lastSpace === -1) {
     logger.error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
     throw new Error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
   }
   const url = firstLine.slice(firstSpace + 1, lastSpace);
 
   if (url.length === 0) {
-    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
   }
 
   const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
 
   if (!protocol.toLowerCase().startsWith('http')) {
-    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
   }
 
-  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+  const sanitizedUrl = sanitizeUrl(url);
+  const sanitizedFirstLine = `${method} ${sanitizedUrl}${protocol ? ` ${protocol}` : ''}`;
+  logger.debug(
+    `[Http Provider] Encoding URL: ${sanitizedUrl} from first line of raw request: ${sanitizedFirstLine}`,
+  );
 
   try {
     // Use the built-in URL class to parse and encode the URL
@@ -322,6 +335,45 @@ function isBase64(str: string): boolean {
 }
 
 /**
+ * Explain why PEM key material cannot be used for signing, in terms of what the operator
+ * can actually see and act on.
+ *
+ * OpenSSL 3 is the reason this exists: `createSign().sign()` and `createPrivateKey()` both
+ * collapse empty, whitespace-only, malformed, truncated, and public-key-instead-of-private
+ * input into one opaque `error:1E08010C:DECODER routines::unsupported`. The distinction only
+ * survives in the PEM text, so classify that before handing it to crypto.
+ *
+ * Returns `undefined` when the material is structurally sound -- crypto then reports anything
+ * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
+ *
+ * Uses plain string matching rather than regexes so no user-controlled input reaches a
+ * backtracking matcher, and never echoes key material -- only which marker was found or
+ * missing, so pointing this at the wrong file cannot leak that file's contents.
+ */
+export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
+  const text = typeof material === 'string' ? material.trim() : '';
+  if (!text) {
+    return 'it is empty';
+  }
+  if (text.includes('BEGIN CERTIFICATE')) {
+    return 'it is a certificate, not a private key';
+  }
+  if (text.includes('PUBLIC KEY-----')) {
+    return 'it is a public key, not a private key';
+  }
+  if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
+    return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
+  }
+  if (!text.includes('PRIVATE KEY-----')) {
+    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
+  }
+  if (!text.includes('-----END')) {
+    return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
+  }
+  return undefined;
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -330,6 +382,9 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     let privateKey: string;
+    // Which configured input the key came from, for error messages. Paths are already
+    // resolved; no secret material is recorded here.
+    let keySource: string;
 
     // For backward compatibility, detect type from legacy fields if not explicitly set
     let authType = signatureAuth.type;
@@ -351,11 +406,14 @@ export async function generateSignature(
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
           privateKey = await fs.readFile(resolvedPath, 'utf8');
+          keySource = `privateKeyPath ${resolvedPath}`;
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
+          keySource = 'the configured privateKey';
         } else if (signatureAuth.certificateContent) {
           logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
           privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+          keySource = 'certificateContent';
         } else {
           throw new Error(
             'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
@@ -422,6 +480,7 @@ export async function generateSignature(
         }
 
         privateKey = entry.key;
+        keySource = `JKS alias '${targetAlias}'`;
         break;
       }
       case 'pfx': {
@@ -517,6 +576,10 @@ export async function generateSignature(
             }
 
             privateKey = result.key;
+            keySource =
+              signatureAuth.pfxContent || signatureAuth.certificateContent
+                ? 'pfxContent'
+                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
             logger.debug(
               `[Signature Auth] Successfully extracted private key from PFX using pem library`,
             );
@@ -541,6 +604,7 @@ export async function generateSignature(
               // Use base64 encoded content from database
               logger.debug(`[Signature Auth] Loading private key from base64 content`);
               privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+              keySource = 'keyContent';
               logger.debug(
                 `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
               );
@@ -560,6 +624,7 @@ export async function generateSignature(
               try {
                 // Read the key directly — readFile surfaces ENOENT with the path.
                 privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+                keySource = `keyPath ${resolvedKeyPath}`;
               } catch (err) {
                 if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
                   throw new Error(`Key file not found: ${resolvedKeyPath}`);
@@ -588,6 +653,14 @@ export async function generateSignature(
         throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
     }
 
+    // Fail with an actionable message before OpenSSL flattens the cause (see
+    // diagnosePrivateKeyMaterial). keySource names which configured input produced this key,
+    // because "which key did it even load?" is the operator's first question.
+    const keyProblem = diagnosePrivateKeyMaterial(privateKey);
+    if (keyProblem) {
+      throw new Error(`Private key from ${keySource} cannot be used: ${keyProblem}`);
+    }
+
     const data = getNunjucksEngine()
       .renderString(signatureAuth.signatureDataTemplate, {
         signatureTimestamp,
@@ -609,13 +682,21 @@ export async function generateSignature(
       return signature.toString('base64');
     } catch (e) {
       logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
+        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length ?? 0}, algorithm=${signatureAuth.signatureAlgorithm}, keyProvided=${Boolean(privateKey)}`,
       );
       throw e;
     }
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
-    throw new Error(`Failed to generate signature: ${String(err)}`);
+    // Unwrap to err.message so the rethrow does not read "...: Error: Error: ...".
+    const wrapped = new Error(
+      `Failed to generate signature: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    // Preserve the original for anyone catching this. Assigned rather than passed to the
+    // constructor because src/app typechecks this file under `lib: ES2020`, which predates
+    // the `ErrorOptions` overload -- `new Error(msg, { cause })` fails that build.
+    (wrapped as Error & { cause?: unknown }).cause = err;
+    throw wrapped;
   }
 }
 
@@ -875,8 +956,6 @@ export const SessionEndpointConfigSchema = z.object({
    */
   responseParser: z.union([z.string(), z.function()]),
 });
-
-export type SessionEndpointConfig = z.infer<typeof SessionEndpointConfigSchema>;
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
@@ -1371,32 +1450,6 @@ function getHeaderValue(
   return entry?.[1];
 }
 
-function sanitizeUrlEncodedBody(body: string): string {
-  if (!body.includes('=')) {
-    return body;
-  }
-
-  try {
-    const params = new URLSearchParams(body);
-    const entries = Array.from(params.entries());
-    if (entries.length === 0) {
-      return body;
-    }
-
-    let changed = false;
-    for (const [key, value] of entries) {
-      if (isSecretField(key) || looksLikeSecret(value)) {
-        params.set(key, REDACTED);
-        changed = true;
-      }
-    }
-
-    return changed ? params.toString() : body;
-  } catch {
-    return body;
-  }
-}
-
 function getMultipartBoundary(contentType: string): string | undefined {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
@@ -1408,7 +1461,7 @@ function sanitizeMultipartFallbackBody(body: string): string {
     return body;
   }
 
-  const sanitizedTrimmedBody = sanitizeUrlEncodedBody(trimmedBody);
+  const sanitizedTrimmedBody = sanitizeUrlEncodedString(trimmedBody);
   return sanitizedTrimmedBody === trimmedBody
     ? body
     : body.replace(trimmedBody, sanitizedTrimmedBody);
@@ -1468,7 +1521,7 @@ function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, 
     return sanitizeMultipartBody(sanitizedBody, contentType);
   }
   if (normalizedContentType?.includes('application/x-www-form-urlencoded')) {
-    return sanitizeUrlEncodedBody(sanitizedBody);
+    return sanitizeUrlEncodedString(sanitizedBody);
   }
 
   return sanitizedBody;
@@ -1554,6 +1607,21 @@ function sanitizeTransformedRequestForMetadata(
     .join('\n');
 }
 
+function logTransformedPrompt(
+  transformedPrompt: unknown,
+  prompt: unknown,
+  headers?: Record<string, string>,
+): void {
+  const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+    transformedPrompt,
+    headers,
+  );
+  const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
+  logger.debug(
+    `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
+  );
+}
+
 function formatRawRequestForDebugMetadata(
   parsedRequest: ReturnType<typeof parseRawRequest>,
   bodyContent?: string,
@@ -1569,7 +1637,7 @@ function formatRawRequestForDebugMetadata(
     requestLines.push(`${key}: ${value}`);
   }
 
-  const sanitizedBody = sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers);
+  const sanitizedBody = sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers);
   if (sanitizedBody !== undefined) {
     requestLines.push('', String(sanitizedBody));
   }
@@ -1867,7 +1935,9 @@ async function createHttpsAgent(
   // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
 }
 
 export class HttpProvider implements ApiProvider {
@@ -2573,36 +2643,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'http',
-      operationName: 'chat',
-      model: this.url,
-      providerId: this.id(),
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, options),
-      resultExtractor,
-    );
+    return this.callApiInternal(prompt, context, options);
   }
 
   private async callApiInternal(
@@ -2730,9 +2771,7 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
+    logTransformedPrompt(transformedPrompt, prompt, headers);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
@@ -2797,8 +2836,14 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    const sanitizedRenderedConfig = sanitizeObject(renderedConfig, {
+      context: 'request config',
+    }) as Partial<HttpProviderConfig>;
+    sanitizedRenderedConfig.body = sanitizeRequestBodyForMetadata(renderedConfig.body, headers) as
+      | HttpProviderConfig['body']
+      | undefined;
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
-      config: renderedConfig,
+      config: sanitizedRenderedConfig,
     });
 
     const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
@@ -2945,6 +2990,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -2959,9 +3005,6 @@ export class HttpProvider implements ApiProvider {
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
 
     // JSON-escape all string variables for safe substitution in raw request body
     // This prevents control characters and quotes from breaking JSON strings
@@ -2972,6 +3015,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
+    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
@@ -3044,16 +3088,6 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
-    );
-
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
-
     // Determine body content:
     // - For JSON/text bodies, http-z provides body.text
     // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
@@ -3064,6 +3098,22 @@ export class HttpProvider implements ApiProvider {
     } else if (parsedRequest.body?.params) {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
+      {
+        request: {
+          method: parsedRequest.method,
+          url: sanitizeUrl(parsedRequest.url),
+          httpVersion: parsedRequest.httpVersion,
+          headers: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+          body: sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers),
+        },
+      },
+    );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
 
     const fetchOptions: any = {
       method: parsedRequest.method,
@@ -3186,6 +3236,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -3211,7 +3262,16 @@ export class HttpProvider implements ApiProvider {
     rawText: string,
     transformedPrompt: any,
     prompt: string,
+    originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const originalTokenUsage =
+      originalResponse &&
+      typeof originalResponse === 'object' &&
+      'tokenUsage' in originalResponse &&
+      originalResponse.tokenUsage &&
+      typeof originalResponse.tokenUsage === 'object'
+        ? (originalResponse.tokenUsage as Partial<TokenUsage>)
+        : undefined;
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
@@ -3227,7 +3287,9 @@ export class HttpProvider implements ApiProvider {
       };
       // Add estimated token usage if available and not already present
       if (!result.tokenUsage) {
-        if (estimatedTokenUsage) {
+        if (originalTokenUsage) {
+          result.tokenUsage = originalTokenUsage;
+        } else if (estimatedTokenUsage) {
           result.tokenUsage = estimatedTokenUsage;
         } else {
           result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
@@ -3242,7 +3304,9 @@ export class HttpProvider implements ApiProvider {
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {
-      if (estimatedTokenUsage) {
+      if (originalTokenUsage) {
+        result.tokenUsage = originalTokenUsage;
+      } else if (estimatedTokenUsage) {
         result.tokenUsage = estimatedTokenUsage;
       } else {
         result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };

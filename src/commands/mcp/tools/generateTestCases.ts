@@ -74,7 +74,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         .describe(
           dedent`
             AI provider to use for generation.
-            Examples: "openai:gpt-4o", "anthropic:claude-3-sonnet"
+            Examples: "openai:gpt-4o", "anthropic:claude-sonnet-4-6"
             Defaults to configured default provider.
           `,
         ),

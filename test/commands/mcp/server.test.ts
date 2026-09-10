@@ -128,7 +128,7 @@ const expressMocks = vi.hoisted(() => {
 
 const transportMocks = vi.hoisted(() => {
   const instances: Array<{ handleRequest: ReturnType<typeof vi.fn> }> = [];
-  const StreamableHTTPServerTransport = vi.fn(function MockStreamableHTTPServerTransport(
+  const WebStandardStreamableHTTPServerTransport = vi.fn(function MockWebStandardStreamableHTTPServerTransport(
     this: { handleRequest: ReturnType<typeof vi.fn> },
     _options?: { sessionIdGenerator?: () => string },
   ) {
@@ -136,7 +136,7 @@ const transportMocks = vi.hoisted(() => {
     instances.push(this);
   });
 
-  return { instances, StreamableHTTPServerTransport };
+  return { instances, WebStandardStreamableHTTPServerTransport };
 });
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
@@ -147,9 +147,23 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: transportMocks.StreamableHTTPServerTransport,
+vi.mock('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js', () => ({
+  WebStandardStreamableHTTPServerTransport: transportMocks.WebStandardStreamableHTTPServerTransport,
 }));
+
+const nodeAdapterMocks = vi.hoisted(() => ({
+  getRequestListener: vi.fn((handler) => async (request: any, _response: any) =>
+    handler(request, { incoming: request }),
+  ),
+}));
+
+vi.mock('@hono/node-server', () => ({
+  getRequestListener: nodeAdapterMocks.getRequestListener,
+}));
+
+vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => {
+  throw new Error('The SDK Node transport must not load its nested Hono adapter');
+});
 
 vi.mock('express', () => ({
   default: expressMocks.expressFactory,
@@ -407,8 +421,7 @@ describe('MCP Server', () => {
 
       expect(transportMocks.instances[0].handleRequest).toHaveBeenCalledWith(
         request,
-        response,
-        request.body,
+        { parsedBody: request.body },
       );
 
       process.emit('SIGINT');
@@ -431,14 +444,17 @@ describe('MCP Server', () => {
         serverPromise = startHttpMcpServer(3100);
 
         await vi.waitFor(() => {
-          expect(transportMocks.StreamableHTTPServerTransport).toHaveBeenCalledOnce();
+          expect(transportMocks.WebStandardStreamableHTTPServerTransport).toHaveBeenCalledOnce();
         });
 
-        const transportOptions = transportMocks.StreamableHTTPServerTransport.mock.calls[0][0] as {
+        const transportOptions = transportMocks.WebStandardStreamableHTTPServerTransport.mock.calls[0][0] as {
           sessionIdGenerator: () => string;
         };
         expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
         expect(mockRandomUUID).toHaveBeenCalledOnce();
+        expect(nodeAdapterMocks.getRequestListener).toHaveBeenCalledWith(expect.any(Function), {
+          overrideGlobalObjects: false,
+        });
       } finally {
         if (shutdown) {
           shutdown();

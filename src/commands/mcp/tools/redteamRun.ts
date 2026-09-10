@@ -290,7 +290,7 @@ export function registerRedteamRunTool(server: McpServer) {
               basic: dedent`
                 redteam:
                   purpose: "Test my chatbot for safety issues"
-                  plugins: ["harmful", "pii", "prompt-injection"]
+                  plugins: ["harmful", "pii", "hijacking"]
                 targets:
                   - id: "my-model"
                     config:

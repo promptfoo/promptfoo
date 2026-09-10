@@ -49,7 +49,7 @@ export function registerTestProviderTool(server: McpServer) {
           dedent`
             Provider to test. Examples:
             - "openai:gpt-4o"
-            - "anthropic:messages:claude-sonnet-4" 
+            - "anthropic:claude-sonnet-4-6"
             - {"id": "custom-provider", "config": {...}}
             - path to custom provider file
           `,
@@ -194,11 +194,7 @@ export function registerTestProviderTool(server: McpServer) {
               providerId,
               suggestion:
                 'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: [
-                'openai:gpt-4o',
-                'anthropic:messages:claude-3-sonnet',
-                'azure:deployment-name',
-              ],
+              examples: ['openai:gpt-4o', 'anthropic:claude-sonnet-4-6', 'azure:deployment-name'],
             },
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );

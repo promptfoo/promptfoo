@@ -2,10 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
 import { renderEnvOnlyInObject } from '../../../util/render';
+import { loadYaml } from '../../../util/yamlLoad';
 import { ConfigurationError } from './errors';
 
 type EnvOverrides = Record<string, string | undefined>;
@@ -556,7 +556,7 @@ function validateProviderConfigFile(providerPath: string, state: ProviderValidat
   }
   state.validatedConfigFiles.add(cacheKey);
 
-  const rawConfig = yaml.load(fs.readFileSync(realProviderPath, 'utf8'));
+  const rawConfig = loadYaml(fs.readFileSync(realProviderPath, 'utf8'));
   const configs = Array.isArray(rawConfig) ? rawConfig : [rawConfig];
   for (const config of configs) {
     validateProviderReferenceWithState(config, state, true);
@@ -656,7 +656,7 @@ function validateStaticConfigFile(configPath: string, state: ProviderValidationS
   }
 
   const realConfigPath = fs.realpathSync(configPath);
-  const rawConfig = yaml.load(fs.readFileSync(realConfigPath, 'utf8'));
+  const rawConfig = loadYaml(fs.readFileSync(realConfigPath, 'utf8'));
   const configState = {
     ...state,
     basePath: path.dirname(realConfigPath),
@@ -681,7 +681,7 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     validateExecReference(renderedProviderId, state, false);
     return;
   }
-  if (/\s/.test(renderedProviderId)) {
+  if (/\s/.test(renderedProviderId) || renderedProviderId.endsWith(':')) {
     throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
   }
 
@@ -785,7 +785,7 @@ export function validateMcpConfigFile(configPath: string, workspacePath = proces
       );
     }
 
-    const rawConfig = yaml.load(fs.readFileSync(matchedConfigPath, 'utf8'));
+    const rawConfig = loadYaml(fs.readFileSync(matchedConfigPath, 'utf8'));
     const rootConfig = getObject(rawConfig);
     const configState: ProviderValidationState = {
       ...state,

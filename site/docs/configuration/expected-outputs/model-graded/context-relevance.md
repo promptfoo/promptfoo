@@ -97,7 +97,7 @@ assert:
 ## Limitations
 
 - Only identifies minimum sufficient content
-- Single context strings split by lines (use arrays for better accuracy)
+- A single-paragraph (prose) context string is split into sentences on `.`/`!`/`?` boundaries; a context with two or more non-empty lines, or an array of chunks, is treated as already segmented and split by line/chunk. Sentence splitting is a lightweight heuristic that does not handle every abbreviation or decimal edge case — provide an array of chunks for the most precise denominator.
 - Score interpretation varies by use case
 
 ## Related metrics

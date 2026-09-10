@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { ModelsLabImageProvider } from '../../src/providers/modelslab';
 
+import type { CallApiContextParams } from '../../src/types/providers';
+
 vi.mock('../../src/cache');
 vi.mock('../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: vi.fn().mockReturnValue(false),
@@ -327,7 +329,11 @@ describe('ModelsLabImageProvider', () => {
     );
 
     const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
-    const result = await provider.callApi('Blob test');
+    const result = await provider.callApi('Blob test', {
+      evaluationId: 'eval-modelslab',
+      promptIdx: 2,
+      testIdx: 1,
+    } as unknown as CallApiContextParams);
 
     expect(result.output).toContain('promptfoo://blob/abc123');
     expect(result.metadata).toEqual(
@@ -340,7 +346,12 @@ describe('ModelsLabImageProvider', () => {
     expect(storeBlob).toHaveBeenCalledWith(
       expect.any(Buffer),
       'image/jpeg',
-      expect.objectContaining({ kind: 'image' }),
+      expect.objectContaining({
+        evalId: 'eval-modelslab',
+        kind: 'image',
+        promptIdx: 2,
+        testIdx: 1,
+      }),
     );
   });
 });

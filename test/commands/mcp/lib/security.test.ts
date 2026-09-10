@@ -218,6 +218,20 @@ describe('MCP Security', () => {
       ).not.toThrow();
     });
 
+    it.each([
+      'anthropic:messages:claude-sonnet-4-6',
+      'openai:chat:gpt-4.1-mini',
+      'openai:chat:team/served-model:revision-1',
+      'huggingface:chat:organization/model-name',
+      'openrouter:organization/model-name',
+    ])('accepts model modes and namespaces: %s', (providerId) => {
+      expect(() => validateProviderId(providerId)).not.toThrow();
+    });
+
+    it('rejects exec commands without a workspace script', () => {
+      expect(() => validateProviderId('exec:script')).toThrow(ConfigurationError);
+    });
+
     it('should accept file path providers', () => {
       expect(() => validateProviderId('providers/custom.js')).not.toThrow();
       expect(() => validateProviderId('my-provider.cjs')).not.toThrow();
