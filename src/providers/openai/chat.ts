@@ -787,6 +787,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                       guardrails: { flagged: contentFiltered },
                       metadata: {
                         ...providerMetadata,
+                        errorOrigin: 'tool',
                         http: {
                           status,
                           statusText,

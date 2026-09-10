@@ -2,7 +2,12 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+  isOpenAiErrorOnlyResponse,
+} from './openai/util';
 import {
   getRequestTimeoutMs,
   isCallerAbortError,
@@ -156,6 +161,9 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
+      }
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
       }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
