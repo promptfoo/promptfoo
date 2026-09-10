@@ -45,6 +45,8 @@ The responses are synthesized into a comprehensive profile to inform attack stra
 
 ## Troubleshooting
 
+If discovery fails after making requests, the CLI reports the observed token usage before the error. The local discovery API includes that usage in `details.tokenUsage` on the error response.
+
 If `promptfoo redteam discover` fails with `Remote server returned HTTP 400: Unknown task: target-purpose-discovery` (or a similar 400/404 error), your client is most likely out of date. Update with `npm install -g promptfoo@latest` and rerun.
 
 Other common errors:
