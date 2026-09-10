@@ -6,17 +6,31 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
+import { parseImportFile } from '../../src/importers/parse';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { EchoProvider } from '../../src/providers/echo';
 import { getTraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type EvaluateSummaryV3,
+  type OutputFile,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
+import { accumulateNamedMetric } from '../../src/util/namedMetrics';
 import {
   createOutputMetadata,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
+import { createGradingResult } from '../factories/gradingResult';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -711,6 +725,159 @@ describe('writeOutput', () => {
       },
     );
 
+    it.each(['json', 'yaml', 'xml'])(
+      'preserves numeric aggregate metric names through %s serialization',
+      async (format) => {
+        const metrics = createPromptMetrics();
+        for (const [metricName, metricValue, weight] of [
+          ['token', 0, 2],
+          ['password', 0.5, 3],
+          ['accuracy', 1, 0],
+        ] as const) {
+          accumulateNamedMetric(metrics, {
+            metricName,
+            metricValue,
+            gradingResult: createGradingResult({ namedScoreWeights: { [metricName]: weight } }),
+          });
+        }
+        const prompt = createCompletedPrompt('hello', {
+          metrics,
+          config: {
+            password: 'private prompt credential',
+            provider: { id: 'echo', config: { token: 'private provider credential' } },
+          },
+        });
+        const original = structuredClone(prompt);
+        const eval_ = new Eval({}, { prompts: [prompt] });
+        await eval_.addResult(
+          createEvaluateResult({
+            promptId: prompt.id,
+            namedScores: { token: 0, password: 0.5, accuracy: 1 },
+          }),
+        );
+        await writeOutput('metric-contract.' + format, eval_, null);
+        const contents = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed =
+          format === 'json'
+            ? JSON.parse(contents)
+            : format === 'yaml'
+              ? yaml.load(contents)
+              : new XMLParser().parse(contents).promptfoo;
+        const exported = format === 'xml' ? parsed.results.prompts : parsed.results.prompts[0];
+        expect(exported.metrics.namedScores).toEqual({ token: 0, password: 1.5, accuracy: 0 });
+        expect(exported.metrics.namedScoresCount).toEqual({ token: 1, password: 1, accuracy: 1 });
+        expect(exported.metrics.namedScoreWeights).toEqual({ token: 2, password: 3, accuracy: 0 });
+        expect(exported.config.password).toBe('[REDACTED]');
+        expect(exported.config.provider.config.token).toBe('[REDACTED]');
+        expect(contents).not.toContain('private prompt credential');
+        expect(contents).not.toContain('private provider credential');
+        expect(prompt).toEqual(original);
+        if (format === 'json') {
+          const imported = parseImportFile(contents).evalData as OutputFile;
+          const summary = imported.results as EvaluateSummaryV3;
+          const reopened = new Eval(imported.config, { prompts: summary.prompts });
+          for (const result of summary.results) {
+            await reopened.addResult(result);
+          }
+          expect((await reopened.getTable()).head.prompts[0].metrics).toEqual(metrics);
+          expect(summary.results[0].namedScores).toEqual({ token: 0, password: 0.5, accuracy: 1 });
+        }
+      },
+    );
+
+    it('keeps nonnumeric metric data redacted in legacy V2 prompt projections', async () => {
+      const summary = createLegacyV2Summary();
+      const prompt = Object.assign(summary.table.head.prompts[0], {
+        metrics: {
+          namedScores: {
+            token: 0,
+            password: 'private metric credential',
+            nested: { apiKey: 'nested credential' },
+          },
+          namedScoresCount: { token: 2 },
+          namedScoreWeights: { token: 0.5 },
+          password: 'private neighboring credential',
+        },
+      });
+      const original = structuredClone(prompt);
+      const originalMetrics = prompt.metrics;
+      const eval_ = new Eval({});
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+      await writeOutput('legacy-metrics.json', eval_, null);
+      const parsed = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+      expect(parsed.results.table.head.prompts[0].metrics).toEqual({
+        namedScores: { token: 0, password: '[REDACTED]', nested: { apiKey: '[REDACTED]' } },
+        namedScoresCount: { token: 2 },
+        namedScoreWeights: { token: 0.5 },
+        password: '[REDACTED]',
+      });
+      expect(prompt.config.apiKey).toBe('head-prompt-api-key-secret');
+      expect(parsed.results.table.head.prompts[0].config.apiKey).toBe('[REDACTED]');
+      expect(prompt).toEqual(original);
+      expect(prompt.metrics).toBe(originalMetrics);
+    });
+
+    it.each(['name', 'prompt', 'query', 'question'])(
+      'preserves %s variables after prompt-only export and flag-off HTML reimport',
+      async (variable) => {
+        const realFs = await vi.importActual<typeof import('fs')>('fs');
+        vi.mocked(fsPromises.readFile).mockResolvedValue(
+          realFs.readFileSync(path.resolve(__dirname, '../../src/tableOutput.html'), 'utf8'),
+        );
+        const vars: Record<string, string> = {
+          [variable]: 'preserved user input',
+          ...(variable !== 'name' && { topic: 'safe topic' }),
+        };
+        const original = structuredClone(vars);
+        const prompt = createCompletedPrompt('Hello {{' + variable + '}}', { provider: 'echo' });
+        const eval_ = new Eval({}, { prompts: [prompt], vars: Object.keys(vars) });
+        const response = await new EchoProvider().callApi('Hello preserved user input');
+        await eval_.addResult(
+          createEvaluateResult({ prompt, promptId: prompt.id, vars, testCase: { vars }, response }),
+        );
+        const restoreStrip = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'false',
+        });
+        let serialized: string;
+        try {
+          await writeOutput('prompt-only.json', eval_, null);
+          serialized = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        } finally {
+          restoreStrip();
+        }
+        const restoreReopen = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: undefined,
+          PROMPTFOO_STRIP_TEST_VARS: undefined,
+        });
+        try {
+          const imported = parseImportFile(serialized).evalData as OutputFile;
+          const summary = imported.results as EvaluateSummaryV3;
+          const reopened = new Eval(imported.config, {
+            prompts: summary.prompts,
+            vars: imported.vars,
+          });
+          for (const result of summary.results) {
+            await reopened.addResult(result);
+          }
+          await writeOutput('reopened.html', reopened, null);
+          const html = vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string;
+          const table = await reopened.getTable();
+          expect(table.body[0].vars[table.head.vars.indexOf(variable)]).toBe(original[variable]);
+          expect(html).toContain('preserved user input');
+          expect(summary.results[0].response).not.toHaveProperty('prompt');
+          expect(summary.results[0]).toMatchObject({ success: true, score: 1, vars: original });
+          expect(summary.results[0].response?.output).toBe('Hello preserved user input');
+          expect(vars).toEqual(original);
+          expect(response).not.toHaveProperty('prompt');
+        } finally {
+          restoreReopen();
+        }
+      },
+    );
+
     it.each([
       {
         name: 'output-only single variable',
@@ -1120,7 +1287,7 @@ describe('writeOutput', () => {
       expect(output.prompt).toBe('[prompt stripped]');
       expect(output.text).toBe('[output stripped]');
       expect(output.response.output).toBe('[output stripped]');
-      expect(output.response.prompt).toBe('[prompt stripped]');
+      expect(output.response).not.toHaveProperty('prompt');
       expect(output.response.audio).toBeUndefined();
       expect(output.response.images).toBeUndefined();
       expect(output.response.video).toBeUndefined();

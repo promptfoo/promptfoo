@@ -81,7 +81,8 @@ function projectProviderResponse(
   }
 
   if (options.stripPrompt) {
-    projectedResponse.prompt = '[prompt stripped]';
+    // A display marker must not become provider-reported input on a later import.
+    delete projectedResponse.prompt;
     if (projectedResponse.metadata) {
       projectedResponse.metadata = projectPromptMetadata(projectedResponse.metadata, true);
     }
@@ -126,6 +127,26 @@ export function sanitizePromptForArtifact<T extends Prompt>(
     return prompt;
   }
   const sanitized = sanitizeForDbWithSecrets(prompt, true);
+  const metrics = asRecord(asRecord(prompt)?.metrics);
+  const sanitizedMetrics = asRecord(asRecord(sanitized)?.metrics);
+  if (metrics && sanitizedMetrics) {
+    // Custom metric names may be credential-shaped, but these schema-defined
+    // maps contain numeric aggregates. Keep other values under normal redaction.
+    for (const key of ['namedScores', 'namedScoresCount', 'namedScoreWeights']) {
+      const values = asRecord(metrics[key]);
+      if (values) {
+        const numericValues = Object.fromEntries(
+          Object.entries(values).filter(
+            ([, value]) => typeof value === 'number' && Number.isFinite(value),
+          ),
+        );
+        sanitizedMetrics[key] = {
+          ...asRecord(sanitizedMetrics[key]),
+          ...sanitizeForDb(numericValues),
+        };
+      }
+    }
+  }
   // Generated prompt identities are SHA-256 hashes, which otherwise match the
   // generic secret-value heuristic. Other IDs still undergo normal redaction.
   if (typeof prompt.id === 'string' && /^[a-f0-9]{64}$/i.test(prompt.id)) {

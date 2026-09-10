@@ -1,4 +1,3 @@
-import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
@@ -18,7 +17,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
   );
   const results = eval_.results;
-  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   // Guard against malformed payloads where `vars` is present but not an array
   // (corrupt store, schema skew across server versions). Warn so the bad
   // writer is visible instead of silently rendering an alphabetized fallback.
@@ -56,8 +54,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     const actualPrompt =
       getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
 
-    // A stripped prompt is an export projection, not provider-reported display input.
-    if (!shouldStripPromptText && result.vars && actualPrompt) {
+    if (result.vars && actualPrompt) {
       const varKeys = Object.keys(result.vars);
       if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
         result.vars[varKeys[0]] = actualPrompt;
