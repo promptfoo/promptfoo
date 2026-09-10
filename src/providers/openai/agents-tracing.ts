@@ -606,7 +606,9 @@ function parseStructuredJson(value: string): unknown {
   return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
     if (
       typeof parsed === 'number' &&
-      (!Number.isSafeInteger(parsed) || (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
+      (!Number.isSafeInteger(parsed) ||
+        Object.is(parsed, -0) ||
+        (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
       typeof context?.source === 'string'
     ) {
       return losslessJson.rawJSON!(context.source);
@@ -618,6 +620,15 @@ function parseStructuredJson(value: string): unknown {
 function sanitizeCredentialText(value: string): string {
   if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(value)) {
     return '<redacted>';
+  }
+
+  // Multiline credential values cannot be redacted safely as independent lines.
+  for (const [, , key] of value.matchAll(
+    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*[|>](?:[1-9][+-]?|[+-][1-9]?)?[ \t]*(?:#[^\r\n]*)?(?:[\r\n]|$)/g,
+  )) {
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
@@ -646,6 +657,7 @@ function sanitizeCredentialText(value: string): string {
 
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
+    .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '<redacted>')
     .replace(
       /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#]+@/gi,
       (_match, prefix: string) => `${prefix}<redacted>@`,
@@ -789,7 +801,8 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   if (isCredentialAttributeKey(key)) {
     return '<redacted>';
   }
-  if (isRecord(value) || Array.isArray(value)) {
+  // Objects are sanitized after JSON serialization, preserving their toJSON behavior.
+  if (Array.isArray(value)) {
     return sanitizeStructuredAttribute(value);
   }
   return value;
@@ -835,7 +848,10 @@ function sanitizeStructuredAttribute(
       if (isCredentialPairValue(source, key) || isCredentialAttributeKey(key)) {
         sanitized = '<redacted>';
         state.changed = true;
-      } else if (losslessJson.isRawJSON?.(entry)) {
+      } else if (
+        losslessJson.isRawJSON?.(entry) ||
+        (isRecord(entry) && typeof entry.toJSON === 'function')
+      ) {
         sanitized = entry;
       } else if (isRecord(entry) || Array.isArray(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {

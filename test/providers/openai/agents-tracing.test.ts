@@ -766,6 +766,65 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts unlabeled credentials and preserves JSON serialization in %s',
+    async (format) => {
+      const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl';
+      const date = new Date('2026-01-01T00:00:00Z');
+      const serialized = { toJSON: () => ({ date, password: 'opaque-custom' }) };
+      const exporter = new OTLPTracingExporter();
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'custom',
+            name: `result ${jwt}`,
+            data: {
+              result: jwt,
+              literal_yaml: 'api_key: |\n  opaque/value',
+              folded_yaml: "'password': >- # credential\n  secret text",
+              ordinary_yaml: 'description: |\n  public description',
+              request: '{"offset":-0,"exponent":-0e0,"password":"opaque"}',
+            },
+          },
+          traceMetadata: {
+            'promptfoo.otlp_format': format,
+            recorded_at: date,
+            nested: { date },
+            serialized,
+            list: [date, serialized],
+          },
+          error: { message: jwt },
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      const dateText = JSON.stringify(date);
+      const serializedText = JSON.stringify({ date, password: '<redacted>' });
+      expect(attributes).toMatchObject({
+        result: '<redacted>',
+        literal_yaml: '<redacted>',
+        folded_yaml: '<redacted>',
+        ordinary_yaml: 'description: |\n  public description',
+        request: '{"offset":-0,"exponent":-0e0,"password":"<redacted>"}',
+        'trace.metadata.recorded_at': dateText,
+        'trace.metadata.nested': JSON.stringify({ date }),
+        'trace.metadata.serialized': serializedText,
+        'trace.metadata.list': {
+          arrayValue: { values: [{ stringValue: dateText }, { stringValue: serializedText }] },
+        },
+      });
+      expect(JSON.stringify(payload)).not.toContain(jwt);
+      expect(JSON.stringify(payload)).not.toContain('opaque-custom');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts escaped credentials while preserving descriptive authentication and usage fields in %s',
     async (format) => {
       const exporter = new OTLPTracingExporter();
