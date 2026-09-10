@@ -1,9 +1,10 @@
 import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
+import { providerRegistry } from '../providerRegistry';
+import { getRequestTimeoutMs } from '../shared';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { prepareLiveInput } from './liveInput';
-import { LiveSession } from './liveSession';
+import { LIVE_FRAME_MS, LiveSession } from './liveSession';
 import { appendOpenAiApiPath } from './util';
-import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -11,57 +12,8 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { LiveAudioFormat, LiveInputMessage } from './liveInput';
-import type { OpenAiSharedOptions } from './types';
-
-export interface LiveTranscriptDelta {
-  role: 'user' | 'assistant';
-  delta: string;
-  start_ms: number;
-  end_ms: number;
-}
-
-type ResponsesBackend = Pick<
-  OpenAI.Responses.ResponseCreateParamsNonStreaming,
-  | 'instructions'
-  | 'max_output_tokens'
-  | 'parallel_tool_calls'
-  | 'reasoning'
-  | 'service_tier'
-  | 'text'
-  | 'tool_choice'
-> & {
-  model: string;
-  tools?: (OpenAI.Responses.FunctionTool | { type: 'web_search' })[];
-};
-
-export type LiveDelegationHandler = (
-  request: {
-    id: string;
-    offsetMs: number;
-    input: LiveInputMessage[];
-    transcript: LiveTranscriptDelta[];
-  },
-  signal: AbortSignal,
-) => Promise<string>;
-export type LiveFunctionCallHandler = (
-  name: string,
-  args: string,
-  signal: AbortSignal,
-) => Promise<string>;
-
-export interface OpenAiLiveOptions extends OpenAiSharedOptions {
-  instructions?: string;
-  audio?: { format?: LiveAudioFormat; output?: { voice?: string | { id: string } } };
-  delegation?: { type: 'client' } | { type: 'responses'; responses: ResponsesBackend };
-  delegationHandler?: LiveDelegationHandler | string;
-  functionCallHandler?: LiveFunctionCallHandler | string;
-  /** Silence streamed after the input clip (or for the entire text-seeded eval). */
-  responseWindowMs?: number;
-  websocketTimeout?: number;
-  closeTimeoutMs?: number;
-  costPerMinute?: number;
-}
+import type { LiveAudioFormat } from './liveInput';
+import type { OpenAiLiveOptions } from './liveTypes';
 
 async function resolveHandler<T extends Function>(
   handler: T | string | undefined,
@@ -108,6 +60,11 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     }
   }
 
+  async shutdown(): Promise<void> {
+    this.cleanup();
+    providerRegistry.unregister(this);
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -118,6 +75,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     const abort = () => controller.abort();
     options?.abortSignal?.addEventListener('abort', abort, { once: true });
     this.activeSessions.add(controller);
+    providerRegistry.register(this);
     try {
       const config: OpenAiLiveOptions = { ...this.config, ...context?.prompt?.config };
       const format: LiveAudioFormat = config.audio?.format ?? { type: 'audio/pcm', rate: 24_000 };
@@ -130,7 +88,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         );
       }
       const responseWindowMs = positiveTimeout(
-        config.responseWindowMs ?? 10_000,
+        config.responseWindowMs ?? 30_000,
         'responseWindowMs',
       );
       const websocketTimeout = positiveTimeout(
@@ -140,8 +98,18 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       const closeTimeoutMs = positiveTimeout(config.closeTimeoutMs ?? 15_000, 'closeTimeoutMs');
       const input = prepareLiveInput(prompt, format);
       const bytesPerSecond = format.rate * (format.type === 'audio/pcm' ? 2 : 1);
-      if ((input.audio.length / bytesPerSecond) * 1000 + responseWindowMs > 300_000) {
+      const captureDurationMs =
+        Math.ceil(
+          ((input.audio.length / bytesPerSecond) * 1000 + responseWindowMs) / LIVE_FRAME_MS,
+        ) * LIVE_FRAME_MS;
+      if (captureDurationMs > 300_000) {
         throw new Error('GPT-Live input audio plus response window must not exceed five minutes.');
+      }
+      const requestTimeoutMs = getRequestTimeoutMs();
+      if (websocketTimeout + captureDurationMs + closeTimeoutMs > requestTimeoutMs) {
+        throw new Error(
+          'GPT-Live startup, audio capture, and close timeouts exceed REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window.',
+        );
       }
       if (
         config.costPerMinute !== undefined &&
@@ -159,7 +127,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       const functionCallHandler = await resolveHandler(config.functionCallHandler);
       controller.signal.throwIfAborted();
       const apiKey = this.getApiKey();
-      const headers = this.getOpenAiRequestHeaders();
+      const headers = this.getOpenAiRequestHeaders(config.headers);
       if (!apiKey && this.requiresApiKey() && !hasHeaderOverride(headers, 'Authorization')) {
         throw new Error(this.getMissingApiKeyErrorMessage());
       }
@@ -183,6 +151,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         responseWindowMs,
         websocketTimeout,
         closeTimeoutMs,
+        requestTimeoutMs,
         delegationHandler,
         functionCallHandler,
         signal: controller.signal,
@@ -196,6 +165,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     } finally {
       controller.abort();
       this.activeSessions.delete(controller);
+      if (!this.activeSessions.size) {
+        providerRegistry.unregister(this);
+      }
       options?.abortSignal?.removeEventListener('abort', abort);
     }
   }

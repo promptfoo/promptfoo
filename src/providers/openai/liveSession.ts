@@ -2,20 +2,19 @@ import { ProxyAgent } from 'proxy-agent';
 import { getProxyForUrl } from 'proxy-from-env';
 import WebSocket from 'ws';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
-import { getRequestTimeoutMs } from '../shared';
-import { convertPcm16ToWav } from './audio';
+import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
 import { getOpenAICompletionTokenDetails } from './util';
 import type OpenAI from 'openai';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
+import type { LiveAudioFormat, LiveInputMessage } from './liveInput';
 import type {
   LiveDelegationHandler,
   LiveFunctionCallHandler,
   LiveTranscriptDelta,
   OpenAiLiveOptions,
-} from './live';
-import type { LiveAudioFormat, LiveInputMessage } from './liveInput';
+} from './liveTypes';
 
 interface LiveEvent {
   type: string;
@@ -42,12 +41,13 @@ interface SessionOptions {
   responseWindowMs: number;
   websocketTimeout: number;
   closeTimeoutMs: number;
+  requestTimeoutMs: number;
   delegationHandler?: LiveDelegationHandler;
   functionCallHandler?: LiveFunctionCallHandler;
   signal: AbortSignal;
 }
 
-const FRAME_MS = 20;
+export const LIVE_FRAME_MS = 20;
 
 export class LiveSession {
   private ws!: WebSocket;
@@ -56,6 +56,7 @@ export class LiveSession {
   private resolve!: (response: ProviderResponse) => void;
   private done = false;
   private started = false;
+  private openingPrompted = false;
   private closing = false;
   private finalized = false;
   private sessionId?: string;
@@ -66,7 +67,7 @@ export class LiveSession {
   private audioBytes = 0;
   private inputBytesSent = 0;
   private transcript: LiveTranscriptDelta[] = [];
-  private tokenUsage: TokenUsage = { numRequests: 0 };
+  private tokenUsage: TokenUsage = { numRequests: 1 };
   private backendCost: number | undefined = 0;
   private backendResponses: { id: string; model: string; usage: unknown }[] = [];
   private delegations = new Set<string>();
@@ -104,7 +105,7 @@ export class LiveSession {
           this.fail(
             'GPT-Live request timed out before session.closed; final usage is unconfirmed.',
           ),
-        getRequestTimeoutMs(),
+        this.options.requestTimeoutMs,
       );
       this.ws.on('open', () => {
         this.send({
@@ -190,10 +191,10 @@ export class LiveSession {
   private streamAudio(): void {
     const bytesPerSecond =
       this.options.format.rate * (this.options.format.type === 'audio/pcm' ? 2 : 1);
-    const frameSize = (bytesPerSecond * FRAME_MS) / 1000;
+    const frameSize = (bytesPerSecond * LIVE_FRAME_MS) / 1000;
     const totalFrames = Math.ceil(
       ((this.options.audio.length / bytesPerSecond) * 1000 + this.options.responseWindowMs) /
-        FRAME_MS,
+        LIVE_FRAME_MS,
     );
     const silence =
       this.options.format.type === 'audio/pcmu'
@@ -202,6 +203,7 @@ export class LiveSession {
           ? 0xd5
           : 0;
     let frame = 0;
+    const startedAt = performance.now();
     const sendFrame = () => {
       if (this.done || this.closing) {
         return;
@@ -219,7 +221,7 @@ export class LiveSession {
       );
       this.send({ type: 'session.input_audio.append', audio: bytes.toString('base64') });
       frame++;
-      this.later(sendFrame, FRAME_MS);
+      this.later(sendFrame, Math.max(0, startedAt + frame * LIVE_FRAME_MS - performance.now()));
     };
     sendFrame();
   }
@@ -236,11 +238,28 @@ export class LiveSession {
         if (!this.options.audio.length) {
           this.send({
             type: 'session.instructions.append',
+            event_id: 'promptfoo_start',
             delegation_id: null,
-            content: "Respond to the user's last message in the conversation now, then listen.",
+            content:
+              "Immediately answer the user's last message out loud, without waiting for the caller to speak, then pause and listen.",
           });
         }
         this.streamAudio();
+        break;
+      case 'session.instructions.appended':
+        if (
+          event.client_event_id === 'promptfoo_start' &&
+          !this.options.audio.length &&
+          !this.closing &&
+          !this.openingPrompted
+        ) {
+          this.openingPrompted = true;
+          this.send({
+            type: 'session.commentary.append',
+            delegation_id: null,
+            content: 'Begin now, following the instructions provided.',
+          });
+        }
         break;
       case 'session.input_transcript.delta':
       case 'session.output_transcript.delta':
@@ -477,6 +496,7 @@ export class LiveSession {
     const config = this.options.config.delegation;
     const model = response.model || (config?.type === 'responses' ? config.responses.model : '');
     this.backendResponses.push({ id: response.id, model, usage: response.usage });
+    accumulateTokenUsage(this.tokenUsage, { numRequests: 1 });
     if (response.usage) {
       const usage = response.usage;
       accumulateTokenUsage(this.tokenUsage, {
@@ -484,7 +504,6 @@ export class LiveSession {
         prompt: usage.input_tokens,
         completion: usage.output_tokens,
         cached: usage.input_tokens_details?.cached_tokens,
-        numRequests: 1,
         completionDetails: getOpenAICompletionTokenDetails(usage),
       });
       const cost = calculateOpenAIUsageCost(model, {}, usage, {
@@ -579,14 +598,13 @@ export class LiveSession {
       ...(this.reason === 'content' && { isRefusal: true }),
       ...(rawAudio.length && {
         audio: {
-          data: (pcm ? convertPcm16ToWav(rawAudio, this.options.format.rate) : rawAudio).toString(
-            'base64',
-          ),
-          format: pcm
-            ? 'wav'
-            : this.options.format.type === 'audio/pcmu'
-              ? 'g711_ulaw'
-              : 'g711_alaw',
+          data: convertPcm16ToWav(
+            this.options.format.type === 'audio/pcm'
+              ? rawAudio
+              : convertG711ToPcm16(rawAudio, this.options.format.type),
+            this.options.format.rate,
+          ).toString('base64'),
+          format: 'wav',
           sampleRate: this.options.format.rate,
           channels: 1,
           transcript: output,

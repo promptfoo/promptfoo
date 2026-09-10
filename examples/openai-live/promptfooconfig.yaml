@@ -11,7 +11,7 @@ providers:
       audio:
         output:
           voice: marin
-      responseWindowMs: 15000
+      responseWindowMs: 30000
       delegation:
         type: responses
         responses:

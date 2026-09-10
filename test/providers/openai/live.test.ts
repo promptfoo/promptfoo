@@ -2,9 +2,10 @@ import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiLiveProvider } from '../../../src/providers/openai/live';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { OpenAiLiveOptions } from '../../../src/providers/openai/live';
+import type { OpenAiLiveOptions } from '../../../src/providers/openai/liveTypes';
 
 interface Socket extends EventEmitter {
   readyState: number;
@@ -15,6 +16,7 @@ interface Socket extends EventEmitter {
     agent?: { destroy: () => void; getProxyForUrl: (url: string) => string };
   };
   sent: any[];
+  send(value: string): void;
   terminate: ReturnType<typeof vi.fn>;
 }
 const { sockets, loadCallback } = vi.hoisted(() => ({
@@ -96,6 +98,12 @@ describe('OpenAiLiveProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it('exposes its provider identity and OpenAI audio input format', () => {
+    const p = provider();
+    expect(p.id()).toBe('openai:live:gpt-live-1');
+    expect(p.getAudioInputFormat()).toBe('openai');
+  });
+
   it('starts Live, waits for readiness, and returns exact transcripts, WAV audio, and final duration cost', async () => {
     const result = provider({ audio: { output: { voice: 'quartz' } } }).callApi('Hello');
     const socket = await connect();
@@ -120,8 +128,22 @@ describe('OpenAiLiveProvider', () => {
     start(socket);
     expect(socket.sent[1]).toMatchObject({
       type: 'session.instructions.append',
+      event_id: 'promptfoo_start',
       delegation_id: null,
     });
+    expect(socket.sent.some((event) => event.type === 'session.commentary.append')).toBe(false);
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'another_command' });
+    expect(socket.sent.some((event) => event.type === 'session.commentary.append')).toBe(false);
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    expect(socket.sent.at(-1)).toEqual({
+      type: 'session.commentary.append',
+      delegation_id: null,
+      content: 'Begin now, following the instructions provided.',
+    });
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    expect(socket.sent.filter((event) => event.type === 'session.commentary.append')).toHaveLength(
+      1,
+    );
     text(socket, 'Hi');
     text(socket, ' there', 'output', 10, 20);
     text(socket, 'Hello', 'input', 5, 15);
@@ -139,6 +161,7 @@ describe('OpenAiLiveProvider', () => {
       output: 'Hi there',
       cached: false,
       sessionId: 'live_fixture',
+      tokenUsage: { numRequests: 1 },
       metadata: { voiceSeconds: 12, finalUsageConfirmed: true, inputTranscript: 'Hello' },
     });
     expect(response.cost).toBeCloseTo(0.01);
@@ -192,12 +215,73 @@ describe('OpenAiLiveProvider', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('keeps audio on its timeline when sending frames takes time', async () => {
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    const startedAt = Date.now();
+    const frameTimes: number[] = [];
+    const send = socket.send.bind(socket);
+    vi.spyOn(socket, 'send').mockImplementation((value) => {
+      send(value);
+      if (JSON.parse(value).type === 'session.input_audio.append') {
+        frameTimes.push(Date.now() - startedAt);
+        vi.advanceTimersByTime(7);
+      }
+    });
+    start(socket);
+    text(socket);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(frameTimes).toEqual([0, 20, 40, 60, 80]);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    closed(socket);
+    expect((await result).error).toBeUndefined();
+  });
+
+  it('reserves startup and finalization time including the last padded audio frame', async () => {
+    mockProcessEnv({ REQUEST_TIMEOUT_MS: '419' });
+    expect((await provider({ responseWindowMs: 101 }).callApi('Hi')).error).toContain(
+      'REQUEST_TIMEOUT_MS',
+    );
+    expect(sockets).toHaveLength(0);
+    mockProcessEnv({ REQUEST_TIMEOUT_MS: '420' });
+    const result = provider({ responseWindowMs: 101 }).callApi('Hi');
+    const socket = await connect();
+    await vi.advanceTimersByTimeAsync(199);
+    start(socket);
+    text(socket);
+    await vi.advanceTimersByTimeAsync(120);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    await vi.advanceTimersByTimeAsync(99);
+    closed(socket);
+    expect((await result).metadata?.finalUsageConfirmed).toBe(true);
+  });
+
+  it('rejects a five-minute capture unless the overall request budget is increased', async () => {
+    expect((await provider({ responseWindowMs: 300_000 }).callApi('Hi')).error).toContain(
+      'REQUEST_TIMEOUT_MS',
+    );
+    expect(sockets).toHaveLength(0);
+  });
+
   it('reports startup timeout and releases the socket', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
     await vi.advanceTimersByTimeAsync(200);
     expect((await result).error).toContain('session.started');
     expect(socket.terminate).toHaveBeenCalledOnce();
+  });
+
+  it('does not request new speech after the capture window closes', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    await vi.advanceTimersByTimeAsync(100);
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    closed(socket);
+    expect((await result).error).toBeUndefined();
   });
 
   it('preserves partial output and usage when finalization times out', async () => {
@@ -277,7 +361,7 @@ describe('OpenAiLiveProvider', () => {
     await oneRejected;
     expect(sockets[0].terminate).toHaveBeenCalledOnce();
     expect(sockets[1].terminate).not.toHaveBeenCalled();
-    p.cleanup();
+    await providerRegistry.shutdownAll();
     await twoRejected;
     expect(sockets[1].terminate).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
@@ -314,6 +398,27 @@ describe('OpenAiLiveProvider', () => {
     const socket = await connect();
     expect(socket.options.headers).toEqual({ authorization: 'Bearer custom-token' });
     expect(socket.url).toBe('ws://localhost:1234/v1/live/sessions');
+    start(socket);
+    text(socket);
+    closed(socket);
+    await result;
+  });
+
+  it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {
+    const result = provider({ headers: { 'X-Route': 'provider' } }).callApi('Hi', {
+      vars: {},
+      prompt: {
+        raw: 'Hi',
+        label: 'Hi',
+        config: { headers: { authorization: 'Bearer prompt-token', 'X-Route': 'prompt' } },
+      },
+    });
+    const socket = await connect();
+    expect(socket.options.headers).toEqual({
+      'X-OpenAI-Originator': 'promptfoo',
+      authorization: 'Bearer prompt-token',
+      'X-Route': 'prompt',
+    });
     start(socket);
     text(socket);
     closed(socket);
@@ -387,7 +492,7 @@ describe('OpenAiLiveProvider', () => {
       prompt: 20,
       completion: 10,
       total: 30,
-      numRequests: 2,
+      numRequests: 3,
     });
     expect(output.cost).toBeCloseTo(0.050024);
     expect(output.metadata?.backendResponses).toHaveLength(2);
@@ -554,11 +659,11 @@ describe('OpenAiLiveProvider', () => {
   });
 
   it.each([
-    ['audio/pcmu', 'g711_ulaw', 255],
-    ['audio/pcma', 'g711_alaw', 213],
+    ['audio/pcmu', 255, [-31100, -30076, -29052]],
+    ['audio/pcma', 213, [-5248, -6016, -5760]],
   ] as const)(
-    'uses the correct silence and output encoding for %s',
-    async (type, format, silence) => {
+    'streams %s silence and converts output to playable PCM16 WAV',
+    async (type, silence, samples) => {
       const result = provider({ audio: { format: { type, rate: 8000 } } }).callApi('Hi');
       const socket = await connect();
       start(socket);
@@ -566,7 +671,12 @@ describe('OpenAiLiveProvider', () => {
       emit(socket, { type: 'session.output_audio.delta', delta: 'AQID' });
       await vi.advanceTimersByTimeAsync(100);
       closed(socket);
-      expect((await result).audio).toMatchObject({ data: 'AQID', format, sampleRate: 8000 });
+      const audio = (await result).audio!;
+      expect(audio).toMatchObject({ format: 'wav', sampleRate: 8000 });
+      const wav = Buffer.from(audio.data!, 'base64');
+      expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(wav.readUInt32LE(24)).toBe(8000);
+      expect([wav.readInt16LE(44), wav.readInt16LE(46), wav.readInt16LE(48)]).toEqual(samples);
     },
   );
 });
