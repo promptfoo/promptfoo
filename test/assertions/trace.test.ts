@@ -3,6 +3,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -131,6 +132,40 @@ describe('trace assertions', () => {
   };
 
   describe('javascript assertions with trace', () => {
+    it('uses the evaluation tracing context for the grader test index', async () => {
+      const graderSpan = vi.fn();
+      const test: AtomicTestCase = {
+        metadata: { evaluationId: 'test-evaluation-id' },
+        vars: { input: 'ordinary user variable' },
+      };
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 5,
+          withGraderSpan: async (options, invoke) => {
+            graderSpan(options);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () =>
+          runAssertion({
+            assertion: { type: 'contains', value: 'Test' },
+            test,
+            providerResponse: mockProviderResponse,
+            traceId: 'test-trace-id',
+          }),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'contains',
+        evalId: 'test-evaluation-id',
+        testIndex: 5,
+      });
+      expect(test.vars).toEqual({ input: 'ordinary user variable' });
+    });
+
     it('should treat ruby assertions as trace-aware', () => {
       expect(
         assertionUsesTrace({

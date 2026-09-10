@@ -107,12 +107,6 @@ export const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-icontains-all',
 ]);
 
-export const COMMA_SEPARATED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  ...ARRAY_VALUE_ASSERTION_TYPES,
-  'moderation',
-  'not-moderation',
-]);
-
 export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'cost',
   'latency',
@@ -705,11 +699,7 @@ function getBasicExpectedValueError(assertion: Assertion): string | undefined {
   if (
     REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
-    !(
-      typeof assertion.value === 'number' &&
-      Number.isFinite(assertion.value) &&
-      assertion.value !== 0
-    )
+    !(typeof assertion.value === 'number' && Number.isFinite(assertion.value))
   ) {
     return 'Enter an expected value before saving this check.';
   }

@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callProviderWithContext } from '../../src/matchers/providers';
-import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import { callGradingProvider, callProviderWithContext } from '../../src/matchers/providers';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { createRateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
 
+import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
   ApiProvider,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   RateLimitRegistryRef,
   VarValue,
@@ -122,6 +128,46 @@ describe('callProviderWithContext', () => {
     );
   });
 
+  it('traces grading providers while preserving scheduler and cancellation context', async () => {
+    const provider = createProvider();
+    const registry = createRegistry();
+    const abortController = new AbortController();
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+      { callContext },
+      invoke,
+    ) => invoke({ ...callContext!, traceparent });
+    const providerSpan = vi.fn(withProviderSpan);
+
+    await withProviderCallExecutionContext(
+      { abortSignal: abortController.signal, rateLimitRegistry: registry },
+      () =>
+        withProviderCallTracingContext(
+          {
+            getActiveTraceparent: () => traceparent,
+            withGraderSpan: async (_options, invoke) => invoke(),
+            withProviderSpan: providerSpan,
+          },
+          () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+        ),
+    );
+
+    expect(registry.executeSpy).toHaveBeenCalledTimes(1);
+    expect(providerSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ provider, role: 'grader', promptLabel: 'rubric' }),
+      expect.any(Function),
+    );
+    expect(provider.callApi).toHaveBeenCalledWith(
+      'grade this',
+      {
+        prompt: { raw: 'grade this', label: 'rubric' },
+        vars,
+        traceparent,
+      },
+      { abortSignal: abortController.signal },
+    );
+  });
+
   it('keeps scheduler execution context scoped to its callback', async () => {
     const provider = createProvider();
     const registry = createRegistry();
@@ -164,26 +210,88 @@ describe('callProviderWithContext', () => {
     );
   });
 
-  it('queues provider calls when a provider call queue is available', async () => {
-    const response = { output: 'queued response' };
-    const provider = createProvider(response);
-    const providerCallQueue = new ProviderGroupedCallQueue();
+  it.each([false, true])(
+    'queues provider calls while preserving cancellation, signal=%s',
+    async (withSignal) => {
+      const abortSignal = withSignal ? new AbortController().signal : undefined;
+      const response = { output: 'queued response' };
+      const provider = createProvider(response);
+      const providerCallQueue = new ProviderGroupedCallQueue();
 
-    const promise = withProviderCallExecutionContext({ providerCallQueue }, () =>
-      callProviderWithContext(provider, 'grade this', 'rubric', vars),
+      const promise = withProviderCallExecutionContext({ providerCallQueue, abortSignal }, () =>
+        callProviderWithContext(provider, 'grade this', 'rubric', vars),
+      );
+
+      expect(provider.callApi).not.toHaveBeenCalled();
+      const group = providerCallQueue.takeNextGroup();
+      expect(group).toHaveLength(1);
+      expect(group[0].providerId).toBe('test-grader');
+
+      await providerCallQueue.run(group[0]);
+      await expect(promise).resolves.toBe(response);
+      expect(vi.mocked(provider.callApi).mock.calls[0]).toEqual([
+        'grade this',
+        { prompt: { raw: 'grade this', label: 'rubric' }, vars },
+        ...(abortSignal ? [{ abortSignal }] : []),
+      ]);
+    },
+  );
+});
+
+describe('callGradingProvider', () => {
+  const vars: Record<string, VarValue> = { question: 'What is two plus two?' };
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('traces non-text grading calls without changing their response shape', async () => {
+    const provider = createProvider();
+    const response: ProviderClassificationResponse = { classification: { safe: 0.9 } };
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async ({ callContext }, invoke) => invoke(callContext),
     );
 
-    expect(provider.callApi).not.toHaveBeenCalled();
-    const group = providerCallQueue.takeNextGroup();
-    expect(group).toHaveLength(1);
-    expect(group[0].providerId).toBe('test-grader');
+    await expect(
+      withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'classification', async () => response),
+      ),
+    ).resolves.toBe(response);
 
-    await providerCallQueue.run(group[0]);
-    await expect(promise).resolves.toBe(response);
-    expect(provider.callApi).toHaveBeenCalledWith('grade this', {
-      prompt: { raw: 'grade this', label: 'rubric' },
-      vars,
-    });
+    expect(providerSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ provider, role: 'grader', promptLabel: 'classification' }),
+      expect.any(Function),
+    );
+  });
+
+  it('reuses rate limiting and grouped execution for embedding calls', async () => {
+    const provider = createProvider();
+    const registry = createRegistry();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const invoke = vi.fn(
+      async (): Promise<ProviderEmbeddingResponse> => ({
+        embedding: [1, 0, 0],
+      }),
+    );
+
+    const promise = withProviderCallExecutionContext(
+      { providerCallQueue, rateLimitRegistry: registry },
+      () => callGradingProvider(provider, 'similarity.embedding', invoke),
+    );
+
+    expect(invoke).not.toHaveBeenCalled();
+    const [group] = providerCallQueue.takeNextGroup();
+    await providerCallQueue.run(group);
+
+    await expect(promise).resolves.toEqual({ embedding: [1, 0, 0] });
+    expect(registry.executeSpy).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('skips provider calls whose queued-call signal was aborted', async () => {

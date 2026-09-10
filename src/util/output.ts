@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { collectBlobHashes } from '../blobs/blobRefs';
 import { BLOB_MAX_SIZE } from '../blobs/constants';
 import { VERSION } from '../constants';
@@ -29,7 +29,11 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
+import {
+  sanitizeObject,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -332,7 +336,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, {
+  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,

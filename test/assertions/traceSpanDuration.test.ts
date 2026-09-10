@@ -440,6 +440,77 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it('should throw error for a percentile above 100', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: 150 } },
+      renderedValue: { max: 1000, percentile: 150 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // Regression: an out-of-range percentile indexed past the sorted durations
+    // array and returned `undefined`, which compared false against `max` and
+    // silently PASSED with an "undefinedms" reason. It must be rejected instead.
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a negative percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: -5 } },
+      renderedValue: { max: 1000, percentile: -5 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a non-finite percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: Number.NaN } },
+      renderedValue: { max: 1000, percentile: Number.NaN },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a non-numeric percentile', () => {
+    // YAML configs are cast to the value type without runtime type checking, so a
+    // string percentile can reach the guard. `Number.isFinite` does not coerce, so
+    // it rejects non-numbers without a separate `typeof` check.
+    const value = { max: 1000, percentile: '95' as unknown as number };
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value },
+      renderedValue: value,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
   it('should handle edge case with single span for percentile', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -485,22 +556,21 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-  ])('should reject invalid max values (%s)', (max) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-span-duration', value: { max } },
-      renderedValue: { max },
-      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    'should reject invalid max values (%s)',
+    (max) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-span-duration', value: { max } },
+        renderedValue: { max },
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+      };
 
-    expect(() => handleTraceSpanDuration(params)).toThrow(
-      'trace-span-duration assertion max must be a finite non-negative number',
-    );
-  });
+      expect(() => handleTraceSpanDuration(params)).toThrow(
+        'trace-span-duration assertion max must be a finite non-negative number',
+      );
+    },
+  );
 
   it('should invert the result for not-trace-span-duration when latency budget is met', () => {
     const params: AssertionParams = {

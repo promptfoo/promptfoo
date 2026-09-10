@@ -5,6 +5,7 @@ import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
   getProviderCallExecutionContext,
+  getProviderCallTracingContext,
   raceWithAbortSignal,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
@@ -13,6 +14,7 @@ import invariant from '../util/invariant';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -39,16 +41,61 @@ export function shouldUseRemoteGrading(
   return shouldGenerateRemote(options);
 }
 
+export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
+  const abortSignal = getProviderCallExecutionContext()?.abortSignal;
+  return abortSignal ? { abortSignal } : undefined;
+}
+
 /**
- * Helper to call provider with consistent context propagation pattern.
- * Spreads the optional context and merges with prompt label and vars.
- * Also reuses evaluator scheduler context for cancellation, rate limits,
- * and grouped grading provider calls when present.
- *
- * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
- * override. This ensures originalProvider from context is preserved while
- * allowing this call to specify its own prompt metadata.
+ * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
+export function callGradingProvider<T extends ProviderResponse>(
+  provider: ApiProvider,
+  label: string,
+  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  options: {
+    callContext?: CallApiContextParams;
+    operationName?: 'embeddings';
+  } = {},
+): Promise<T> {
+  const { callContext, operationName } = options;
+  const executionContext = getProviderCallExecutionContext();
+  const tracingContext = getProviderCallTracingContext();
+  const callProvider = (): Promise<T> => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+    const promise = tracingContext
+      ? (tracingContext.withProviderSpan(
+          { provider, callContext, operationName, role: 'grader', promptLabel: label },
+          invoke,
+        ) as Promise<T>)
+      : invoke(callContext);
+    return raceWithAbortSignal(promise, executionContext?.queuedCallAbortSignal);
+  };
+
+  const executeCall = () => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return raceWithAbortSignal(
+        executionContext.rateLimitRegistry.execute(
+          provider,
+          callProvider,
+          createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
+        ),
+        executionContext.queuedCallAbortSignal,
+      );
+    }
+
+    return callProvider();
+  };
+
+  if (executionContext?.providerCallQueue) {
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+  }
+
+  return executeCall();
+}
+
+/** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
 export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
@@ -64,39 +111,16 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const executionContext = getProviderCallExecutionContext();
-  const callApiOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
-  const callApi = () => {
-    executionContext?.queuedCallAbortSignal?.throwIfAborted();
-    return callApiOptions
-      ? provider.callApi(prompt, callApiContext, callApiOptions)
-      : provider.callApi(prompt, callApiContext);
-  };
-
-  const executeCall = () => {
-    executionContext?.queuedCallAbortSignal?.throwIfAborted();
-
-    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return raceWithAbortSignal(
-        executionContext.rateLimitRegistry.execute(
-          provider,
-          callApi,
-          createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
-        ),
-        executionContext.queuedCallAbortSignal,
-      );
-    }
-
-    return raceWithAbortSignal(callApi(), executionContext?.queuedCallAbortSignal);
-  };
-
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
-  }
-
-  return executeCall();
+  const callApiOptions = getGradingProviderCallOptions();
+  return callGradingProvider(
+    provider,
+    label,
+    (tracedContext) =>
+      callApiOptions
+        ? provider.callApi(prompt, tracedContext, callApiOptions)
+        : provider.callApi(prompt, tracedContext),
+    { callContext: callApiContext },
+  );
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
