@@ -346,6 +346,41 @@ describeEvaluator('evaluator token usage', () => {
     expect(summary.results[1].testCase?.metadata).not.toHaveProperty('providerTokenUsage');
   });
 
+  it('attaches generation usage to the first scheduled routed prompt', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('First prompt'), toPrompt('Second prompt')],
+      tests: [
+        {
+          prompts: ['Second prompt'],
+          metadata: {
+            providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 2 },
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].testCase?.metadata?.providerTokenUsage).toBeDefined();
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
+    });
+  });
+
   it('moves default generation usage before scenario metadata inheritance', async () => {
     const providerWithTokens: ApiProvider = {
       id: vi.fn().mockReturnValue('provider-with-tokens'),

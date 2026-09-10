@@ -838,7 +838,12 @@ async function doGenerateRedteamInternal(
   // (e.g., --strict mode failures, write errors)
   try {
     // Check for failed plugins - warn by default, throw with --strict
-    handleFailedPlugins(failedPlugins, options.strict ?? false);
+    try {
+      handleFailedPlugins(failedPlugins, options.strict ?? false);
+    } catch (error) {
+      const { tokenUsage } = detachProviderTokenUsage(redteamTests);
+      rethrowWithGenerationTokenUsage(error, tokenUsage);
+    }
 
     if (redteamTests.length === 0) {
       logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));

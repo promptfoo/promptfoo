@@ -161,10 +161,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       });
       testCases = generatedTestCases.map((testCase) => withPluginMetadata(testCase, plugin.id));
     } catch (error) {
-      const tokenUsage = mergeTokenUsage(
-        trackedRedteamProvider.getTokenUsage(),
-        getErrorTokenUsage(error),
-      );
+      const errorTokenUsage = getErrorTokenUsage(error);
+      const tokenUsage = errorTokenUsage
+        ? { ...errorTokenUsage, numRequests: errorTokenUsage.numRequests ?? 1 }
+        : trackedRedteamProvider.getTokenUsage();
       sendError(res, 500, 'Failed to generate test case', error, tokenUsage ? { tokenUsage } : {});
       return;
     }

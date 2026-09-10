@@ -219,6 +219,7 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  includeGenerationTokenUsage?: boolean;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;

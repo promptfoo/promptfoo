@@ -1382,7 +1382,10 @@ describe('doGenerateRedteam', () => {
         {
           vars: { input: 'Test input' },
           assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'working-plugin' },
+          metadata: {
+            pluginId: 'working-plugin',
+            providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
         },
       ],
       purpose: 'Test purpose',
@@ -1404,7 +1407,9 @@ describe('doGenerateRedteam', () => {
       strict: true, // Enable strict mode
     };
 
-    await expect(doGenerateRedteam(options)).rejects.toThrow(PartialGenerationError);
+    await expect(doGenerateRedteam(options)).rejects.toMatchObject({
+      tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+    });
   });
 
   it('should include plugin details in PartialGenerationError message with --strict', async () => {

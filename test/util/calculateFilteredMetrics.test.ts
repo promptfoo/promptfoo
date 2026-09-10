@@ -204,7 +204,7 @@ describe('calculateFilteredMetrics', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
-        numRequests: 0,
+        numRequests: 1,
       });
     });
 

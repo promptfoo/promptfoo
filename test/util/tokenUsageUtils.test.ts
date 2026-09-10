@@ -366,7 +366,7 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('accumulateGradingRequest', () => {
-    it('counts the request without token usage when the grader reports none', () => {
+    it('counts a grading request without token usage', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, undefined);
 
@@ -378,7 +378,7 @@ describe('tokenUsageUtils', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
 
-      expect(assertions.numRequests).toBe(1);
+      expect(assertions.numRequests).toBe(3);
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);

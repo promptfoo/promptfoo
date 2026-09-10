@@ -212,7 +212,7 @@ export function accumulateGradingRequest(
   assertions: NonNullable<TokenUsage['assertions']>,
   tokensUsed: Partial<TokenUsage> | undefined,
 ): void {
-  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+  assertions.numRequests = (assertions.numRequests ?? 0) + (tokensUsed?.numRequests ?? 1);
   if (tokensUsed) {
     accumulateAssertionTokenUsage(assertions, tokensUsed, { countRequests: false });
   }

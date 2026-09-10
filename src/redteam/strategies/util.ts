@@ -90,8 +90,12 @@ export function mergeProviderTokenUsage(
     return cloneTokenUsage(existing);
   }
 
+  const validatedUpdate = getGenerationErrorTokenUsage({ tokenUsage: update });
+  if (!validatedUpdate) {
+    return cloneTokenUsage(existing);
+  }
   const merged = cloneTokenUsage(existing);
-  accumulateTokenUsage(merged, update);
+  accumulateTokenUsage(merged, validatedUpdate);
   return merged;
 }
 

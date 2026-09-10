@@ -155,7 +155,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.cacheCreationInputTokens') AS INTEGER)) as assertion_completion_details_cache_creation_input_tokens,
       SUM(
         CASE
-          WHEN json_extract(response, '$.tokenUsage') IS NOT NULL
+          WHEN response IS NOT NULL
           THEN COALESCE(CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER), 1)
           ELSE 0
         END

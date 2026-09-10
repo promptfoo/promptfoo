@@ -991,7 +991,7 @@ export default class EvalResult {
     if (this.response) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
-    if (this.testIdx === 0 && this.promptIdx === 0) {
+    if (this.testCase.metadata?.providerTokenUsage) {
       accumulateGenerationTokenUsage(tokenUsage, this.testCase.metadata?.providerTokenUsage);
     }
     if (this.gradingResult) {

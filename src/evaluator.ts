@@ -1435,6 +1435,7 @@ async function runEvalInternal({
   abortSignal,
   deferGrading,
   evalId,
+  includeGenerationTokenUsage = testIndex === 0 && promptIndex === 0 && repeatIndex === 0,
   providerCallQueue,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
@@ -1532,7 +1533,7 @@ async function runEvalInternal({
 
     const ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
-      includeGenerationTokenUsage: testIndex === 0 && promptIndex === 0 && repeatIndex === 0,
+      includeGenerationTokenUsage,
       latencyMs,
       prompt,
       promptIdx: promptIndex,
@@ -1599,12 +1600,10 @@ async function runEvalInternal({
           numRequests: responseTokenUsage.numRequests ?? 1,
         })
       : undefined;
-    if (
-      testIndex === 0 &&
-      promptIndex === 0 &&
-      repeatIndex === 0 &&
-      test.metadata?.providerTokenUsage
-    ) {
+    if (responseTokenUsage) {
+      trackProviderUsage(provider, { tokenUsage: responseTokenUsage });
+    }
+    if (includeGenerationTokenUsage && test.metadata?.providerTokenUsage) {
       const combinedTokenUsage = errorTokenUsage ?? createEmptyTokenUsage();
       if (accumulateGenerationTokenUsage(combinedTokenUsage, test.metadata.providerTokenUsage)) {
         errorTokenUsage = combinedTokenUsage;
@@ -2383,6 +2382,16 @@ async function buildRunEvalOptions({
       testCase,
       testSuite,
     });
+  }
+  const generationCarrier = runEvalOptions.find(({ test }) => test.metadata?.providerTokenUsage);
+  if (generationCarrier) {
+    for (const option of runEvalOptions) {
+      option.includeGenerationTokenUsage = option === generationCarrier;
+      if (option !== generationCarrier && option.test.metadata?.providerTokenUsage) {
+        const { providerTokenUsage: _providerTokenUsage, ...metadata } = option.test.metadata;
+        option.test.metadata = metadata;
+      }
+    }
   }
 
   return runEvalOptions;
@@ -3388,7 +3397,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
-    if (row.testIdx === 0 && row.promptIdx === 0) {
+    if (row.testCase?.metadata?.providerTokenUsage) {
       accumulateGenerationTokenUsage(
         metrics.tokenUsage,
         row.testCase?.metadata?.providerTokenUsage,
