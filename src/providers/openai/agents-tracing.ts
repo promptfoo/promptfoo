@@ -622,13 +622,20 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
-  // Plain and block YAML scalars can continue on later lines.
+  // YAML values can span lines, including flow collections under credential keys.
   for (const [, , key, scalar] of value.matchAll(
     /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*([^\r\n]*)/g,
   )) {
-    if (isCredentialAttributeKey(key) && !/^[ \t]*["'[{]/.test(scalar)) {
+    if (isCredentialAttributeKey(key) && !/^[ \t]*["']/.test(scalar)) {
       return '<redacted>';
     }
+  }
+
+  if (
+    /(?:^|[\r\n])\s*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(value) &&
+    /(?:^|\s)(?:password|account)\s+\S/i.test(value)
+  ) {
+    return '<redacted>';
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
@@ -855,21 +862,34 @@ function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key:
 }
 
 function isJwe(value: unknown): boolean {
-  if (
-    !isRecord(value) ||
-    typeof value.protected !== 'string' ||
-    value.protected.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
-    typeof value.ciphertext !== 'string' ||
-    typeof value.tag !== 'string'
-  ) {
+  if (!isRecord(value) || typeof value.ciphertext !== 'string' || typeof value.tag !== 'string') {
     return false;
   }
-  try {
-    const header = JSON.parse(Buffer.from(value.protected, 'base64url').toString('utf8'));
-    return isRecord(header) && typeof header.alg === 'string' && typeof header.enc === 'string';
-  } catch {
-    return false;
+  let protectedHeader: unknown;
+  if (typeof value.protected === 'string') {
+    if (value.protected.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+      return true;
+    }
+    try {
+      protectedHeader = JSON.parse(Buffer.from(value.protected, 'base64url').toString('utf8'));
+    } catch {
+      // Unprotected headers can still identify a sensitive envelope.
+    }
   }
+  const hasAlgorithms = (recipientHeader: unknown) =>
+    ['alg', 'enc'].every((key) =>
+      [protectedHeader, value.unprotected, recipientHeader].some(
+        (header) => isRecord(header) && typeof header[key] === 'string',
+      ),
+    );
+  return (
+    hasAlgorithms(value.header) ||
+    (Array.isArray(value.recipients) &&
+      (value.recipients.length > MAX_STRUCTURED_ATTRIBUTE_NODES ||
+        value.recipients.some(
+          (recipient) => isRecord(recipient) && hasAlgorithms(recipient.header),
+        )))
+  );
 }
 
 function sanitizeStructuredAttribute(

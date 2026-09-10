@@ -31,14 +31,18 @@ function getAttributes(span: any): Record<string, unknown> {
   );
 }
 
-function createJwe() {
-  const header = Buffer.from(JSON.stringify({ alg: 'dir', enc: 'A256GCM' })).toString('base64url');
+function createJwe(
+  protectedHeader: Record<string, string> | null = { alg: 'dir', enc: 'A256GCM' },
+) {
+  const header = protectedHeader
+    ? Buffer.from(JSON.stringify(protectedHeader)).toString('base64url')
+    : '';
   const iv = Buffer.alloc(12, 1);
   const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 2), iv);
   cipher.setAAD(Buffer.from(header));
   const encrypted = Buffer.concat([cipher.update('fixture credential'), cipher.final()]);
   return {
-    protected: header,
+    ...(header && { protected: header }),
     encrypted_key: '',
     iv: iv.toString('base64url'),
     ciphertext: encrypted.toString('base64url'),
@@ -128,6 +132,81 @@ describe('OTLPTracingExporter', () => {
       }
       expect(JSON.parse(attributes.root as string)).toBe('<redacted>');
       expect(JSON.stringify(payload)).not.toContain(flattened.ciphertext);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts JWE JSON with combined or unprotected headers in %s',
+    async (format) => {
+      const { encrypted_key, ...split } = createJwe({ enc: 'A256GCM' });
+      const { encrypted_key: directKey, ...unprotected } = createJwe(null);
+      const values = {
+        splitGeneral: { ...split, recipients: [{ encrypted_key, header: { alg: 'dir' } }] },
+        splitShared: { ...split, encrypted_key, unprotected: { alg: 'dir' } },
+        shared: {
+          ...unprotected,
+          encrypted_key: directKey,
+          unprotected: { alg: 'dir', enc: 'A256GCM' },
+        },
+        flattened: {
+          ...unprotected,
+          encrypted_key: directKey,
+          header: { alg: 'dir', enc: 'A256GCM' },
+        },
+        general: {
+          ...unprotected,
+          recipients: [{ encrypted_key: directKey, header: { alg: 'dir', enc: 'A256GCM' } }],
+        },
+      };
+      const { attributes, payload } = await exportCustomData(
+        { native: values, serialized: JSON.stringify(values) },
+        format,
+      );
+      const expected = Object.fromEntries(Object.keys(values).map((key) => [key, '<redacted>']));
+      expect(JSON.parse(attributes.native as string)).toEqual(expected);
+      expect(JSON.parse(attributes.serialized as string)).toEqual(expected);
+      expect(JSON.stringify(payload)).not.toContain(split.ciphertext);
+      expect(JSON.stringify(payload)).not.toContain(unprotected.ciphertext);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts YAML credential flow collections in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          sequence: 'tokens: [opaque-token-one, opaque-token-two]',
+          mapping: 'password: {primary: opaque-secret}',
+          multiline: 'config:\n  credentials: [\n    opaque-first,\n    opaque-second\n  ]',
+          ordinary: 'names: [first, second]',
+        },
+        format,
+      );
+      expect(attributes.sequence).toBe('<redacted>');
+      expect(attributes.mapping).toBe('<redacted>');
+      expect(attributes.multiline).toBe('<redacted>');
+      expect(attributes.ordinary).toBe('names: [first, second]');
+      expect(JSON.stringify(payload)).not.toContain('opaque-');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts netrc password and account clauses in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          single: 'machine api.example login buildbot password opaque/value',
+          quoted: 'machine api.example\nlogin buildbot\npassword "opaque quoted phrase"',
+          fallback: 'default login buildbot account opaque-account',
+          ordinary: 'machine learning uses account metadata',
+        },
+        format,
+      );
+      expect(attributes.single).toBe('<redacted>');
+      expect(attributes.quoted).toBe('<redacted>');
+      expect(attributes.fallback).toBe('<redacted>');
+      expect(attributes.ordinary).toBe('machine learning uses account metadata');
+      expect(JSON.stringify(payload)).not.toContain('opaque');
     },
   );
 
