@@ -761,17 +761,21 @@ export class GoogleProvider extends GoogleGenericProvider {
         },
       };
 
-      response.output = await this.executeFunctionToolCallbacks(
-        output,
-        {
-          ...config,
-          basePath:
-            promptConfig?.functionToolCallbacks === undefined
-              ? this.config.basePath
-              : promptBasePath,
-        },
-        toolsDisabled,
-      );
+      try {
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        );
+      } catch (error) {
+        return { ...response, output: undefined, error: String(error) };
+      }
 
       return response;
     } catch (err) {

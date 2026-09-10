@@ -553,18 +553,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           );
       const audio = normalizeGeminiAudio(output);
 
-      return {
-        output: await this.executeFunctionToolCallbacks(
-          output,
-          {
-            ...config,
-            basePath:
-              promptConfig?.functionToolCallbacks === undefined
-                ? this.config.basePath
-                : promptBasePath,
-          },
-          toolsDisabled,
-        ),
+      const response: ProviderResponse = {
+        output,
         ...(audio && { audio }),
         tokenUsage,
         cost,
@@ -577,6 +567,22 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           ...(actualServiceTier && { serviceTier: actualServiceTier }),
         },
       };
+      try {
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        );
+      } catch (error) {
+        return { ...response, output: undefined, error: String(error) };
+      }
+      return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,

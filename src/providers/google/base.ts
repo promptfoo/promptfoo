@@ -272,58 +272,57 @@ function restoreStreamedFunctionCallParts(
     }
   }
 
-  const activeCallIds = new Set<string>();
-  let unnamedCallInProgress = false;
+  const activeCallParts = new Map<string, number>();
+  let unnamedCallPart: number | undefined;
+  const normalizedParts: any[] = [];
 
-  return parts.flatMap((part) => {
+  for (const part of parts) {
     const fragment = part?.functionCall as StreamedFunctionCall | undefined;
     if (!fragment) {
-      return [part];
+      normalizedParts.push(part);
+      continue;
     }
 
-    if (fragment.id) {
-      if (activeCallIds.has(fragment.id)) {
-        if (fragment.willContinue !== true) {
-          activeCallIds.delete(fragment.id);
+    const activeId =
+      fragment.id ||
+      (isAnonymousFunctionCallFragment(fragment) &&
+      unnamedCallPart === undefined &&
+      activeCallParts.size === 1
+        ? activeCallParts.keys().next().value
+        : undefined);
+    const activePart = activeId ? activeCallParts.get(activeId) : unnamedCallPart;
+    if (activePart !== undefined) {
+      // Signatures can arrive on a continuation. Keep their association with the call.
+      normalizedParts[activePart] = {
+        ...normalizedParts[activePart],
+        ...part,
+        functionCall: normalizedParts[activePart].functionCall,
+      };
+      if (fragment.willContinue !== true) {
+        if (activeId) {
+          activeCallParts.delete(activeId);
+        } else {
+          unnamedCallPart = undefined;
         }
-        return [];
       }
-
-      const functionCall = callsById.get(fragment.id)?.shift();
-      if (!functionCall) {
-        return [];
-      }
-      if (fragment.willContinue === true) {
-        activeCallIds.add(fragment.id);
-      }
-      return [{ ...part, functionCall }];
+      continue;
     }
 
-    if (
-      isAnonymousFunctionCallFragment(fragment) &&
-      !unnamedCallInProgress &&
-      activeCallIds.size === 1
-    ) {
-      if (fragment.willContinue !== true) {
-        activeCallIds.clear();
-      }
-      return [];
-    }
-
-    if (unnamedCallInProgress) {
-      if (fragment.willContinue !== true) {
-        unnamedCallInProgress = false;
-      }
-      return [];
-    }
-
-    const functionCall = unnamedCalls.shift();
+    const functionCall = fragment.id ? callsById.get(fragment.id)?.shift() : unnamedCalls.shift();
     if (!functionCall) {
-      return [];
+      continue;
     }
-    unnamedCallInProgress = fragment.willContinue === true;
-    return [{ ...part, functionCall }];
-  });
+    if (fragment.willContinue === true) {
+      if (fragment.id) {
+        activeCallParts.set(fragment.id, normalizedParts.length);
+      } else {
+        unnamedCallPart = normalizedParts.length;
+      }
+    }
+    normalizedParts.push({ ...part, functionCall });
+  }
+
+  return normalizedParts;
 }
 
 /**
@@ -737,14 +736,15 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     for (const { functionName, args, callId } of preparedCalls) {
       try {
         results.push(await this.executeFunctionCallback(functionName, args, config, callId));
-      } catch {
-        // executeFunctionCallback already logs the error. Preserve normalized
-        // model output when a callback cannot be executed.
-        return normalizedOutput;
+      } catch (error) {
+        throw new Error(
+          `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
+            `Check for side effects before retrying: ${String(error)}`,
+        );
       }
     }
     if (results.length === 1) {
-      return results[0] ?? normalizedOutput;
+      return results[0] ?? '';
     }
     return results
       .map((result) => {

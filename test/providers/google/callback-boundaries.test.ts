@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -279,12 +279,25 @@ export function getWeather(args) {
       expect((await call(provider, { functionToolCallbacks: {} })).output).toEqual([functionCall]);
     });
 
-    it('preserves strict named exports and original output after a callback failure', async () => {
+    it('reports a missing named export without invoking the default callback', async () => {
+      const marker = path.join(root, 'default-invoked');
+      await writeFile(
+        path.join(providerDir, 'default.mjs'),
+        `import { writeFileSync } from 'node:fs';
+export default () => writeFileSync(${JSON.stringify(marker)}, 'unexpected');
+`,
+      );
       const provider = await load({
         basePath: providerDir,
         functionToolCallbacks: { get_weather: 'file://default.mjs:missing' },
       });
-      expect((await call(provider)).output).toEqual([functionCall]);
+      const response = await call(provider);
+      expect(response.output).toBeUndefined();
+      expect(response.error).toContain(
+        "Function callback 'get_weather' failed after 0 completed callback(s)",
+      );
+      expect(response.error).toContain('missing');
+      await expect(access(marker)).rejects.toMatchObject({ code: 'ENOENT' });
     });
 
     it('keeps the path guard when the owning directory is explicit', async () => {
@@ -292,7 +305,14 @@ export function getWeather(args) {
         basePath: providerDir,
         functionToolCallbacks: { get_weather: 'file://../prompt/callbacks.mjs:getWeather' },
       });
-      expect((await call(provider)).output).toEqual([functionCall]);
+      const response = await call(provider);
+      expect(response.output).toBeUndefined();
+      expect(response.error).toContain(
+        "Function callback 'get_weather' failed after 0 completed callback(s)",
+      );
+      expect(
+        (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
+      ).toBe('prompt:Boston:1');
     });
   });
 

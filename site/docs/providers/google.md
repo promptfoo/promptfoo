@@ -1179,7 +1179,9 @@ providers:
           mode: AUTO # AUTO, ANY, VALIDATED, or NONE
 ```
 
-Promptfoo executes configured `functionToolCallbacks` only for native `functionCall` response parts. JSON text remains text. Without callbacks, those parts are available to assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
+Promptfoo can execute configured `functionToolCallbacks`, including calls represented as JSON model output, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. If a callback fails, the eval reports an error with the number of completed callbacks and stops executing further calls. Check for side effects before retrying. A single callback that returns no value produces empty output.
+
+Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. Streamed function-call parts retain signatures from continuation chunks on the assembled call. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
 
 ```yaml
 prompts:

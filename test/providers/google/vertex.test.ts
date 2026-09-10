@@ -1348,9 +1348,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
   });
 
-  it.each(['fresh', 'cached'])(
-    'rejects %s function-call fragments before executing any callback without streaming opt-in',
-    async (source) => {
+  it.each([
+    ['fresh', true],
+    ['cached', true],
+    ['fresh', false],
+    ['cached', false],
+  ] as const)(
+    'rejects %s function-call fragments with supplied metadata=%s before callbacks without streaming opt-in',
+    async (source, suppliedMetadata) => {
       const callback = vi.fn().mockResolvedValue('ticket found');
       const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
         config: {
@@ -1368,17 +1373,50 @@ describe('VertexChatProvider.callGeminiApi', () => {
           },
         },
       ];
-      const mockRequest = mockVertexRequest([{ candidates: [{ content: { parts } }] }]);
+      const raw = [
+        {
+          candidates: [{ content: { parts } }],
+          ...(suppliedMetadata && {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          }),
+        },
+      ];
+      const mockRequest = mockVertexRequest(raw);
       if (source === 'cached') {
-        mockCacheGet.mockResolvedValue(JSON.stringify({ output: parts }));
+        mockCacheGet.mockResolvedValue(
+          JSON.stringify({
+            output: parts,
+            ...(suppliedMetadata && {
+              raw,
+              tokenUsage: { total: 15, prompt: 10, completion: 5 },
+              cost: 0.25,
+            }),
+          }),
+        );
       }
 
       const response = await geminiProvider.callGeminiApi('Look up the tickets');
 
-      expect(response).toEqual({
-        error:
-          'Gemini API response error: Error: Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
-      });
+      expect(response.error).toBe(
+        'Error: Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+      );
+      expect(response.output).toBeUndefined();
+      expect(response.cached).toBe(source === 'cached');
+      if (suppliedMetadata) {
+        expect(response.tokenUsage).toMatchObject({
+          total: 15,
+          prompt: 10,
+          completion: 5,
+          ...(source === 'cached' ? { cached: 15 } : {}),
+        });
+        expect(response.cost).toEqual(source === 'cached' ? 0.25 : expect.any(Number));
+      } else {
+        expect(response.tokenUsage).toEqual(
+          source === 'cached' ? undefined : { total: 0, prompt: 0, completion: 0 },
+        );
+        expect(response.cost).toBeUndefined();
+      }
+      expect(response.raw).toEqual(source === 'cached' && suppliedMetadata ? raw : undefined);
       expect(callback).not.toHaveBeenCalled();
       expect(mockRequest).toHaveBeenCalledTimes(source === 'cached' ? 0 : 1);
     },
@@ -1872,7 +1910,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const result = await provider.callApi('Call the error function');
 
-    expect(result.output).toEqual(mockCachedResponse.output);
+    expect(result.output).toBeUndefined();
+    expect(result.error).toContain(
+      "Function callback 'errorFunction' failed after 0 completed callback(s)",
+    );
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
 
@@ -2055,8 +2096,11 @@ describe('VertexChatProvider.callGeminiApi', () => {
         path.resolve('/test/base/path', 'nonexistent/module.js'),
         'errorFunction',
       );
-      // Should fall back to original function call object when loading fails
-      expect(result.output).toEqual(mockCachedResponse.output);
+      expect(result.output).toBeUndefined();
+      expect(result.error).toContain(
+        "Function callback 'error_function' failed after 0 completed callback(s)",
+      );
+      expect(result.error).toContain('Module not found');
     });
 
     it('should handle mixed inline and external function callbacks', async () => {

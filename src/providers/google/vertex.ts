@@ -1071,8 +1071,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         },
         toolsDisabled,
       );
-    } catch (err) {
-      return { error: `Gemini API response error: ${String(err)}` };
+    } catch (error) {
+      return { ...response, output: undefined, error: String(error) };
     }
     return response;
   }
