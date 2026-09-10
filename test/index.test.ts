@@ -1160,6 +1160,22 @@ describe('evaluate function', () => {
         );
       });
 
+      it('preserves suite env for nested test providers', async () => {
+        loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+
+        await evaluate({
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          tests: [{ provider: 'envoy:route:stable', vars: { input: 'hello' } }],
+        });
+
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('envoy:route:stable', {
+          basePath: '',
+          env: { OPENAI_API_KEY: 'suite-key' },
+        });
+      });
+
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 

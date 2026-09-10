@@ -25,6 +25,7 @@ import { loadYaml } from './yamlLoad';
 
 import type {
   CsvRow,
+  EnvOverrides,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -428,6 +429,7 @@ export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
   isDefaultTest: boolean = false,
+  env?: EnvOverrides,
 ): Promise<TestCase> {
   let testCase: TestCase;
   let effectiveBasePath = basePath;
@@ -445,11 +447,15 @@ export async function readTest(
   if (testCase.provider && typeof testCase.provider !== 'function') {
     // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
+      testCase.provider = await loadApiProvider(testCase.provider, {
+        basePath: effectiveBasePath,
+        env,
+      });
     } else if (typeof testCase.provider.id === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider.id, {
         options: testCase.provider as ProviderOptions,
         basePath: effectiveBasePath,
+        env,
       });
     }
   }
@@ -487,6 +493,7 @@ export async function readTest(
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
+  env?: EnvOverrides,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -574,7 +581,7 @@ export async function loadTestsFromGlob(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+        ret.push(await readTest(testCase, path.dirname(testFile), false, env));
       }
     }
   }
@@ -584,6 +591,7 @@ export async function loadTestsFromGlob(
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
+  env?: EnvOverrides,
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
@@ -593,7 +601,7 @@ export async function readTests(
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath);
+      return loadTestsFromGlob(tests, basePath, env);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
@@ -625,13 +633,13 @@ export async function readTests(
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
           // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
         }
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, false, env));
       }
     }
   } else if (tests !== undefined && tests !== null) {
