@@ -6,8 +6,10 @@ prompts:
   - 'Can you search for information about {{topic}} in the {{repo}} repository?'
 
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
@@ -15,9 +17,10 @@ providers:
           require_approval: never
           allowed_tools: ['ask_question']
       max_output_tokens: 1000
-      temperature: 0.3
-  - id: openai:responses:gpt-5.4
+  - id: openai:responses:gpt-5.6-sol
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
@@ -25,7 +28,6 @@ providers:
           require_approval: never
           allowed_tools: ['ask_question']
       max_output_tokens: 1000
-      temperature: 0.3
 
 tests:
   - vars:

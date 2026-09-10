@@ -468,14 +468,14 @@ export async function createDummyFiles(
     }
 
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5.4-mini', 'openai:gpt-5.6'] },
+      { name: `I'll choose later`, value: ['openai:gpt-5.6-luna', 'openai:gpt-5.6-terra'] },
       {
-        name: '[OpenAI] GPT 5.6, GPT 5.4 Mini, ...',
+        name: '[OpenAI] GPT-5.6 Luna, Terra, Sol, GPT-6 Astra, ...',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-5.6',
+                  id: 'openai:chat:gpt-5.6-terra',
                   config: {
                     tools: [
                       {
@@ -499,7 +499,7 @@ export async function createDummyFiles(
                   },
                 },
               ]
-            : ['openai:gpt-5.4-mini', 'openai:gpt-5.6'],
+            : ['openai:gpt-5.6-luna', 'openai:gpt-5.6-terra'],
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
@@ -648,8 +648,8 @@ export async function createDummyFiles(
         });
       }
     } else {
-      providers.push('openai:gpt-5.4-mini');
-      providers.push('openai:gpt-5.6');
+      providers.push('openai:gpt-5.6-luna');
+      providers.push('openai:gpt-5.6-terra');
     }
 
     if (action === 'compare') {
@@ -687,8 +687,8 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-5.4-mini');
-    providers.push('openai:gpt-5.6');
+    providers.push('openai:gpt-5.6-luna');
+    providers.push('openai:gpt-5.6-terra');
   }
 
   const nunjucks = getNunjucksEngine();

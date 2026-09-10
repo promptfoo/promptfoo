@@ -704,7 +704,7 @@ providers:
   - id: bedrock:amazon.nova-2-sonic-v1:0
     config:
       region: us-east-1
-      interfaceConfig:
+      inferenceConfiguration:
         maxTokens: 1024 # Maximum number of tokens to generate
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
         topP: 0.95 # Nucleus sampling parameter
@@ -735,7 +735,11 @@ providers:
         audioType: SPEECH
 ```
 
+`inferenceConfiguration` takes precedence over the older `inferenceConfig` and `interfaceConfig` aliases, in that order. Omitted settings use provider defaults. Legacy `interfaceConfig.max_new_tokens` and `interfaceConfig.top_p` map to `maxTokens` and `topP`.
+
 Audio input must be base64-encoded. You can use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
+
+`toolConfig` declares tools the model can request. Promptfoo does not execute Nova Sonic tools: when a tool is requested, the provider stops the response, closes the session, and returns an unsupported-execution error without sending a tool result. The requested tool ID, name, and original JSON arguments are retained in `metadata.toolCalls` as `toolUseId`, `toolName`, and `content`.
 
 ### Amazon Nova Reel (Video Generation)
 

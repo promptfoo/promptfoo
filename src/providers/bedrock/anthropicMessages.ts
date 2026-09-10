@@ -53,6 +53,7 @@ const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
   'anthropic.claude-opus-4-7',
   'anthropic.claude-opus-4-8',
   'anthropic.claude-opus-5',
+  'anthropic.claude-sonnet-5',
 ];
 const BEDROCK_ANTHROPIC_MESSAGES_ONLY_MODELS = new Set([
   'anthropic.claude-mythos-5',
@@ -132,14 +133,19 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     // A configured proxy may require its own explicit bearer credential or API key.
     // Native AWS credentials and Anthropic-scoped defaults stay isolated.
     const allowProxyCredentials = isConfiguredBedrockProxy(this.config.apiBaseUrl);
-    return Object.fromEntries(
-      Object.entries(headers).filter(
-        ([name]) =>
-          (allowProxyCredentials &&
-            (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
-          !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+    return {
+      ...Object.fromEntries(
+        Object.entries(headers).filter(
+          ([name]) =>
+            (allowProxyCredentials &&
+              (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
+            !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+        ),
       ),
-    );
+      // The SDK merges request headers after the null defaults used to suppress
+      // ambient Anthropic headers, so restore Bedrock's required version here.
+      'anthropic-version': '2023-06-01',
+    };
   }
 }
 

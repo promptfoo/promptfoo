@@ -66,9 +66,10 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
     const agents = await import('@openai/agents');
 
     const executedSettings: Array<Pick<Agent<any, any>, 'model' | 'modelSettings'>> = [];
-    vi.spyOn(agents.Runner.prototype, 'run').mockImplementation(async (agent: any) => {
+    const recordRun = async (agent: any) => {
       executedSettings.push({ model: agent.model, modelSettings: agent.modelSettings });
       if (executedSettings.length === 1) {
+        expect(agent.tools[0]).toBe(childTool);
         await agent.tools[0].invoke({}, JSON.stringify({ input: 'Do the work.' }));
       }
       return {
@@ -76,10 +77,14 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
         usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
         newItems: [],
       } as any;
-    });
+    };
 
     await import('../../../src/providers/openai/agents');
     vi.resetModules();
+    const reloadedAgents = await import('@openai/agents');
+    for (const Runner of new Set([agents.Runner, reloadedAgents.Runner])) {
+      vi.spyOn(Runner.prototype, 'run').mockImplementation(recordRun);
+    }
     const { OpenAiAgentsProvider } = await import('../../../src/providers/openai/agents');
 
     const childAgent = new agents.Agent({
@@ -88,12 +93,13 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
       model: 'gpt-5.4-mini',
       modelSettings: { temperature: 0.9 },
     });
+    const childTool = childAgent.asTool({ toolName: 'delegate_to_child' });
     const provider = new OpenAiAgentsProvider('support-agent', {
       config: {
         agent: new agents.Agent({
           name: 'Root Agent',
           instructions: 'Delegate work.',
-          tools: [childAgent.asTool({ toolName: 'delegate_to_child' })],
+          tools: [childTool],
         }),
         model: 'gpt-5.6-terra',
         modelSettings: { temperature: 0.2 },

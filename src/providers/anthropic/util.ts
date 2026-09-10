@@ -281,6 +281,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
     match: CLAUDE_MYTHOS_PREVIEW_RE,
     warningName: 'Claude Mythos Preview',
+    samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
   },
   {

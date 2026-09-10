@@ -1,7 +1,6 @@
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -73,9 +72,9 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { resolveOpenAiApiUrl } from './openai';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { usesCustomModelProvider } from './openai/codexApiKeyGating';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
@@ -1049,10 +1048,17 @@ export const providerMap: ProviderFactory[] = [
 
       const codexBaseUrl =
         providerOptions.config?.base_url ?? providerOptions.config?.cli_config?.openai_base_url;
+      const codexModelProvider =
+        providerOptions.config?.model_provider ??
+        providerOptions.config?.cli_config?.model_provider;
+      // Codex can load either backend selector from its own configuration files.
+      // Apply OpenAI model restrictions only when both native selectors are explicit.
       if (
         ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex'].includes(modelType) &&
-        !usesCustomModelProvider(providerOptions.config ?? {}) &&
-        isOpenAiFirstPartyApiUrl(typeof codexBaseUrl === 'string' ? codexBaseUrl : undefined)
+        codexModelProvider === 'openai' &&
+        typeof codexBaseUrl === 'string' &&
+        codexBaseUrl.length > 0 &&
+        isOpenAiFirstPartyApiUrl(codexBaseUrl)
       ) {
         assertOpenAiModelEndpointCompatibility(modelName || configuredModel);
       }
@@ -1099,22 +1105,12 @@ export const providerMap: ProviderFactory[] = [
         !['agents', 'chatkit'].includes(modelType) &&
         (modelType !== 'assistant' || assistantModel)
       ) {
-        const configApiHost = providerOptions.config?.apiHost;
-        const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-        const apiUrl = configApiHost
-          ? `https://${configApiHost}/v1`
-          : providerOptions.config?.apiBaseUrl ||
-            (envApiHost ? `https://${envApiHost}/v1` : undefined) ||
-            providerOptions.env?.OPENAI_API_BASE_URL ||
-            providerOptions.env?.OPENAI_BASE_URL ||
-            getEnvString('OPENAI_API_BASE_URL') ||
-            getEnvString('OPENAI_BASE_URL') ||
-            'https://api.openai.com/v1';
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env);
         assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          modelName || configuredModel || 'gpt-5.6-terra',
           providerOptions,
         );
       }
@@ -1144,7 +1140,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          modelName || configuredModel || 'gpt-5.6-terra',
           providerOptions,
         );
       }
@@ -1444,9 +1440,12 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions.config, {
+        ...context.env,
+        ...providerOptions.env,
+      });
     },
   },
   {

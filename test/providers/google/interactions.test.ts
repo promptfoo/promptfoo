@@ -11,12 +11,14 @@ import { googleProviderFactories } from '../../../src/providers/families/google'
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleInteractionsProvider } from '../../../src/providers/google/interactions';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 vi.mock('../../../src/blobs', () => ({ storeBlob: vi.fn() }));
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
 
 describe('GoogleInteractionsProvider', () => {
+  let restoreGoogleEnv: () => void;
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockStoreBlob = vi.mocked(storeBlob);
   const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
@@ -57,6 +59,20 @@ describe('GoogleInteractionsProvider', () => {
     // resetAllMocks (not clearAllMocks) so per-test persistent setters like
     // mockFetchWithCache.mockResolvedValue cannot leak across randomized test order.
     vi.resetAllMocks();
+    // Each auth test supplies its own keys and project, independent of the developer shell.
+    restoreGoogleEnv = mockProcessEnv({
+      VERTEX_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      GOOGLE_API_BASE_URL: undefined,
+      GOOGLE_GENERATIVE_AI_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+      VERTEX_PROJECT_ID: undefined,
+      GOOGLE_PROJECT_ID: undefined,
+      GOOGLE_CLOUD_PROJECT: undefined,
+      GOOGLE_APPLICATION_CREDENTIALS: undefined,
+      GOOGLE_LOCATION: undefined,
+    });
     // Keep endpoint resolution hermetic: developers with gcloud configured often have
     // these set, which would silently redirect the Vertex endpoint assertions.
     vi.stubEnv('VERTEX_REGION', '');
@@ -72,6 +88,8 @@ describe('GoogleInteractionsProvider', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    restoreGoogleEnv();
+    vi.useRealTimers();
   });
 
   it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
@@ -168,7 +186,6 @@ describe('GoogleInteractionsProvider', () => {
               max_output_tokens: 2_048,
               thinking_level: 'low',
               video_config: { task: 'text_to_video' },
-              stop_sequences: ['stop'],
               seed: 42,
             },
             service_tier: 'priority',
@@ -204,6 +221,59 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
     },
   );
+
+  it.each(
+    [
+      { name: 'top-level stopSequences', config: { stopSequences: ['STOP'] } },
+      {
+        name: 'generationConfig aliases',
+        config: { generationConfig: { stopSequences: ['STOP'], stop_sequences: ['STOP'] } },
+      },
+      {
+        name: 'passthrough.generationConfig aliases',
+        config: {
+          passthrough: { generationConfig: { stopSequences: ['STOP'], stop_sequences: ['STOP'] } },
+        },
+      },
+      {
+        name: 'passthrough.generation_config aliases',
+        config: {
+          passthrough: { generation_config: { stopSequences: ['STOP'], stop_sequences: ['STOP'] } },
+        },
+      },
+      {
+        name: 'top-level passthrough aliases',
+        config: { passthrough: { stopSequences: ['STOP'], stop_sequences: ['STOP'] } },
+      },
+    ].flatMap((source) => ['provider', 'prompt'].map((scope) => ({ ...source, scope }))),
+  )('omits Omni stop sequences from $scope $name', async ({ config, scope }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+      config: {
+        apiKey: 'test-key',
+        seed: 42,
+        ...(scope === 'provider' ? config : {}),
+      },
+    });
+
+    const result = await provider.callApi(
+      'A city at dusk',
+      scope === 'prompt' ? ({ prompt: { config } } as any) : undefined,
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(result.error).toBeUndefined();
+    expect(body.generation_config).toEqual({ seed: 42 });
+    expect(body).not.toHaveProperty('stop_sequences');
+    expect(body).not.toHaveProperty('stopSequences');
+  });
 
   it('applies layered response_format precedence for Omni video requests', async () => {
     mockFetchWithCache.mockResolvedValue({
@@ -2150,6 +2220,166 @@ describe('GoogleInteractionsProvider', () => {
       model: 'gemini-omni-flash-preview',
     });
     expect(result.cost).toBeCloseTo((100 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
+  });
+
+  it.each([
+    { scope: 'provider', explicitResponseFormat: false },
+    { scope: 'provider', explicitResponseFormat: true },
+    { scope: 'prompt', explicitResponseFormat: false },
+    { scope: 'prompt', explicitResponseFormat: true },
+  ])(
+    'preserves Omni video capabilities for a $scope custom alias with explicit response format $explicitResponseFormat',
+    async ({ scope, explicitResponseFormat }) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          id: 'interaction-custom-video',
+          status: 'completed',
+          steps: [
+            {
+              type: 'model_output',
+              content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+            },
+          ],
+        },
+        cached: false,
+      } as any);
+      const passthrough = {
+        model: 'video-deployment',
+        ...(explicitResponseFormat
+          ? { response_format: { type: 'video', aspect_ratio: '9:16', resolution: '720p' } }
+          : {}),
+      };
+      const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example.test/v1beta',
+          aspectRatio: '9:16',
+          ...(scope === 'provider' ? { passthrough } : {}),
+        },
+      });
+
+      const result = await provider.callApi(
+        'Create a short robot demonstration.',
+        scope === 'prompt' ? ({ prompt: { config: { passthrough } } } as any) : undefined,
+      );
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(request.body as string)).toMatchObject({
+        model: 'video-deployment',
+        response_format: {
+          type: 'video',
+          aspect_ratio: '9:16',
+          ...(explicitResponseFormat ? { resolution: '720p' } : {}),
+        },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.video).toMatchObject({
+        id: 'interaction-custom-video',
+        model: 'video-deployment',
+      });
+      expect(mockStoreBlob).toHaveBeenCalledWith(
+        Buffer.from('video'),
+        'video/mp4',
+        expect.any(Object),
+      );
+    },
+  );
+
+  it.each(
+    [
+      { name: 'uniform rate', pricing: { cost: 0.01 }, expectedCost: 0.35 },
+      {
+        name: 'input and output rates',
+        pricing: { inputCost: 0.02, outputCost: 0.03 },
+        expectedCost: 0.95,
+      },
+      {
+        name: 'modality-specific rates',
+        pricing: {
+          cost: 0.01,
+          audioInputCost: 0.02,
+          imageInputCost: 0.03,
+          audioOutputCost: 0.04,
+          videoOutputCost: 0.05,
+        },
+        expectedCost: 1.19,
+      },
+      { name: 'zero rate', pricing: { cost: 0 }, expectedCost: 0 },
+      { name: 'no explicit rates', pricing: {}, expectedCost: undefined },
+      { name: 'only one explicit rate', pricing: { inputCost: 0.02 }, expectedCost: undefined },
+    ].flatMap((testCase) => ['provider', 'prompt'].map((scope) => ({ ...testCase, scope }))),
+  )('prices a custom Omni alias with $scope $name', async ({ pricing, expectedCost, scope }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        usage: {
+          total_input_tokens: 10,
+          total_output_tokens: 20,
+          total_reasoning_tokens: 5,
+          total_tokens: 35,
+          input_tokens_by_modality: [
+            { modality: 'audio', tokens: 2 },
+            { modality: 'image', tokens: 3 },
+          ],
+          output_tokens_by_modality: [
+            { modality: 'audio', tokens: 4 },
+            { modality: 'video', tokens: 16 },
+          ],
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://gateway.example.test/v1beta',
+        passthrough: { model: 'video-deployment' },
+        ...(scope === 'provider' ? pricing : {}),
+      },
+    });
+
+    const result = await provider.callApi(
+      'A city at dusk',
+      scope === 'prompt' ? ({ prompt: { config: pricing } } as any) : undefined,
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: 'video-deployment',
+      response_format: { type: 'video' },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.video?.model).toBe('video-deployment');
+    if (expectedCost === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(expectedCost, 12);
+    }
+  });
+
+  it('does not bill cached custom Omni alias responses with explicit pricing', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        usage: { total_input_tokens: 10, total_output_tokens: 20 },
+      },
+      cached: true,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { model: 'video-deployment' },
+        cost: 0.01,
+      },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
   });
 
   it('uses a Robotics passthrough model for tools, text output, and billing', async () => {
@@ -4164,6 +4394,7 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('falls back to the provider polling timeout when the prompt omits it', async () => {
+    vi.useFakeTimers();
     mockFetchWithCache
       .mockResolvedValueOnce({
         data: { id: 'interaction-provider-timeout', status: 'in_progress' },
@@ -4187,8 +4418,7 @@ describe('GoogleInteractionsProvider', () => {
 
     const pollTimeoutMs = mockFetchWithCache.mock.calls[1][2] as number;
     expect(result.error).toBeUndefined();
-    expect(pollTimeoutMs).toBeGreaterThan(0);
-    expect(pollTimeoutMs).toBeLessThanOrEqual(30);
+    expect(pollTimeoutMs).toBe(30);
   });
 
   it('surfaces a terminal non-completed interaction status', async () => {

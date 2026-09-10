@@ -223,6 +223,58 @@ describe('XAIResponsesProvider', () => {
     expect(provider.getResolvedApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
   });
 
+  it.each(['low', 'medium', 'high', 'xhigh'] as const)(
+    'accepts Grok 4.6 reasoning effort %s',
+    async (effort) => {
+      const provider = new TestableXAIResponsesProvider('grok-4.6', {
+        config: { reasoning: { effort } },
+      });
+      expect((await provider.getRequestBody('hello')).body.reasoning).toEqual({ effort });
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'uses the effective Grok 4.6 model from %s passthrough for effort and sampling',
+    async (configSource) => {
+      const config = {
+        passthrough: {
+          model: 'grok-4.6',
+          reasoning: { effort: 'xhigh' },
+          presence_penalty: 0.5,
+          frequency_penalty: 0.7,
+          stop: ['END'],
+        },
+      };
+      const provider = new TestableXAIResponsesProvider('grok-3-mini', {
+        config: configSource === 'provider' ? config : {},
+      });
+      const { body } = await provider.getRequestBody(
+        'hello',
+        configSource === 'prompt'
+          ? { prompt: { raw: 'hello', label: 'hello', config }, vars: {} }
+          : undefined,
+      );
+      expect(body.model).toBe('grok-4.6');
+      expect(body.reasoning).toEqual({ effort: 'xhigh' });
+      expect(body).not.toHaveProperty('presence_penalty');
+      expect(body).not.toHaveProperty('frequency_penalty');
+      expect(body).not.toHaveProperty('stop');
+    },
+  );
+
+  it.each([
+    ['grok-4.6', 'none'],
+    ['grok-4.6', 'minimal'],
+    ['grok-4.5', 'xhigh'],
+  ])('validates effort %s/%s against the effective wire model', async (model, effort) => {
+    const provider = new TestableXAIResponsesProvider('grok-4.6', {
+      config: { passthrough: { model, reasoning: { effort } } },
+    });
+    await expect(provider.getRequestBody('hello')).rejects.toThrow(
+      `xAI model ${model} does not support reasoning.effort ${JSON.stringify(effort)}`,
+    );
+  });
+
   it('rejects unsupported reasoning effort values for Grok 4.5 and its aliases', async () => {
     for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
       for (const effort of ['none', 'xhigh']) {

@@ -4,7 +4,7 @@ This example demonstrates how to use promptfoo to evaluate OpenAI's vision capab
 
 ## Features Demonstrated
 
-- Using OpenAI's GPT-4o with vision capabilities
+- Using OpenAI's GPT-5.6 Sol with vision capabilities
 - Incorporating images in prompts using JSON format
 - Passing image URLs as variables
 - Testing vision model responses against expected content

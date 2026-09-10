@@ -2360,7 +2360,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.base_url
-        ? { config: { ...(config.cli_config ?? {}), base_url: config.base_url } }
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
         : {}),
       ephemeral: config.ephemeral ?? true,
       experimentalRawEvents: config.experimental_raw_events ?? false,
@@ -2387,6 +2387,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { developerInstructions: config.developer_instructions }
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
+      ...(config.base_url
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
+        : {}),
       persistExtendedHistory: config.persist_extended_history ?? false,
     };
   }

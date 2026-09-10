@@ -371,6 +371,225 @@ describe('OpenAiAgentsProvider execution overrides', () => {
   it.each([
     ['model', { model: 'override-model' }],
     ['model settings', { modelSettings: { temperature: 0.2 } }],
+    ['model and model settings', { model: 'override-model', modelSettings: { temperature: 0.2 } }],
+  ])('refreshes callback-updated handoff graphs with %s overrides', async (_name, overrides) => {
+    const modelProvider = new RecordingModelProvider();
+    setDefaultModelProvider(modelProvider);
+
+    const resolutionAgent = new Agent({
+      name: 'Resolution Agent',
+      instructions: 'Original resolution instructions.',
+      model: 'resolution-model',
+      modelSettings: { temperature: 0.8 },
+    });
+    const staleDestination = new Agent({ name: 'Stale Destination' });
+    const target = new Agent({
+      name: 'Target',
+      instructions: 'Original target instructions.',
+      model: 'target-model',
+      modelSettings: { temperature: 0.8 },
+      handoffs: [staleDestination, resolutionAgent],
+    });
+    let transfer = 0;
+    const onHandoff = vi.fn(async () => {
+      transfer += 1;
+      target.instructions = `Target instructions for transfer ${transfer}.`;
+      target.tools = [
+        tool({
+          name: `transfer_tool_${transfer}`,
+          description: 'Tool selected by the handoff callback.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+          execute: async () => 'Tool result.',
+        }),
+      ];
+      target.handoffs = [resolutionAgent, supportAgent];
+      resolutionAgent.instructions = `Resolution instructions for transfer ${transfer}.`;
+    });
+    const supportAgent = new Agent({
+      name: 'Support Agent',
+      model: 'initial-model',
+      modelSettings: { temperature: 0.8 },
+      handoffs: [handoff(target, { onHandoff })],
+    });
+    // Both the initial graph and the callback's replacement graph contain a cycle.
+    target.handoffs.push(supportAgent);
+    const provider = new OpenAiAgentsProvider('support-workflow', {
+      config: { agent: supportAgent, ...overrides },
+    });
+
+    for (const iteration of [1, 2]) {
+      await expect(provider.callApi(`Escalate request ${iteration}.`)).resolves.toMatchObject({
+        output: 'Escalated successfully.',
+      });
+      const requests = modelProvider.model.requests.slice((iteration - 1) * 3);
+      expect(requests).toHaveLength(3);
+      expect(requests[1].systemInstructions).toBe(`Target instructions for transfer ${iteration}.`);
+      expect(requests[1].tools.map((candidate) => candidate.name)).toEqual([
+        `transfer_tool_${iteration}`,
+      ]);
+      expect(requests[1].handoffs.map((candidate) => candidate.toolName)).toEqual([
+        'transfer_to_Resolution_Agent',
+        'transfer_to_Support_Agent',
+      ]);
+      expect(requests[2].systemInstructions).toBe(
+        `Resolution instructions for transfer ${iteration}.`,
+      );
+      expect(modelProvider.modelNames.slice((iteration - 1) * 3)).toEqual(
+        'model' in overrides
+          ? ['override-model', 'override-model', 'override-model']
+          : ['initial-model', 'target-model', 'resolution-model'],
+      );
+      expect(requests.map((request) => request.modelSettings)).toEqual(
+        Array(3).fill('modelSettings' in overrides ? { temperature: 0.2 } : { temperature: 0.8 }),
+      );
+    }
+    expect(onHandoff).toHaveBeenCalledTimes(2);
+    expect(target.model).toBe('target-model');
+    expect(target.modelSettings).toEqual({ temperature: 0.8 });
+  });
+
+  it.each([
+    ['model', { model: 'override-model' }],
+    ['model settings', { modelSettings: { temperature: 0.2 } }],
+    ['model and model settings', { model: 'override-model', modelSettings: { temperature: 0.2 } }],
+  ])('refreshes tool-updated plain Agent handoffs with %s overrides', async (_name, overrides) => {
+    const model = new ToolCallingModel();
+    const getModel = vi.fn(() => model);
+    setDefaultModelProvider({ getModel });
+    const resolutionAgent = new Agent({
+      name: 'Resolution Agent',
+      instructions: 'Original resolution instructions.',
+      model: 'resolution-model',
+      modelSettings: { temperature: 0.8 },
+    });
+    const target = new Agent({
+      name: 'Target',
+      instructions: 'Original target instructions.',
+      model: 'target-model',
+      modelSettings: { temperature: 0.8 },
+      handoffs: [new Agent({ name: 'Stale Destination' }), resolutionAgent],
+    });
+    const selectedTool = tool({
+      name: 'selected_account_tool',
+      description: 'Tool for the selected account.',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: async () => 'Selected account.',
+    });
+    const configureTarget = vi.fn(async () => {
+      target.instructions = 'Use the selected account.';
+      target.tools = [selectedTool];
+      target.handoffs = [resolutionAgent, supportAgent];
+      target.model = 'selected-account-model';
+      target.modelSettings = { temperature: 0.6, topP: 0.4 };
+      resolutionAgent.instructions = 'Resolve the selected account.';
+      return 'Configured the target.';
+    });
+    const supportAgent = new Agent({
+      name: 'Support Agent',
+      model: 'initial-model',
+      modelSettings: { temperature: 0.8 },
+      tools: [
+        tool({
+          name: 'delegate',
+          description: 'Configure the handoff target.',
+          parameters: {
+            type: 'object',
+            properties: { input: { type: 'string' } },
+            required: ['input'],
+            additionalProperties: false,
+          },
+          execute: configureTarget,
+        }),
+      ],
+      handoffs: [target],
+    });
+    target.handoffs.push(supportAgent);
+    const provider = new OpenAiAgentsProvider('support-workflow', {
+      config: { agent: supportAgent, ...overrides },
+    });
+
+    await expect(provider.callApi('Configure and transfer this request.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    expect(configureTarget).toHaveBeenCalledTimes(1);
+    expect(model.requests).toHaveLength(4);
+    expect(model.requests[2].systemInstructions).toBe('Use the selected account.');
+    expect(model.requests[2].tools.map((candidate) => candidate.name)).toEqual([
+      'selected_account_tool',
+    ]);
+    expect(model.requests[2].handoffs.map((candidate) => candidate.toolName)).toEqual([
+      'transfer_to_Resolution_Agent',
+      'transfer_to_Support_Agent',
+    ]);
+    expect(model.requests[3].systemInstructions).toBe('Resolve the selected account.');
+    expect(getModel.mock.calls).toEqual(
+      'model' in overrides
+        ? Array(4).fill(['override-model'])
+        : [['initial-model'], ['initial-model'], ['selected-account-model'], ['resolution-model']],
+    );
+    expect(model.requests.map((request) => request.modelSettings)).toEqual(
+      'modelSettings' in overrides
+        ? Array(4).fill({ temperature: 0.2 })
+        : [
+            { temperature: 0.8 },
+            { temperature: 0.8 },
+            { temperature: 0.6, topP: 0.4 },
+            { temperature: 0.8 },
+          ],
+    );
+    expect(target.model).toBe('selected-account-model');
+    expect(target.modelSettings).toEqual({ temperature: 0.6, topP: 0.4 });
+  });
+
+  it.each([false, 'mock'] as const)(
+    'preserves plain handoff tool mocks with model overrides when executeTools is %s',
+    async (executeTools) => {
+      const model = new ToolCallingModel();
+      const getModel = vi.fn(() => model);
+      setDefaultModelProvider({ getModel });
+      const execute = vi.fn(async () => 'Real tool result.');
+      const target = new Agent({
+        name: 'Target',
+        model: 'target-model',
+        modelSettings: { temperature: 0.8 },
+        tools: [
+          tool({
+            name: 'delegate',
+            description: 'A tool that must stay mocked.',
+            parameters: {
+              type: 'object',
+              properties: { input: { type: 'string' } },
+              required: ['input'],
+              additionalProperties: false,
+            },
+            execute,
+          }),
+        ],
+      });
+      const provider = new OpenAiAgentsProvider('support-workflow', {
+        config: {
+          agent: new Agent({ name: 'Root', handoffs: [target] }),
+          model: 'override-model',
+          modelSettings: { temperature: 0.2 },
+          executeTools,
+        },
+      });
+
+      await expect(provider.callApi('Transfer and mock the tool.')).resolves.toMatchObject({
+        output: 'Escalated successfully.',
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(model.requests).toHaveLength(3);
+      expect(getModel.mock.calls).toEqual(Array(3).fill(['override-model']));
+      expect(model.requests.map((request) => request.modelSettings)).toEqual(
+        Array(3).fill({ temperature: 0.2 }),
+      );
+    },
+  );
+
+  it.each([
+    ['model', { model: 'override-model' }],
+    ['model settings', { modelSettings: { temperature: 0.2 } }],
   ])(
     'preserves lifecycle listeners across recursive %s override cloning',
     async (_name, overrides) => {

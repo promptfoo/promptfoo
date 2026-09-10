@@ -418,12 +418,14 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 
 export class GoogleLiveProvider implements ApiProvider {
   config: GoogleProviderConfig;
+  env?: ProviderOptions['env'];
   modelName: string;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
     this.config = options.config || {};
+    this.env = options.env;
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -468,8 +470,13 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
+    return (
+      this.config.apiKey ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
+    );
   }
 
   /**
@@ -488,23 +495,15 @@ export class GoogleLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    // Try OAuth2 first (required for WebSocket Live API - API keys are not supported)
-    // Fall back to API key only if OAuth2 is not available
+    // Preserve OAuth2 precedence when credentials are available; API keys are also supported.
     const accessToken = await this.getAccessToken();
     const apiKey = this.getApiKey();
 
     if (!accessToken && !apiKey) {
       throw new Error(
-        'Google authentication is not configured. The Live API requires OAuth2 authentication.\n\n' +
-          'Either:\n' +
-          '1. Set up Application Default Credentials:\n' +
-          '   gcloud auth application-default login --client-id-file=client_secret.json ' +
-          '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
-          '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
-          '3. Add `credentials` to the provider config with service account JSON\n\n' +
-          'Note: GOOGLE_API_KEY is NOT supported for the Live API WebSocket endpoint.\n' +
-          'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
-          'These options require the google-auth-library package to be installed.',
+        'Google authentication is not configured. For the Live API, set apiKey in the provider ' +
+          'config, GOOGLE_API_KEY, or GEMINI_API_KEY. Alternatively, use OAuth2 with Application ' +
+          'Default Credentials, GOOGLE_APPLICATION_CREDENTIALS, or credentials in the provider config.',
       );
     }
 
@@ -679,14 +678,27 @@ export class GoogleLiveProvider implements ApiProvider {
       let isResolved = false;
       let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
       let liveTranslateHardTimeout: ReturnType<typeof setTimeout> | undefined;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let cancelFinalStateRetrieval: ((reason: Error) => void) | undefined;
+      let statefulApiCleanupStarted = false;
       let armLiveTranslateCompletion = () => {};
       let armLiveTranslateHardTimeout = () => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
+          clearTimeout(timeout);
           clearTimeout(liveTranslateCompletionTimeout);
           clearTimeout(liveTranslateHardTimeout);
+          cancelFinalStateRetrieval?.(new Error('Final state retrieval cancelled'));
+          if (statefulApi && !statefulApiCleanupStarted) {
+            statefulApiCleanupStarted = true;
+            try {
+              statefulApi.kill('SIGTERM');
+            } catch (error) {
+              logger.error('Failed to terminate stateful API process', { error });
+            }
+          }
           resolve(response);
         }
       };
@@ -697,15 +709,14 @@ export class GoogleLiveProvider implements ApiProvider {
       }
       const usesRealtimeTextInput = apiVersion === 'v1beta';
 
-      // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
+      // Construct the WebSocket URL with the selected OAuth2 token or API key.
       let url: string;
       if (accessToken) {
         url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
         logger.debug('Using OAuth2 access token for Google Live API authentication');
       } else {
-        // Note: API keys are likely to be rejected by the Live API WebSocket endpoint
         url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-        logger.debug('Using API key for Google Live API authentication (may not be supported)');
+        logger.debug('Using API key for Google Live API authentication');
       }
 
       const ws = new WebSocketCtor(url);
@@ -809,9 +820,11 @@ export class GoogleLiveProvider implements ApiProvider {
       // finite-input translation while still leaving enough room for a response that begins near
       // the idle limit to finish its trailing-output grace period.
       const liveTranslateHardDeadlineMs = effectiveTimeoutMs + liveTranslateCompletionGraceMs;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
         clearTimeout(timeout);
+        if (isResolved || hasFinalized) {
+          return;
+        }
         timeout = setTimeout(() => {
           logger.error(
             `WebSocket connection timed out after ${effectiveTimeoutMs}ms of inactivity`,
@@ -859,8 +872,8 @@ export class GoogleLiveProvider implements ApiProvider {
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
-        if (hasFinalized) {
-          logger.debug('finalizeResponse already called, skipping duplicate call');
+        if (hasFinalized || isResolved) {
+          logger.debug('Response already finalized or resolved, skipping finalization');
           return;
         }
         hasFinalized = true;
@@ -882,17 +895,45 @@ export class GoogleLiveProvider implements ApiProvider {
         // onclose/timeout) — the caller has moved on and won't read the
         // result.
         if (!isResolved && !toolsDisabled && config.functionToolStatefulApi) {
+          const controller = new AbortController();
+          const finalStateTimeoutMs = config.timeoutMs || 30_000;
+          let finalStateTimeout: ReturnType<typeof setTimeout> | undefined;
+          // Bound headers and JSON consumption, even if an aborted fetch wrapper settles late.
+          const cancelled = new Promise<never>((_, reject) => {
+            cancelFinalStateRetrieval = (reason) => {
+              clearTimeout(finalStateTimeout);
+              reject(reason);
+              controller.abort();
+            };
+            finalStateTimeout = setTimeout(() => {
+              cancelFinalStateRetrieval?.(
+                new Error(`Final state retrieval timed out after ${finalStateTimeoutMs}ms`),
+              );
+            }, finalStateTimeoutMs);
+          });
           try {
             const url = new URL('get_state', config.functionToolStatefulApi.url).href;
-            statefulApiState = await fetchJson(url);
+            const state = await Promise.race([
+              fetchJson(url, { signal: controller.signal }),
+              cancelled,
+            ]);
+            if (isResolved) {
+              return;
+            }
+            statefulApiState = state;
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
-            logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+            if (!isResolved) {
+              logger.error('Error retrieving final state of api', { error: err });
+            }
+          } finally {
+            clearTimeout(finalStateTimeout);
+            cancelFinalStateRetrieval = undefined;
           }
         }
 
-        if (statefulApi) {
-          statefulApi.kill();
+        if (isResolved) {
+          return;
         }
 
         // Determine final output text and thinking
@@ -1650,8 +1691,10 @@ export class GoogleLiveProvider implements ApiProvider {
         logger.debug(
           `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`,
         );
-        if (statefulApi && !statefulApi.killed) {
-          statefulApi.kill('SIGTERM');
+        // Finalization closes the socket before awaiting final state. That expected
+        // close must leave both the result and the stateful worker to the finalizer.
+        if (hasFinalized) {
+          return;
         }
         clearTimeout(timeout);
         // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.

@@ -148,6 +148,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    return super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return !this.isReasoningCapabilityModel(modelName);
+  }
+
   /**
    * Loads a function from an external file
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
@@ -195,6 +203,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const capabilityModelName = this.normalizeCapabilityModelName(
       passthroughModel ?? this.getCapabilityModelName(),
     ).replace(/(^|\/)ft:/, '$1');
+    // Repeating the configured model must preserve subclass capabilities, such as
+    // Mantle Grok's completion cap and temperature support.
+    const usesConfiguredCapabilities =
+      capabilityModelName ===
+      this.normalizeCapabilityModelName(this.getCapabilityModelName()).replace(/(^|\/)ft:/, '$1');
     const isGPT5Model = this.isGPT5Model(capabilityModelName);
     const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
@@ -204,10 +217,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
-    const isReasoningModel =
-      passthroughModel === undefined
-        ? this.isReasoningModel()
-        : super.isReasoningModel(capabilityModelName);
+    const isReasoningModel = usesConfiguredCapabilities
+      ? this.isReasoningModel()
+      : this.isReasoningCapabilityModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -224,8 +236,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const supportsTemperature =
-      passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel;
+    const supportsTemperature = usesConfiguredCapabilities
+      ? this.supportsTemperature()
+      : this.supportsTemperatureForCapabilityModel(capabilityModelName);
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;

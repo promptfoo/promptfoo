@@ -45,13 +45,13 @@ providers:
 | [AI21 Labs](./ai21.md)                                  | Jamba models                                                     | `ai21:jamba-mini`                                                                                                     |
 | [AI/ML API](./aimlapi.md)                               | Tap into 300+ cutting-edge AI models with a single API           | `aimlapi:chat:deepseek-r1`                                                                                            |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                    | Alibaba Cloud's Qwen models                                      | `alibaba:qwen-max` or `qwen-plus`                                                                                     |
-| [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-ai/DeepSeek-V3-0324`                                                                             |
+| [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-v3`                                                                                              |
 | [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-4-6-v1`                                                                             |
 | [AWS Bedrock Agents](./bedrock-agents.md)               | Amazon Bedrock Agents for orchestrating AI workflows             | `bedrock-agent:YOUR_AGENT_ID`                                                                                         |
 | [Amazon SageMaker](./sagemaker.md)                      | Models deployed on SageMaker endpoints                           | `sagemaker:my-endpoint-name`                                                                                          |
 | [Azure OpenAI](./azure.md)                              | Azure-hosted OpenAI models                                       | `azureopenai:gpt-4o-custom-deployment-name`                                                                           |
 | [Cerebras](./cerebras.md)                               | High-performance inference API for open models                   | `cerebras:gpt-oss-120b`                                                                                               |
-| [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                          |
+| [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                     |
 | [Cloudflare AI Gateway](./cloudflare-gateway.md)        | Route requests through Cloudflare AI Gateway                     | `cloudflare-gateway:openai:gpt-5.2`                                                                                   |
 | [Cloudera](./cloudera.md)                               | Cloudera AI Inference Service                                    | `cloudera:llama-2-13b-chat`                                                                                           |
 | [CometAPI](./cometapi.md)                               | 500+ AI models from multiple providers via unified API           | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                                                               |
@@ -143,8 +143,7 @@ Providers are specified using various syntax options:
    ```yaml
    - id: openai:gpt-5
      config:
-       temperature: 0.7
-       max_tokens: 150
+       max_completion_tokens: 150
    ```
 
 3. File-based configuration:
@@ -153,16 +152,12 @@ Providers are specified using various syntax options:
 
    ```yaml title="provider.yaml"
    id: openai:chat:gpt-5
-   config:
-     temperature: 0.7
    ```
 
    Or multiple providers:
 
    ```yaml title="providers.yaml"
    - id: openai:gpt-5
-     config:
-       temperature: 0.7
    - id: anthropic:messages:claude-opus-4-6
      config:
        max_tokens: 1000
@@ -269,6 +264,7 @@ Many providers support these common configuration options:
 
 - `temperature`: Controls randomness (0.0 to 1.0)
 - `max_tokens`: Maximum number of tokens to generate
+- `max_completion_tokens`: Output token cap for OpenAI reasoning models such as GPT-5
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Penalizes frequent tokens
 - `presence_penalty`: Penalizes new tokens based on presence in text
@@ -280,8 +276,7 @@ Example:
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
-      max_tokens: 150
+      max_completion_tokens: 150
       top_p: 0.9
       frequency_penalty: 0.5
       presence_penalty: 0.5
@@ -300,7 +295,6 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
       mcp:
         enabled: true
         server:

@@ -128,6 +128,14 @@ const AZURE_PRIORITY_MULTIPLIERS = new Map<string, number>([
   ['gpt-5.1-codex-mini-2025-11-13', 1.8],
 ]);
 
+// Azure Retail Prices publishes GPT-5.5 Global ShortCo PP input/cache/output
+// meters at $12.50/$1.25/$75 per 1M tokens, versus $5/$0.50/$30 standard.
+// This override is limited to those short-context meters: https://prices.azure.com/api/retail/prices
+const AZURE_SHORT_CONTEXT_PRIORITY_MULTIPLIERS = new Map<string, number>([
+  ['gpt-5.5', 2.5],
+  ['gpt-5.5-2026-04-24', 2.5],
+]);
+
 /**
  * Throws a configuration error with standard formatting and documentation link
  */
@@ -219,7 +227,10 @@ export function calculateAzureCost(
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
-      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(modelName) ?? 1)
+      ? (model.cost.priorityMultiplier ??
+        (longContext ? undefined : AZURE_SHORT_CONTEXT_PRIORITY_MULTIPLIERS.get(modelName)) ??
+        AZURE_PRIORITY_MULTIPLIERS.get(modelName) ??
+        1)
       : 1;
 
   return (

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache, fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
@@ -14,6 +14,8 @@ import { filterProviders } from '../../src/util/eval/filterProviders';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import type { OpenAiCompletionOptions } from '../../src/providers/openai/types';
+import type { CallApiContextParams } from '../../src/types/index';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -436,6 +438,117 @@ describe('MetaProvider request body shaping', () => {
   });
 });
 
+describe('Meta Chat effective-model request consistency', () => {
+  it.each([
+    ['provider', 'muse-spark-1.1', 'muse-spark-1.3'],
+    ['prompt', 'muse-spark-1.1', 'muse-spark-1.3'],
+    ['provider', 'muse-spark-1.3', 'muse-spark-1.1'],
+    ['prompt', 'muse-spark-1.3', 'muse-spark-1.1'],
+  ])(
+    'preserves direct request fields through %s override from %s to %s',
+    async (scope, from, to) => {
+      const config = {
+        apiKey: 'meta-fixture-key',
+        apiBaseUrl: 'https://meta-proxy.example/v1',
+        reasoning_effort: 'low' as const,
+        max_completion_tokens: 4096,
+        temperature: 0.4,
+      };
+      const direct = asChat(createMetaProvider(`meta:chat:${to}`, { config }));
+      const overridden = asChat(
+        createMetaProvider(`meta:chat:${from}`, {
+          config: { ...config, passthrough: { model: scope === 'provider' ? to : from } },
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'Hello', label: 'test', config: { passthrough: { model: to } } },
+            }
+          : undefined;
+      const { body: baseline } = await direct.getOpenAiBody('Hello');
+      const { body } = await overridden.getOpenAiBody('Hello', context);
+
+      expect(baseline).toMatchObject({
+        model: to,
+        reasoning_effort: 'low',
+        max_completion_tokens: 4096,
+        temperature: 0.4,
+      });
+      expect(body).toEqual(baseline);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(overridden.modelName).toBe(from);
+      expect(overridden.id()).toBe(`meta:chat:${from}`);
+      expect(overridden.getApiUrl()).toBe(config.apiBaseUrl);
+      expect(overridden.getApiKey()).toBe(config.apiKey);
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'preserves direct defaults through %s model override',
+    async (scope) => {
+      const direct = asChat(createMetaProvider('meta:chat:muse-spark-1.3'));
+      const overridden = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: scope === 'provider' ? { passthrough: { model: 'muse-spark-1.3' } } : {},
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'test',
+                config: { passthrough: { model: 'muse-spark-1.3' } },
+              },
+            }
+          : undefined;
+      const { body: baseline } = await direct.getOpenAiBody('Hello');
+      const { body } = await overridden.getOpenAiBody('Hello', context);
+
+      expect(baseline.temperature).toBe(0);
+      expect(body).toEqual(baseline);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'retains local effort validation through %s model override',
+    async (scope) => {
+      const direct = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.3', { config: { reasoning_effort: 'none' } }),
+      );
+      const overridden = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: {
+            reasoning_effort: 'none',
+            ...(scope === 'provider' ? { passthrough: { model: 'muse-spark-1.3' } } : {}),
+          },
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'test',
+                config: { passthrough: { model: 'muse-spark-1.3' } },
+              },
+            }
+          : undefined;
+
+      await expect(direct.getOpenAiBody('Hello')).rejects.toThrow(/reasoning_effort 'none'/);
+      await expect(overridden.getOpenAiBody('Hello', context)).rejects.toThrow(
+        /reasoning_effort 'none'/,
+      );
+    },
+  );
+});
+
 // Cost for 1,000 input tokens (400 cached) and 500 output tokens.
 const museSparkPricingCases = [
   { modelName: 'muse-spark-1.1', expectedCost: 0.002935 },
@@ -786,6 +899,145 @@ describe('MetaResponsesProvider request body shaping', () => {
     });
 
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(/logprobs/);
+  });
+});
+
+// These fixtures compare existing local estimates; they do not certify vendor prices.
+describe.each(['chat', 'responses'] as const)('Meta %s effective-model billing', (mode) => {
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  afterEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  async function invoke(
+    model: string,
+    config: OpenAiCompletionOptions = {},
+    context?: CallApiContextParams,
+    cached = false,
+  ) {
+    const data =
+      mode === 'chat'
+        ? {
+            choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+            usage: {
+              total_tokens: 1500,
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              prompt_tokens_details: { cached_tokens: 400 },
+            },
+          }
+        : {
+            id: 'resp_meta_fixture',
+            object: 'response',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                status: 'completed',
+                content: [{ type: 'output_text', text: 'hi' }],
+              },
+            ],
+            usage: {
+              total_tokens: 1500,
+              input_tokens: 1000,
+              output_tokens: 500,
+              input_tokens_details: { cached_tokens: 400 },
+            },
+          };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data,
+      cached,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+    const provider = createMetaProvider(`meta:${mode}:${model}`, {
+      config: {
+        apiKey: 'meta-fixture-key',
+        apiBaseUrl: 'https://meta-proxy.example/v1',
+        ...config,
+      },
+    });
+    const result = await provider.callApi('Say hi', context);
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
+    expect(url).toBe(
+      `https://meta-proxy.example/v1/${mode === 'chat' ? 'chat/completions' : 'responses'}`,
+    );
+    expect(new Headers(request?.headers).get('authorization')).toBe('Bearer meta-fixture-key');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('hi');
+    return { result, body: JSON.parse(request?.body as string) };
+  }
+
+  it.each([
+    ['provider', 'muse-spark-1.1', 'muse-spark-1.3-contributor', 0.0001608],
+    ['prompt', 'muse-spark-1.1', 'muse-spark-1.3-contributor', 0.0001608],
+    ['provider', 'muse-spark-1.3-contributor', 'muse-spark-1.1', 0.002935],
+    ['prompt', 'muse-spark-1.3-contributor', 'muse-spark-1.1', 0.002935],
+  ] as const)(
+    'uses the effective local price row for %s override from %s to %s',
+    async (scope, from, to, expected) => {
+      const direct = await invoke(to);
+      const overridden = await invoke(
+        from,
+        { passthrough: { model: scope === 'provider' ? to : from } },
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'Say hi', label: 'test', config: { passthrough: { model: to } } },
+            }
+          : undefined,
+      );
+
+      expect(direct.body.model).toBe(to);
+      expect(overridden.body.model).toBe(to);
+      expect(direct.result.cost).toBeCloseTo(expected, 12);
+      expect(overridden.result.cost).toBeCloseTo(expected, 12);
+      expect(overridden.result.tokenUsage).toEqual(direct.result.tokenUsage);
+    },
+  );
+
+  it('does not borrow the configured model price for an unknown effective model', async () => {
+    const { body, result } = await invoke('muse-spark-1.1', {
+      passthrough: { model: 'muse-future' },
+    });
+    expect(body.model).toBe('muse-future');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('combines a partial explicit rate with the effective local price row', async () => {
+    const { body, result } = await invoke('muse-spark-1.1', {
+      passthrough: { model: 'muse-spark-1.3-contributor' },
+      outputCost: 4 / 1e6,
+    });
+    expect(body.model).toBe('muse-spark-1.3-contributor');
+    expect(result.cost).toBeCloseTo(0.0020608, 12);
+  });
+
+  it('preserves explicit zero cost and response-cache behavior with a model override', async () => {
+    const config = { passthrough: { model: 'muse-spark-1.3-contributor' } };
+    const explicit = await invoke('muse-spark-1.1', { ...config, cost: 0 });
+    const cached = await invoke('muse-spark-1.1', config, undefined, true);
+    const cachedExplicit = await invoke('muse-spark-1.1', { ...config, cost: 0 }, undefined, true);
+    expect(explicit.result.cost).toBe(0);
+    expect(cached.result.cached).toBe(true);
+    expect(cached.result.cost).toBeUndefined();
+    expect(cachedExplicit.result.cost).toBe(0);
+  });
+
+  it('uses the configured model when prompt passthrough replaces the provider model override', async () => {
+    const { body, result } = await invoke(
+      'muse-spark-1.1',
+      {
+        passthrough: { model: 'muse-spark-1.3-contributor' },
+      },
+      { vars: {}, prompt: { raw: 'Say hi', label: 'test', config: { passthrough: {} } } },
+    );
+    expect(body.model).toBe('muse-spark-1.1');
+    expect(result.cost).toBeCloseTo(0.002935, 12);
   });
 });
 

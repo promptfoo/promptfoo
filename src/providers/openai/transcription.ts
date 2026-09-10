@@ -356,43 +356,17 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
 
       // Calculate average quality metrics from segments
       const segments = data.segments || [];
-      let avgLogprob: number | undefined;
-      let avgCompressionRatio: number | undefined;
-      let avgNoSpeechProb: number | undefined;
-
-      if (segments.length > 0) {
-        const validSegments = segments.filter(
-          (s: any) =>
-            s.avg_logprob !== undefined ||
-            s.compression_ratio !== undefined ||
-            s.no_speech_prob !== undefined,
-        );
-
-        if (validSegments.length > 0) {
-          const sumLogprob = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.avg_logprob || 0),
-            0,
-          );
-          const sumCompressionRatio = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.compression_ratio || 0),
-            0,
-          );
-          const sumNoSpeechProb = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.no_speech_prob || 0),
-            0,
-          );
-
-          avgLogprob = validSegments.some((s: any) => s.avg_logprob !== undefined)
-            ? sumLogprob / validSegments.length
-            : undefined;
-          avgCompressionRatio = validSegments.some((s: any) => s.compression_ratio !== undefined)
-            ? sumCompressionRatio / validSegments.length
-            : undefined;
-          avgNoSpeechProb = validSegments.some((s: any) => s.no_speech_prob !== undefined)
-            ? sumNoSpeechProb / validSegments.length
-            : undefined;
-        }
-      }
+      const averageMetric = (key: 'avg_logprob' | 'compression_ratio' | 'no_speech_prob') => {
+        const values = segments
+          .map((segment: any) => segment[key])
+          .filter((value: unknown): value is number => typeof value === 'number');
+        return values.length > 0
+          ? values.reduce((sum: number, value: number) => sum + value, 0) / values.length
+          : undefined;
+      };
+      const avgLogprob = averageMetric('avg_logprob');
+      const avgCompressionRatio = averageMetric('compression_ratio');
+      const avgNoSpeechProb = averageMetric('no_speech_prob');
 
       // Format output based on response format
       let output: string;

@@ -15,6 +15,30 @@ export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
 export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
 export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
 
+export function resolveOpenAiApiUrl(
+  config: Pick<OpenAiSharedOptions, 'apiHost' | 'apiBaseUrl'>,
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const envApiHost = env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+  if (envApiHost) {
+    return `https://${envApiHost}/v1`;
+  }
+  return (
+    env?.OPENAI_API_BASE_URL ||
+    env?.OPENAI_BASE_URL ||
+    getEnvString('OPENAI_API_BASE_URL') ||
+    getEnvString('OPENAI_BASE_URL') ||
+    defaultUrl
+  );
+}
+
 /**
  * Whether `customHeaders` contains a case-insensitive override for `headerName`.
  * A differently-cased duplicate would otherwise survive an object spread and be
@@ -107,23 +131,7 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    if (this.config.apiHost) {
-      return `https://${this.config.apiHost}/v1`;
-    }
-    if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
-    }
-    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (envApiHost) {
-      return `https://${envApiHost}/v1`;
-    }
-    return (
-      this.env?.OPENAI_API_BASE_URL ||
-      this.env?.OPENAI_BASE_URL ||
-      getEnvString('OPENAI_API_BASE_URL') ||
-      getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return resolveOpenAiApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   getApiKey(): string | undefined {

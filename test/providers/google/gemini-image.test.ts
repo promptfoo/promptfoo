@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';
 import { mockProcessEnv } from '../../util/utils';
+import type { GoogleAuthOptions } from 'google-auth-library';
 
 vi.mock('../../../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -220,6 +221,66 @@ describe('GeminiImageProvider', () => {
     );
   });
 
+  it.each(['provider', 'process'])(
+    'should keep regional %s GOOGLE_LOCATION on Vertex OAuth',
+    async (scope) => {
+      if (scope === 'provider') {
+        mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'ambient-project' });
+      } else {
+        mockProcessEnv({ GOOGLE_LOCATION: 'europe-west1' });
+      }
+      const request = vi.fn().mockResolvedValue({
+        data: {
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } }] } },
+          ],
+        },
+      });
+      mockGetGoogleClient.mockResolvedValue({
+        client: { request },
+        projectId: 'test-project',
+      });
+      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+        config: { vertexai: true },
+        env:
+          scope === 'provider'
+            ? { GOOGLE_API_KEY: 'scoped-key', GOOGLE_LOCATION: 'europe-west1' }
+            : undefined,
+      });
+
+      const result = await provider.callApi('Draw a circle');
+
+      expect(result.error).toBeUndefined();
+      expect(result.images).toHaveLength(1);
+      expect(mockGetGoogleClient).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(request).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          url: 'https://europe-west1-aiplatform.googleapis.com/v1/projects/test-project/locations/europe-west1/publishers/google/models/gemini-2.5-flash-image:generateContent',
+        }),
+      );
+    },
+  );
+
+  it.each(['provider', 'process'])(
+    'should reject regional %s GOOGLE_LOCATION for explicit Vertex Express',
+    async (scope) => {
+      if (scope === 'process') {
+        mockProcessEnv({ GOOGLE_LOCATION: 'europe-west1' });
+      }
+      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+        config: { vertexai: true, expressMode: true },
+        env: scope === 'provider' ? { GOOGLE_LOCATION: 'europe-west1' } : undefined,
+      });
+
+      const result = await provider.callApi('Draw a circle');
+
+      expect(result.error).toContain('region europe-west1 was configured');
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('should use Vertex Express when vertexai is true with an API key and no project', async () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
       config: { vertexai: true, apiKey: 'vertex-express-key' },
@@ -397,6 +458,150 @@ describe('GeminiImageProvider', () => {
     const result = await provider.callApi('');
 
     expect(result.error).toBe('Prompt is required for image generation');
+  });
+
+  describe('nested GoogleAuthOptions routing', () => {
+    afterEach(() => {
+      // Successful OAuth calls leave the fallback HTTP response unused.
+      mockFetchWithCache.mockReset();
+    });
+
+    class OpaqueAuthClient {
+      #marker = 'original-client';
+      request = vi.fn().mockResolvedValue({
+        data: {
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } }] } },
+          ],
+        },
+      });
+
+      getMarker() {
+        return this.#marker;
+      }
+    }
+
+    const nestedOptions = {
+      projectId: () => ({ projectId: 'nested-project' }),
+      keyFile: () => ({ keyFile: '/mock/service-account.json' }),
+      authClient: () => ({
+        authClient: new OpaqueAuthClient() as unknown as GoogleAuthOptions['authClient'],
+      }),
+      keyFilename: () => ({ keyFilename: '/mock/service-account.json' }),
+      credentials: () => ({
+        credentials: { client_email: 'mock@example.com', private_key: 'mock' },
+      }),
+    } satisfies Record<string, () => Partial<GoogleAuthOptions>>;
+
+    it.each(Object.keys(nestedOptions) as (keyof typeof nestedOptions)[])(
+      'uses nested %s OAuth despite ambient and provider-scoped API keys',
+      async (option) => {
+        const googleAuthOptions: Partial<GoogleAuthOptions> = nestedOptions[option]();
+        const client =
+          (googleAuthOptions.authClient as unknown as OpaqueAuthClient) || new OpaqueAuthClient();
+        mockGetGoogleClient.mockResolvedValue({
+          client: client as any,
+          projectId: 'nested-project',
+        });
+        mockResolveProjectId.mockResolvedValue(googleAuthOptions.projectId || 'adc-project');
+
+        for (const env of [undefined, { GOOGLE_API_KEY: 'scoped-key' }]) {
+          vi.clearAllMocks();
+          mockSuccessfulImageResponse();
+          const config = { vertexai: true, googleAuthOptions };
+          const provider = new GeminiImageProvider('gemini-3.1-flash-image', { config, env });
+
+          const result = await provider.callApi('Draw a circle');
+
+          expect(result.error).toBeUndefined();
+          expect(result.images).toHaveLength(1);
+          expect(mockFetchWithCache).not.toHaveBeenCalled();
+          expect(mockGetGoogleClient).toHaveBeenCalledWith(
+            expect.objectContaining({ googleAuthOptions }),
+          );
+          const passedOptions = mockGetGoogleClient.mock.calls[0][0];
+          if (typeof passedOptions !== 'object' || passedOptions === null) {
+            throw new Error('Expected structured OAuth options');
+          }
+          expect(passedOptions.googleAuthOptions).toBe(googleAuthOptions);
+          expect(client.request).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+              url: `https://aiplatform.googleapis.com/v1/projects/${googleAuthOptions.projectId || 'adc-project'}/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent`,
+            }),
+          );
+          expect(provider.config).toBe(config);
+          if (googleAuthOptions.authClient) {
+            const passedClient = passedOptions.googleAuthOptions?.authClient;
+            expect(passedClient).toBe(client);
+            expect((passedClient as unknown as OpaqueAuthClient).getMarker()).toBe(
+              'original-client',
+            );
+          }
+        }
+      },
+    );
+
+    it.each(['projectId', 'keyFile', 'authClient'] as const)(
+      'keeps explicit native mode with nested %s',
+      async (option) => {
+        mockSuccessfulImageResponse();
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { vertexai: false, googleAuthOptions: nestedOptions[option]() },
+        });
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent',
+        );
+      },
+    );
+
+    it.each([{ apiKey: 'explicit-key' }, { expressMode: true }])(
+      'allows explicit Express with only a nested project: %j',
+      async (explicitOptions) => {
+        mockSuccessfulImageResponse();
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: {
+            vertexai: true,
+            googleAuthOptions: nestedOptions.projectId(),
+            ...explicitOptions,
+          },
+        });
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+          'https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image:generateContent',
+        );
+      },
+    );
+
+    it.each(['keyFile', 'authClient'] as const)(
+      'keeps nested %s credentials ahead of explicit Express',
+      async (option) => {
+        const googleAuthOptions = nestedOptions[option]();
+        const client = new OpaqueAuthClient();
+        mockGetGoogleClient.mockResolvedValue({ client: client as any, projectId: 'adc-project' });
+        mockSuccessfulImageResponse();
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { vertexai: true, googleAuthOptions, apiKey: 'explicit-key', expressMode: true },
+        });
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+        expect(mockGetGoogleClient).toHaveBeenCalledWith(
+          expect.objectContaining({ googleAuthOptions }),
+        );
+        expect(client.request).toHaveBeenCalledOnce();
+      },
+    );
   });
 
   describe('Vertex AI', () => {

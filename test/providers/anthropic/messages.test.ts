@@ -4192,14 +4192,44 @@ describe('AnthropicMessagesProvider', () => {
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 5 },
       } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Response');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_p');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_k');
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Using unknown Anthropic model'),
       );
+    });
+
+    it.each([
+      { name: 'default', sampling: {} },
+      { name: 'explicit', sampling: { temperature: 0.5, top_p: 0.7, top_k: 40 } },
+    ])('omits $name sampling parameters with adaptive thinking', async ({ sampling }) => {
+      const provider = createProvider('claude-mythos-preview', {
+        config: { thinking: { type: 'adaptive' }, ...sampling },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'msg-mythos-preview-sampling',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 

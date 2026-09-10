@@ -44,7 +44,6 @@ Browse the complete [model gallery](https://fal.ai/models) for available models 
 
 **For speed**: `fal:image:fal-ai/flux/schnell` - Ultra-fast generation in 1-4 steps  
 **For quality**: `fal:image:fal-ai/flux/dev` - High-quality 12B parameter model  
-**For highest quality**: `fal:image:fal-ai/imagen4/preview` - Google's highest quality model  
 **For text/logos**: `fal:image:fal-ai/ideogram/v3` - Exceptional typography handling  
 **For professional work**: `fal:image:fal-ai/flux-pro/v1.1-ultra` - Up to 2K resolution  
 **For vector art**: `fal:image:fal-ai/recraft/v3/text-to-image` - SOTA with vector art and typography  

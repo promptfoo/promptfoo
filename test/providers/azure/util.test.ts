@@ -352,16 +352,27 @@ describe('calculateAzureCost', () => {
     );
   });
 
+  it.each(['gpt-5.5', 'gpt-5.5-2026-04-24'])(
+    'uses the published Global short-context priority meters for %s',
+    (model) => {
+      const config = { passthrough: { service_tier: 'priority' } };
+      expect(calculateAzureCost(model, config, 1_000, 0)).toBeCloseTo(0.0125, 12);
+      expect(calculateAzureCost(model, config, 1_000, 0, 1_000)).toBeCloseTo(0.00125, 12);
+      expect(calculateAzureCost(model, config, 0, 1_000)).toBeCloseTo(0.075, 12);
+      expect(calculateAzureCost(model, config, 1_000, 1_000)).toBeCloseTo(0.0875, 12);
+      expect(calculateAzureCost(model, config, 272_000, 1_000, 1_000)).toBeCloseTo(
+        (271_000 * 12.5 + 1_000 * 1.25 + 1_000 * 75) / 1e6,
+        12,
+      );
+      // The short-context correction must not change the existing long-context calculation.
+      expect(calculateAzureCost(model, config, 272_001, 1_000, 1_000)).toBeCloseTo(
+        (2 * (271_001 * 10 + 1_000 * 1 + 1_000 * 45)) / 1e6,
+        12,
+      );
+    },
+  );
+
   it('uses cached and priority pricing for existing GPT-5 models', () => {
-    expect(
-      calculateAzureCost(
-        'gpt-5.5',
-        { passthrough: { service_tier: 'priority' } },
-        2_000,
-        1_000,
-        500,
-      ),
-    ).toBeCloseTo(0.0755, 12);
     // Top-level `service_tier` is intentionally ignored here: chat/completion never send
     // it on the wire, and the Responses provider bridges it into `passthrough` at the
     // call site. Only `passthrough.service_tier` reflects what Azure actually billed.

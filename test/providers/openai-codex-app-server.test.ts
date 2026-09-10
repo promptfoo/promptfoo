@@ -6270,47 +6270,63 @@ describe('OpenAICodexAppServerProvider', () => {
     await resultPromise;
   });
 
-  it('propagates base_url to spawn environment', async () => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
+  it.each(['thread/start', 'thread/resume'])(
+    'routes base_url through the native config key for %s',
+    async (threadMethod) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        apiKey: 'test-key',
-        base_url: 'https://custom.example.com/v1',
-        thread_cleanup: 'none',
-      },
-    });
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          apiKey: 'test-key',
+          base_url: 'https://custom.example.com/v1',
+          cli_config: {
+            openai_base_url: 'https://raw.example.com/v1',
+            model_provider: 'openai',
+            model_reasoning_effort: 'low',
+          },
+          model_provider: 'tenant',
+          ...(threadMethod === 'thread/resume' ? { thread_id: 'thr_base' } : {}),
+          thread_cleanup: 'none',
+        },
+      });
 
-    const resultPromise = provider.callApi('Hello');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
+      const resultPromise = provider.callApi('Hello');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
 
-    const spawnEnv = mocks.spawn.mock.calls[0][2].env;
-    expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
-    expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env;
+      expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
+      expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
 
-    const loginStart = await waitForMessage(
-      server,
-      (message) => message.method === 'account/login/start',
-    );
-    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
-    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
+      const loginStart = await waitForMessage(
+        server,
+        (message) => message.method === 'account/login/start',
+      );
+      expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
+      server.send({ id: loginStart.id, result: { type: 'apiKey' } });
 
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_base', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
-    });
-    await resultPromise;
-  });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === threadMethod,
+      );
+      expect(threadStart.params.modelProvider).toBe('tenant');
+      expect(threadStart.params.config).toEqual({
+        openai_base_url: 'https://custom.example.com/v1',
+        model_provider: 'openai',
+        model_reasoning_effort: 'low',
+      });
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_base', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
+      });
+      await resultPromise;
+    },
+  );
 });

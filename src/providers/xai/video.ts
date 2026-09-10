@@ -12,6 +12,7 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isSecretField, looksLikeSecret } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -119,6 +120,8 @@ export interface XaiVideoOptions {
   region?: string;
   /** Custom headers */
   headers?: Record<string, string>;
+  /** Nonsecret account namespace required for persistent video cache reuse. Never use an API key. */
+  cacheNamespace?: string;
   /** Video duration in seconds (1-15, default: 8) */
   duration?: number;
   /** Aspect ratio (default: 16:9) */
@@ -233,16 +236,23 @@ function buildVideoInputReference(
   modelName: XaiVideoModel,
   config: XaiVideoOptions,
 ): string | null {
+  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
+  const referenceAudios =
+    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
   if (config.image?.url) {
     const imageUrl = isGrokImagineVideo15Model(modelName)
       ? sanitizeVideoCacheReferenceUrl(config.image.url)
       : config.image.url;
-    return `image:${imageUrl}`;
+    return referenceImages.length || referenceAudios.length
+      ? JSON.stringify({
+          type: 'xai-reference-media',
+          image: imageUrl,
+          reference_images: referenceImages.map(sanitizeVideoCacheReferenceUrl),
+          reference_audios: referenceAudios,
+        })
+      : `image:${imageUrl}`;
   }
 
-  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
-  const referenceAudios =
-    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
   if (!referenceImages.length && !referenceAudios.length) {
     return null;
   }
@@ -258,11 +268,7 @@ function buildVideoInputReference(
   });
 }
 
-function canUsePersistentCache(modelName: XaiVideoModel, config: XaiVideoOptions): boolean {
-  if (!isGrokImagineVideo15Model(modelName)) {
-    return true;
-  }
-
+function canUsePersistentCache(config: XaiVideoOptions): boolean {
   const inputUrls = [
     ...(config.image?.url ? [config.image.url] : []),
     ...(config.reference_images?.map(({ url }) => url) ?? []),
@@ -351,6 +357,43 @@ export class XAIVideoProvider implements ApiProvider {
     return DEFAULT_API_BASE_URL;
   }
 
+  private getPersistentCacheScope(): Record<string, string> | undefined {
+    const namespace =
+      typeof this.config.cacheNamespace === 'string'
+        ? this.config.cacheNamespace.trim()
+        : undefined;
+    const apiUrl = this.getApiUrl();
+    const apiKey = this.getApiKey();
+    if (
+      !namespace ||
+      looksLikeSecret(namespace) ||
+      namespace === apiKey ||
+      (apiKey && apiUrl.includes(apiKey)) ||
+      !isVideoCacheReferenceUrlSafe(apiUrl)
+    ) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(apiUrl);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.search ||
+        url.hash ||
+        url.pathname.split('/').some((segment) => {
+          const decoded = decodeURIComponent(segment);
+          return isSecretField(decoded) || looksLikeSecret(decoded) || decoded === apiKey;
+        })
+      ) {
+        return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return { 'api-base-url': apiUrl, 'account-namespace': namespace };
+  }
+
   /**
    * Build authorization headers
    */
@@ -376,7 +419,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     const body: Record<string, unknown> = {
       model: this.modelName,
-      prompt,
+      ...(isGrokImagineVideo15Model(this.modelName) && !prompt.trim() ? {} : { prompt }),
     };
 
     // Add generation-specific parameters (not for edits)
@@ -464,10 +507,13 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     if (!hasReferenceMedia) {
+      if (isVideo15 && !config.image?.url && !prompt.trim()) {
+        return 'Video generation requires a non-empty prompt.';
+      }
       return undefined;
     }
 
-    if (config.image?.url) {
+    if (config.image?.url && !isVideo15) {
       return hasReferenceAudios
         ? 'reference media cannot be combined with image input. Use one video generation mode per request.'
         : 'reference_images cannot be combined with image input. Use one video generation mode per request.';
@@ -477,7 +523,7 @@ export class XAIVideoProvider implements ApiProvider {
       return 'reference media cannot be combined with video edits. Use one video generation mode per request.';
     }
 
-    if (!prompt.trim()) {
+    if (!prompt.trim() && !(isVideo15 && (config.image?.url || hasReferenceImages))) {
       return 'Reference-to-video requires a non-empty prompt.';
     }
 
@@ -693,7 +739,8 @@ export class XAIVideoProvider implements ApiProvider {
       return { error: generationParameterError };
     }
 
-    const persistentCacheAllowed = canUsePersistentCache(this.modelName, config);
+    const cacheScope = this.getPersistentCacheScope();
+    const persistentCacheAllowed = cacheScope !== undefined && canUsePersistentCache(config);
     const cacheKey = persistentCacheAllowed
       ? generateVideoCacheKey({
           provider: 'xai',
@@ -702,11 +749,14 @@ export class XAIVideoProvider implements ApiProvider {
           size: `${aspectRatio}:${resolution}`,
           seconds: duration,
           inputReference: buildVideoInputReference(this.modelName, config),
+          cacheScope,
         })
       : undefined;
 
     if (!persistentCacheAllowed) {
-      logger.debug(`[${PROVIDER_NAME}] Skipping persistent cache for credential-bearing input URL`);
+      logger.debug(
+        `[${PROVIDER_NAME}] Skipping persistent cache without a safe endpoint and account scope or input URL`,
+      );
     }
 
     // Check cache (skip for edits)
@@ -804,7 +854,7 @@ export class XAIVideoProvider implements ApiProvider {
       ? calculateVideoCost(actualDuration, false, {
           modelName: this.modelName,
           resolution: outputResolution,
-          imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
+          imageInputCount: (config.reference_images?.length ?? 0) + (config.image?.url ? 1 : 0),
         })
       : undefined;
     const cost = reportedCost ?? estimatedCost;

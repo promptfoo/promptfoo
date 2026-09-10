@@ -7,6 +7,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -300,6 +301,16 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}`);
+
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+      });
+
       it.each([
         'gpt-5.6',
         'gpt-5.6-sol',
@@ -1042,7 +1053,14 @@ describe('Provider Registry', () => {
           await expect(
             factory!.create(
               `openai:${modelType}:${transcriptionModel}`,
-              mockProviderOptions,
+              {
+                ...mockProviderOptions,
+                config: {
+                  ...mockProviderOptions.config,
+                  model_provider: 'openai',
+                  base_url: 'https://api.openai.com/v1',
+                },
+              },
               mockContext,
             ),
           ).rejects.toThrow(expectedError);
@@ -1051,7 +1069,12 @@ describe('Provider Registry', () => {
               `openai:${modelType}`,
               {
                 ...mockProviderOptions,
-                config: { ...mockProviderOptions.config, model: transcriptionModel },
+                config: {
+                  ...mockProviderOptions.config,
+                  model: transcriptionModel,
+                  model_provider: 'openai',
+                  base_url: 'https://api.openai.com/v1',
+                },
               },
               mockContext,
             ),
@@ -1219,15 +1242,71 @@ describe('Provider Registry', () => {
     it.each(
       codexRoutes.flatMap((route) =>
         [
-          { backend: 'explicit OpenAI host', config: { base_url: 'https://api.openai.com/v1' } },
-          { backend: 'explicit OpenAI provider', config: { model_provider: 'OpenAI' } },
+          { backend: 'implicit Codex configuration', config: {} },
+          { backend: 'only native URL', config: { base_url: 'https://api.openai.com/v1' } },
+          { backend: 'only native provider', config: { model_provider: 'openai' } },
+          {
+            backend: 'only raw native URL',
+            config: { cli_config: { openai_base_url: 'https://api.openai.com/v1' } },
+          },
+          {
+            backend: 'only raw native provider',
+            config: { cli_config: { model_provider: 'openai' } },
+          },
+        ].flatMap((backend) =>
+          ['gpt-transcribe', 'vendor/gpt-live-transcribe'].map((model) => ({
+            route,
+            ...backend,
+            model,
+          })),
+        ),
+      ),
+    )(
+      'defers $model on $route with $backend to Codex configuration',
+      async ({ route, config, model }) => {
+        const factory = providerMap.find((candidate) => candidate.test(`openai:${route}`));
+        for (const inline of [true, false]) {
+          const provider = await factory!.create(
+            `openai:${route}${inline ? `:${model}` : ''}`,
+            {
+              ...mockProviderOptions,
+              config: { ...mockProviderOptions.config, ...config, ...(!inline && { model }) },
+            },
+            mockContext,
+          );
+          expect(provider).toHaveProperty('config.model', model);
+        }
+      },
+    );
+
+    it.each(
+      codexRoutes.flatMap((route) =>
+        [
+          {
+            backend: 'explicit OpenAI host and provider',
+            config: { base_url: 'https://api.openai.com/v1', model_provider: 'openai' },
+          },
+          {
+            backend: 'raw OpenAI host and provider',
+            config: {
+              cli_config: {
+                openai_base_url: 'https://api.openai.com/v1',
+                model_provider: 'openai',
+              },
+            },
+          },
           {
             backend: 'first-class native provider',
-            config: { model_provider: 'openai', cli_config: { model_provider: 'tenant' } },
+            config: {
+              model_provider: 'openai',
+              base_url: 'https://api.openai.com/v1',
+              cli_config: { model_provider: 'tenant' },
+            },
           },
           {
             backend: 'first-class native URL',
             config: {
+              model_provider: 'openai',
               base_url: 'https://api.openai.com/v1',
               cli_config: { openai_base_url: 'https://gateway.example/v1' },
             },
@@ -1246,7 +1325,7 @@ describe('Provider Registry', () => {
     });
 
     it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'])(
-      'allows custom OpenAI-compatible endpoints to route their own %s model',
+      'keeps an explicit custom endpoint ahead of a native environment host for %s',
       async (customModel) => {
         const providerPath = `openai:chat:${customModel}`;
         const factory = providerMap.find((candidate) => candidate.test(providerPath));
@@ -1256,6 +1335,7 @@ describe('Provider Registry', () => {
           providerPath,
           {
             ...mockProviderOptions,
+            env: { OPENAI_API_HOST: 'api.openai.com' },
             config: {
               ...mockProviderOptions.config,
               apiBaseUrl: 'https://gateway.example/v1',
@@ -1265,6 +1345,13 @@ describe('Provider Registry', () => {
         );
 
         expect((customProvider as { modelName?: string }).modelName).toBe(customModel);
+        expect((customProvider as OpenAiChatCompletionProvider).getApiUrl()).toBe(
+          'https://gateway.example/v1',
+        );
+        expect(
+          (await (customProvider as OpenAiChatCompletionProvider).getOpenAiBody('hello')).body
+            .model,
+        ).toBe(customModel);
       },
     );
 
@@ -1614,41 +1701,25 @@ describe('Provider Registry', () => {
     });
 
     it('should resolve relative paths correctly for file-based providers', async () => {
-      // We'll test the path resolution by looking at the provider IDs, which contain the path
-
-      // Test Golang provider
-      const golangFactory = providerMap.find((f) => f.test('golang:script.go'));
-      expect(golangFactory).toBeDefined();
-
-      // These variables would be used in actual implementation tests
-      // Adding underscore prefix to mark as intentionally unused
-      const _customContext = {
-        basePath: '/custom/path',
-      };
-
-      // For relative paths, they should be joined with basePath
-      const _relativePath = 'script.go';
-      const _expectedRelativePath = path.join('/custom/path', _relativePath);
-
-      // For absolute paths, they should remain unchanged
-      const _absolutePath = path.resolve('/absolute/path/script.go');
-
-      // Test Python provider with file:// URL
       const pythonFactory = providerMap.find((f) => f.test('file://script.py'));
       expect(pythonFactory).toBeDefined();
+      const customContext = { ...mockContext, basePath: '/custom/path' };
 
-      // Test exec provider
-      const execFactory = providerMap.find((f) => f.test('exec:script.sh'));
-      expect(execFactory).toBeDefined();
+      // Local script paths remain relative; the config loader has already resolved its base path.
+      await pythonFactory!.create('file://script.py', mockProviderOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith('script.py', mockProviderOptions);
 
-      // Instead of testing the exact path resolution logic (which involves mocking),
-      // we'll verify that the registry factories exist and are configured correctly.
-      // The actual path resolution logic is now identical in all three providers,
-      // so testing one provider's implementation would effectively test all of them.
+      // Cloud configs resolve script paths from the process working directory.
+      const cloudOptions = { ...mockProviderOptions, config: { isCloudConfig: true } };
+      await pythonFactory!.create('file://script.py', cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(
+        path.join(process.cwd(), 'script.py'),
+        cloudOptions,
+      );
 
-      // For actual end-to-end tests of the path resolution, integration tests would be more
-      // appropriate than these unit tests, especially if we need to mock or spy on
-      // the provider constructors.
+      const absolutePath = path.resolve('/absolute/path/script.py');
+      await pythonFactory!.create(`file://${absolutePath}`, cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
     });
 
     it('should preserve absolute paths in file-based providers', async () => {

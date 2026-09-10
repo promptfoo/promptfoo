@@ -245,6 +245,7 @@ describe('package manifests', () => {
           rule.enabled === false &&
           rule.matchManagers?.includes('github-actions') &&
           rule.matchPackageNames?.includes('node') &&
+          rule.matchPackageNames?.includes('actions/node-versions') &&
           rule.matchFileNames?.includes(workflowPath),
       ),
     ).toBe(true);
@@ -474,6 +475,7 @@ describe('package manifests', () => {
         rule.enabled === false &&
         rule.matchManagers?.includes('github-actions') &&
         rule.matchPackageNames?.includes('node') &&
+        rule.matchPackageNames?.includes('actions/node-versions') &&
         rule.matchFileNames?.includes(workflowPath) &&
         rule.matchCurrentValue,
     );

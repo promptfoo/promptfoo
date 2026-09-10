@@ -642,15 +642,18 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Default | Description                                              |
-| ------------------ | ------ | ------- | -------------------------------------------------------- |
-| `duration`         | number | 8       | Video length in seconds (1-15)                           |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3        |
-| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p |
-| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation         |
-| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)        |
-| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                         |
-| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                           |
+| Option             | Type   | Default | Description                                                                 |
+| ------------------ | ------ | ------- | --------------------------------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                                              |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                           |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p                    |
+| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation                            |
+| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)                           |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                            |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                              |
+| `cacheNamespace`   | string | -       | Nonsecret account or tenant label that enables persistent video cache reuse |
+
+Set `cacheNamespace` in the provider config to a label unique to the account or tenant, and change it when switching accounts. Cache entries are also scoped to the API endpoint. Never use API keys, tokens, or credential hashes as the namespace. Without a namespace, or with credential-bearing endpoint or input URLs, Promptfoo generates videos without reusing persistent cache entries.
 
 #### Image-to-Video
 
@@ -702,10 +705,12 @@ providers:
       resolution: '720p'
 ```
 
-Reference-to-video requires a non-empty prompt and at least one reference image or preset voice. It
-cannot be combined with `image` or `video`, and its resolution is capped at 720p. The Video 1.5
-family supports durations up to 15 seconds; the legacy `grok-imagine-video` model is limited to 10
-seconds and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
+Video 1.5 can combine a starting `image` with `reference_images`, preset `reference_audios`, or both.
+The prompt is optional when an `image` or `reference_images` is supplied; text-only and voice-only
+requests require a non-empty prompt. Reference-to-video cannot be combined with video editing,
+and its resolution is capped at 720p. The Video 1.5 family supports durations up to 15 seconds.
+The legacy `grok-imagine-video` model is limited to 10 seconds for reference-to-video, rejects
+starting-image/reference-image combinations, and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
 restricted to trusted partners in the United States.
 
 #### Pricing

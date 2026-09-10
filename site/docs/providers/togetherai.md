@@ -99,7 +99,7 @@ providers:
 
   - id: togetherai:moonshotai/Kimi-K3
     config:
-      temperature: 0.0
+      temperature: 1.0
       response_format: { type: 'json_object' }
       tools:
         - type: function
@@ -112,5 +112,7 @@ providers:
                 location: { type: 'string' }
                 unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
 ```
+
+Kimi K3 uses a fixed `temperature` of `1.0`; see Together AI's [sampling parameters](https://docs.together.ai/docs/kimi-k3-quickstart#sampling-parameters).
 
 For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).

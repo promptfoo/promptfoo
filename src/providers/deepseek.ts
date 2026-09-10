@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost, clampCachedTokens } from './shared';
+import { clampCachedTokens } from './shared';
 
 import type {
   ApiProvider,
@@ -11,7 +11,7 @@ import type {
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
-type DeepSeekConfig = OpenAiCompletionOptions;
+type DeepSeekConfig = OpenAiCompletionOptions & { cacheReadCost?: number };
 
 type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: {
@@ -43,39 +43,13 @@ function getDeepSeekCachedTokens(usage: DeepSeekUsage | undefined, promptTokens?
 }
 
 export const DEEPSEEK_CHAT_MODELS = [
-  {
-    id: 'deepseek-v4-flash',
-    cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
-    },
-  },
-  {
-    id: 'deepseek-v4-pro',
-    cost: {
-      input: 0.435 / 1e6,
-      output: 0.87 / 1e6,
-      cache_read: 0.003625 / 1e6,
-    },
-  },
+  // DeepSeek publishes peak/off-peak prices, but token usage does not establish
+  // the applicable billing period: https://api-docs.deepseek.com/quick_start/pricing/
+  { id: 'deepseek-v4-flash' },
+  { id: 'deepseek-v4-pro' },
   // Legacy aliases retained for compatibility.
-  {
-    id: 'deepseek-chat',
-    cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
-    },
-  },
-  {
-    id: 'deepseek-reasoner',
-    cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
-    },
-  },
+  { id: 'deepseek-chat' },
+  { id: 'deepseek-reasoner' },
 ];
 
 /**
@@ -99,21 +73,28 @@ export function calculateDeepSeekCost(
     return undefined;
   }
 
-  const model = DEEPSEEK_CHAT_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    // Use default pricing for unknown models
-    return calculateCost(modelName, config, promptTokens, completionTokens, DEEPSEEK_CHAT_MODELS);
-  }
-
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  const inputCost = config.inputCost ?? config.cost;
+  const outputCost = config.outputCost ?? config.cost;
+  const cacheReadCost = config.cacheReadCost ?? inputCost;
+  const ratesAndTokens = [
+    [inputCost, uncachedPromptTokens],
+    [cacheReadCost, billableCachedTokens],
+    [outputCost, completionTokens],
+  ];
+  if (
+    ratesAndTokens.some(
+      ([rate, tokens]) =>
+        tokens > 0 && (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0),
+    )
+  ) {
+    return undefined;
+  }
 
-  const inputCostTotal = inputCost * uncachedPromptTokens;
-  const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * completionTokens;
+  const inputCostTotal = uncachedPromptTokens > 0 ? inputCost * uncachedPromptTokens : 0;
+  const cacheReadCostTotal = billableCachedTokens > 0 ? cacheReadCost * billableCachedTokens : 0;
+  const outputCostTotal = completionTokens > 0 ? outputCost * completionTokens : 0;
 
   logger.debug(
     `DeepSeek cost calculation for ${modelName}: ` +
