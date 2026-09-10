@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { minVersion, satisfies, subset, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers } from '../scripts/architectureUtils';
+import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -509,6 +509,35 @@ describe('package manifests', () => {
     expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
       true,
     );
+  });
+
+  it('includes every browser loader in the optional production profile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<PackageManifest & { version?: string; dev?: boolean }>>(
+        'package-lock.json',
+      );
+    const browserSource = fs.readFileSync('src/providers/browser.ts', 'utf8');
+    const browserPackages = extractModuleSpecifiers(browserSource, 'src/providers/browser.ts')
+      .map(getPackageName)
+      .filter((name): name is string => name !== undefined);
+
+    expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
+    for (const dependency of new Set(browserPackages)) {
+      const range = packageJson.optionalDependencies?.[dependency];
+      expect(
+        range,
+        `${dependency} must be available to production browser consumers`,
+      ).toBeDefined();
+      // npm treats a same-root dev + optional declaration as dev-only during
+      // `npm ci --omit=dev`, even though packed consumers resolve it as optional.
+      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[dependency]).toBe(range);
+      const installed = packageLock.packages[`node_modules/${dependency}`];
+      expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
+      expect(installed?.version, `${dependency} must have a locked version`).toBeDefined();
+      expect(satisfies(installed.version!, range!)).toBe(true);
+    }
   });
 
   it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
