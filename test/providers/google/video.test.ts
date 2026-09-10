@@ -84,7 +84,7 @@ async function callVideoProviderWithPromptConfig(
   transport: VideoTransport,
   providerConfig: GoogleVideoOptions,
   promptConfig: GoogleVideoOptions,
-  modelName: GoogleVideoModel = 'veo-3.1-generate-preview',
+  modelName: string = 'veo-3.1-generate-preview',
 ) {
   const base64Video = Buffer.from('fake video').toString('base64');
   if (transport === 'Vertex') {
@@ -1186,6 +1186,82 @@ describe('GoogleVideoProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Invalid duration');
+    });
+
+    describe('resolution before duration diagnostics', () => {
+      it.each(['1080p', '4k'] as const)(
+        'reports the unsupported %s resolution for a 6-second native Veo 2 request',
+        async (resolution) => {
+          const provider = new GoogleVideoProvider('veo-2-generate-001', {
+            config: {
+              apiKey: 'test-api-key',
+              vertexai: false,
+              resolution,
+              durationSeconds: 6,
+            },
+          });
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe('Veo 2 only supports 720p resolution.');
+          expect(mockRequest).not.toHaveBeenCalled();
+          expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ['Google AI Studio', 'veo-2-generate-001', '720p', 6],
+        ['Google AI Studio', 'veo-3.1-generate-preview', '1080p', 8],
+        ['Google AI Studio', 'veo-3.1-generate-preview', '4k', 8],
+        ['Vertex', 'veo-3.1-generate-001', '1080p', 6],
+        ['Vertex', 'veo-3.1-generate-001', '4k', 6],
+      ] as const)(
+        'preserves %s %s at %s for %i seconds',
+        async (transport, model, resolution, durationSeconds) => {
+          const result = await callVideoProviderWithPromptConfig(
+            transport,
+            { resolution, durationSeconds },
+            {},
+            model,
+          );
+
+          expect(result.error).toBeUndefined();
+          expect(result.video?.blobRef?.uri).toBe('promptfoo://blob/abc123def456');
+          expect(getLastVideoCreateRequestBody(transport)).toMatchObject({
+            instances: [{ prompt: 'test prompt' }],
+            parameters: { resolution, durationSeconds },
+          });
+          expect(transport === 'Vertex' ? mockRequest : mockFetchWithTimeout).toHaveBeenCalledTimes(
+            2,
+          );
+          expect(
+            transport === 'Vertex' ? mockFetchWithTimeout : mockRequest,
+          ).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(['1080p', '4k'] as const)(
+        'still rejects a 6-second native Veo 3.1 request at supported %s resolution',
+        async (resolution) => {
+          const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+            config: {
+              apiKey: 'test-api-key',
+              vertexai: false,
+              resolution,
+              durationSeconds: 6,
+            },
+          });
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe(
+            'This configuration requires durationSeconds: 8 when using video extension, ' +
+              'reference images, or 1080p/4k resolution (received 6).',
+          );
+          expect(mockRequest).not.toHaveBeenCalled();
+          expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        },
+      );
     });
 
     it.each(
