@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InputsSchema } from '../../src/contracts/shared';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import {
   ApiProviderSchema,
   ProviderOptionsSchema,
@@ -66,6 +68,21 @@ describe('ProviderOptionsSchema', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toEqual({});
+  });
+
+  it('uses process env for a custom Together AI credential name after config parsing', () => {
+    vi.stubEnv('CUSTOM_TOGETHER_KEY', 'process-key');
+    try {
+      const parsed = ProviderOptionsSchema.parse({
+        config: { apiKeyEnvar: 'CUSTOM_TOGETHER_KEY' },
+        env: { CUSTOM_TOGETHER_KEY: 'provider-key', TOGETHER_API_KEY: 'registered-key' },
+      });
+      expect(parsed.env).toEqual({ TOGETHER_API_KEY: 'registered-key' });
+      const provider = createTogetherAiProvider('togetherai:chat:fixture', { config: parsed });
+      expect((provider as OpenAiChatCompletionProvider).getApiKey()).toBe('process-key');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
