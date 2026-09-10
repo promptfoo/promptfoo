@@ -10,7 +10,7 @@ import {
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
   trajectoryToolSetConfigError,
-} from '@promptfoo/util/traceAssertionConfig';
+} from '@promptfoo/contracts';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [

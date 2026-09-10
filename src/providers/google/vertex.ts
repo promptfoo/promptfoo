@@ -14,7 +14,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import {
-  applyClaude5RegionalPremium,
+  applyClaudeRegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -420,12 +420,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
-      // Regional and multi-region Vertex endpoints bill Claude 5 at a premium
-      // over the global endpoint.
+      // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
+      // over the global endpoint (see isClaudeRegionalPremiumModel).
       const pricingConfig =
         this.getRegion() === 'global'
           ? this.config
-          : applyClaude5RegionalPremium(normalizedModelName, this.config);
+          : applyClaudeRegionalPremium(normalizedModelName, this.config);
       const response = {
         cached: false,
         output,

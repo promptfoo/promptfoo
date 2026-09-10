@@ -61,7 +61,7 @@ describe('GroqProvider', () => {
     });
 
     it('should identify qwen as reasoning model', () => {
-      const provider = new GroqProvider('qwen/qwen3-32b', {});
+      const provider = new GroqProvider('qwen/qwen3.6-27b', {});
       expect(provider['isReasoningModel']()).toBe(true);
     });
 
@@ -83,7 +83,7 @@ describe('GroqProvider', () => {
     });
 
     it('should support temperature for qwen models', () => {
-      const provider = new GroqProvider('qwen/qwen3-32b', {});
+      const provider = new GroqProvider('qwen/qwen3.6-27b', {});
       expect(provider['supportsTemperature']()).toBe(true);
     });
 

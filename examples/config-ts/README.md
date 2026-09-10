@@ -15,7 +15,7 @@ This example demonstrates TypeScript configuration for promptfoo, including:
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
 - TypeScript loader (`tsx` recommended)
 
 Install dependencies:
@@ -73,6 +73,6 @@ Both OpenAI and Gemini support strict schema enforcement to ensure outputs match
 
 Node.js currently requires external loaders to run TypeScript files directly:
 
-- Node.js 20+ supports ES modules with the `--import` flag
+- Supported Node.js versions support ES modules with the `--import` flag
 - The `tsx` loader provides the best developer experience
 - Future versions may include native TypeScript support

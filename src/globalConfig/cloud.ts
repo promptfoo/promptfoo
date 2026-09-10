@@ -59,30 +59,47 @@ interface CloudTokenValidation {
   hasActiveLicense?: boolean;
 }
 
-export class CloudConfig {
-  private config: {
-    appUrl: string;
-    apiHost?: string;
-    apiKey?: string;
-    sharing?: boolean;
-    currentOrganizationId?: string;
-    currentTeamId?: string;
-    teams?: {
-      [organizationId: string]: {
-        currentTeamId?: string;
-        cache?: Array<{
-          id: string;
-          name: string;
-          slug: string;
-          lastFetched: string;
-        }>;
-      };
+interface CloudConfigState {
+  appUrl: string;
+  apiHost?: string;
+  apiKey?: string;
+  sharing?: boolean;
+  currentOrganizationId?: string;
+  currentTeamId?: string;
+  teams?: {
+    [organizationId: string]: {
+      currentTeamId?: string;
+      cache?: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        lastFetched: string;
+      }>;
     };
   };
+}
 
-  constructor() {
+export class CloudConfig {
+  private configState: CloudConfigState | null = null;
+
+  constructor(initializeImmediately: boolean = true) {
+    if (initializeImmediately) {
+      void this.config;
+    }
+  }
+
+  private get config(): CloudConfigState {
+    this.configState ??= this.readConfig();
+    return this.configState;
+  }
+
+  private set config(config: CloudConfigState) {
+    this.configState = config;
+  }
+
+  private readConfig(): CloudConfigState {
     const savedConfig = readGlobalConfig()?.cloud || {};
-    this.config = {
+    return {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
@@ -173,16 +190,7 @@ export class CloudConfig {
   }
 
   private reload(): void {
-    const savedConfig = readGlobalConfig()?.cloud || {};
-    this.config = {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost,
-      apiKey: savedConfig.apiKey,
-      sharing: savedConfig.sharing,
-      currentOrganizationId: savedConfig.currentOrganizationId,
-      currentTeamId: savedConfig.currentTeamId,
-      teams: savedConfig.teams,
-    };
+    this.config = this.readConfig();
   }
 
   saveValidatedApiToken(
@@ -336,4 +344,6 @@ export class CloudConfig {
 }
 
 // singleton instance
-export const cloudConfig = new CloudConfig();
+// The CLI initializes this singleton lazily after early --env-file handling. Direct CloudConfig
+// instances retain eager initialization for backward compatibility.
+export const cloudConfig = new CloudConfig(false);

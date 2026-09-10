@@ -2,9 +2,14 @@ import * as os from 'os';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getConfigDirectoryPath,
+  refreshConfigDirectoryPathFromEnv,
+  setConfigDirectoryPath,
+} from '../../../src/util/config/manage';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
+import { mockProcessEnv } from '../../util/utils';
 
 // Create hoisted mock functions for fs
 const mockFs = vi.hoisted(() => ({
@@ -36,9 +41,6 @@ vi.mock('node:fs', () => ({
 
 // Mock os module
 vi.mock('os');
-vi.mock('../../../src/envars', () => ({
-  getEnvString: vi.fn().mockReturnValue(undefined),
-}));
 vi.mock('../../../src/logger', () => ({
   default: {
     warn: vi.fn(),
@@ -46,9 +48,19 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 describe('config management', () => {
+  let restoreEnv: () => void;
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/home/user');
+    restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: undefined });
+    refreshConfigDirectoryPathFromEnv();
+    setConfigDirectoryPath(undefined);
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    refreshConfigDirectoryPathFromEnv();
     setConfigDirectoryPath(undefined);
   });
 

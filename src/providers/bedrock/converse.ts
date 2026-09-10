@@ -1089,10 +1089,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
-    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
-
-    // Raw additional fields must not bypass Fable's model-level constraints.
-    if (alwaysOnAdaptiveThinking) {
+    // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
+    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
+    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
+    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
       delete fields.top_k;

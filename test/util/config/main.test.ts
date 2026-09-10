@@ -3,8 +3,13 @@ import * as path from 'path';
 
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
-import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
+import {
+  getConfigDirectoryPath,
+  refreshConfigDirectoryPathFromEnv,
+  setConfigDirectoryPath,
+} from '../../../src/util/config/manage';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -59,17 +64,49 @@ describe('config', () => {
     vi.mocked(os.homedir).mockReturnValue(mockHomedir);
     mockFs.existsSync.mockReturnValue(false);
     restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: undefined });
+    refreshConfigDirectoryPathFromEnv();
     setConfigDirectoryPath(undefined);
   });
 
   afterEach(() => {
     restoreEnv();
+    refreshConfigDirectoryPathFromEnv();
     setConfigDirectoryPath(undefined);
   });
 
   describe('getConfigDirectoryPath', () => {
     it('returns default path when no custom path is set', () => {
       expect(getConfigDirectoryPath()).toBe(defaultConfigPath);
+    });
+
+    it('reads a config directory refreshed after early env-file loading', () => {
+      const restoreConfigDir = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/env-file/config' });
+      try {
+        refreshConfigDirectoryPathFromEnv();
+        expect(getConfigDirectoryPath()).toBe('/env-file/config');
+      } finally {
+        restoreConfigDir();
+        refreshConfigDirectoryPathFromEnv();
+      }
+    });
+
+    it('does not let eval config env overrides move the global config directory', () => {
+      const originalConfig = cliState.config;
+      cliState.config = { env: { PROMPTFOO_CONFIG_DIR: '/eval-config/path' } };
+      try {
+        expect(getConfigDirectoryPath()).toBe(defaultConfigPath);
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('does not move after later process environment changes', () => {
+      const restoreConfigDir = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/late/config' });
+      try {
+        expect(getConfigDirectoryPath()).toBe(defaultConfigPath);
+      } finally {
+        restoreConfigDir();
+      }
     });
 
     it('does not create directory when createIfNotExists is false', () => {

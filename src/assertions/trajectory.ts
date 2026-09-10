@@ -1,7 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { renderVarsInObject } from '../util/render';
 import {
   notTrajectoryToolUsedBoundsError,
   trajectoryCountBoundsError,
@@ -9,7 +7,9 @@ import {
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
   trajectoryToolSetConfigError,
-} from '../util/traceAssertionConfig';
+} from '../contracts/validators/traceAssertionConfig';
+import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { renderVarsInObject } from '../util/render';
 import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
@@ -82,6 +82,9 @@ function getRenderedTrajectoryValue(params: AssertionParams): unknown {
   const value = params.renderedValue ?? params.assertion.value;
   if (params.valueFromScript !== undefined) {
     return value;
+  }
+  if (typeof params.assertion.value === 'string' && params.assertion.value.startsWith('file://')) {
+    return renderVarsInObject(value, params.assertionValueContext.vars);
   }
   if (Array.isArray(value)) {
     return value.map((item) =>

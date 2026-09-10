@@ -31,7 +31,7 @@ variables:
 steps:
   - task: NodeTool@0
     inputs:
-      versionSpec: '20.x'
+      versionSpec: '24.x'
     displayName: 'Install Node.js'
 
   - task: Cache@2
@@ -128,7 +128,7 @@ Run promptfoo only when certain files change:
 steps:
   - task: NodeTool@0
     inputs:
-      versionSpec: '20.x'
+      versionSpec: '24.x'
     displayName: 'Install Node.js'
 
   - script: |

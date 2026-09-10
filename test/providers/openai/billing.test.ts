@@ -116,6 +116,27 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 0.5 + 500 * 0.05 + 1_000 * 4) / 1e6, 10);
   });
 
+  it('prices GPT-5.6 preview cached input at the published 90% discount', () => {
+    const usage = {
+      prompt_tokens: 2_000,
+      completion_tokens: 1_000,
+      prompt_tokens_details: { cached_tokens: 500 },
+    };
+
+    expect(calculateOpenAIUsageCost('gpt-5.6-sol', {}, usage)).toBeCloseTo(
+      (1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6,
+      10,
+    );
+    expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage)).toBeCloseTo(
+      (1_500 * 2.5 + 500 * 0.25 + 1_000 * 15) / 1e6,
+      10,
+    );
+    expect(calculateOpenAIUsageCost('gpt-5.6-luna', {}, usage)).toBeCloseTo(
+      (1_500 * 1 + 500 * 0.1 + 1_000 * 6) / 1e6,
+      10,
+    );
+  });
+
   it('uses returned service tiers when pricing flex and priority work', () => {
     const usage = {
       input_tokens: 1_000,

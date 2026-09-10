@@ -341,7 +341,18 @@ async function askForPermissionToOverwrite({
   return hasPermissionToWrite;
 }
 
-export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+interface InitProjectResult {
+  numPrompts: number;
+  providerPrefixes: string[];
+  action: string;
+  language: string;
+  outDirectory: string;
+}
+
+export async function createDummyFiles(
+  directory: string | null,
+  interactive: boolean = true,
+): Promise<InitProjectResult> {
   const outDirectory = directory || '.';
   const outDirAbsolute = path.join(process.cwd(), outDirectory);
 
@@ -436,6 +447,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         providerPrefixes: [],
         action: 'redteam',
         language: 'not_applicable',
+        outDirectory,
       };
     }
 
@@ -494,6 +506,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: [
           'anthropic:messages:claude-fable-5',
           'anthropic:messages:claude-opus-4-8',
+          'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-3-7-sonnet-20250219',

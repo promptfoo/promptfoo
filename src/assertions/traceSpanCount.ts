@@ -1,4 +1,4 @@
-import { traceSpanCountBoundsError } from '../util/traceAssertionConfig';
+import { traceSpanCountBoundsError } from '../contracts/validators/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';

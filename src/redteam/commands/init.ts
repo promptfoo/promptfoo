@@ -316,6 +316,10 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-opus-4-8',
       },
       {
+        name: 'anthropic:claude-sonnet-5',
+        value: 'anthropic:messages:claude-sonnet-5',
+      },
+      {
         name: 'anthropic:claude-opus-4-6',
         value: 'anthropic:messages:claude-opus-4-6',
       },

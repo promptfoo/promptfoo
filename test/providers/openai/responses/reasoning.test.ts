@@ -118,6 +118,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it.each([
+    { model: 'gpt-5.6-sol', reasoningEffort: 'max', maxOutputTokens: 4000 },
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },

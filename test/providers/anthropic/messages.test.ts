@@ -3052,6 +3052,68 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.type).toBe('enabled');
       expect(params.thinking?.budget_tokens).toBe(5000);
     });
+
+    it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
+      // Regression for the live-API 400: `temperature` is deprecated for this model.
+      const provider = createProvider('claude-sonnet-5', { config: {} });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+    });
+
+    it('omits temperature/top_p/top_k and warns with a Sonnet 5 message', async () => {
+      const provider = createProvider('claude-sonnet-5', {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+      );
+    });
+
+    it('still sends temperature on Sonnet 4.6 (regression — 4.x keeps sampling params)', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: { temperature: 0.5 } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0.5);
+    });
+
+    it('converts manual thinking to adaptive on Sonnet 5 (migrated config)', async () => {
+      const provider = createProvider('claude-sonnet-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as {
+        thinking?: { type?: string; budget_tokens?: number };
+      };
+      expect(params.thinking?.type).toBe('adaptive');
+      expect(params.thinking?.budget_tokens).toBeUndefined();
+    });
   });
 
   describe('refusal stop_details handling', () => {

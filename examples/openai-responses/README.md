@@ -71,6 +71,10 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 Example comparing GPT-5.5 standard and pro models with different Responses API reasoning settings.
 
+### GPT-5.6 limited preview (`promptfooconfig.gpt-5.6.yaml`)
+
+Example comparing the public Sol, Terra, and Luna preview identifiers. Your OpenAI account must be enabled for the limited preview. Sol uses the new `max` reasoning effort; `ultra` is available through the Codex providers rather than the Responses API.
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -130,6 +134,9 @@ npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 
 # GPT-5.5 example
 npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+
+# GPT-5.6 limited-preview example
+npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
 
 # Prompt caching example
 npx promptfoo eval -c promptfooconfig.prompt-cache.yaml
