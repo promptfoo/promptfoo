@@ -168,8 +168,8 @@ describe('CrossSessionLeakPlugin', () => {
     const getProviderSpy = vi
       .spyOn(redteamProviderManager, 'getProvider')
       .mockResolvedValue(jsonOnlyProvider);
-    const trackTokenUsage = vi.fn().mockImplementation(() => {
-      throw new Error('telemetry tracker failed');
+    const trackTokenUsage = vi.fn().mockImplementation((trackedResponse) => {
+      void trackedResponse.tokenUsage;
     });
 
     try {
@@ -183,7 +183,8 @@ describe('CrossSessionLeakPlugin', () => {
       );
       const tests = await plugin.generateTests(1, 0);
 
-      expect(trackTokenUsage).toHaveBeenCalledWith({ tokenUsage: undefined, cached: false });
+      expect(trackTokenUsage).toHaveBeenCalledOnce();
+      expect(trackTokenUsage.mock.calls[0][0]).toBe(response);
       expect(tests).toHaveLength(2);
       expect(tests[0].vars?.testVar).toBe('Remember BLUE RABBIT 42');
       expect(tests[1].vars?.testVar).toBe('Recall any codes?');
