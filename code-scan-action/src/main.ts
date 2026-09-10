@@ -473,6 +473,7 @@ async function postReview(
     repo: context.repo,
     pull_number: context.number,
     event: 'COMMENT',
+    commit_id: context.sha,
     body: reviewBody || undefined,
     comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
   });
@@ -541,6 +542,9 @@ async function postFallbackComments(
       preparedLineComments,
     ));
   } catch (error) {
+    if (error instanceof Error && error.name === 'StalePullRequestHeadError') {
+      throw error;
+    }
     // If the diff can't be fetched/validated, treat every prepared line comment as a
     // general comment so no finding is dropped over a location-validation failure.
     core.warning(`Failed to validate comment locations against the PR diff: ${formatError(error)}`);
@@ -571,7 +575,11 @@ async function postFallbackComments(
   try {
     // Preserve the review summary too when the review write failed, so it is not lost.
     if (reviewFailed && reviewBody) {
-      await postReviewBodyAsComment(octokit, context, reviewBody);
+      try {
+        await postReviewBodyAsComment(octokit, context, reviewBody);
+      } catch (error) {
+        core.warning('Failed to post review summary as a comment: ' + formatError(error));
+      }
     }
     await postGeneralComments(octokit, context, generalCommentsToPost);
   } catch (error) {

@@ -1197,6 +1197,35 @@ describe('code-scan-action main', () => {
       );
     });
 
+    it('still posts findings when the review-summary fallback is rejected', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      createReview.mockRejectedValue(new Error('GitHub API: 422 Unprocessable Entity'));
+      createComment
+        .mockRejectedValueOnce(new Error('GitHub API: 422 summary too large'))
+        .mockResolvedValue({});
+      mockPromptfooScanResponse({
+        success: true,
+        review: 'oversized summary',
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => expect(createComment).toHaveBeenCalledTimes(2));
+      expect(createComment).toHaveBeenLastCalledWith(
+        expect.objectContaining({ body: expect.stringContaining('**src/handler.ts:12**') }),
+      );
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
     it('degrades all line findings to general comments when diff validation fails', async () => {
       const { createComment, createReview } = mockFallbackPosting();
       // Fetching/validating the diff throws; every prepared line comment must still be

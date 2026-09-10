@@ -63,7 +63,11 @@ index abc123..def456 100644
     Octokit: vi.fn().mockImplementation(() => ({
       pulls: {
         createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
+        get: vi.fn().mockImplementation((options) =>
+          Promise.resolve({
+            data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+          }),
+        ),
       },
       issues: {
         createComment: vi.fn().mockResolvedValue({}),
@@ -107,7 +111,11 @@ describe('GitHub API Client', () => {
       return {
         pulls: {
           createReview: vi.fn().mockResolvedValue({}),
-          get: vi.fn().mockResolvedValue({ data: mockDiff }),
+          get: vi.fn().mockImplementation((options) =>
+            Promise.resolve({
+              data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+            }),
+          ),
         },
         issues: {
           createComment: vi.fn().mockResolvedValue({}),
@@ -257,6 +265,22 @@ describe('GitHub API Client', () => {
       ]);
       expect(result.lineComments).toEqual([]);
       expect(result.invalidLineComments).toEqual([]);
+    });
+
+    it('fails closed when the pull request head changed after scanning', async () => {
+      mocks.Octokit.mockImplementationOnce(function () {
+        return {
+          pulls: {
+            get: vi.fn().mockResolvedValue({ data: { head: { sha: 'new-head' } } }),
+          },
+        } as unknown as Octokit;
+      });
+
+      await expect(
+        partitionReviewCommentsByDiff('fake-token', mockContext, [
+          { file: 'src/auth.ts', line: 50, finding: 'stale finding' },
+        ]),
+      ).rejects.toThrow('Pull request head changed after scan');
     });
   });
 });

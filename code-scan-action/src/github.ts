@@ -19,6 +19,8 @@ import {
   type PullRequestContext,
 } from '../../src/types/codeScan';
 
+export class StalePullRequestHeadError extends Error {}
+
 /**
  * Get GitHub context from the current workflow.
  * Supports both pull_request events and workflow_dispatch (with pr_number input).
@@ -122,6 +124,19 @@ async function getPRDiffRanges(
   }
 }
 
+async function assertCurrentPRHead(octokit: Octokit, context: PullRequestContext): Promise<void> {
+  const { data: pr } = await octokit.pulls.get({
+    owner: context.owner,
+    repo: context.repo,
+    pull_number: context.number,
+  });
+  if (pr.head.sha !== context.sha) {
+    throw new StalePullRequestHeadError(
+      'Pull request head changed after scan: ' + context.sha + ' -> ' + pr.head.sha,
+    );
+  }
+}
+
 /**
  * Whether a comment's exact line(s) can be placed as an inline review comment.
  *
@@ -166,7 +181,9 @@ async function partitionReviewCommentsWithOctokit(
   generalComments: Comment[];
   invalidLineComments: Comment[];
 }> {
+  await assertCurrentPRHead(octokit, context);
   const validRanges = await getPRDiffRanges(octokit, context);
+  await assertCurrentPRHead(octokit, context);
   const lineComments: Comment[] = [];
   const generalComments: Comment[] = [];
   const invalidLineComments: Comment[] = [];
