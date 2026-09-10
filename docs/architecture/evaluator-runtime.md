@@ -33,10 +33,11 @@ exports reference these same classes so `instanceof` checks remain valid.
 
 ## CLI and library policy
 
-The optional runtime `selectPrompt` callback chooses generated prompt variants.
-Without a selector, all requested variants are evaluated without terminal input.
-The optional `createProgressReporters` callback supplies at most one progress sink; execution
-updates and closes them, while the runtime owns reporter selection.
+Generated prompt variants require a runtime `selectPrompt` approval callback.
+Without a selector, generation requests fail with `PromptSuggestionsRejectedError`
+before contacting the suggestions provider. Only approved variants are added to the suite.
+The optional `createProgressReporters` callback supplies at most one progress sink;
+execution updates and closes it, while the runtime owns reporter selection.
 
 Only CLI composition installs interactive prompt selection, terminal/CI reporters,
 and the process exit status for rejected suggestions. Library, web, and MCP calls

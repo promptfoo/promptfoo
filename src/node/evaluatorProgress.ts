@@ -19,8 +19,6 @@ export class ProgressBarManager {
 
   // Track overall progress
   private totalCount: number = 0;
-  private completedCount: number = 0;
-  private concurrency: number = 1;
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
@@ -92,7 +90,7 @@ export class ProgressBarManager {
    */
   async initialize(
     runEvalOptions: RunEvalOptions[],
-    concurrency: number,
+    _concurrency: number,
     compareRowsCount: number,
   ): Promise<void> {
     if (this.isWebUI) {
@@ -100,7 +98,6 @@ export class ProgressBarManager {
     }
 
     this.totalCount = runEvalOptions.length + compareRowsCount;
-    this.concurrency = concurrency;
 
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
@@ -148,7 +145,6 @@ export class ProgressBarManager {
       return;
     }
 
-    this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
     const vars = formatVarsForDisplay(evalStep.test.vars, 40);
@@ -169,7 +165,6 @@ export class ProgressBarManager {
       return;
     }
 
-    this.completedCount++;
     this.progressBar.increment({
       provider: 'Grading',
       prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,

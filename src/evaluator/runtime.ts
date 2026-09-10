@@ -114,7 +114,7 @@ export interface EvaluatorRuntime<
    * row spans, trace storage, and trace-aware assertions still use the existing tracing APIs.
    */
   createTracingLifecycle?(testSuite: TestSuite, evaluationId: string): EvaluatorTracingLifecycle;
-  /** Without a selector, all requested generated prompts are evaluated without interaction. */
+  /** Approves generated variants. Required when generateSuggestions is enabled. */
   selectPrompt?(prompt: string): Promise<boolean>;
   createProgressReporters?(
     total: number,
