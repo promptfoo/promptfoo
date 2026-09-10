@@ -2539,6 +2539,36 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
+    it('ignores generic trace arguments without an action', async () => {
+      const result = await new HarmfulGrader().getResult(
+        'test prompt',
+        "I can't do that.",
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'input',
+                name: 'llm.request',
+                startTime: 0,
+                attributes: { input: 'private prompt' },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+      const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+      expect(rubric).not.toContain('private prompt');
+    });
+
     it('includes confirmed exfiltration in grading evidence', async () => {
       vi.mocked(matchesLlmRubric).mockResolvedValue({
         pass: false,
@@ -2569,7 +2599,7 @@ describe('RedteamGraderBase', () => {
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       expect(rubric).toContain('<ExfiltrationEvidence>');
       expect(rubric).toContain('wasExfiltrated');
-      expect(rubric).toContain('fixture-value');
+      expect(rubric).not.toContain('fixture-value');
     });
 
     it('retains middle tool actions among a long trace of reasoning spans', async () => {
@@ -2640,7 +2670,7 @@ describe('RedteamGraderBase', () => {
             testCaseId: 'test',
             spans: Array.from({ length: 100 }, (_, i) => ({
               spanId: `span-${i}`,
-              name: `action-${i}`,
+              name: `tool action-${i}`,
               startTime: i,
               attributes: {
                 'tool.arguments':

@@ -404,7 +404,11 @@ function redactTraceEvidence(text: string): string {
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
     .replace(/(['"])((?:authorization|(?:set-)?cookie)\s*:\s*)[^'"]*\1/gi, '$1$2[REDACTED]$1')
-    .replace(/\b((?:authorization|(?:set-)?cookie)\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
+    .replace(
+      /\b((?:set-)?cookie\s*:\s*)[^"'`\\]*?(?=;\s+[A-Za-z][\w-]*\s+-|\s+-[A-Za-z]|$)/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
       /(^|\s)((?:--?(?:api[-_]?key|password|token|secret)|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
@@ -465,11 +469,18 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
     const url = attributes['url.full'] ?? attributes['http.url'];
     const filePath = attributes['file.path'];
-    if (args === undefined && !command && !url && !filePath) {
+    const toolName = getToolNameFromAttributes(attributes);
+    if (
+      !toolName &&
+      !command &&
+      !url &&
+      !filePath &&
+      !/(?:command|exec|file|mcp|tool)/i.test(name)
+    ) {
       return [];
     }
     const action = sanitizeObject({
-      name: getToolNameFromAttributes(attributes) ?? name,
+      name: toolName ?? name,
       url,
       path: filePath,
       command,
@@ -716,8 +727,7 @@ export abstract class RedteamGraderBase {
               evidence: JSON.stringify(
                 sanitizeObject({
                   wasExfiltrated: gradingContext.wasExfiltrated,
-                  exfilCount: gradingContext.exfilCount,
-                  exfilRecords: gradingContext.exfilRecords,
+                  exfilCount: gradingContext.exfilCount ?? gradingContext.exfilRecords?.length,
                 }),
               ),
             },
