@@ -378,58 +378,34 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
   });
 
-  it('evaluator should compute derived metrics correctly when many rows sharing a prompt run concurrently', async () => {
-    // Regression test for a race condition in updateDerivedMetrics: it used to
-    // `await import('mathjs')` in the middle of a read-modify-write on the shared
-    // per-prompt metrics object, and awaiting anything (even an already-resolved
-    // promise) yields a microtask tick that a concurrently-processed row sharing
-    // the same prompt could interleave with, corrupting the derived-metric result.
-    //
-    // Every provider call here is staggered across a different number of
-    // microtask ticks (deterministic, no real timers) so that with maxConcurrency
-    // > 1, many rows' post-provider-call processing genuinely overlaps instead of
-    // running strictly one-at-a-time. The assertion is on exact totals: if any
-    // row's contribution to Score_sum or __count went missing or got double
-    // counted due to interleaving, these would not match.
-    const N = 40;
+  it('should keep derived scores and __count consistent across concurrent rows', async () => {
+    // The race also occurs when the dynamic import is already cached.
+    await import('mathjs');
+
     const provider: ApiProvider = {
       id: () => 'concurrent-metrics-provider',
-      callApi: async (_prompt, context) => {
-        const idx = (context?.vars?.idx as number) ?? 0;
-        for (let tick = 0; tick < idx % 5; tick++) {
-          await Promise.resolve();
-        }
-        return {
-          output: 'ok',
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-        };
-      },
+      callApi: async () => ({ output: 'ok' }),
     };
-
-    const tests = Array.from({ length: N }, (_, idx) => ({
-      vars: { idx, score: idx + 1 },
-      assert: [{ type: 'javascript' as const, value: 'context.vars.score', metric: 'Score' }],
-    }));
-
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Concurrent derived metrics prompt')],
-      tests,
+      tests: Array.from({ length: 20 }, (_, index) => ({
+        vars: { index },
+        assert: [{ type: 'javascript' as const, value: '1', metric: 'Score' }],
+      })),
       derivedMetrics: [
-        { name: 'Score_sum', value: 'Score' },
-        { name: 'Score_avg', value: 'Score / __count' },
+        {
+          name: 'PeakAverage',
+          value: (scores) => Math.max(scores.PeakAverage || 0, scores.Score / scores.__count),
+        },
       ],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, { maxConcurrency: 10 });
 
-    const expectedSum = tests.reduce((acc, t) => acc + t.vars.score, 0); // 1+2+...+N = N(N+1)/2
-    const metrics = evalRecord.prompts[0]?.metrics;
-    expect(metrics).toBeDefined();
-    expect(metrics!.namedScores.Score).toBeCloseTo(expectedSum, 10);
-    expect(metrics!.namedScores.Score_sum).toBeCloseTo(expectedSum, 10);
-    expect(metrics!.namedScores.Score_avg).toBeCloseTo(expectedSum / N, 10);
+    // Remember intermediate averages so an inflated value cannot self-correct.
+    expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({ Score: 20, PeakAverage: 1 });
   });
 
   it('should apply max-score to overall pass/fail and stats', async () => {

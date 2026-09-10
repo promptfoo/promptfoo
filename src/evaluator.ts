@@ -2000,36 +2000,6 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
   }
 }
 
-// Module-scope cache: `updateDerivedMetrics` must be able to call into mathjs
-// without ever `await`-ing, even on the first call. It mutates a `PromptMetrics`
-// object that multiple concurrent test cases sharing a prompt write into
-// (see `preloadMathjsModule`'s doc comment for why that requires zero internal
-// await points), so the module has to already be resolved before the
-// concurrent eval loop starts.
-let mathjsModulePromise: Promise<typeof import('mathjs')> | undefined;
-
-/**
- * Preloads mathjs before the concurrent eval loop starts, so `updateDerivedMetrics`
- * can stay fully synchronous.
- *
- * `updateDerivedMetrics` mutates `context.prompts[promptIdx].metrics` — one shared
- * object that every test case sharing that prompt writes into, often concurrently
- * (default concurrency is 4). Every other mutation in `updatePromptMetricsForRow`
- * is a synchronous `+=`, which is safe under concurrency only because JS never
- * interrupts a synchronous statement — but an `await` inside a read-modify-write
- * on shared state reopens that window: a sibling test case's own read can land in
- * between this call's snapshot and its write, corrupting the derived-metric result.
- * `await`-ing a promise always defers to the microtask queue, even one that's
- * already resolved, so merely caching the *promise* here isn't enough — every
- * caller must be able to use the already-*resolved* module with no `await` at all.
- */
-function preloadMathjsModule(): Promise<typeof import('mathjs')> {
-  if (!mathjsModulePromise) {
-    mathjsModulePromise = import('mathjs');
-  }
-  return mathjsModulePromise;
-}
-
 function updateDerivedMetrics(
   metrics: PromptMetrics,
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
@@ -3516,7 +3486,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async updatePromptMetricsForRow({
+  private updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
     mathjsModule,
@@ -3530,7 +3500,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
-  }): Promise<void> {
+  }): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3542,10 +3512,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      invariant(
-        mathjsModule,
-        'Expected mathjs to be preloaded before processing rows for a testSuite with derivedMetrics',
-      );
+      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
       updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
     }
 
@@ -3699,7 +3666,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
-      await this.updatePromptMetricsForRow({
+      this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
         mathjsModule: context.mathjsModule,
@@ -4890,9 +4857,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
-    // Preload before any concurrent row processing starts (see preloadMathjsModule's
-    // doc comment) so updateDerivedMetrics never has to await mid-mutation.
-    const mathjsModule = testSuite.derivedMetrics ? await preloadMathjsModule() : null;
+    // Awaiting after accumulating scores lets other rows change the total
+    // before derived metrics use this row's __count.
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,
