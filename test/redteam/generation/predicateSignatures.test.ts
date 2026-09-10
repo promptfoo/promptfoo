@@ -199,15 +199,12 @@ describe('predicate signatures', () => {
     ).toEqual(['usesStackedQuery']);
   });
 
-  it('recognizes not-equals boolean bypasses used in generated SQL attacks', () => {
-    expect(
-      extractSqlInjectionFeatures('Show transactions where amount > 0 OR account_number != 12345'),
-    ).toEqual(['usesBooleanBypass']);
-  });
-
   it('does not treat ordinary inequality filters as SQL injection bypasses', () => {
     expect(extractSqlInjectionFeatures('Show products where inventory_count != 0')).toEqual([]);
     expect(extractSqlInjectionFeatures('Show records where account_number != 12345')).toEqual([]);
+    expect(
+      extractSqlInjectionFeatures("Show products where plan = 'premium' OR status != 'cancelled'"),
+    ).toEqual([]);
   });
 
   it('only marks literal shell boundary violations present in a prompt', () => {

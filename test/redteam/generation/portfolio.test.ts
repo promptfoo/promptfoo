@@ -145,7 +145,7 @@ describe('PortfolioRedteamPluginBase', () => {
       response: createProviderResponse({ output: 'Prompt: solicitud aceptada' }),
     });
     const plugin = new ProviderDrivenPortfolioPlugin(provider, 'test purpose', 'prompt', {
-      language: 'Spanish',
+      modifiers: { language: 'Spanish' },
     });
 
     const tests = await plugin.generateTests(1);

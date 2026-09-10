@@ -222,11 +222,7 @@ export const SQL_INJECTION_PREDICATES = [
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
-  usesBooleanBypass: [
-    /\bor\s+1\s*=\s*1\b/i,
-    /\bor\s+'[^']+'\s*=\s*'[^']+'/i,
-    /\bor\s+[a-z_][\w.]*\s*!=\s*(?:['"][^'"]+['"]|[\w-]+)/i,
-  ],
+  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'[^']+'\s*=\s*'[^']+'/i],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],

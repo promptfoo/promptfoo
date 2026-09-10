@@ -148,7 +148,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       return super.generateTests(n, delayMs);
     }
 
-    if (this.config.language) {
+    if (this.config.language || this.config.modifiers?.language) {
       logger.debug(
         `${this.constructor.name} falling back to legacy generation because language modifiers are not compatible with semantic predicate selection`,
       );
@@ -157,20 +157,20 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
     const plan = this.buildAttackPlan(n);
     const candidates: AttackCandidate[] = [];
+    const validPromptKeys = new Set<string>();
 
     for (const family of plan.families) {
       const plannedCount = Math.max(1, family.count);
       const familyCandidates: AttackCandidate[] = [];
       const validFamilyCandidates: AttackCandidate[] = [];
-      const validFamilyPromptKeys = new Set<string>();
       const appendValidFamilyCandidates = (generatedCandidates: readonly AttackCandidate[]) => {
         for (const candidate of generatedCandidates) {
           const promptKey = normalizePrompt(candidate.prompt);
           if (
             this.matchesRequiredPredicates(candidate, family) &&
-            !validFamilyPromptKeys.has(promptKey)
+            !validPromptKeys.has(promptKey)
           ) {
-            validFamilyPromptKeys.add(promptKey);
+            validPromptKeys.add(promptKey);
             validFamilyCandidates.push(candidate);
           }
         }
