@@ -434,7 +434,9 @@ async function sendChunkedResults(
 
   const remoteConfig = evalRecord.runtimeOptions?.providerSelection
     ? buildProviderShareConfig(evalRecord.config, evalRecord.runtimeOptions.providerSelection)
-    : evalRecord.config;
+    : evalRecord.runtimeOptions?.promptSelection || evalRecord.runtimeOptions?.testCaseSelection
+      ? buildProviderShareConfig(evalRecord.config, { providers: [] })
+      : evalRecord.config;
   await checkCloudPermissions(remoteConfig);
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob

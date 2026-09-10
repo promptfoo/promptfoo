@@ -16,7 +16,7 @@ interface ReplayPrompt {
 }
 
 interface PromptSelection {
-  prompts: Array<{ id: string; fingerprint: string }>;
+  prompts: Array<{ id: string; fingerprint: string; reuse?: boolean }>;
 }
 
 function getPromptFingerprint(prompt: ReplayPrompt): string {
@@ -24,15 +24,27 @@ function getPromptFingerprint(prompt: ReplayPrompt): string {
   // raw credential values (so rotating a prompt-config secret would reject an
   // otherwise-equivalent replay). Use the shared cycle/BigInt-safe canonicalizer
   // that redacts only credential leaves while preserving semantic prompt config.
-  return sha256(stableStringify(redactSecretLeaves(prompt)));
+  return sha256(
+    stableStringify({
+      raw: prompt.raw,
+      label: prompt.label,
+      config: redactSecretLeaves(prompt.config),
+    }),
+  );
 }
 
 export function createPromptSelection(prompts: ReplayPrompt[]): PromptSelection {
+  const seen = new WeakSet<object>();
   return {
-    prompts: prompts.map((prompt) => ({
-      id: generateIdFromPrompt(prompt),
-      fingerprint: getPromptFingerprint(prompt),
-    })),
+    prompts: prompts.map((prompt) => {
+      const reuse = seen.has(prompt);
+      seen.add(prompt);
+      return {
+        id: generateIdFromPrompt(prompt),
+        fingerprint: getPromptFingerprint(prompt),
+        ...(reuse ? { reuse } : {}),
+      };
+    }),
   };
 }
 
@@ -50,6 +62,7 @@ export function applyPromptSelection(
     matchingPrompts.push(prompt);
     promptsById.set(promptId, matchingPrompts);
   }
+  const matched = new Map<string, ReplayPrompt>();
   return selection.prompts.map((selectedPrompt, index) => {
     if (
       typeof selectedPrompt?.id !== 'string' ||
@@ -59,14 +72,24 @@ export function applyPromptSelection(
     ) {
       throw new Error(`Stored prompt selection entry ${index} is invalid.`);
     }
-    const prompt = promptsById
-      .get(selectedPrompt.id)
-      ?.find((candidate) => getPromptFingerprint(candidate) === selectedPrompt.fingerprint);
+    const candidates = promptsById.get(selectedPrompt.id);
+    const key = selectedPrompt.id + '\\0' + selectedPrompt.fingerprint;
+    if (selectedPrompt.reuse && matched.has(key)) {
+      return matched.get(key)!;
+    }
+    const candidateIndex = candidates?.findIndex(
+      (candidate) => getPromptFingerprint(candidate) === selectedPrompt.fingerprint,
+    );
+    const prompt =
+      candidateIndex === undefined || candidateIndex < 0
+        ? undefined
+        : candidates?.splice(candidateIndex, 1)[0];
     if (!prompt) {
       throw new Error(
         `Selected prompt ${index} no longer exists in the resolved configuration. The evaluation was not changed.`,
       );
     }
+    matched.set(key, prompt);
     return prompt;
   });
 }

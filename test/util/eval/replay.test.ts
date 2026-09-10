@@ -110,6 +110,23 @@ describe('evaluation replay helpers', () => {
     );
   });
 
+  it('consumes duplicate prompt matches instead of replaying one prompt twice', () => {
+    const duplicate = { raw: 'same', label: 'Same' };
+    const selection = createPromptSelection([duplicate, { ...duplicate }]);
+
+    expect(() => applyPromptSelection([duplicate], selection)).toThrow(
+      'no longer exists in the resolved configuration',
+    );
+  });
+
+  it('keeps semantic prompt text in fingerprints even when it looks secret-like', () => {
+    const selection = createPromptSelection([{ raw: 'A'.repeat(64), label: 'Prompt' }]);
+
+    expect(() =>
+      applyPromptSelection([{ raw: 'B'.repeat(64), label: 'Prompt' }], selection),
+    ).toThrow('no longer exists in the resolved configuration');
+  });
+
   it('restores selected tests by identity after the config is reordered', () => {
     const originalTests = [
       { vars: { input: 'first' }, assert: [{ type: 'equals', value: 'one' }] },

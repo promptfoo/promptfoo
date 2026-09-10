@@ -322,6 +322,7 @@ interface EffectiveProviderTest {
 
 interface EffectiveProviderSource {
   tests?: unknown;
+  scenarios?: unknown;
   defaultTest?: unknown;
   redteam?: { provider?: unknown } | unknown;
 }
@@ -335,6 +336,12 @@ function collectTestProviderPermissions(test: unknown, into: PermissionProvider[
     const permission = toPermissionProvider(provider);
     if (permission) {
       into.push(permission);
+      return;
+    }
+    if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
+      for (const type of ['embedding', 'classification', 'text', 'moderation']) {
+        push((provider as Record<string, unknown>)[type]);
+      }
     }
   };
   // Target override executed by callActiveProvider.
@@ -348,6 +355,10 @@ function collectTestProviderPermissions(test: unknown, into: PermissionProvider[
     for (const assertion of record.assert) {
       if (assertion && typeof assertion === 'object') {
         push((assertion as { provider?: unknown }).provider);
+        collectTestProviderPermissions(
+          { assert: (assertion as { assert?: unknown }).assert },
+          into,
+        );
       }
     }
   }
@@ -367,6 +378,24 @@ export function collectEffectiveTestProviderPermissions(
   if (Array.isArray(source.tests)) {
     for (const test of source.tests) {
       collectTestProviderPermissions(test, collected);
+    }
+  }
+  if (Array.isArray(source.scenarios)) {
+    for (const scenario of source.scenarios) {
+      if (!scenario || typeof scenario !== 'object') {
+        continue;
+      }
+      const record = scenario as { config?: unknown; tests?: unknown };
+      if (Array.isArray(record.config)) {
+        for (const test of record.config) {
+          collectTestProviderPermissions(test, collected);
+        }
+      }
+      if (Array.isArray(record.tests)) {
+        for (const test of record.tests) {
+          collectTestProviderPermissions(test, collected);
+        }
+      }
     }
   }
   collectTestProviderPermissions(source.defaultTest, collected);
@@ -422,6 +451,32 @@ export function buildProviderPermissionConfig(
   };
 }
 
+function omitFunctionsForShare(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (typeof value === 'function') {
+    return undefined;
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => omitFunctionsForShare(item, seen) ?? null);
+    }
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, item]) => {
+        const sanitized = omitFunctionsForShare(item, seen);
+        return sanitized === undefined ? [] : [[key, sanitized]];
+      }),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
 export function buildProviderShareConfig<TConfig extends object>(
   config: TConfig,
   selection: ProviderSelection,
@@ -437,7 +492,7 @@ export function buildProviderShareConfig<TConfig extends object>(
     ...rest
   } = config as Record<string, unknown>;
   return {
-    ...(redactSecretLeaves(rest) as Record<string, unknown>),
+    ...(redactSecretLeaves(omitFunctionsForShare(rest)) as Record<string, unknown>),
     providers: getPermissionProviders(selection),
   } as unknown as TConfig;
 }

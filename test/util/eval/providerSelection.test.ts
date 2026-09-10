@@ -405,6 +405,7 @@ describe('provider selection', () => {
         },
       ],
       redteam: { provider: { id: 'http', config: { apiKey: 'sentinel-redteam-secret' } } },
+      transform: () => 'sentinel-function-body',
     };
 
     const share = buildProviderShareConfig(config, selection) as Record<string, unknown>;
@@ -419,5 +420,37 @@ describe('provider selection', () => {
       { input: 'x' },
       { input: 'y' },
     ]);
+  });
+
+  it('collects scenario, nested assertion, and typed grader providers', () => {
+    const effective = collectEffectiveTestProviderPermissions({
+      scenarios: [
+        {
+          config: [{ provider: 'openai:scenario-target' }],
+          tests: [
+            {
+              options: {
+                provider: { text: 'openai:text-grader', embedding: 'openai:embedding-grader' },
+              },
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'llm-rubric', provider: { moderation: 'openai:moderator' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(effective.map((p) => (typeof p === 'string' ? p : p.id))).toEqual(
+      expect.arrayContaining([
+        'openai:scenario-target',
+        'openai:text-grader',
+        'openai:embedding-grader',
+        'openai:moderator',
+      ]),
+    );
   });
 });

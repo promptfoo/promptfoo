@@ -895,6 +895,7 @@ export async function doEval(
           // projected permission boundary would authorize only the top-level
           // matrix while `callActiveProvider` runs an unauthorized override.
           tests: testSuite.tests,
+          scenarios: testSuite.scenarios,
           defaultTest: testSuite.defaultTest,
           redteam: config.redteam,
         })
