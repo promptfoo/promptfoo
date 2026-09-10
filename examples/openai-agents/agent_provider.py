@@ -42,7 +42,7 @@ from agents.sandbox.entries import File
 from agents.sandbox.sandboxes.unix_local import UnixLocalSandboxClient
 from promptfoo_tracing import configure_promptfoo_tracing
 
-DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-5.4-mini")
+DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-5.6-luna")
 SESSION_DB_PATH = Path(__file__).with_name(".promptfoo-openai-agents.sqlite3")
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DISCOUNT_REVIEW_SKILL_DIR = EXAMPLE_DIR / "skills" / "discount-review"
@@ -477,7 +477,7 @@ def _build_agents(model: str) -> Agent[AirlineContext]:
     faq_agent = Agent[AirlineContext](
         name="FAQ Agent",
         model=model,
-        model_settings=ModelSettings(include_usage=True, temperature=0),
+        model_settings=ModelSettings(include_usage=True),
         instructions=(
             "You answer airline policy questions. "
             "Always call faq_lookup instead of using prior knowledge. "
@@ -491,7 +491,7 @@ def _build_agents(model: str) -> Agent[AirlineContext]:
     seat_agent = Agent[AirlineContext](
         name="Seat Booking Agent",
         model=model,
-        model_settings=ModelSettings(include_usage=True, temperature=0),
+        model_settings=ModelSettings(include_usage=True),
         instructions=(
             "You handle booking lookups and seat changes. "
             "If the conversation or shared context already includes a confirmation number, "
@@ -515,7 +515,7 @@ def _build_agents(model: str) -> Agent[AirlineContext]:
     triage_agent = Agent[AirlineContext](
         name="Triage Agent",
         model=model,
-        model_settings=ModelSettings(include_usage=True, temperature=0),
+        model_settings=ModelSettings(include_usage=True),
         instructions=(
             "You route each request to the best specialist. "
             "Use the FAQ Agent for airline policies and the Seat Booking Agent for "
@@ -681,7 +681,6 @@ def _build_sandbox_agent(model: str) -> SandboxAgent:
         default_manifest=_build_sandbox_manifest(),
         model_settings=ModelSettings(
             include_usage=True,
-            temperature=0,
             tool_choice="required",
         ),
     )
@@ -719,7 +718,6 @@ def _build_skill_agent(model: str) -> Agent[Any]:
         ],
         model_settings=ModelSettings(
             include_usage=True,
-            temperature=0,
             tool_choice="required",
         ),
     )

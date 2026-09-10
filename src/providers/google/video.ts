@@ -913,6 +913,7 @@ export class GoogleVideoProvider implements ApiProvider {
     const aspectRatio = effectiveConfig.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
     const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
+    const isVertexExtension = isVideoExtension && this.isVertexMode(effectiveConfig);
     // Support both 'durationSeconds' and 'duration' (alias)
     let durationSeconds =
       effectiveConfig.durationSeconds ??
@@ -926,8 +927,10 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    if (isVideoExtension) {
+    if (isVertexExtension) {
       durationSeconds = resolveExtensionDuration(durationSeconds);
+    } else if (isVideoExtension && durationSeconds !== VEO_EXTENSION_DURATION) {
+      return { error: 'Google AI Studio video extension requires durationSeconds: 8.' };
     } else {
       const durationValidation = validateDuration(model, durationSeconds);
       if (!durationValidation.valid) {
@@ -954,7 +957,7 @@ export class GoogleVideoProvider implements ApiProvider {
       ...requestConfig,
       aspectRatio,
       resolution,
-      ...(isVideoExtension ? {} : { durationSeconds }),
+      ...(isVertexExtension ? {} : { durationSeconds }),
     });
 
     if (createError || !createdOp) {

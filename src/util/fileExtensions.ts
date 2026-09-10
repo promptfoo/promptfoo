@@ -37,6 +37,7 @@ export function isVideoFile(filePath: string): boolean {
     'mpeg',
     'mpg',
     'webm',
+    'ogg',
     'mov',
     'avi',
     'flv',

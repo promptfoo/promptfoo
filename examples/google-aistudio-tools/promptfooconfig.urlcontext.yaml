@@ -6,7 +6,7 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: google:gemini-3.6-flash
+  - id: google:gemini-3.8-flash
     config:
       maxOutputTokens: 2048
       tools:

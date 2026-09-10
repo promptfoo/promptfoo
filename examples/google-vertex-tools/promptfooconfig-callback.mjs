@@ -6,7 +6,7 @@ export default /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'vertex:gemini-3.6-flash',
+      id: 'vertex:gemini-3.8-flash',
       config: {
         region: 'global',
         streaming: true,

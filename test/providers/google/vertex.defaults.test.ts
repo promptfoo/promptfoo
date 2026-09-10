@@ -11,8 +11,8 @@ describe('Google Vertex default providers', () => {
     const providers = getGoogleVertexProviders();
     expect(providers.embeddingProvider.modelName).toBe('gemini-embedding-001');
     expect(providers.embeddingProvider.id()).toBe('vertex:gemini-embedding-001');
-    expect(providers.gradingProvider.modelName).toBe('gemini-3.6-flash');
-    expect(providers.gradingProvider.id()).toBe('vertex:gemini-3.6-flash');
+    expect(providers.gradingProvider.modelName).toBe('gemini-3.8-flash');
+    expect(providers.gradingProvider.id()).toBe('vertex:gemini-3.8-flash');
   });
 
   it('should create correct provider instances', () => {

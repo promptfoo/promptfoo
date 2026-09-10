@@ -171,6 +171,28 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('exports very large token-like config values with secret redaction intact', async () => {
+    const eval_ = new Eval({
+      tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
+      providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
+    });
+
+    await writeOutput('output.json', eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.tests[0].vars).toEqual({
+      media: '[REDACTED]',
+      message: 'Public fixture text.',
+    });
+    expect(parsed.config.providers[0].config).toEqual({
+      apiKey: '[REDACTED]',
+      max_tokens: 37,
+    });
+    expect(outputJson).not.toContain('fixture-api-key');
+  });
+
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -190,6 +212,20 @@ describe('writeOutput', () => {
           },
         },
       ],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          auth: { token: 'output-tempo-secret' },
+          headers: {
+            'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
+            'X-Trace-Access': 'Bearer short-secret',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
     });
 
     await writeOutput(outputPath, eval_, null);
@@ -204,6 +240,11 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(outputJson).not.toContain('output-tempo-secret');
+    expect(outputJson).not.toContain('output-honeycomb-secret');
+    expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
+    expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
   it.each([

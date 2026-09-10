@@ -1591,6 +1591,12 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('preserves Ogg video metadata for existing evaluations', () => {
+      expect(collectFileMetadata({ clip: 'file://clip.ogg' })).toEqual({
+        clip: { path: 'file://clip.ogg', type: 'video', format: 'ogg' },
+      });
+    });
+
     it('should identify video files correctly', () => {
       const vars = {
         video1: 'file://path/to/video.mp4',
@@ -1624,7 +1630,7 @@ describe('evaluatorHelpers', () => {
       const vars = {
         audio1: 'file://path/to/audio.mp3',
         audio2: 'file://path/to/audio.wav',
-        audio3: 'file://path/to/audio.ogg',
+        audio3: 'file://path/to/audio.flac',
         text: 'This is not a file',
       };
 
@@ -1642,9 +1648,9 @@ describe('evaluatorHelpers', () => {
           format: 'wav',
         },
         audio3: {
-          path: 'file://path/to/audio.ogg',
+          path: 'file://path/to/audio.flac',
           type: 'audio',
-          format: 'ogg',
+          format: 'flac',
         },
       });
     });
@@ -1830,7 +1836,7 @@ describe('evaluatorHelpers', () => {
       },
     );
 
-    it.each(['mp3', 'wav', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
+    it.each(['mp3', 'wav', 'm4a', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
       'should load %s audio files as raw base64',
       async (extension) => {
         vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
@@ -1848,23 +1854,33 @@ describe('evaluatorHelpers', () => {
       },
     );
 
-    // Extensions are whatever the user typed. isAudioFile() lowercases before matching, so an
-    // uppercase name still classifies as audio and must take the same branch -- otherwise it
-    // falls through to ISO-BMFF sniffing, which labels a generic `mp42`/`isom` brand as
-    // video/mp4 and Gemini rejects the request with HTTP 400.
     it.each(['m4a', 'M4A', 'M4a'])(
-      'should preserve M4A audio MIME type in a data URL for .%s',
+      'preserves M4A MIME type for Google providers with .%s inputs',
       async (extension) => {
-        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-          return Buffer.from('test-audio-content');
-        });
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+        for (const id of ['google:gemini-3.8-flash', 'vertex:gemini-3.8-flash']) {
+          const rendered = await renderPrompt(
+            toPrompt('{{audio}}'),
+            { audio: `file://test-audio.${extension}` },
+            undefined,
+            createMockProvider({ id }),
+          );
+          expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+        }
+      },
+    );
 
-        const prompt = toPrompt('Test prompt with audio: {{audio}}');
-        const renderedPrompt = await renderPrompt(prompt, {
-          audio: `file://test-audio.${extension}`,
-        });
-
-        expect(renderedPrompt).toContain('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+    it.each(['https://example.com/api', 'file://custom-provider.js', 'openai:gpt-5.6'])(
+      'keeps M4A variables as raw base64 for %s',
+      async (id) => {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+        const rendered = await renderPrompt(
+          toPrompt('{{audio}}'),
+          { audio: 'file://test-audio.m4a' },
+          undefined,
+          createMockProvider({ id }),
+        );
+        expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
       },
     );
 

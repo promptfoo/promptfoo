@@ -7,7 +7,7 @@ prompts:
 
 providers:
   # Google Search as a tool using the latest frontier Flash model
-  - id: google:gemini-3.6-flash
+  - id: google:gemini-3.8-flash
     config:
       maxOutputTokens: 1024
       tools:

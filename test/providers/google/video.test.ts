@@ -809,6 +809,66 @@ describe('GoogleVideoProvider', () => {
       },
     );
 
+    it.each([undefined, 8] as const)(
+      'sends duration 8 for AI Studio extensions configured with %s',
+      async (durationSeconds) => {
+        const sourceVideo = Buffer.from('source video').toString('base64');
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            vertexai: false,
+            apiKey: 'test-api-key',
+            sourceVideo,
+            durationSeconds,
+            pollIntervalMs: 10,
+          },
+        });
+        mockFetchWithTimeout.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ name: 'models/veo-3.1-generate-preview/operations/test-extension' }),
+            { status: 200 },
+          ),
+        );
+        mockFetchWithTimeout.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              name: 'models/veo-3.1-generate-preview/operations/test-extension',
+              done: true,
+              response: {
+                videos: [{ bytesBase64Encoded: Buffer.from('extended video').toString('base64') }],
+              },
+            }),
+            { status: 200 },
+          ),
+        );
+        const result = await provider.callApi('Continue the video');
+        const body = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+        expect(body.parameters.durationSeconds).toBe(8);
+        expect(body.instances[0].video.inlineData).toEqual({
+          mimeType: 'video/mp4',
+          data: sourceVideo,
+        });
+        expect(result.error).toBeUndefined();
+      },
+    );
+
+    it.each([4, 6] as const)(
+      'rejects duration %s for AI Studio video extensions before sending a request',
+      async (durationSeconds) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            vertexai: false,
+            apiKey: 'test-api-key',
+            sourceVideo: Buffer.from('source video').toString('base64'),
+            durationSeconds,
+          },
+        });
+        const result = await provider.callApi('Continue the video');
+        expect(result.error).toContain('requires durationSeconds: 8');
+        expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        expect(mockRequest).not.toHaveBeenCalled();
+      },
+    );
+
     it('should send a Vertex GCS source video using gcsUri', async () => {
       const operationName = 'test-op';
       const base64Video = Buffer.from('fake video').toString('base64');

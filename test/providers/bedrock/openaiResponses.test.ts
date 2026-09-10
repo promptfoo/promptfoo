@@ -149,6 +149,7 @@ describe('bedrock openaiResponses helper', () => {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       });
       expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect(provider['getGenAISystem']()).toBe('bedrock');
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
@@ -276,7 +277,7 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it.each([
-      ['openai.gpt-5.6-sol', 5.5, 33],
+      ['openai.gpt-5.6-sol', 4.4, 22],
       ['openai.gpt-5.6-terra', 2.2, 13.2],
       ['openai.gpt-5.6-luna', 0.22, 1.32],
     ])(
@@ -304,7 +305,7 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it.each([
-      ['openai.gpt-5.6-sol', 5.5, 0.55, 33],
+      ['openai.gpt-5.6-sol', 4.4, 0.44, 22],
       ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
       ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
     ])('prices %s when cache-write usage is missing', (modelId, input, cachedInput, output) => {
@@ -332,7 +333,7 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5.5, 33],
+      ['openai.gpt-5.6-sol', 4.4, 22],
       ['openai.gpt-5.6-terra', 2.2, 13.2],
       ['openai.gpt-5.6-luna', 0.22, 1.32],
     ])(
