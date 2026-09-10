@@ -1,3 +1,5 @@
+import { createCipheriv } from 'node:crypto';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
 import { decodeExportTraceServiceRequest } from '../../../src/tracing/protobuf';
@@ -74,6 +76,86 @@ describe('OTLPTracingExporter', () => {
       for (const token of tokens) {
         expect(JSON.stringify(payload)).not.toContain(token);
       }
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts direct-encryption compact JWE credentials in %s',
+    async (format) => {
+      const header = Buffer.from(JSON.stringify({ alg: 'dir', enc: 'A256GCM' })).toString(
+        'base64url',
+      );
+      const iv = Buffer.alloc(12, 1);
+      const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 2), iv);
+      cipher.setAAD(Buffer.from(header));
+      const encrypted = Buffer.concat([cipher.update('fixture credential'), cipher.final()]);
+      const token = [
+        header,
+        '',
+        iv.toString('base64url'),
+        encrypted.toString('base64url'),
+        cipher.getAuthTag().toString('base64url'),
+      ].join('.');
+      const { attributes } = await exportCustomData(
+        { result: token, module: 'package.module.method' },
+        format,
+      );
+      expect(attributes.result).toBe('<redacted>');
+      expect(attributes.module).toBe('package.module.method');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts scoped npmrc credentials and preserves registry settings in %s',
+    async (format) => {
+      const npmrc = [
+        '//registry.example/:_password=b3BhcXVlL3Bhc3N3b3Jk',
+        '//registry.example/path/:_auth=opaque-base64-credential',
+        '//registry.example/:_authToken="opaque token value"',
+        '//registry.example/:username=fixture-user',
+        'registry=https://registry.example/',
+      ].join('\n');
+      const { attributes } = await exportCustomData({ result: npmrc }, format);
+      expect(attributes.result).toBe(
+        [
+          '//registry.example/:_password=<redacted>',
+          '//registry.example/path/:_auth=<redacted>',
+          '//registry.example/:_authToken="<redacted>"',
+          '//registry.example/:username=fixture-user',
+          'registry=https://registry.example/',
+        ].join('\n'),
+      );
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts alternating raw header values in native and serialized data in %s',
+    async (format) => {
+      const rawHeaders = [
+        'Authorization',
+        'opaque-header-proof',
+        'Content-Type',
+        'application/json',
+        'Cookie',
+        'opaque-cookie-proof',
+      ];
+      const { attributes, payload } = await exportCustomData(
+        { native: { rawHeaders }, result: JSON.stringify({ rawHeaders }) },
+        format,
+      );
+      for (const key of ['native', 'result']) {
+        expect(JSON.parse(attributes[key] as string)).toEqual({
+          rawHeaders: [
+            'Authorization',
+            '<redacted>',
+            'Content-Type',
+            'application/json',
+            'Cookie',
+            '<redacted>',
+          ],
+        });
+      }
+      expect(JSON.stringify(payload)).not.toContain('opaque-');
     },
   );
 

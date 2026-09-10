@@ -624,7 +624,7 @@ function sanitizeCredentialText(value: string): string {
 
   // Multiline credential values cannot be redacted safely as independent lines.
   for (const [, , key] of value.matchAll(
-    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*[|>](?:[1-9][+-]?|[+-][1-9]?)?[ \t]*(?:#[^\r\n]*)?(?:[\r\n]|$)/g,
+    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*[|>](?:[1-9][+-]?|[+-][1-9]?)?[ \t]*(?:#[^\r\n]*)?(?:[\r\n]|$)/g,
   )) {
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
@@ -632,7 +632,7 @@ function sanitizeCredentialText(value: string): string {
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
-  for (const [, key] of value.matchAll(/\\+"([A-Za-z][A-Za-z\d_.-]*)\\+"\s*:/g)) {
+  for (const [, key] of value.matchAll(/\\+"([A-Za-z_][A-Za-z\d_.-]*)\\+"\s*:/g)) {
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
     }
@@ -658,7 +658,7 @@ function sanitizeCredentialText(value: string): string {
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
     .replace(
-      /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
       (token, header: string) => {
         if (header.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
           return '<redacted>';
@@ -680,12 +680,12 @@ function sanitizeCredentialText(value: string): string {
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
-      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
+      /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
       (match, prefix: string, key: string, separator: string) =>
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;\s])((?:[A-Za-z]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
       (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
@@ -703,14 +703,14 @@ function sanitizeCredentialText(value: string): string {
 function redactQuotedCredentials(value: string): string {
   return value
     .replace(
-      /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/g,
+      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/g,
       (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
         isCredentialAttributeKey(key)
           ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
           : match,
     )
     .replace(
-      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/gi,
+      /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/gi,
       (match, prefix: string, key: string, separator: string, quote: string) =>
         isCredentialAttributeKey(key)
           ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
@@ -827,7 +827,8 @@ function isCredentialPairValue(source: Record<string, unknown> | unknown[], key:
     return (
       typeof option === 'string' &&
       isCredentialAttributeKey(option) &&
-      ((key === '1' && source.length === 2) || /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option))
+      ((Number(key) % 2 === 1 && source.length % 2 === 0) ||
+        /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option))
     );
   }
   return (
