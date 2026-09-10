@@ -11,6 +11,7 @@ export type { EvalConfigResponse, EvalResultDetailResponse };
 
 const RESULT_DETAIL_CACHE_LIMIT = 50;
 const EVAL_CONFIG_CACHE_LIMIT = 3;
+const MAX_CACHED_RESPONSE_CHARACTERS = 100_000;
 
 const resultDetailCache = new Map<string, Promise<EvalResultDetailResponse>>();
 const evalConfigCache = new Map<string, Promise<EvalConfigResponse>>();
@@ -87,7 +88,10 @@ function withAbortSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
   });
 }
 
-async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+async function parseJsonResponse<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<{ data: T; characters: number }> {
   if (!response.ok) {
     let message = fallbackMessage;
     try {
@@ -99,7 +103,8 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
     throw new Error(message);
   }
 
-  return response.json();
+  const body = await response.text();
+  return { data: JSON.parse(body) as T, characters: body.length };
 }
 
 function fetchJsonCached<T>({
@@ -126,7 +131,13 @@ function fetchJsonCached<T>({
   }
 
   const request = callApi(path)
-    .then((response) => parseJsonResponse<T>(response, fallbackMessage))
+    .then(async (response) => {
+      const { data, characters } = await parseJsonResponse<T>(response, fallbackMessage);
+      if (characters > MAX_CACHED_RESPONSE_CHARACTERS && cache.get(key) === request) {
+        cache.delete(key);
+      }
+      return data;
+    })
     .catch((error) => {
       if (cache.get(key) === request) {
         cache.delete(key);

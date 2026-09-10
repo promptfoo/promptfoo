@@ -266,6 +266,9 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
 }
 
 function renderDiffNode(firstOutputText: string, text: string): React.ReactNode {
+  if ([firstOutputText, text].some((value) => value.startsWith('[content omitted:'))) {
+    return <span>Diff unavailable because an output is too large for the table.</span>;
+  }
   let diffResult;
   try {
     JSON.parse(firstOutputText);

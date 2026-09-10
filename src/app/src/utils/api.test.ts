@@ -279,6 +279,22 @@ describe('fetchEvalResultDetail', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('shares an in-flight large response without retaining it in the cache', async () => {
+    const detail = { evalId: 'eval-123', resultId: 'large', text: 'x'.repeat(100_001) };
+    mockFetch.mockImplementation(async () => new Response(JSON.stringify(detail), { status: 200 }));
+
+    const [first, second] = await Promise.all([
+      fetchEvalResultDetail('eval-123', 'large'),
+      fetchEvalResultDetail('eval-123', 'large'),
+    ]);
+    expect(first.text).toBe(detail.text);
+    expect(second.text).toBe(detail.text);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    await fetchEvalResultDetail('eval-123', 'large');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('returns null when prefetching result detail fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 

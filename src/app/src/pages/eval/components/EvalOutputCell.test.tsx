@@ -700,6 +700,33 @@ describe('EvalOutputCell', () => {
     );
   });
 
+  it.each(['current', 'reference', 'both'])(
+    'does not compute a diff from omitted %s output',
+    (omitted) => {
+      const placeholder = '[content omitted: 120000 characters]';
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          showDiffs
+          firstOutput={{
+            ...defaultProps.output,
+            id: 'reference',
+            text: omitted === 'current' ? 'Reference output' : placeholder,
+          }}
+          output={{
+            ...defaultProps.output,
+            text: omitted === 'reference' ? 'Current output' : placeholder,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText('Diff unavailable because an output is too large for the table.'),
+      ).toBeInTheDocument();
+      expect(container.querySelector('del, ins')).toBeNull();
+      expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    },
+  );
+
   it('copies the full output when table text is omitted', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
