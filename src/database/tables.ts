@@ -11,6 +11,7 @@ import {
 import {
   type AtomicTestCase,
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvaluateSummaryV2,
   type GradingResult,
   type Prompt,
@@ -66,9 +67,7 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
-    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<
-      Partial<import('../types').EvaluateOptions>
-    >(),
+    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<EvalRuntimeOptions>(),
     isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({
@@ -240,7 +239,7 @@ export const blobReferencesTable = sqliteTable(
     testIdx: integer('test_idx'),
     promptIdx: integer('prompt_idx'),
     location: text('location'), // e.g., response.audio.data, turns[0].audio.data
-    kind: text('kind'), // audio | image
+    kind: text('kind'), // audio | image | video
     createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
@@ -339,49 +338,6 @@ export const configsTable = sqliteTable(
   }),
 );
 
-// ------------ Outputs ------------
-// We're just recording these on eval.results for now...
-
-/*
-export const llmOutputs = sqliteTable(
-  'llm_outputs',
-  {
-    id: text('id')
-      .notNull()
-      .unique(),
-    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    evalId: text('eval_id')
-      .notNull()
-      .references(() => evals.id),
-    promptId: text('prompt_id')
-      .notNull()
-      .references(() => prompts.id),
-    providerId: text('provider_id').notNull(),
-    vars: text('vars', {mode: 'json'}),
-    response: text('response', {mode: 'json'}),
-    error: text('error'),
-    latencyMs: integer('latency_ms'),
-    gradingResult: text('grading_result', {mode: 'json'}),
-    namedScores: text('named_scores', {mode: 'json'}),
-    cost: real('cost'),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.id] }),
-  }),
-);
-
-export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
-  eval: one(evals, {
-    fields: [llmOutputs.evalId],
-    references: [evals.id],
-  }),
-  prompt: one(prompts, {
-    fields: [llmOutputs.promptId],
-    references: [prompts.id],
-  }),
-}));
-*/
-
 // ------------ Model Audits ------------
 
 export const modelAuditsTable = sqliteTable(
@@ -476,6 +432,7 @@ export const spansTable = sqliteTable(
   (table) => ({
     traceIdIdx: index('spans_trace_id_idx').on(table.traceId),
     spanIdIdx: index('spans_span_id_idx').on(table.spanId),
+    uniqueTraceSpan: uniqueIndex('spans_trace_id_span_id_unique').on(table.traceId, table.spanId),
   }),
 );
 

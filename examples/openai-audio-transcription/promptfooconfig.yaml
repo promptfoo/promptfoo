@@ -6,6 +6,12 @@ prompts:
   - '{{audio_file}}'
 
 providers:
+  - id: openai:transcription:gpt-transcribe
+    config:
+      languages: [en]
+      keywords: [mankind]
+      prompt: A recording of the first Moon landing.
+
   # Standard Whisper model
   - id: openai:transcription:whisper-1
     config:
@@ -16,7 +22,7 @@ providers:
   - id: openai:transcription:gpt-4o-transcribe
     config:
       language: en
-      prompt: This is a technical discussion about AI and machine learning. # Optional: provide context
+      prompt: A recording of the first Moon landing.
 
   # GPT-4o Mini (faster, cheaper)
   - id: openai:transcription:gpt-4o-mini-transcribe
@@ -24,8 +30,12 @@ providers:
   # Diarization - identifies different speakers
   - id: openai:transcription:gpt-4o-transcribe-diarize
     config:
-      num_speakers: 2 # Optional: expected number of speakers
-      # speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+      chunking_strategy: auto # Required for inputs longer than 30 seconds
+      # Optional: identify up to four known speakers with matching 2-10 second audio data URLs.
+      # known_speaker_names: ['Alice', 'Bob']
+      # known_speaker_references:
+      #   - 'data:audio/wav;base64,<alice-reference>'
+      #   - 'data:audio/wav;base64,<bob-reference>'
 
 tests:
   # Test with Neil Armstrong's famous moon landing quote

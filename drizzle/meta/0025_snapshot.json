@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "33aaf02a-4b98-4e4b-9c98-529d9771638e",
+  "id": "3e96c996-5f5f-4da8-8c24-1903c4ef0dd9",
   "prevId": "00fa2978-039b-4dbd-8e05-d962a981755f",
   "tables": {
     "blob_assets": {
@@ -1239,13 +1239,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "events": {
-          "name": "events",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "status_code": {
           "name": "status_code",
           "type": "integer",
@@ -1275,6 +1268,14 @@
             "span_id"
           ],
           "isUnique": false
+        },
+        "spans_trace_id_span_id_unique": {
+          "name": "spans_trace_id_span_id_unique",
+          "columns": [
+            "trace_id",
+            "span_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {

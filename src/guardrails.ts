@@ -17,12 +17,13 @@ function resolveGuardrailsApi(): { baseUrl: string; headers: Record<string, stri
     base = override;
   } else if (cloudConfig.isEnabled()) {
     base = cloudConfig.getApiHost();
-    // The global fetch auth-injection only adds the bearer token for the public
-    // cloud origin, so send it explicitly to authenticate against on-prem hosts.
-    const apiKey = cloudConfig.getApiKey();
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
+    // The fetch layer injects the cloud bearer token for the configured cloud origin
+    // (incl. on-prem) and won't override a header we set here, so attaching it
+    // explicitly keeps this request authenticated regardless of fetch-layer changes.
+    // Use the configured auth header name (defaults to Authorization) rather than
+    // hardcoding it, so on-prem gateways expecting a custom header don't also
+    // receive a duplicate Authorization header from the fetch-layer injection.
+    Object.assign(headers, cloudConfig.getAuthHeaders() ?? {});
   } else {
     base = getShareApiBaseUrl();
   }

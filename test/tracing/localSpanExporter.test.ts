@@ -47,6 +47,7 @@ describe('LocalSpanExporter', () => {
       endTime: [number, number];
       attributes: Record<string, unknown>;
       events: ReadableSpan['events'];
+      resourceAttributes: Record<string, unknown>;
       status: { code: number; message?: string };
     }> = {},
   ): ReadableSpan {
@@ -70,7 +71,7 @@ describe('LocalSpanExporter', () => {
       kind: 2, // CLIENT
       links: [],
       events: overrides.events ?? [],
-      resource: { attributes: {} },
+      resource: { attributes: overrides.resourceAttributes ?? {} },
       instrumentationLibrary: { name: 'test' },
       duration: [0, 700000000],
       ended: true,

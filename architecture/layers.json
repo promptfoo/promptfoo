@@ -19,7 +19,7 @@
     "app",
     "facade"
   ],
-  "maxStronglyConnectedComponentSize": 8,
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
@@ -65,12 +65,13 @@
         "src/util/objectUtils.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
+        "src/util/yamlLoad.ts",
         "src/validators/providers.ts"
       ]
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "roots": ["src/entrypoint.ts", "src/localEntrypoint.ts", "src/main.ts", "src/commands"],
       "allowedDependencies": [
         "core",
         "legacy-contracts",
@@ -97,15 +98,7 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
@@ -126,15 +119,7 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "providers",
-        "redteam",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",

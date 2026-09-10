@@ -9,7 +9,7 @@ import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import { createMockProvider } from '../factories/provider';
 
-import type { Tool } from '../../src/providers/google//types';
+import type { Tool } from '../../src/providers/google/types';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 // Create hoisted mocks for stable references

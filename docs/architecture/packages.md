@@ -72,10 +72,15 @@ Mixed modules that do not yet have a stable package owner belong to
 `legacy-runtime`. This keeps migration debt visible. New checked source files
 must be assigned to a layer instead of silently becoming unclassified.
 
-`src/evaluator/runtime.ts` defines the evaluator's narrow runtime port. Its
-default `src/node/evaluatorRuntime.ts` adapter owns result persistence, JSONL
-writer construction, and resume append behavior while the evaluator continues
-to orchestrate evaluation behavior.
+`src/evaluator/runtime.ts` defines the evaluator's narrow runtime port. The
+`EvaluationStore` contract owns result append/read, prompt updates, resume lookup,
+comparison-result saves, and final evaluation persistence. The default
+`src/node/evaluationStore.ts` adapter maps that port to the existing `Eval` and
+`EvalResult` models, while `src/evaluator/inMemoryStore.ts` provides a
+dependency-light state implementation for embedded evaluators and focused tests.
+`src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
+resume append behavior. The evaluator orchestrates evaluation behavior without
+importing the concrete `Eval` model.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling

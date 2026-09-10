@@ -39,7 +39,7 @@ redteam:
     - owasp:agentic
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
 ```
 
@@ -78,7 +78,7 @@ redteam:
     - intent
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak:composite
 ```
 
@@ -106,7 +106,7 @@ redteam:
     - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI03: Identity and Privilege Abuse
@@ -131,7 +131,7 @@ redteam:
     - agentic:approval-continuity
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI04: Agentic Supply Chain Vulnerabilities
@@ -154,7 +154,7 @@ redteam:
     - agentic:mcp-schema-injection
     - agentic:tool-discovery-confusion
   strategies:
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI05: Unexpected Code Execution
@@ -179,7 +179,7 @@ redteam:
     - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI06: Memory and Context Poisoning
@@ -227,7 +227,7 @@ redteam:
     - agentic:handoff-context-leakage
     - agentic:agent-as-tool-boundary
   strategies:
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI08: Cascading Failures
@@ -252,7 +252,7 @@ redteam:
     - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI09: Human Agent Trust Exploitation
@@ -326,7 +326,7 @@ redteam:
     - owasp:llm
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
 ```
 
