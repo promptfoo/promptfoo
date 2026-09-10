@@ -19,13 +19,6 @@ defaultTest:
         const video = context.providerResponse?.video?.blobRef;
         return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
 
-defaultTest:
-  assert:
-    - type: javascript
-      value: |
-        const video = context.providerResponse?.video?.blobRef;
-        return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
-
 tests:
   - vars:
       continuation: The camera pans to reveal a beautiful sunset on the horizon
