@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockIntersectionObserver } from '@app/tests/browserMocks';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaItem } from './types';
@@ -32,8 +32,10 @@ import * as mediaItemHooks from './hooks/useMediaItems';
 import Media from './Media';
 
 // Helper to capture current location for assertions
+let navigateTo: ReturnType<typeof useNavigate>;
 function LocationDisplay() {
   const location = useLocation();
+  navigateTo = useNavigate();
   return <div data-testid="location">{location.search}</div>;
 }
 
@@ -445,6 +447,31 @@ describe('Media page URL state machine', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByTestId('location')).not.toHaveTextContent('hash=');
     expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
+  });
+
+  it('refetches a missing hash after another lookup clears its visible error', async () => {
+    let resolveSecond!: (
+      result: Awaited<ReturnType<typeof mediaItemHooks.fetchMediaItemByHash>>,
+    ) => void;
+    const pendingSecond = new Promise<
+      Awaited<ReturnType<typeof mediaItemHooks.fetchMediaItemByHash>>
+    >((resolve) => {
+      resolveSecond = resolve;
+    });
+    mockApiResponses();
+    vi.spyOn(mediaItemHooks, 'fetchMediaItemByHash')
+      .mockResolvedValueOnce({ item: null, error: 'not_found' })
+      .mockReturnValueOnce(pendingSecond)
+      .mockResolvedValueOnce({ item: null, error: 'not_found' });
+
+    renderMedia('/media?hash=missing-a');
+    await screen.findByText(/not found/i);
+    await act(async () => navigateTo('/media?hash=missing-b'));
+    await waitFor(() => expect(mediaItemHooks.fetchMediaItemByHash).toHaveBeenCalledTimes(2));
+    await act(async () => navigateTo('/media?hash=missing-a'));
+    await waitFor(() => expect(mediaItemHooks.fetchMediaItemByHash).toHaveBeenCalledTimes(3));
+
+    await act(async () => resolveSecond({ item: null, error: 'not_found' }));
   });
 
   it('closing modal removes hash from URL', async () => {

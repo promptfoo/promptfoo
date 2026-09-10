@@ -117,6 +117,7 @@ export default function Media() {
 
   const resolveDeepLinkByHash = useCallback(async (hash: string) => {
     const requestGeneration = ++deepLinkRequestGenerationRef.current;
+    lastResolvedDeepLinkRef.current = null;
     const isCancelled = () =>
       requestGeneration !== deepLinkRequestGenerationRef.current || !isMountedRef.current;
 
