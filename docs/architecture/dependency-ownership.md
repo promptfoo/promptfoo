@@ -68,7 +68,10 @@ installed packages, generated runtime bundles, mocks, and build/cache output
 within each workspace, plus configured architecture ignored roots. Workspace
 manifest discovery only excludes `node_modules` and explicit workspace exclusions;
 a workspace may itself live under a directory named `build` or `dist`. Tests outside those source roots, Markdown/MDX, CSS imports,
-package-script shell commands, and custom loader functions are not parsed.
+package-script shell commands, tsconfig files (including `compilerOptions.types`),
+and custom loader functions are not parsed. Named `createRequire` results are not
+tracked: they can resolve against another package, such as the installed-package
+checks in `scripts/testPackageArtifact.ts`. These uses need separate dependency evidence.
 Files owned by a nested manifest outside the audited manifest list are excluded;
 they do not become root dependency evidence merely because a broad source root contains them.
 

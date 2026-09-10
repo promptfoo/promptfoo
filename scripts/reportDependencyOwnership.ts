@@ -426,7 +426,7 @@ export function reportDependencyOwnership(
         dependency === packages.get(manifest)?.name ||
         ((aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) ||
           (aliasedFile && fs.existsSync(aliasedFile) && fs.statSync(aliasedFile).isFile()) ||
-          resolveInternalModule(repoRoot, file, specifier, config.aliases)) &&
+          resolveInternalModule(repoRoot, file, specifier, config.aliases, configuredRoots)) &&
           !packageNames.includes(dependency)) ||
         specifier === 'src' ||
         specifier.startsWith('src/') ||

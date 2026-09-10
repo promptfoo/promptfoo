@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
+import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
@@ -54,9 +54,6 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.mjs': ['.mts'],
   '.cjs': ['.cts'],
 };
-const BUILTIN_MODULES = new Set(
-  builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
-);
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -343,6 +340,7 @@ export function resolveInternalModule(
   importerRelativePath: string,
   specifier: string,
   aliases: Record<string, string> = {},
+  additionalRoots: string[] = [],
 ): string | undefined {
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
@@ -387,7 +385,8 @@ export function resolveInternalModule(
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
       if (
-        relativeCandidate.startsWith('src/') &&
+        ['src', ...additionalRoots].some((root) => isWithinRoot(relativeCandidate, root)) &&
+        !relativeCandidate.split('/').includes('node_modules') &&
         TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
       ) {
         return relativeCandidate;
@@ -420,8 +419,7 @@ export function getExternalModuleName(specifier: string): string | undefined {
 
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
-  const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return isBuiltin(specifier) ? undefined : getExternalModuleName(specifier);
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
