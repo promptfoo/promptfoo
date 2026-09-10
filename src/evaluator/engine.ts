@@ -1988,7 +1988,7 @@ async function maybeAddGeneratedPrompts(
     logger.info(`${prompt}`);
     logger.info('--------------------------------------------------------');
 
-    if (!selectPrompt || (await selectPrompt(prompt))) {
+    if (selectPrompt && (await selectPrompt(prompt))) {
       testSuite.prompts.push({ raw: prompt, label: prompt });
       numAdded++;
     } else {

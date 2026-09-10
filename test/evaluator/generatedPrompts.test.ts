@@ -39,8 +39,14 @@ describe('generated prompt selection', () => {
     };
   }
 
-  it.each(['library', 'web', 'mcp', 'default'] as const)(
-    'evaluates all generated prompts without terminal input for %s callers',
+  async function evaluateWithoutApproval(options: Parameters<typeof evaluate>[2]) {
+    await expect(evaluate(createTestSuite(), new Eval({}), options)).rejects.toBeInstanceOf(
+      PromptSuggestionsRejectedError,
+    );
+  }
+
+  it.each(['library', 'web', 'mcp'] as const)(
+    'rejects generated prompts without an approval hook for %s callers',
     async (eventSource) => {
       const previousExitCode = process.exitCode;
       const testSuite = createTestSuite();
@@ -50,12 +56,9 @@ describe('generated prompt selection', () => {
           eventSource,
           generateSuggestions: true,
         }),
-      ).resolves.toBe(record);
-      expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual([
-        'Original prompt',
-        'Generated prompt',
-      ]);
-      expect(record.results).toHaveLength(2);
+      ).rejects.toBeInstanceOf(PromptSuggestionsRejectedError);
+      expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual(['Original prompt']);
+      expect(record.results).toHaveLength(0);
       expect(promptYesNo).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(previousExitCode);
     },
@@ -143,7 +146,7 @@ describe('generated prompt selection', () => {
   it('passes the requested suggestion count to the generator', async () => {
     vi.mocked(promptYesNo).mockResolvedValueOnce(true);
 
-    await evaluate(createTestSuite(), new Eval({}), {
+    await evaluateWithoutApproval({
       eventSource: 'library',
       generateSuggestions: true,
       suggestionsCount: 3,
@@ -155,7 +158,7 @@ describe('generated prompt selection', () => {
   it('defaults suggestionsCount to 1 when omitted', async () => {
     vi.mocked(promptYesNo).mockResolvedValueOnce(true);
 
-    await evaluate(createTestSuite(), new Eval({}), {
+    await evaluateWithoutApproval({
       eventSource: 'library',
       generateSuggestions: true,
     });
@@ -166,7 +169,7 @@ describe('generated prompt selection', () => {
   it('clamps over-cap suggestionsCount to MAX_SUGGESTIONS_COUNT', async () => {
     vi.mocked(promptYesNo).mockResolvedValueOnce(true);
 
-    await evaluate(createTestSuite(), new Eval({}), {
+    await evaluateWithoutApproval({
       eventSource: 'library',
       generateSuggestions: true,
       suggestionsCount: 1_000,
@@ -178,7 +181,7 @@ describe('generated prompt selection', () => {
   it('coerces invalid suggestionsCount values to 1', async () => {
     vi.mocked(promptYesNo).mockResolvedValueOnce(true);
 
-    await evaluate(createTestSuite(), new Eval({}), {
+    await evaluateWithoutApproval({
       eventSource: 'library',
       generateSuggestions: true,
       suggestionsCount: 0,
