@@ -401,9 +401,14 @@ function redactTraceEvidence(text: string): string {
     }
   }
   return text
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
     .replace(/(['"])((?:authorization|(?:set-)?cookie)\s*:\s*)[^'"]*\1/gi, '$1$2[REDACTED]$1')
     .replace(/\b((?:authorization|(?:set-)?cookie)\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
+    .replace(
+      /(^|\s)((?:--?(?:api[-_]?key|password|token|secret)|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
+      '$1$2[REDACTED]',
+    )
     .replace(
       /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
@@ -488,7 +493,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     );
     return [truncateTraceEvidence(serialized, 600)];
   });
-  const priorityActions = actions.filter((action) => /"(?:command|path|url)":/.test(action));
+  const priorityActions = actions.filter((action) => /"(?:path|url)":|https?:\/\//.test(action));
   const selected =
     actions.length > 24
       ? [...new Set([...priorityActions, ...actions.slice(0, 15), ...actions.slice(-8)])].slice(

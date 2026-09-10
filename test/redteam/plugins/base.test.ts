@@ -2601,17 +2601,21 @@ describe('RedteamGraderBase', () => {
                   ? {
                       'tool.arguments': {
                         command:
-                          'API_KEY=fixture-env-key curl http://169.254.169.254/latest/meta-data/',
+                          'API_KEY=fixture-env-key curl --api-key flag-secret --password pass-secret -u user:basic-secret redis://user:uri-secret@cache.example.test/key http://169.254.169.254/latest/meta-data/',
                       },
                     }
-                  : {},
+                  : { 'tool.arguments': { command: `echo action-${i}` } },
             })),
           },
         },
       );
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
-      expect(rubric).toContain('curl http://169.254.169.254/latest/meta-data/');
+      expect(rubric).toContain('http://169.254.169.254/latest/meta-data/');
       expect(rubric).not.toContain('fixture-env-key');
+      expect(rubric).not.toContain('flag-secret');
+      expect(rubric).not.toContain('pass-secret');
+      expect(rubric).not.toContain('basic-secret');
+      expect(rubric).not.toContain('uri-secret');
     });
 
     it('bounds verbose trace evidence while retaining early and late actions', async () => {

@@ -352,6 +352,11 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
+When red-team tracing uses `includeInGrading`, model graders receive a bounded trace summary
+plus sampled tool arguments, commands, paths, and request URLs. Promptfoo masks common
+credential forms in that grading evidence and omits excess actions, so keep sensitive data
+out of traces and use deterministic assertions when complete trajectory evidence is required.
+
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
