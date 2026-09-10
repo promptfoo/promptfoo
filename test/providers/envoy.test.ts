@@ -149,6 +149,12 @@ describe('Envoy gateway URLs', () => {
       if (registeredUrl !== undefined) {
         cliState.config = { env: { ENVOY_API_BASE_URL: registeredUrl } };
       }
+      const loaderOptions =
+        suiteUrl === undefined
+          ? registeredUrl === undefined
+            ? { env: undefined }
+            : {}
+          : { env: { ENVOY_API_BASE_URL: suiteUrl } };
       const [provider] = await loadApiProviders(
         [
           {
@@ -156,7 +162,7 @@ describe('Envoy gateway URLs', () => {
             env: providerUrl === undefined ? undefined : { ENVOY_API_BASE_URL: providerUrl },
           },
         ],
-        { env: suiteUrl === undefined ? undefined : { ENVOY_API_BASE_URL: suiteUrl } },
+        loaderOptions,
       );
 
       expect((await provider.callApi('Hello')).output).toBe('Hello');

@@ -1486,6 +1486,22 @@ describe('loadApiProvider', () => {
     }
   });
 
+  it('does not inherit cliState env when a suite explicitly has no env', async () => {
+    const originalConfig = cliState.config;
+    const originalGateway = process.env.ENVOY_API_BASE_URL;
+    cliState.config = { env: { ENVOY_API_BASE_URL: 'https://previous.example.com/v1' } };
+    mockProcessEnv({ ENVOY_API_BASE_URL: undefined });
+
+    try {
+      await expect(loadApiProviders(['envoy:test-model'], { env: undefined })).rejects.toThrow(
+        'Envoy provider requires a gateway URL',
+      );
+    } finally {
+      cliState.config = originalConfig;
+      mockProcessEnv({ ENVOY_API_BASE_URL: originalGateway });
+    }
+  });
+
   it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
     mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
     mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
