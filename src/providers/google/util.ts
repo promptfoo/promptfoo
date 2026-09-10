@@ -239,15 +239,6 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     transformedToolChoice && typeof transformedToolChoice === 'object'
       ? (transformedToolChoice as GoogleToolConfig)
       : undefined;
-  const toolsDisabled = [
-    explicitConfig?.functionCallingConfig?.mode,
-    config.toolConfig?.functionCallingConfig?.mode,
-    config.tool_config?.function_calling_config?.mode,
-    toolChoiceConfig?.functionCallingConfig?.mode,
-    passthrough?.toolConfig?.functionCallingConfig?.mode,
-    passthrough?.tool_config?.function_calling_config?.mode,
-  ].some((mode) => normalizeGoogleToolMode(mode) === 'NONE');
-
   const toolConfig = {
     ...toolChoiceConfig,
     ...explicitConfig,
@@ -258,15 +249,13 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     ...explicitConfig?.functionCallingConfig,
     ...passthroughConfig?.functionCallingConfig,
   };
-  if (toolsDisabled) {
-    toolConfig.functionCallingConfig = { mode: 'NONE' };
-  } else if (Object.keys(functionCallingConfig).length > 0) {
+  if (Object.keys(functionCallingConfig).length > 0) {
     toolConfig.functionCallingConfig = functionCallingConfig;
   }
 
   return {
     ...(Object.keys(toolConfig).length > 0 ? { toolConfig } : {}),
-    toolsDisabled,
+    toolsDisabled: functionCallingConfig.mode === 'NONE',
   };
 }
 
@@ -1592,18 +1581,87 @@ function getEbmlMimeType(bytes: Buffer): string | undefined {
     return undefined;
   }
 
-  const encodedLength = bytes[doctypeOffset + EBML_DOCTYPE_ID.length];
-  if (encodedLength === undefined || (encodedLength & 0x80) === 0) {
+  const sizeOffset = doctypeOffset + EBML_DOCTYPE_ID.length;
+  const encodedLength = bytes[sizeOffset];
+  if (encodedLength === undefined || encodedLength === 0) {
     return undefined;
   }
 
-  const doctypeLength = encodedLength & 0x7f;
-  const doctypeOffsetStart = doctypeOffset + EBML_DOCTYPE_ID.length + 1;
-  const doctype = bytes
-    .subarray(doctypeOffsetStart, doctypeOffsetStart + doctypeLength)
-    .toString('ascii');
+  let width = 1;
+  let marker = 0x80;
+  while ((encodedLength & marker) === 0) {
+    marker >>= 1;
+    width++;
+  }
+  if (sizeOffset + width > bytes.length) {
+    return undefined;
+  }
 
-  return doctype === 'webm' ? 'video/webm' : undefined;
+  let doctypeLength = encodedLength & (marker - 1);
+  for (let index = 1; index < width; index++) {
+    doctypeLength = doctypeLength * 256 + bytes[sizeOffset + index];
+    // Only the exact four-byte WebM DocType is supported. This also rejects
+    // unknown sizes before large VINT values can exceed safe integer precision.
+    if (doctypeLength > 4) {
+      return undefined;
+    }
+  }
+  const doctypeOffsetStart = sizeOffset + width;
+  if (doctypeLength !== 4 || doctypeOffsetStart + doctypeLength > bytes.length) {
+    return undefined;
+  }
+  const doctype = bytes.subarray(doctypeOffsetStart, doctypeOffsetStart + doctypeLength);
+
+  return doctype.equals(Buffer.from('webm')) ? 'video/webm' : undefined;
+}
+
+function getOggMimeType(bytes: Buffer): string | undefined {
+  let offset = 0;
+  let hasAudio = false;
+
+  // Inspect only identification packets on beginning-of-stream pages. Comment
+  // and compressed-data packets can contain codec names without identifying it.
+  while (offset + 27 <= bytes.length) {
+    if (bytes.toString('utf8', offset, offset + 4) !== 'OggS' || bytes[offset + 4] !== 0) {
+      return undefined;
+    }
+    const flags = bytes[offset + 5];
+    if ((flags & 2) === 0) {
+      return hasAudio ? 'audio/ogg' : undefined;
+    }
+    const segmentCount = bytes[offset + 26];
+    const payloadOffset = offset + 27 + segmentCount;
+    if ((flags & 1) !== 0 || segmentCount === 0 || payloadOffset > bytes.length) {
+      return undefined;
+    }
+
+    const segments = bytes.subarray(offset + 27, payloadOffset);
+    const packetEnd = segments.findIndex((length) => length < 255);
+    if (packetEnd < 0) {
+      return undefined;
+    }
+    const packetLength = segments
+      .subarray(0, packetEnd + 1)
+      .reduce((sum, length) => sum + length, 0);
+    const pageEnd = payloadOffset + segments.reduce((sum, length) => sum + length, 0);
+    if (pageEnd > bytes.length) {
+      return undefined;
+    }
+    const packet = bytes.subarray(payloadOffset, payloadOffset + packetLength);
+    if (packet.subarray(0, 7).equals(Buffer.from('\x80theora', 'latin1'))) {
+      return 'video/ogg';
+    }
+    const audioHeaders = ['OpusHead', '\x01vorbis', 'Speex   ', '\x7fFLAC'];
+    if (
+      !audioHeaders.some((header) => packet.subarray(0, header.length).equals(Buffer.from(header)))
+    ) {
+      return undefined;
+    }
+    hasAudio = true;
+    offset = pageEnd;
+  }
+
+  return offset === bytes.length && hasAudio ? 'audio/ogg' : undefined;
 }
 
 function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
@@ -1643,9 +1701,7 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
     return 'audio/flac';
   } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
-    return bytes.subarray(0, 65_536).includes(Buffer.from('theora', 'ascii'))
-      ? 'video/ogg'
-      : 'audio/ogg';
+    return getOggMimeType(bytes);
   }
 
   return undefined;

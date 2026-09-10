@@ -2083,8 +2083,8 @@ describe('GoogleProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
-    it('honors a passthrough snake-case NONE beside camel-case retrieval settings', async () => {
-      const callback = vi.fn();
+    it('ignores a snake-case NONE beside winning camel-case retrieval settings', async () => {
+      const callback = vi.fn().mockResolvedValue('sunny');
       const provider = new GoogleProvider('gemini-3.5-flash', {
         config: {
           apiKey: 'test-key',
@@ -2096,6 +2096,10 @@ describe('GoogleProvider', () => {
           },
         },
       });
+      mockMaybeLoadToolsFromExternalFile.mockResolvedValueOnce([
+        { googleSearch: {} },
+        { functionDeclarations: [{ name: 'get_weather' }] },
+      ]);
       const parts = [{ functionCall: { name: 'get_weather', args: {} } }];
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: { candidates: [{ content: { parts } }] },
@@ -2107,7 +2111,7 @@ describe('GoogleProvider', () => {
       const response = await provider.callApi('test prompt');
 
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
-        [{ googleSearch: {} }],
+        [{ googleSearch: {} }, 'file://tools.mjs:getTools'],
         undefined,
       );
       const body = JSON.parse(
@@ -2115,11 +2119,13 @@ describe('GoogleProvider', () => {
       );
       expect(body.toolConfig).toEqual({
         retrievalConfig: { languageCode: 'en' },
-        functionCallingConfig: { mode: 'NONE' },
       });
-      expect(body.tools).toEqual([{ googleSearch: {} }]);
-      expect(callback).not.toHaveBeenCalled();
-      expect(response.output).toEqual(parts);
+      expect(body.tools).toEqual([
+        { googleSearch: {} },
+        { functionDeclarations: [{ name: 'get_weather' }] },
+      ]);
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+      expect(response.output).toBe('sunny');
     });
 
     it('should preserve non-function tools loaded from data files when disabled', async () => {

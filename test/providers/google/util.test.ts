@@ -47,6 +47,8 @@ import {
 
 import type { Tool } from '../../../src/providers/google/types';
 
+const { readFileSync: readFixture } = await vi.importActual<typeof import('node:fs')>('node:fs');
+
 // Create a comprehensive mock for Google Auth Library
 // This prevents the real library from reading ~/.config/gcloud/ or environment
 const googleAuthMock = vi.hoisted(() => {
@@ -2053,12 +2055,18 @@ describe('util', () => {
 
         it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['IMAGE/PNG', Buffer.from('89504e470d0a1a0a0000000000000000', 'hex').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/aiff', Buffer.from('FORM....AIFFCOMM........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
-          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          [
+            'audio/ogg',
+            readFixture(
+              path.join(__dirname, '../../fixtures/google-media/vorbis-ordinary.ogg'),
+            ).toString('base64'),
+          ],
           ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
@@ -2075,7 +2083,9 @@ describe('util', () => {
 
           const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
 
-          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: mimeType.toLowerCase(), data: base64Data } },
+          ]);
         });
 
         it.each([
@@ -2152,7 +2162,12 @@ describe('util', () => {
           ['audio/aac', Buffer.from('fff95080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mpeg', Buffer.from('fffb5000000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
-          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          [
+            'audio/ogg',
+            readFixture(
+              path.join(__dirname, '../../fixtures/google-media/vorbis-ordinary.ogg'),
+            ).toString('base64'),
+          ],
           ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
@@ -2183,7 +2198,10 @@ describe('util', () => {
           ['image/avif', Buffer.from('....ftypavif........')],
           ['image/x-canon-cr3', Buffer.from('....ftypcrx ........')],
           ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
-          ['video/ogg', Buffer.from('OggS........\u0080theora...')],
+          [
+            'video/ogg',
+            readFixture(path.join(__dirname, '../../fixtures/google-media/theora.ogg')),
+          ],
           ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
           ['audio/unsupported', Buffer.from('unsupported audio...')],
           ['video/unsupported', Buffer.from('unsupported video...')],
@@ -4813,16 +4831,26 @@ describe('util', () => {
   });
 
   describe('resolveGoogleToolConfig', () => {
-    it('any disable signal forces NONE, even when explicit toolConfig says AUTO', () => {
-      // Documents the safety bias: a "no tools" signal from any source wins.
-      // If this needs to flip, update the test with the new precedence rule.
-      const result = resolveGoogleToolConfig({
+    it('lets explicit AUTO override tool_choice none', () => {
+      expect(
+        resolveGoogleToolConfig({
+          tool_choice: 'none',
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        }),
+      ).toEqual({
         toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-        tool_choice: 'none',
+        toolsDisabled: false,
+      });
+    });
+
+    it('derives disablement from the winning tool config', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
       });
       expect(result).toEqual({
-        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-        toolsDisabled: true,
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
       });
     });
 
@@ -4850,19 +4878,28 @@ describe('util', () => {
 
     it.each([
       {
-        toolConfig: { retrievalConfig: { languageCode: 'en' } },
-        tool_config: { function_calling_config: { mode: 'NONE' } },
+        passthrough: {
+          toolConfig: { retrievalConfig: { languageCode: 'en' } },
+          tool_config: { function_calling_config: { mode: 'NONE' } },
+        },
+        toolsDisabled: false,
       },
       {
-        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-        tool_config: { function_calling_config: { mode: 'ANY' } },
+        passthrough: {
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tool_config: { function_calling_config: { mode: 'ANY' } },
+        },
+        toolsDisabled: true,
       },
-    ])('honors NONE when both passthrough aliases are configured', (passthrough) => {
-      const result = resolveGoogleToolConfig({ passthrough });
-
-      expect(result.toolsDisabled).toBe(true);
-      expect(result.toolConfig?.functionCallingConfig).toEqual({ mode: 'NONE' });
-    });
+    ])(
+      'uses the winning camel-case config when both passthrough aliases are configured: $toolsDisabled',
+      ({ passthrough, toolsDisabled }) => {
+        expect(resolveGoogleToolConfig({ passthrough })).toEqual({
+          toolConfig: passthrough.toolConfig,
+          toolsDisabled,
+        });
+      },
+    );
 
     it.each([
       {
@@ -4942,6 +4979,26 @@ describe('util', () => {
             allowedFunctionNames: ['get_weather'],
             streamFunctionCallArguments: true,
           },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('preserves passthrough-only tool config', () => {
+      expect(
+        resolveGoogleToolConfig({
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: ['get_weather'],
+              },
+            },
+          },
+        } as any),
+      ).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_weather'] },
         },
         toolsDisabled: false,
       });
