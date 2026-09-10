@@ -31,6 +31,14 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   pii: `${BASE_DOCS_URL}/pii/`,
   'prompt-extraction': `${BASE_DOCS_URL}/prompt-extraction/`,
   'agentic:memory-poisoning': `${BASE_DOCS_URL}/memory-poisoning/`,
+  'agentic:approval-continuity': `${BASE_DOCS_URL}/agentic/approval-continuity/`,
+  'agentic:handoff-context-leakage': `${BASE_DOCS_URL}/agentic/handoff-context-leakage/`,
+  'agentic:agent-as-tool-boundary': `${BASE_DOCS_URL}/agentic/agent-as-tool-boundary/`,
+  'agentic:mcp-schema-injection': `${BASE_DOCS_URL}/agentic/mcp-schema-injection/`,
+  'agentic:session-memory-contamination': `${BASE_DOCS_URL}/agentic/session-memory-contamination/`,
+  'agentic:tool-discovery-confusion': `${BASE_DOCS_URL}/agentic/tool-discovery-confusion/`,
+  'agentic:tool-error-feedback-injection': `${BASE_DOCS_URL}/agentic/tool-error-feedback-injection/`,
+  'agentic:guardrail-coverage-gap': `${BASE_DOCS_URL}/agentic/guardrail-coverage-gap/`,
 
   // Compliance & Legal
   contracts: `${BASE_DOCS_URL}/contracts/`,

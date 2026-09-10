@@ -938,6 +938,20 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('scrubs echoes of strings nested below a redacted collection key', () => {
+      const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
+      const span = (redactingReceiver as any).redactSpan(
+        {
+          attributes: { authorization: ['Bearer nested-token'] },
+          name: 'Bearer nested-token',
+        },
+        ['authorization'],
+      );
+
+      expect(span.name).toBe('[REDACTED]');
+      expect(span.attributes.authorization).toBe('[REDACTED]');
+    });
+
     it('uses trace-specific redaction config instead of the receiver default', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],

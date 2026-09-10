@@ -360,16 +360,16 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
-  const targetManifest = (configForRemote as Record<string, unknown>).targetManifest;
+  const { targetManifest, ...remoteConfig } = configForRemote as Record<string, unknown>;
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
-    configForRemote.modifiers = {
-      ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
+    remoteConfig.modifiers = {
+      ...((remoteConfig.modifiers as Record<string, string> | undefined) ?? {}),
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
   const body = JSON.stringify({
-    config: configForRemote,
+    config: remoteConfig,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
     inputs: config?.inputs,

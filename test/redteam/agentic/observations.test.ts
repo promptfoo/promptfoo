@@ -32,6 +32,49 @@ describe('agentic run observations', () => {
     });
     expect(findingsFromObservations(observations)[0].location).toBe('tool update_seat');
   });
+
+  it('inherits span plugin IDs for event findings and recognizes standard tool arguments', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'event-plugin',
+          testCaseId: 'event-plugin',
+          traceId: 'event-plugin',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.plugin_id': 'agentic:approval-continuity',
+                'gen_ai.tool.call.arguments': '{"secret":"canary"}',
+              },
+              events: [
+                {
+                  attributes: {
+                    'promptfoo.agentic.finding.kind': 'approval-bypass',
+                    'promptfoo.agentic.finding.evidence': 'unguarded call',
+                  },
+                  name: 'finding',
+                  timestamp: 2,
+                },
+              ],
+              name: 'tool update_seat',
+              spanId: 'event-plugin',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'tool_call', input: '{"secret":"canary"}' }),
+        expect.objectContaining({
+          kind: 'finding',
+          pluginId: 'agentic:approval-continuity',
+        }),
+      ]),
+    );
+  });
   it('normalizes final output, provider raw Codex items, trace spans, and Agentic Runtime findings', () => {
     const gradingContext: RedteamGradingContext = {
       providerResponse: {

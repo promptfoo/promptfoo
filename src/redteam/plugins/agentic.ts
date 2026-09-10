@@ -368,7 +368,8 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
     observations
       .filter((observation) => observation.source !== 'trace-event' && observation.spanId)
       .map(
-        (observation) => `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}`,
+        (observation) =>
+          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? observation.timestamp ?? ''}`,
       ),
   );
   const seen = new Set<string>();
@@ -377,7 +378,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       if (
         observation.source === 'trace-event' &&
         spanInvocations.has(
-          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}`,
+          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? observation.timestamp ?? ''}`,
         )
       ) {
         return false;

@@ -311,6 +311,9 @@ function traceAttributeField(
 
   if (
     normalizedAttributeName === 'tool.input' ||
+    normalizedAttributeName === 'gen_ai.tool.call.arguments' ||
+    normalizedAttributeName === 'function.arguments' ||
+    normalizedAttributeName === 'ai.toolcall.args' ||
     normalizedAttributeName.includes('tool.args') ||
     normalizedAttributeName.includes('tool.arguments') ||
     normalizedAttributeName.includes('tool.input') ||
@@ -649,8 +652,14 @@ export function observationsFromTraceData(
 
     traceSpan.events?.forEach((event) => {
       const eventLocation = `${spanLocation} event ${event.name || 'event'}`;
+      const inheritedPluginId = getAttribute(traceSpan.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS);
       const eventSpan = {
-        attributes: event.attributes,
+        attributes: {
+          ...(inheritedPluginId === undefined
+            ? {}
+            : { 'promptfoo.agentic.plugin_id': inheritedPluginId }),
+          ...event.attributes,
+        },
         name: event.name,
         parentSpanId: traceSpan.parentSpanId,
         spanId: traceSpan.spanId,
@@ -666,7 +675,7 @@ export function observationsFromTraceData(
       }
       observations.push(
         ...observationsFromTraceAttributes(
-          event.attributes,
+          eventSpan.attributes,
           eventLocation,
           'trace-event',
           eventSpan,

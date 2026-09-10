@@ -372,18 +372,42 @@ export class OTLPReceiver {
     // through a span field the operator believes `redactAttributes` covers.
     const redactedSourceValues = new Set<string>();
     const collectRedactedSourceValues = (value: unknown, key?: string): void => {
-      if (key && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        if (typeof value === 'string') {
-          redactedSourceValues.add(value);
+      const pending: Array<{ value: unknown; key?: string; sensitive: boolean; depth: number }> = [
+        { value, key, sensitive: false, depth: 0 },
+      ];
+      let visited = 0;
+      while (pending.length > 0 && ++visited <= 10_000) {
+        const current = pending.pop()!;
+        const sensitive =
+          current.sensitive ||
+          Boolean(current.key && this.shouldRedactAttribute(current.key, redactAttributePatterns));
+        if (typeof current.value === 'string') {
+          if (sensitive) {
+            redactedSourceValues.add(current.value);
+          }
+          continue;
         }
-        return;
-      }
-      if (Array.isArray(value)) {
-        value.forEach((item) => collectRedactedSourceValues(item));
-      } else if (value && typeof value === 'object') {
-        Object.entries(value).forEach(([nestedKey, nestedValue]) =>
-          collectRedactedSourceValues(nestedValue, nestedKey),
-        );
+        if (current.depth >= 100) {
+          continue;
+        }
+        if (Array.isArray(current.value)) {
+          pending.push(
+            ...current.value.map((item) => ({
+              value: item,
+              sensitive,
+              depth: current.depth + 1,
+            })),
+          );
+        } else if (current.value && typeof current.value === 'object') {
+          pending.push(
+            ...Object.entries(current.value).map(([nestedKey, nestedValue]) => ({
+              value: nestedValue,
+              key: nestedKey,
+              sensitive,
+              depth: current.depth + 1,
+            })),
+          );
+        }
       }
     };
     for (const attributeSet of [

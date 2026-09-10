@@ -1,10 +1,10 @@
 const MAX_JSON_LENGTH = 100_000;
 
-function appendJsonObject(objects: object[], value: string, start: number, end: number): void {
+function parseJsonObject(value: string, start: number, end: number): object | undefined {
   try {
     const parsed: unknown = JSON.parse(value.slice(start, end + 1));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      objects.push(parsed);
+      return parsed;
     }
   } catch {
     // Reject malformed evidence at the verifier boundary.
@@ -16,7 +16,7 @@ export function extractJsonObjects(value: string): object[] {
   value = value.slice(0, MAX_JSON_LENGTH);
 
   const objects: object[] = [];
-  const nestedObjects: object[] = [];
+  let nestedObjects: Array<{ start: number; value: object }> = [];
   const starts: number[] = [];
   let escaped = false;
   let inString = false;
@@ -37,16 +37,20 @@ export function extractJsonObjects(value: string): object[] {
       starts.push(index);
     } else if (character === '}' && starts.length > 0) {
       const start = starts.pop()!;
+      const parsed = parseJsonObject(value, start, index);
       if (starts.length === 0) {
-        appendJsonObject(objects, value, start, index);
+        if (parsed) {
+          objects.push(parsed);
+        }
         nestedObjects.length = 0;
-      } else if (starts.length === 1) {
-        appendJsonObject(nestedObjects, value, start, index);
+      } else if (parsed) {
+        nestedObjects = nestedObjects.filter((candidate) => candidate.start < start);
+        nestedObjects.push({ start, value: parsed });
       }
     }
   }
 
-  objects.push(...nestedObjects);
+  objects.push(...nestedObjects.map(({ value }) => value));
   return objects;
 }
 
