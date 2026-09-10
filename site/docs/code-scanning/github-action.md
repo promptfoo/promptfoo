@@ -25,7 +25,7 @@ The easiest way to get started is by installing the Promptfoo Scanner GitHub App
 4. **Review the setup PR**: A pull request will be automatically opened in each repository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
 5. **Merge the PR**: you can tweak the workflow configuration if desired, and merge when ready.
 
-Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found.
+Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found. The action runs the scanner with its bundled Node.js 24 runtime, but older action releases and direct CLI steps require Node.js `>=22.22.0` on the runner. The [manual workflow](#workflow-configuration) configures Node.js 24 LTS for compatibility.
 
 :::info
 When using the GitHub App:
@@ -167,7 +167,7 @@ name: Promptfoo Code Scan
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, ready_for_review, synchronize]
 
 jobs:
   security-scan:
@@ -182,6 +182,11 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
 
       - name: Run Promptfoo Code Scan
         id: promptfoo-code-scan
@@ -209,7 +214,7 @@ The example pins the third-party actions to full commit SHAs with version commen
 The hardening below applies to code-scan-action releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
 
 - The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
-- The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo --signer-workflow promptfoo/promptfoo/.github/workflows/release-please.yml --source-ref refs/heads/main` (and likewise for `action.yml`).
+- The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo` (and likewise for `action.yml`).
 - The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that runs pull-request-controlled code earlier in the same job (such as `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and it already runs with the job's token. Keep the scan in a job that only checks out and scans the PR; run untrusted build steps in a separate job.
 
 ## See Also

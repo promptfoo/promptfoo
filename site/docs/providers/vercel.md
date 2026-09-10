@@ -9,7 +9,7 @@ description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Verc
 
 [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
-If you call the Vercel AI SDK directly from a [`file://` custom provider](/docs/providers/custom-api/) and enable `experimental_telemetry`, Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
+When [tracing](/docs/tracing/) is enabled, Promptfoo automatically turns on the AI SDK's built-in tracing for text generation, streaming, structured output, and embeddings. SDK spans inherit the current evaluation trace, including direct provider calls that supply a `traceparent`. Prompt and response content are not recorded. If you call the SDK directly from a [`file://` custom provider](/docs/providers/custom-api/), enable `experimental_telemetry` yourself; Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize its tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
 ## Setup
 

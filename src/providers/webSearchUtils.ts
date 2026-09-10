@@ -70,10 +70,29 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for OpenAI responses API with web_search_preview tool
+  // Check for OpenAI Responses API with either supported web-search tool.
   if (
     isOpenAiResponsesProvider(provider, id) &&
-    hasTool(provider, (t) => t.type === 'web_search_preview')
+    hasTool(provider, (t) => t.type === 'web_search' || t.type === 'web_search_preview')
+  ) {
+    return true;
+  }
+
+  // Chat Completions search models always retrieve from the web before responding.
+  const isOpenAiChat =
+    !isOpenAiResponsesProvider(provider, id) &&
+    (id.startsWith('openai:chat:') ||
+      provider.constructor?.name === 'OpenAiChatCompletionProvider');
+  const passthroughModel = provider.config?.passthrough?.model;
+  const chatModelId =
+    typeof passthroughModel === 'string'
+      ? passthroughModel
+      : 'modelName' in provider && typeof provider.modelName === 'string'
+        ? provider.modelName
+        : id;
+  if (
+    isOpenAiChat &&
+    /(?:^|[/:])(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
   ) {
     return true;
   }
@@ -129,10 +148,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
+  // OpenAI GPT-5.6 Terra with web search tool (via Responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
+      return await loadApiProvider('openai:responses:gpt-5.6-terra', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },
