@@ -192,7 +192,7 @@ describe('dependency ownership report', () => {
     },
   );
 
-  it.each(['dist/pkg', 'packages/pkg'])(
+  it.each(['dist/pkg', 'dist/test/pkg', 'packages/pkg', 'test/pkg', 'tests/pkg', '__tests__/pkg'])(
     'keeps handwritten and generated declarations distinct for workspace %s',
     (workspace) => {
       json('package.json', { workspaces: [workspace], dependencies: { 'root-types': '1' } });
@@ -912,6 +912,71 @@ describe('dependency ownership report', () => {
       expect.objectContaining({
         dependency: 'missing-types',
         references: [expect.objectContaining({ kind: 'type', line: 3 })],
+      }),
+    ]);
+  });
+
+  it('continues reading JSDoc imports after an unsupported tag', () => {
+    write(
+      'src/index.js',
+      [
+        '/**',
+        " * @import 'unsupported'",
+        ' * @import {',
+        ' *   Client',
+        " * } from 'client-types'",
+        ' */',
+        'export {};',
+      ].join('\n'),
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'client-types',
+        references: [expect.objectContaining({ kind: 'type', line: 3 })],
+      }),
+    ]);
+  });
+
+  it('attributes package resource queries to the declared package', () => {
+    json('package.json', { dependencies: { shared: '1', '@site/sdk': '1' } });
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root' },
+      aliases: { 'package.json': ['@site'] },
+    });
+    write('src/index.ts', "import 'shared?raw'; import '@site/sdk?init'; import 'missing#asset';");
+    const report = reportDependencyOwnership(root, config);
+    for (const [dependency, specifier] of [
+      ['shared', 'shared?raw'],
+      ['@site/sdk', '@site/sdk?init'],
+    ]) {
+      expect(
+        report.declarations.find((entry) => entry.dependency === dependency)?.references,
+      ).toEqual([expect.objectContaining({ specifier })]);
+    }
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'missing',
+        references: [expect.objectContaining({ specifier: 'missing#asset' })],
+      }),
+    ]);
+  });
+
+  it.each([
+    ['ts', 'export {};'],
+    ['d.ts', 'export {};'],
+    ['cts', 'import shared = require("shared");'],
+  ])('records module augmentations in %s files', (extension, moduleMarker) => {
+    write(
+      `src/augment.${extension}`,
+      `${moduleMarker}\ndeclare module 'driver' { interface Client { label: string } }`,
+    );
+    write('src/shim.d.ts', "declare module 'shim-only' { export interface Client {} }");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'driver',
+        references: [
+          expect.objectContaining({ file: `src/augment.${extension}`, kind: 'type', line: 2 }),
+        ],
       }),
     ]);
   });

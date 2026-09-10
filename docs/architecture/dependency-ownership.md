@@ -48,7 +48,8 @@ The versioned JSON object contains:
 
 Reference scopes separate source, build, colocated test/story, and declaration
 files. Reference kinds distinguish explicit type imports, leading triple-slash type
-references, JSDoc type tags and `@import` declarations in JavaScript files, value-capable imports, dynamic imports, resolution calls, and manual
+references, module augmentations in files with import/export syntax, JSDoc type tags
+and `@import` declarations in JavaScript files, value-capable imports, dynamic imports, resolution calls, and manual
 annotation evidence. Type references retain their written specifier; Node types
 and installed DefinitelyTyped entries are attributed to their `@types` package.
 Installed type entries are checked along the referencing file's default Node lookup paths;
