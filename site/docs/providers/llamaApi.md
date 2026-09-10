@@ -7,6 +7,12 @@ description: Use Meta's hosted Llama API service for text generation and multimo
 
 The Llama API provider enables you to use Meta's hosted Llama models through their official API service. This includes access to the latest Llama 4 multimodal models and Llama 3.3 text models, as well as accelerated variants from partners like Cerebras and Groq.
 
+:::warning
+
+Meta [retired the Llama API Public Preview on July 6, 2026](https://llama.developer.meta.com/docs/llama-api-deprecation/). Llama models remain available for download and through third-party hosts such as [AWS Bedrock](/docs/providers/aws-bedrock.md), [Together AI](/docs/providers/togetherai.md), and [Groq](/docs/providers/groq.md). For Meta's current hosted inference service (the Muse Spark models at `api.meta.ai`), use the [Meta Model API provider](/docs/providers/meta.md).
+
+:::
+
 ## Setup
 
 First, you'll need to get an API key from Meta:

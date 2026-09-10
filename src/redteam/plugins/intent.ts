@@ -23,7 +23,13 @@ export class IntentPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
   private intents: (string | string[])[];
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+    private readonly targetId?: string,
+  ) {
     super(provider, purpose, injectVar, config);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
@@ -52,7 +58,14 @@ export class IntentPlugin extends RedteamPluginBase {
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
-        const extractedIntent = await extractGoalFromPrompt(intent, this.purpose, this.id);
+        const extractedIntent = await extractGoalFromPrompt(
+          intent,
+          this.purpose,
+          this.id,
+          undefined,
+          this.targetId,
+          this.provider,
+        );
 
         testCases.push({
           vars: {
@@ -67,7 +80,14 @@ export class IntentPlugin extends RedteamPluginBase {
         });
       } else {
         const firstPrompt = Array.isArray(intent) ? intent[0] : intent;
-        const extractedIntent = await extractGoalFromPrompt(firstPrompt, this.purpose, this.id);
+        const extractedIntent = await extractGoalFromPrompt(
+          firstPrompt,
+          this.purpose,
+          this.id,
+          undefined,
+          this.targetId,
+          this.provider,
+        );
 
         testCases.push({
           vars: {

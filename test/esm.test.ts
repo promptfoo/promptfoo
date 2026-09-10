@@ -32,6 +32,7 @@ describe('ESM utilities', () => {
 
   afterEach(() => {
     clearWrapperDirCache();
+    vi.restoreAllMocks();
   });
 
   describe('getWrapperDir', () => {
@@ -97,6 +98,55 @@ describe('ESM utilities', () => {
         defaultProp: 'ts default property',
       });
       expect(result.testFunction()).toBe('ts default test result');
+    });
+
+    it.each([
+      { extension: 'JS', source: "module.exports = { value: 'js' };", value: 'js' },
+      { extension: 'MJS', source: "export const value = 'mjs';", value: 'mjs' },
+      { extension: 'CJS', source: "module.exports = { value: 'cjs' };", value: 'cjs' },
+      { extension: 'TS', source: "export const value = 'ts';", value: 'ts' },
+      { extension: 'MTS', source: "export const value = 'mts';", value: 'mts' },
+      { extension: 'CTS', source: "export const value = 'cts';", value: 'cts' },
+    ])(
+      'imports modules referenced with an uppercase .$extension extension',
+      async ({ extension, source, value }) => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
+        const lowerCasePath = path.join(tempDir, `provider.${extension.toLowerCase()}`);
+        const upperCasePath = path.join(tempDir, `provider.${extension}`);
+        fs.writeFileSync(lowerCasePath, source);
+
+        try {
+          const result = await importModule(upperCasePath);
+          expect(result.value).toBe(value);
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it('does not substitute a different module on case-sensitive file systems', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
+      const lowerCasePath = path.join(tempDir, 'provider.js');
+      const upperCasePath = path.join(tempDir, 'provider.JS');
+      fs.writeFileSync(lowerCasePath, "module.exports = { value: 'lower' };");
+
+      try {
+        if (fs.existsSync(upperCasePath)) {
+          expect(fs.statSync(upperCasePath).ino).toBe(fs.statSync(lowerCasePath).ino);
+          return;
+        }
+
+        fs.writeFileSync(upperCasePath, "module.exports = { value: 'upper' };");
+        expect(fs.statSync(upperCasePath).ino).not.toBe(fs.statSync(lowerCasePath).ino);
+        try {
+          const result = await importModule(upperCasePath);
+          expect(result).toEqual({ value: 'upper' });
+        } catch (error) {
+          expect(error).toMatchObject({ code: 'ERR_UNKNOWN_FILE_EXTENSION' });
+        }
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it('imports TypeScript modules with transitive TypeScript dependencies', async () => {
@@ -189,16 +239,61 @@ describe('ESM utilities', () => {
       expect(result.testFunction()).toBe('js default test result');
     });
 
-    it('throws ENOENT error for non-existent module (normalized from ERR_MODULE_NOT_FOUND)', async () => {
-      const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
+    it.each(['cjs', 'cts', 'js', 'mjs', 'mts', 'ts'])(
+      'throws ENOENT without logging an error or stack for a missing .%s module',
+      async (extension) => {
+        const nonExistentPath = path.resolve(__dirname, `__fixtures__/nonExistent.${extension}`);
 
-      // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
-      const error = await importModule(nonExistentPath).catch((e) => e);
-      expect(error).toBeInstanceOf(Error);
-      expect((error as NodeJS.ErrnoException).code).toBe('ENOENT');
-      expect((error as NodeJS.ErrnoException).path).toBe(nonExistentPath);
-      // Should NOT log error for missing files - this is expected during config discovery
-      expect(logger.error).not.toHaveBeenCalled();
+        // Missing files are expected during config discovery, including in verbose logs.
+        await expect(importModule(nonExistentPath)).rejects.toMatchObject({
+          code: 'ENOENT',
+          path: nonExistentPath,
+        });
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.debug).not.toHaveBeenCalledWith(
+          expect.stringMatching(/ERR_MODULE_NOT_FOUND|Cannot find module|\n\s+at /),
+        );
+      },
+    );
+
+    it.each([
+      {
+        name: 'missing dependency',
+        source: "import './missing-dependency.mjs';",
+        error: { code: 'ERR_MODULE_NOT_FOUND' },
+      },
+      {
+        // A missing bare specifier names the package, never the entry module's path,
+        // so the ENOENT normalization must not claim the config file itself is absent.
+        name: 'missing bare package dependency',
+        source: "import 'promptfoo-not-a-real-package';",
+        error: { code: 'ERR_MODULE_NOT_FOUND' },
+      },
+      {
+        name: 'invalid syntax',
+        source: 'export default {;',
+        // Vite reports parse failures as Error rather than Node's SyntaxError.
+        error: { message: expect.stringMatching(/syntax|Unexpected token/i) },
+      },
+      {
+        name: 'runtime failure',
+        source: "throw new Error('config initialization failed');",
+        error: { message: 'config initialization failed' },
+      },
+    ])('preserves and logs a $name in an existing module', async ({ source, error }) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-error-test-'));
+      const modulePath = path.join(tempDir, 'config.mjs');
+      fs.writeFileSync(modulePath, source);
+
+      try {
+        const thrown = await importModule(modulePath).catch((err) => err);
+        expect(thrown).toMatchObject(error);
+        expect(thrown.stack).toEqual(expect.any(String));
+        expect(logger.debug).toHaveBeenCalledWith(thrown.stack);
+        expect(logger.error).toHaveBeenCalledWith(`ESM import failed: ${thrown}`);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it('logs debug information during import process', async () => {
