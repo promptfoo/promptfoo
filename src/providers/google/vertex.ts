@@ -35,6 +35,7 @@ import {
   getCandidate,
   getGoogleClient,
   getGoogleResponseServiceTier,
+  getVertexServiceTierHeaders,
   isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
@@ -675,8 +676,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     } = config.passthrough || {};
     const serviceTier = normalizeGoogleServiceTier(
       passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
-      true,
     );
+    const tierHeaders = getVertexServiceTierHeaders(serviceTier, this.config.headers);
+    const opaqueServiceTier =
+      serviceTier && !['standard', 'priority', 'flex'].includes(serviceTier)
+        ? serviceTier
+        : undefined;
     const requestPassthroughTools =
       toolsDisabled && passthroughTools !== undefined
         ? removeGoogleFunctionDeclarations(passthroughTools)
@@ -711,7 +716,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(mergedTools ? { tools: mergedTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
-      ...(serviceTier ? { serviceTier } : {}),
+      ...(opaqueServiceTier ? { serviceTier: opaqueServiceTier } : {}),
       ...passthrough,
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
@@ -751,7 +756,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
+    const tierHeader = Object.entries(tierHeaders).find(
+      ([name]) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+    )?.[1];
+    // Tier selection moved to a header; retain it in the local cache identity only.
+    const cacheBody =
+      tierHeader === undefined ? body : { requestBody: body, serviceTierHeader: tierHeader };
+    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, cacheBody, apiHost);
 
     let response;
     let cachedResponse;
@@ -787,7 +798,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
           const res = await fetchWithProxy(url, {
             method: 'POST',
-            headers: await this.getAuthHeaders(),
+            headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
@@ -813,6 +824,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             url,
             method: 'POST',
             data: body,
+            headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
             timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
@@ -990,6 +1002,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const actualServiceTier = getGoogleResponseServiceTier(
           responseHeaders,
           lastData.usageMetadata,
+          true,
         );
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
@@ -1013,6 +1026,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {
             ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
             ...(actualServiceTier && { serviceTier: actualServiceTier }),
+            ...(typeof lastData.usageMetadata?.trafficType === 'string' && {
+              trafficType: lastData.usageMetadata.trafficType,
+            }),
           },
         };
 

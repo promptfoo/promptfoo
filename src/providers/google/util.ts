@@ -51,11 +51,8 @@ type GoogleToolConfig = NonNullable<CompletionOptions['toolConfig']>;
 
 type GoogleServiceTier = 'standard' | 'priority' | 'flex';
 
-/** Normalize the SDK-style tier name or Vertex's protobuf enum for the target API. */
-export function normalizeGoogleServiceTier(
-  serviceTier: unknown,
-  vertexai = false,
-): string | undefined {
+/** Normalize supported tier names, including legacy prefixed configuration values. */
+export function normalizeGoogleServiceTier(serviceTier: unknown): string | undefined {
   if (typeof serviceTier !== 'string') {
     return undefined;
   }
@@ -65,13 +62,29 @@ export function normalizeGoogleServiceTier(
     return serviceTier;
   }
 
-  return vertexai ? `SERVICE_TIER_${normalized.toUpperCase()}` : normalized;
+  return normalized;
+}
+
+/** Add the documented Vertex PayGo tier without overriding an explicit custom header. */
+export function getVertexServiceTierHeaders(
+  serviceTier: unknown,
+  headers: Record<string, string> = {},
+): Record<string, string> {
+  const headerName = 'X-Vertex-AI-LLM-Shared-Request-Type';
+  if (Object.keys(headers).some((name) => name.toLowerCase() === headerName.toLowerCase())) {
+    return headers;
+  }
+  const normalized = normalizeGoogleServiceTier(serviceTier);
+  return normalized === 'priority' || normalized === 'flex'
+    ? { [headerName]: normalized, ...headers }
+    : headers;
 }
 
 /** Read the actual processing tier before estimating costs for a downgraded request. */
 export function getGoogleResponseServiceTier(
   headers: unknown,
   usageMetadata?: unknown,
+  vertexai = false,
 ): GoogleServiceTier | undefined {
   let headerValue: unknown;
   if (headers && typeof headers === 'object') {
@@ -87,7 +100,23 @@ export function getGoogleResponseServiceTier(
           )?.[1];
   }
 
-  const metadata = usageMetadata as { serviceTier?: unknown; service_tier?: unknown } | undefined;
+  const metadata = usageMetadata as
+    | { serviceTier?: unknown; service_tier?: unknown; trafficType?: unknown }
+    | undefined;
+  // Preserve explicit response-header precedence. Vertex reports the processed PayGo
+  // tier separately from provisioned, unspecified, or future traffic classifications.
+  if (headerValue == null && vertexai && metadata?.trafficType !== undefined) {
+    switch (metadata.trafficType) {
+      case 'ON_DEMAND':
+        return 'standard';
+      case 'ON_DEMAND_PRIORITY':
+        return 'priority';
+      case 'ON_DEMAND_FLEX':
+        return 'flex';
+      default:
+        return undefined;
+    }
+  }
   const normalized = normalizeGoogleServiceTier(
     headerValue ?? metadata?.serviceTier ?? metadata?.service_tier,
   );
@@ -776,6 +805,7 @@ export function calculateGoogleCostFromUsage(
     getGoogleResponseServiceTier(
       responseServiceTier ? { 'x-gemini-service-tier': responseServiceTier } : undefined,
       usageMetadata,
+      isVertexMode,
     ),
   );
 }
@@ -832,6 +862,7 @@ interface GeminiUsageMetadata {
   cacheTokensDetails?: Array<{ modality: string; tokenCount: number }>;
   serviceTier?: string;
   service_tier?: string;
+  trafficType?: string;
 }
 
 export interface GeminiErrorResponse {

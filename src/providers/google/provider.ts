@@ -32,6 +32,7 @@ import {
   getGoogleClient,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
+  getVertexServiceTierHeaders,
   isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
@@ -374,8 +375,14 @@ export class GoogleProvider extends GoogleGenericProvider {
     } = config.passthrough || {};
     const serviceTier = normalizeGoogleServiceTier(
       passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
-      this.isVertexMode,
     );
+    const tierHeaders = this.isVertexMode
+      ? getVertexServiceTierHeaders(serviceTier, this.config.headers)
+      : {};
+    const bodyServiceTier =
+      this.isVertexMode && serviceTier && ['standard', 'priority', 'flex'].includes(serviceTier)
+        ? undefined
+        : serviceTier;
     const serviceTierField = this.isVertexMode ? 'serviceTier' : 'service_tier';
     const requestPassthroughTools =
       toolsDisabled && passthroughTools !== undefined
@@ -412,7 +419,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
-      ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
+      ...(bodyServiceTier ? { [serviceTierField]: bodyServiceTier } : {}),
       ...passthrough,
     };
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
@@ -454,6 +461,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           url,
           method: 'POST',
           data: body,
+          headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
           timeout: getRequestTimeoutMs(),
         });
         data = res.data as GeminiApiResponse;
@@ -465,7 +473,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
         const res = await fetchWithProxy(url, {
           method: 'POST',
-          headers: await this.getAuthHeaders(),
+          headers: { ...tierHeaders, ...(await this.getAuthHeaders()) },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(getRequestTimeoutMs()),
         });
@@ -693,6 +701,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       const actualServiceTier = getGoogleResponseServiceTier(
         responseHeaders,
         lastData.usageMetadata,
+        this.isVertexMode,
       );
 
       // Include thinking tokens in output cost - Google bills them as output tokens
@@ -727,6 +736,10 @@ export class GoogleProvider extends GoogleGenericProvider {
           ...grounding,
           ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
           ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          ...(this.isVertexMode &&
+            typeof lastData.usageMetadata?.trafficType === 'string' && {
+              trafficType: lastData.usageMetadata.trafficType,
+            }),
         },
       };
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { GoogleProvider } from '../../../src/providers/google/provider';
@@ -1113,35 +1113,289 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.000605, 12);
     });
 
-    it('normalizes Vertex service tiers and respects the returned processing tier', async () => {
-      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
-        config: {
-          vertexai: true,
-          apiKey: 'test-vertex-key',
-          region: 'global',
-          service_tier: 'priority',
-        },
+    describe('Vertex tier protocol regression', () => {
+      afterEach(() => {
+        vi.clearAllMocks();
       });
-      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'x-gemini-service-tier': 'standard' }),
-        json: vi.fn().mockResolvedValue({
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1_000,
-            candidatesTokenCount: 100,
-            totalTokenCount: 1_100,
+
+      const cases: Array<{
+        name: string;
+        transport: 'OAuth' | 'Express';
+        config?: NonNullable<ConstructorParameters<typeof GoogleProvider>[1]>['config'];
+        promptConfig?: NonNullable<ConstructorParameters<typeof GoogleProvider>[1]>['config'];
+        headerTier?: string;
+        trafficType?: string;
+        actualTier?: string;
+        cost: number;
+      }> = [
+        {
+          name: 'OAuth Priority',
+          transport: 'OAuth',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          trafficType: 'ON_DEMAND_PRIORITY',
+          actualTier: 'priority',
+          cost: 0.00099,
+        },
+        {
+          name: 'Express Priority',
+          transport: 'Express',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          trafficType: 'ON_DEMAND_PRIORITY',
+          actualTier: 'priority',
+          cost: 0.00099,
+        },
+        {
+          name: 'OAuth Flex',
+          transport: 'OAuth',
+          config: { service_tier: 'flex' },
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        },
+        {
+          name: 'Express Flex',
+          transport: 'Express',
+          config: { service_tier: 'flex' },
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        },
+        {
+          name: 'snake-case passthrough overrides configured Flex',
+          transport: 'OAuth',
+          config: { service_tier: 'flex', passthrough: { service_tier: 'priority' } },
+          headerTier: 'priority',
+          trafficType: 'ON_DEMAND_PRIORITY',
+          actualTier: 'priority',
+          cost: 0.00099,
+        },
+        {
+          name: 'camel-case passthrough overrides configured Priority',
+          transport: 'Express',
+          config: { service_tier: 'priority', passthrough: { serviceTier: 'flex' } },
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        },
+        {
+          name: 'prompt tier overrides provider tier',
+          transport: 'OAuth',
+          config: { service_tier: 'priority' },
+          promptConfig: { service_tier: 'flex' },
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        },
+        {
+          name: 'prompt passthrough overrides provider passthrough',
+          transport: 'Express',
+          config: { passthrough: { service_tier: 'priority' } },
+          promptConfig: { passthrough: { service_tier: 'flex' } },
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        },
+        {
+          name: 'standard does not add a tier or only-PayGo header',
+          transport: 'OAuth',
+          config: { service_tier: 'standard' },
+          trafficType: 'ON_DEMAND',
+          actualTier: 'standard',
+          cost: 0.00055,
+        },
+        {
+          name: 'omitted tier does not add a tier or only-PayGo header',
+          transport: 'Express',
+          trafficType: 'ON_DEMAND',
+          actualTier: 'standard',
+          cost: 0.00055,
+        },
+        ...(['OAuth', 'Express'] as const).map((transport) => ({
+          name: `${transport} explicit mixed-case header overrides configured Priority`,
+          transport,
+          config: {
+            service_tier: 'priority' as const,
+            headers: { 'x-VeRtEx-Ai-LlM-ShArEd-ReQuEsT-TyPe': 'flex' },
           },
-        }),
-      } as any);
+          headerTier: 'flex',
+          trafficType: 'ON_DEMAND_FLEX',
+          actualTier: 'flex',
+          cost: 0.000275,
+        })),
+        ...(['OAuth', 'Express'] as const).map((transport) => ({
+          name: `${transport} Priority downgrade uses ON_DEMAND before billing`,
+          transport,
+          config: { service_tier: 'priority' as const },
+          headerTier: 'priority',
+          trafficType: 'ON_DEMAND',
+          actualTier: 'standard',
+          cost: 0.00055,
+        })),
+        {
+          name: 'unknown traffic retains raw metadata and requested estimate',
+          transport: 'OAuth',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          trafficType: 'FUTURE_TRAFFIC_TYPE',
+          cost: 0.00099,
+        },
+        {
+          name: 'provisioned traffic retains raw metadata and requested estimate',
+          transport: 'Express',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          trafficType: 'PROVISIONED_THROUGHPUT',
+          cost: 0.00099,
+        },
+        {
+          name: 'unspecified traffic retains raw metadata and requested estimate',
+          transport: 'OAuth',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          trafficType: 'TRAFFIC_TYPE_UNSPECIFIED',
+          cost: 0.00099,
+        },
+        {
+          name: 'missing traffic retains requested estimate without actual tier metadata',
+          transport: 'Express',
+          config: { service_tier: 'priority' },
+          headerTier: 'priority',
+          cost: 0.00099,
+        },
+      ];
 
-      const result = await provider.callApi('test prompt');
-      const request = vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
-      const body = JSON.parse(request?.body as string);
+      it.each(cases)(
+        '$name',
+        async ({ transport, config, promptConfig, headerTier, trafficType, actualTier, cost }) => {
+          const data = {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1_000,
+              candidatesTokenCount: 100,
+              totalTokenCount: 1_100,
+              ...(trafficType === undefined
+                ? {}
+                : { trafficType, serviceTier: 'SERVICE_TIER_PRIORITY' }),
+            },
+          };
+          const mockRequest = vi.fn().mockResolvedValue({ data });
+          if (transport === 'OAuth') {
+            vi.mocked(util.getGoogleClient).mockResolvedValueOnce({
+              client: { request: mockRequest },
+              credentials: {},
+            } as any);
+          } else {
+            vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+              ok: true,
+              json: vi.fn().mockResolvedValue(data),
+            } as any);
+          }
+          const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+            config: {
+              vertexai: true,
+              region: 'global',
+              ...(transport === 'OAuth'
+                ? { projectId: 'my-project' }
+                : { apiKey: 'test-vertex-key' }),
+              ...config,
+              headers: { 'X-Test-Header': 'preserved', ...config?.headers },
+            },
+          });
 
-      expect(body.serviceTier).toBe('SERVICE_TIER_PRIORITY');
-      expect(result.cost).toBeCloseTo(0.00055, 12);
-      expect(result.metadata).toMatchObject({ serviceTier: 'standard' });
+          const response = await provider.callApi(
+            'test prompt',
+            promptConfig
+              ? ({ prompt: { raw: 'test prompt', label: 'test', config: promptConfig } } as any)
+              : undefined,
+          );
+          const request =
+            transport === 'OAuth'
+              ? mockRequest.mock.calls.at(-1)?.[0]
+              : vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
+          const headers = new Headers(request?.headers);
+          expect(headers.get('X-Vertex-AI-LLM-Shared-Request-Type')).toBe(headerTier ?? null);
+          expect(headers.has('X-Vertex-AI-LLM-Request-Type')).toBe(false);
+          expect(headers.get('X-Test-Header')).toBe('preserved');
+          expect(
+            Object.keys(request.headers).filter(
+              (name) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+            ),
+          ).toHaveLength(headerTier === undefined ? 0 : 1);
+          if (transport === 'Express') {
+            expect(headers.get('x-goog-api-key')).toBe('test-vertex-key');
+            expect(mockRequest).not.toHaveBeenCalled();
+          } else {
+            expect(mockRequest).toHaveBeenCalledOnce();
+            expect(fetchUtil.fetchWithProxy).not.toHaveBeenCalled();
+          }
+          const url =
+            transport === 'OAuth'
+              ? request.url
+              : vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[0];
+          expect(url).toContain('aiplatform.googleapis.com');
+          expect(url).toContain('/publishers/google/models/gemini-3.5-flash-lite:generateContent');
+          if (transport === 'OAuth') {
+            expect(url).toContain('/projects/my-project/locations/global/');
+          }
+          expect(request.method).toBe('POST');
+          const body = transport === 'OAuth' ? request.data : JSON.parse(request.body);
+          expect(body.contents).toEqual([{ role: 'user', parts: [{ text: 'test prompt' }] }]);
+          expect(body).not.toHaveProperty('serviceTier');
+          expect(body).not.toHaveProperty('service_tier');
+          expect(response.output).toBe('response');
+          expect(response.error).toBeUndefined();
+          expect(response.cost).toBeCloseTo(cost, 12);
+          expect(response.metadata?.serviceTier).toBe(actualTier);
+          expect(response.metadata?.trafficType).toBe(trafficType);
+          if (actualTier === undefined) {
+            expect(response.metadata ?? {}).not.toHaveProperty('serviceTier');
+          }
+          if (trafficType === undefined) {
+            expect(response.metadata ?? {}).not.toHaveProperty('trafficType');
+          }
+        },
+      );
+
+      it('preserves an opaque Vertex passthrough tier without deriving a routing header', async () => {
+        const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+          config: {
+            vertexai: true,
+            apiKey: 'test-vertex-key',
+            region: 'global',
+            passthrough: { serviceTier: 'future-tier' },
+          },
+        });
+        vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1_000,
+              candidatesTokenCount: 100,
+              totalTokenCount: 1_100,
+            },
+          }),
+        } as any);
+
+        const response = await provider.callApi('test prompt');
+        const request = vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
+        const body = JSON.parse(request?.body as string);
+        const headers = new Headers(request?.headers);
+
+        expect(body.serviceTier).toBe('future-tier');
+        expect(body).not.toHaveProperty('service_tier');
+        expect(headers.has('X-Vertex-AI-LLM-Shared-Request-Type')).toBe(false);
+        expect(headers.has('X-Vertex-AI-LLM-Request-Type')).toBe(false);
+        expect(response.output).toBe('response');
+        expect(response.error).toBeUndefined();
+      });
     });
 
     it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(

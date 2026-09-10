@@ -179,20 +179,18 @@ describe('util', () => {
 
   describe('Google service tiers', () => {
     it.each([
-      ['standard', false, 'standard'],
-      ['priority', false, 'priority'],
-      ['flex', false, 'flex'],
-      ['SERVICE_TIER_PRIORITY', false, 'priority'],
-      ['standard', true, 'SERVICE_TIER_STANDARD'],
-      ['priority', true, 'SERVICE_TIER_PRIORITY'],
-      ['flex', true, 'SERVICE_TIER_FLEX'],
-      ['SERVICE_TIER_FLEX', true, 'SERVICE_TIER_FLEX'],
-    ])('normalizes %s for Vertex=%s', (tier, vertexai, expected) => {
-      expect(normalizeGoogleServiceTier(tier, vertexai)).toBe(expected);
+      ['standard', 'standard'],
+      ['priority', 'priority'],
+      ['flex', 'flex'],
+      ['SERVICE_TIER_STANDARD', 'standard'],
+      ['SERVICE_TIER_PRIORITY', 'priority'],
+      ['SERVICE_TIER_FLEX', 'flex'],
+    ])('normalizes %s without manufacturing a wire enum', (tier, expected) => {
+      expect(normalizeGoogleServiceTier(tier)).toBe(expected);
     });
 
-    it('preserves an unknown tier so the API can reject it', () => {
-      expect(normalizeGoogleServiceTier('custom', true)).toBe('custom');
+    it('preserves an unknown tier input', () => {
+      expect(normalizeGoogleServiceTier('custom')).toBe('custom');
     });
 
     it('prefers the actual tier reported in response headers', () => {
@@ -208,6 +206,136 @@ describe('util', () => {
       expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
         'flex',
       );
+    });
+  });
+
+  describe('Vertex tier protocol regression', () => {
+    it.each([
+      ['ON_DEMAND_PRIORITY', 'priority'],
+      ['ON_DEMAND_FLEX', 'flex'],
+      ['ON_DEMAND', 'standard'],
+      ['TRAFFIC_TYPE_UNSPECIFIED', undefined],
+      ['PROVISIONED_THROUGHPUT', undefined],
+      ['FUTURE_TRAFFIC_CLASS', undefined],
+      [undefined, undefined],
+    ])('recognizes only documented on-demand traffic %s', (trafficType, expected) => {
+      expect(getGoogleResponseServiceTier(undefined, { trafficType }, true)).toBe(expected);
+    });
+
+    it('keeps explicit response headers ahead of traffic and legacy metadata', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          new Headers({ 'X-Gemini-Service-Tier': 'standard' }),
+          { trafficType: 'ON_DEMAND_FLEX', serviceTier: 'priority' },
+          true,
+        ),
+      ).toBe('standard');
+    });
+
+    it('uses traffic before legacy aliases while leaving native parsing unchanged', () => {
+      const usage = { trafficType: 'ON_DEMAND_FLEX', serviceTier: 'priority' };
+      expect(getGoogleResponseServiceTier(undefined, usage, true)).toBe('flex');
+      expect(getGoogleResponseServiceTier(undefined, usage)).toBe('priority');
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'priority' }, true)).toBe(
+        'priority',
+      );
+    });
+
+    it.each(['TRAFFIC_TYPE_UNSPECIFIED', 'PROVISIONED_THROUGHPUT', 'FUTURE_TRAFFIC_CLASS'])(
+      'does not reinterpret explicit %s as a legacy PayGo tier',
+      (trafficType) => {
+        expect(
+          getGoogleResponseServiceTier(
+            undefined,
+            { trafficType, serviceTier: 'priority', service_tier: 'flex' },
+            true,
+          ),
+        ).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['ON_DEMAND_PRIORITY', 0.00099],
+      ['ON_DEMAND_FLEX', 0.000275],
+      ['ON_DEMAND', 0.00055],
+      ['PROVISIONED_THROUGHPUT', 0.00099],
+      ['FUTURE_TRAFFIC_CLASS', 0.00099],
+      [undefined, 0.00099],
+    ] as const)(
+      'prices recognized %s before falling back to the requested-tier estimate',
+      (trafficType, expected) => {
+        expect(
+          calculateGoogleCostFromUsage(
+            'gemini-3.5-flash-lite',
+            { region: 'global', service_tier: 'priority' },
+            1_000,
+            100,
+            true,
+            { trafficType },
+          ),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
+    it('preserves zero and partial directional overrides after an actual downgrade', () => {
+      const usage = { trafficType: 'ON_DEMAND', cachedContentTokenCount: 100 };
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.5-flash-lite',
+          { region: 'global', service_tier: 'priority', cost: 0 },
+          1_000,
+          100,
+          true,
+          usage,
+        ),
+      ).toBe(0);
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.5-flash-lite',
+          { region: 'global', service_tier: 'priority', inputCost: 0 },
+          1_000,
+          100,
+          true,
+          usage,
+        ),
+      ).toBeCloseTo(0.00025, 12);
+    });
+
+    it('keeps directional and modality rates absolute with actual Flex traffic', () => {
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.6-flash',
+          {
+            region: 'global',
+            service_tier: 'priority',
+            inputCost: 0.02,
+            outputCost: 0.03,
+            audioInputCost: 0.04,
+            audioOutputCost: 0.05,
+            imageInputCost: 0.06,
+            videoOutputCost: 0.07,
+          },
+          300,
+          300,
+          true,
+          {
+            trafficType: 'ON_DEMAND_FLEX',
+            promptTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 100 },
+              { modality: 'IMAGE', tokenCount: 100 },
+            ],
+            candidatesTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 100 },
+              { modality: 'VIDEO', tokenCount: 100 },
+            ],
+            cachedContentTokenCount: 150,
+            cacheTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 50 },
+              { modality: 'IMAGE', tokenCount: 50 },
+            ],
+          },
+        ),
+      ).toBeCloseTo(27, 10);
     });
   });
 
@@ -3974,7 +4102,7 @@ describe('util', () => {
       [true, 'eu', 'global', 0.075],
       [false, 'global', 'eu', 0.08],
     ] as const)(
-      'keeps effective region %s/%s/%s separate from the actual Flex tier',
+      'keeps effective region %s/%s/%s separate from a defensive actual-Flex mismatch',
       (vertexai, configuredRegion, effectiveRegion, expected) => {
         const config = { region: configuredRegion, service_tier: 'priority' };
         expect(

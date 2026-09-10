@@ -1105,14 +1105,20 @@ Thinking levels for Gemini 3 Pro:
 
 #### Inference tiers and cached-token pricing
 
-Promptfoo converts `service_tier` to Vertex's required enum and includes cached-input and reasoning tokens in cost estimates. When Google reports a Priority-to-standard downgrade, `metadata.serviceTier` reflects the actual tier and standard pricing is used. Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support `global`, `us`, and `eu`; the multi-region endpoints carry a 10% premium. Both models reject frequency and presence penalties.
+Promptfoo sends `service_tier: priority` or `flex` as the `X-Vertex-AI-LLM-Shared-Request-Type` header on both OAuth and Express requests. An explicitly configured header takes precedence. Standard or omitted tier configuration adds no tier header. Opaque tier values in `passthrough` retain body forwarding for custom endpoints; their server-specific meaning is not validated. This does not force requests to use only PayGo or change your endpoint.
+
+Vertex reports the actual traffic class in `usageMetadata.trafficType`: `ON_DEMAND_PRIORITY`, `ON_DEMAND_FLEX`, or `ON_DEMAND` map to `metadata.serviceTier` values `priority`, `flex`, and `standard`. A Priority request downgraded to `ON_DEMAND` uses standard rates in the automatic cost estimate. Cached-input and reasoning tokens are included; explicit cost overrides, including zero, remain absolute.
+
+When actual-tier information is missing or unrecognized, the estimate retains the configured requested tier. Unspecified and provisioned-throughput traffic are not treated as observed standard PayGo; available `metadata.trafficType` is preserved. These fallback estimates do not establish the actual charge or provisioned-throughput price.
+
+[Priority PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/priority-paygo) supports the listed models on `global`, `us`, and `eu`, while [Flex PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/flex-paygo) is limited to listed models on `global`. Regional endpoints are not covered by those tier guides. Promptfoo does not move requests to another region. The existing multi-region token-price premium and generation-parameter restrictions remain separate from tier availability.
 
 ```yaml
 providers:
   - id: vertex:gemini-3.5-flash-lite
     config:
       projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
-      region: global # global, us, or eu
+      region: global # Flex requires global
       service_tier: flex # standard, flex, or priority
       generationConfig:
         maxOutputTokens: 4096
