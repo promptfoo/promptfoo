@@ -662,6 +662,186 @@ describe('writeOutput', () => {
       expect(body[3].outputs[3].response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
     });
 
+    it.each(['json', 'yaml'])(
+      'strips supported provider-map selectors in %s exports without changing vendor options',
+      async (format) => {
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+        try {
+          const config = {
+            providers: [
+              {
+                echo: {
+                  prompts: ['private map selector'],
+                  config: { prompts: ['vendor map option'], temperature: 0.2 },
+                },
+              },
+              {
+                id: 'echo',
+                prompts: ['private direct selector'],
+                config: { prompts: ['vendor direct option'] },
+              },
+            ],
+          };
+          const original = structuredClone(config);
+          const eval_ = new Eval(config);
+          await writeOutput('provider-map.' + format, eval_, null);
+          const contents = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          const output = (format === 'json' ? JSON.parse(contents) : yaml.load(contents)) as {
+            config: typeof config;
+          };
+          expect(output.config.providers).toEqual([
+            {
+              echo: {
+                prompts: ['[prompt stripped]'],
+                config: { prompts: ['vendor map option'], temperature: 0.2 },
+              },
+            },
+            {
+              id: 'echo',
+              prompts: ['[prompt stripped]'],
+              config: { prompts: ['vendor direct option'] },
+            },
+          ]);
+          expect(contents).not.toContain('private map selector');
+          expect(contents).not.toContain('private direct selector');
+          expect(config).toEqual(original);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each([
+      {
+        name: 'output-only single variable',
+        actual: false,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'actual prompt single variable',
+        actual: true,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'output-only multiple variables',
+        actual: false,
+        multiple: true,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'actual prompt multiple variables',
+        actual: true,
+        multiple: true,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'independent variable stripping',
+        actual: true,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: true,
+      },
+      {
+        name: 'unstripped actual prompt display',
+        actual: true,
+        multiple: false,
+        stripPrompt: false,
+        stripVars: false,
+      },
+      {
+        name: 'unstripped output-only display',
+        actual: false,
+        multiple: false,
+        stripPrompt: false,
+        stripVars: false,
+      },
+    ])(
+      'preserves HTML variable policy for $name and subsequent JSON export',
+      async ({ actual, multiple, stripPrompt, stripVars }) => {
+        const realFs = await vi.importActual<typeof import('fs')>('fs');
+        vi.mocked(fsPromises.readFile).mockResolvedValue(
+          realFs.readFileSync(path.resolve(__dirname, '../../src/tableOutput.html'), 'utf8'),
+        );
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+          PROMPTFOO_STRIP_TEST_VARS: String(stripVars),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        });
+        try {
+          const vars = {
+            question: 'keep user data',
+            ...(multiple && { topic: 'keep second variable' }),
+          };
+          const original = structuredClone(vars);
+          const eval_ = new Eval({});
+          await eval_.addPrompts([
+            {
+              id: 'prompt',
+              raw: 'private instruction {{question}}',
+              label: 'private label',
+              provider: 'echo',
+            },
+          ]);
+          eval_.setVars(Object.keys(vars));
+          await eval_.addResult({
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 1,
+            namedScores: {},
+            latencyMs: 1,
+            provider: { id: 'echo' },
+            prompt: { raw: 'private instruction {{question}}', label: 'private label' },
+            response: {
+              output: 'public answer',
+              ...(actual && { prompt: 'actual provider instruction' }),
+            },
+            vars,
+            testCase: { vars },
+            promptIdx: 0,
+            testIdx: 0,
+            promptId: 'prompt',
+          });
+          const liveVars = eval_.results[0].testCase.vars;
+          const expected =
+            actual && !stripPrompt && !stripVars
+              ? { ...original, question: 'actual provider instruction' }
+              : original;
+          await writeOutput('variable-policy.html', eval_, null);
+          const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          expect(eval_.results[0].testCase.vars).toBe(liveVars);
+          expect(liveVars).toEqual(expected);
+          expect(vars).toEqual(original);
+          expect(html).toContain('public answer');
+          if (stripPrompt) {
+            expect(html).not.toContain('private instruction');
+            expect(html).not.toContain('actual provider instruction');
+          }
+          if (stripVars) {
+            expect(html).not.toContain('keep user data');
+          } else {
+            expect(html).toContain(expected.question);
+            if (multiple) {
+              expect(html).toContain('keep second variable');
+            }
+          }
+          await writeOutput('variable-policy.json', eval_, null);
+          const json = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string);
+          expect(json.results.results[0].vars).toEqual(stripVars ? {} : expected);
+          expect(json.results.results[0].success).toBe(true);
+          expect(json.results.results[0].score).toBe(1);
+          expect(json.results.results[0].error).toBeUndefined();
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
     it.each([2, 3])(
       'preserves malformed V%i aggregate prompts and redacts valid prompt config',
       async (version) => {

@@ -31,6 +31,7 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
+import { normalizeProviderRef } from './providerRef';
 import {
   sanitizeObject,
   sanitizeRuntimeOptions,
@@ -414,6 +415,21 @@ function projectConfigTest(
   };
 }
 
+function stripConfigProviderPrompts(provider: unknown): unknown {
+  if (Array.isArray(provider)) {
+    return provider.map(stripConfigProviderPrompts);
+  }
+  const descriptor = normalizeProviderRef(provider);
+  if (descriptor.kind === 'map' && isRecord(provider)) {
+    const key = descriptor.loadProviderPath;
+    return {
+      ...provider,
+      [key]: projectConfigTest(provider[key], { stripPrompt: true, stripVars: false }),
+    };
+  }
+  return projectConfigTest(provider, { stripPrompt: true, stripVars: false });
+}
+
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   const sanitized = sanitizeObject(sanitizeTracingConfigForPersistence(config), {
     context: 'output config',
@@ -429,10 +445,7 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
       projected.prompts = stripConfigPrompt(projected.prompts);
     }
     if ('providers' in projected) {
-      projected.providers = projectConfigTest(projected.providers, {
-        stripPrompt,
-        stripVars: false,
-      });
+      projected.providers = stripConfigProviderPrompts(projected.providers);
     }
     if (isRecord(projected.providerPromptMap)) {
       projected.providerPromptMap = Object.fromEntries(
