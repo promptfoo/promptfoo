@@ -657,13 +657,26 @@ function sanitizeCredentialText(value: string): string {
 
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
-    .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '<redacted>')
+    .replace(
+      /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      (token, header: string) => {
+        if (header.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+          return '<redacted>';
+        }
+        try {
+          const parsed = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+          return isRecord(parsed) && typeof parsed.alg === 'string' ? '<redacted>' : token;
+        } catch {
+          return token;
+        }
+      },
+    )
     .replace(
       /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#]+@/gi,
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
-      /(\b(?:Authorization\s*[:=]|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
+      /(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
@@ -818,16 +831,30 @@ function isCredentialPairValue(source: Record<string, unknown> | unknown[], key:
     );
   }
   return (
-    key === 'value' &&
-    [source.name, source.key].some(
-      (name) => typeof name === 'string' && isCredentialAttributeKey(name),
+    key.toLowerCase() === 'value' &&
+    Object.entries(source).some(
+      ([field, name]) =>
+        /^(name|key)$/i.test(field) && typeof name === 'string' && isCredentialAttributeKey(name),
     )
   );
+}
+
+function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key: string): boolean {
+  if (Array.isArray(source)) {
+    return false;
+  }
+  if (source.kty === 'RSA') {
+    return ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'].includes(key);
+  }
+  return source.kty === 'EC' || source.kty === 'OKP'
+    ? key === 'd'
+    : source.kty === 'oct' && key === 'k';
 }
 
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
+  normalizeScalars = false,
 ): Record<string, unknown> | unknown[] | string {
   type StructuredValue = Record<string, unknown> | unknown[];
   const root: StructuredValue = Array.isArray(value) ? [] : {};
@@ -845,12 +872,16 @@ function sanitizeStructuredAttribute(
       }
 
       let sanitized: unknown;
-      if (isCredentialPairValue(source, key) || isCredentialAttributeKey(key)) {
+      if (
+        isCredentialPairValue(source, key) ||
+        isCredentialAttributeKey(key) ||
+        isPrivateJwkParameter(source, key)
+      ) {
         sanitized = '<redacted>';
         state.changed = true;
       } else if (
-        losslessJson.isRawJSON?.(entry) ||
-        (isRecord(entry) && typeof entry.toJSON === 'function')
+        !normalizeScalars &&
+        (losslessJson.isRawJSON?.(entry) || (isRecord(entry) && typeof entry.toJSON === 'function'))
       ) {
         sanitized = entry;
       } else if (isRecord(entry) || Array.isArray(entry)) {
@@ -863,7 +894,10 @@ function sanitizeStructuredAttribute(
           sanitized = child;
         }
       } else {
-        sanitized = typeof entry === 'string' ? sanitizeCredentialText(entry) : entry;
+        sanitized = normalizeScalars ? sanitizeAttributeValue(entry) : entry;
+        if (typeof sanitized === 'string') {
+          sanitized = sanitizeCredentialText(sanitized);
+        }
         state.changed ||= sanitized !== entry;
       }
 
@@ -906,14 +940,8 @@ function sanitizeAttributeValue(value: unknown): unknown {
     return value;
   }
 
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeAttributeValue(entry));
-  }
-
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeAttributeValue(entry)]),
-    );
+  if (Array.isArray(value) || isRecord(value)) {
+    return sanitizeStructuredAttribute(value, { changed: false }, true);
   }
 
   return String(value);

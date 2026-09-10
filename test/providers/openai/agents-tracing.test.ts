@@ -35,6 +35,148 @@ describe('OTLPTracingExporter', () => {
     mockFetchWithProxy.mockResolvedValue({ ok: true });
   });
 
+  async function exportCustomData(data: Record<string, unknown>, format: 'json' | 'protobuf') {
+    const exporter = new OTLPTracingExporter();
+    await exporter.export(
+      [data, { result: 'healthy' }].map((attributes, index) => ({
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: `span_0123456789abcde${index}`,
+        spanData: { type: 'custom', name: index ? 'healthy' : 'lookup', data: attributes },
+        traceMetadata: { 'promptfoo.otlp_format': format },
+        error: null,
+      })) as any,
+    );
+    expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+    const body = mockFetchWithProxy.mock.calls[0][1].body;
+    const payload =
+      format === 'protobuf' ? await decodeExportTraceServiceRequest(body) : JSON.parse(body);
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+    expect(spans).toHaveLength(2);
+    expect(getAttributes(spans[1]).result).toBe('healthy');
+    return { attributes: getAttributes(spans[0]), payload };
+  }
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts JWT headers containing JSON whitespace in %s',
+    async (format) => {
+      const tokens = ['{ "alg": "RS256" }', '\t{\r\n"alg":"RS256"}\n'].map(
+        (header) => `${Buffer.from(header).toString('base64url')}.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl`,
+      );
+      const identifier = 'a-'.repeat(20_000);
+      const { attributes, payload } = await exportCustomData(
+        { result: tokens.join('\n'), module: 'package.module.method', identifier },
+        format,
+      );
+      expect(attributes.result).toBe('<redacted>\n<redacted>');
+      expect(attributes.module).toBe('package.module.method');
+      expect(attributes.identifier).toBe(identifier);
+      for (const token of tokens) {
+        expect(JSON.stringify(payload)).not.toContain(token);
+      }
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves code following an Authorization assignment in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          script: 'enum Header { Authorization = "Authorization", ContentType = "Content-Type" }',
+          header: 'Authorization=Digest realm="service", response="opaque-proof"',
+        },
+        format,
+      );
+      expect(attributes.script).toBe(
+        'enum Header { Authorization = "<redacted>", ContentType = "Content-Type" }',
+      );
+      expect(attributes.header).toBe('Authorization=<redacted>');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts case-varied header records in %s',
+    async (format) => {
+      const records = [
+        { Name: 'Authorization', Value: 'opaque/header-value' },
+        { KEY: 'X-Api-Key', VALUE: 'opaque/api-value' },
+        { Name: 'Content-Type', Value: 'application/json' },
+      ];
+      const { attributes, payload } = await exportCustomData(
+        { records: JSON.stringify(records) },
+        format,
+      );
+      expect(JSON.parse(attributes.records as string)).toEqual([
+        { Name: 'Authorization', Value: '<redacted>' },
+        { KEY: 'X-Api-Key', VALUE: '<redacted>' },
+        records[2],
+      ]);
+      expect(JSON.stringify(payload)).not.toContain('opaque/');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts private JWK parameters and retains public fields in %s',
+    async (format) => {
+      const rsa = {
+        kty: 'RSA',
+        n: 'public-modulus',
+        e: 'AQAB',
+        d: 'private-exponent',
+        p: 'private-prime-p',
+        q: 'private-prime-q',
+        dp: 'private-dp',
+        dq: 'private-dq',
+        qi: 'private-qi',
+        oth: [{ r: 'private-r', d: 'private-d', t: 'private-t' }],
+      };
+      const keys = [
+        rsa,
+        { kty: 'RSA', n: 'public-modulus', e: 'AQAB' },
+        { kty: 'EC', crv: 'P-256', x: 'public-x', y: 'public-y', d: 'private-ec-d' },
+        { kty: 'OKP', crv: 'Ed25519', x: 'public-x', d: 'private-okp-d' },
+        { kty: 'oct', k: 'private-symmetric' },
+      ];
+      const { attributes, payload } = await exportCustomData({ key_set: { keys } }, format);
+      const sanitized = JSON.parse(attributes.key_set as string).keys;
+      expect(sanitized).toEqual([
+        {
+          ...rsa,
+          d: '<redacted>',
+          p: '<redacted>',
+          q: '<redacted>',
+          dp: '<redacted>',
+          dq: '<redacted>',
+          qi: '<redacted>',
+          oth: '<redacted>',
+        },
+        keys[1],
+        { ...keys[2], d: '<redacted>' },
+        { ...keys[3], d: '<redacted>' },
+        { kty: 'oct', k: '<redacted>' },
+      ]);
+      expect(JSON.stringify(payload)).not.toContain('private-');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'bounds deeply nested native attributes before normalization in %s',
+    async (format) => {
+      let nested: unknown = 'deep-private-canary';
+      for (let depth = 0; depth < 20_000; depth++) {
+        nested = [nested];
+      }
+      const { attributes, payload } = await exportCustomData(
+        { nested, details: { count: 2n, label: 'public' } },
+        format,
+      );
+      expect(JSON.parse(attributes.details as string)).toEqual({ count: '2', label: 'public' });
+      expect(JSON.stringify(payload)).not.toContain('deep-private-canary');
+      expect(JSON.stringify(payload)).toContain('<redacted>');
+      expect(JSON.stringify(payload).length).toBeLessThan(10_000);
+    },
+  );
+
   it('keeps provider token counts standard and namespaces Promptfoo totals', () => {
     const exporter = new OTLPTracingExporter() as any;
     const payload = exporter.transformToOTLP([
