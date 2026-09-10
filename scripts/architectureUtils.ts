@@ -54,7 +54,7 @@ const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cj
 const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
-  '.jsx': ['.tsx'],
+  '.jsx': ['.tsx', '.ts'],
   '.mjs': ['.mts'],
   '.cjs': ['.cts'],
 };
