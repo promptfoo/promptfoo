@@ -34,6 +34,7 @@ vi.mock('@app/stores/evalConfig', () => ({
     config: {}, // Mock config object
     getTestSuite: mockGetTestSuite,
     setConfig: mockSetConfig,
+    sourceEvalId: 'source-eval',
     setState: vi.fn(),
   })),
 }));
@@ -126,7 +127,10 @@ describe('YamlEditor', () => {
     await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
-    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      { description: 'Saved with shortcut' },
+      'source-eval',
+    );
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });

@@ -199,7 +199,10 @@ const EvaluateTestSuiteCreator = () => {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
-              setConfig({ ...config, ...(parsedConfig as Partial<UnifiedConfig>) });
+              setConfig({
+                ...useStore.getState().config,
+                ...(parsedConfig as Partial<UnifiedConfig>),
+              });
               setResetKey((k) => k + 1);
               showToast('Configuration loaded successfully', 'success');
             } else {

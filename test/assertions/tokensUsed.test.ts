@@ -340,6 +340,22 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=response');
   });
 
+  it('does not treat an empty unavailable-usage sentinel as measured zero', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 0, source: 'response' } },
+      renderedValue: { max: 0, source: 'response' },
+      providerResponse: {
+        output: 'o',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      /No token usage data available for tokens-used assertion from provider response/,
+    );
+  });
+
   it('falls back to provider token components when response total is zero', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -724,6 +740,23 @@ describe('handleTokensUsed', () => {
     expect(result.pass).toBe(true);
     expect(result.reason).toContain('Tokens used: 350');
     expect(result.reason).toContain('expected 300-400');
+  });
+
+  it('coerces token budget templates loaded from data files', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: 'file://budget.yaml' },
+      renderedValue: { max: '{{ maxTokens }}' } as unknown as { max: number },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars: { maxTokens: 400 },
+        trace: traceWithTokens,
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('expected at most 400');
   });
 
   it.each([

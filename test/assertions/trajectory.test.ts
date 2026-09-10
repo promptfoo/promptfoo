@@ -990,6 +990,24 @@ describe('trajectory assertions', () => {
       expect(handleTrajectoryToolUsed(params).pass).toBe(true);
     });
 
+    it('renders scalar entries loaded from data files', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: { expectedTool: 'search_orders' },
+        },
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: 'file://tools.yaml',
+        },
+        renderedValue: ['{{ expectedTool }}'],
+      };
+
+      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
+    });
+
     it('rejects invalid matcher values', () => {
       const params: AssertionParams = {
         ...defaultParams,

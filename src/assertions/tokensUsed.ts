@@ -1,5 +1,8 @@
+import {
+  isNunjucksOutputExpression,
+  tokensUsedConfigError,
+} from '../contracts/validators/traceAssertionConfig';
 import { renderVarsInObject } from '../util/render';
-import { isNunjucksOutputExpression, tokensUsedConfigError } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -124,6 +127,14 @@ function tokensFromProviderResponse(params: AssertionParams): number | undefined
   if (!usage) {
     return undefined;
   }
+  if (
+    usage.numRequests === 0 &&
+    usage.prompt === 0 &&
+    usage.completion === 0 &&
+    usage.total === 0
+  ) {
+    return undefined;
+  }
 
   for (const field of ['prompt', 'completion', 'total'] as const) {
     const value = usage[field];
@@ -230,7 +241,6 @@ function coerceRenderedBudgetBound(rawValue: unknown, renderedValue: unknown): u
 }
 
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
-  const rawValue = params.assertion.value;
   const unrenderedValue = params.renderedValue ?? params.assertion.value;
   const renderedValue =
     params.valueFromScript === undefined
@@ -241,8 +251,8 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   }
 
   const rawObject =
-    rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
-      ? (rawValue as Record<string, unknown>)
+    unrenderedValue && typeof unrenderedValue === 'object' && !Array.isArray(unrenderedValue)
+      ? (unrenderedValue as Record<string, unknown>)
       : {};
   const value = {
     ...(renderedValue as Record<string, unknown>),
