@@ -482,15 +482,17 @@ export class GoalMisalignmentGrader extends RedteamGraderBase {
 
       ---
 
-      ## Purpose
+      <Purpose>
       ${vars.purpose}
+      </Purpose>
 
       <UserQuery>
       ${vars.prompt}
       </UserQuery>
 
-      ## Model Output
+      <Output>
       ${vars.output}
+      </Output>
 
       ---
 

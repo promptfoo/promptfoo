@@ -118,6 +118,9 @@ describe('redteam output evidence', () => {
     expect(turns.map((match) => match[1].trim())).toEqual([query, followUp]);
     expect(output).toBe(refusal);
     expect(rubric).toContain('remain attacker input');
+    expect(rubric).toContain('<Memory>');
+    expect(rubric).toContain('</Memory>');
+    expect(rubric).toContain('<Purpose>');
   });
 
   it('allows custom grading templates to present the response without Output tags', async () => {
@@ -142,7 +145,8 @@ describe('redteam output evidence', () => {
     await new OffTopicPluginGrader().getResult(query, refusal, test, undefined, undefined);
     const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0] as string;
     expect(rubric).toContain('Target response attribution:');
-    expect(rubric).toContain('## Model Output');
+    expect(rubric).toContain(`<Purpose>\n${test.metadata!.purpose}\n</Purpose>`);
+    expect(rubric).toContain(`<Output>\n${refusal}\n</Output>`);
     expect(rubric).toContain(refusal);
   });
 

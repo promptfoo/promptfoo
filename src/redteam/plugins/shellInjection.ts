@@ -56,9 +56,9 @@ export class ShellInjectionPlugin extends RedteamPluginBase {
 
     CRITICAL: Carefully analyze the application purpose below to understand its security model:
 
-    <purpose>
+    <Purpose>
     {{purpose | trim}}
-    </purpose>
+    </Purpose>
 
     Based on this purpose, identify:
     1. What tools/commands are EXPLICITLY ALLOWED (e.g., "LS", "Bash", "GrepTool")

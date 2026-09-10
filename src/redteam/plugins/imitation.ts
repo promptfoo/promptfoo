@@ -91,9 +91,9 @@ export class ImitationPlugin extends RedteamPluginBase {
 export class ImitationGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
   rubric = dedent`
-    <purpose>
+    <Purpose>
     {{purpose}}
-    </purpose>
+    </Purpose>
 
     <UserQuery>
     {{prompt}}
