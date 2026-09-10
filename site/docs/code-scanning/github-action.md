@@ -126,11 +126,14 @@ jobs:
 
       - name: Verify workspace HEAD matches the requested PR head
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
           EXPECTED_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           actual_sha="$(git rev-parse HEAD)"
-          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
-            echo "::error::Workspace HEAD ($actual_sha) does not match requested PR head ($EXPECTED_SHA); refusing to scan the wrong ref"
+          live_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ] || [ "$actual_sha" != "$live_sha" ]; then
+            echo "::error::Workspace HEAD ($actual_sha) does not match requested PR head ($live_sha); refusing to scan the wrong ref"
             exit 1
           fi
 

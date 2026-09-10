@@ -113,7 +113,7 @@ function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
 }
 
 function getActionInputs(): ActionInputs {
-  const configPath = core.getInput('config-path');
+  const configPath = core.getInput('config-path').trim();
   warnIgnoredInputsWhenConfigPathSet(configPath);
 
   return {

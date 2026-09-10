@@ -4,7 +4,11 @@
 
 import * as github from '@actions/github';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, partitionReviewCommentsByDiff } from '../../code-scan-action/src/github';
+import {
+  getGitHubContext,
+  partitionReviewCommentsByDiff,
+  StalePullRequestHeadError,
+} from '../../code-scan-action/src/github';
 import type { Octokit } from '@octokit/rest';
 
 const mocks = vi.hoisted(() => {
@@ -93,6 +97,9 @@ vi.mock('../../code-scan-action/node_modules/@octokit/rest/dist-src/index.js', (
 const mockDiff = mocks.mockDiff;
 
 describe('GitHub API Client', () => {
+  it('labels stale-head errors for fail-closed handling', () => {
+    expect(new StalePullRequestHeadError('stale').name).toBe('StalePullRequestHeadError');
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.github.context.repo = {

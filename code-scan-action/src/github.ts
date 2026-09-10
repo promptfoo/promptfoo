@@ -19,7 +19,12 @@ import {
   type PullRequestContext,
 } from '../../src/types/codeScan';
 
-export class StalePullRequestHeadError extends Error {}
+export class StalePullRequestHeadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StalePullRequestHeadError';
+  }
+}
 
 /**
  * Get GitHub context from the current workflow.

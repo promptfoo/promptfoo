@@ -1301,6 +1301,16 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--api-host', 'https://api.promptfoo.app');
     });
 
+    it('treats whitespace-only config-path as unset', async () => {
+      mockActionInputs({ 'config-path': '   ', 'min-severity': 'high' });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', '/tmp/test-config.yaml');
+      expect(mocks.config.generateConfigFile).toHaveBeenCalled();
+      expect(mocks.core.warning).not.toHaveBeenCalled();
+    });
+
     it.each([
       'relative/policy.yaml',
       path.resolve('/test/workspace/policy.yaml'),
