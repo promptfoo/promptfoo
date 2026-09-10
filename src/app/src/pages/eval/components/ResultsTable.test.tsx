@@ -1,7 +1,7 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { prefetchEvalResultDetail } from '@app/utils/api';
+import { fetchEvalConfig, prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
@@ -50,6 +50,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', () => ({
   clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  fetchEvalConfig: vi.fn(),
   prefetchEvalResultDetail: vi.fn(),
 }));
 
@@ -895,6 +896,76 @@ describe('ResultsTable Metrics Display', () => {
         ),
       );
       expect(prefetchEvalResultDetail).toHaveBeenCalledWith('123', 'image-1');
+    });
+
+    it('loads omitted actual and transformed variables only when requested', async () => {
+      const store = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...store,
+        config: { redteam: { injectVar: 'inject' } },
+        table: {
+          ...mockTableWithMedia,
+          head: { prompts: [{}], vars: ['inject'] },
+          body: [
+            {
+              ...mockTableWithMedia.body[0],
+              vars: ['[content omitted: 120000 characters]'],
+              outputs: [
+                {
+                  id: 'result-1',
+                  pass: true,
+                  score: 1,
+                  text: 'output',
+                  response: { prompt: '[content omitted: 120000 characters]' },
+                  metadata: {
+                    transformDisplayVars: {
+                      __attack: '[content omitted: 120000 characters]',
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(prefetchEvalResultDetail).mockResolvedValue({
+        evalId: '123',
+        resultId: 'result-1',
+        prompt: '',
+        text: '',
+        response: { prompt: 'full actual prompt' },
+        metadata: { transformDisplayVars: { __attack: 'full transform' } },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(prefetchEvalResultDetail).not.toHaveBeenCalled();
+      const buttons = screen.getAllByRole('button', { name: 'Load value' });
+      await userEvent.click(buttons[0]);
+      await userEvent.click(buttons[1]);
+      expect(await screen.findByText('full actual prompt')).toBeInTheDocument();
+      expect(await screen.findByText('full transform')).toBeInTheDocument();
+    });
+
+    it('loads an omitted column prompt when its dialog opens', async () => {
+      const store = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...store,
+        table: {
+          ...mockTableWithMedia,
+          head: {
+            ...mockTableWithMedia.head,
+            prompts: [{ raw: '[content omitted: 120000 characters]' }],
+          },
+        },
+      });
+      vi.mocked(fetchEvalConfig).mockResolvedValue({
+        config: { prompts: [{ raw: 'full column prompt' }] },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(fetchEvalConfig).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByText('[content omitted: 120000 characters]'));
+      expect(await screen.findByText('full column prompt')).toBeInTheDocument();
     });
 
     it('renders variable video from file metadata', () => {

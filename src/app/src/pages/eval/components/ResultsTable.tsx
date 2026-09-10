@@ -15,7 +15,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi, clearEvalApiResponseCache, prefetchEvalResultDetail } from '@app/utils/api';
+import {
+  callApi,
+  clearEvalApiResponseCache,
+  fetchEvalConfig,
+  prefetchEvalResultDetail,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -80,6 +85,8 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
+const isOmittedText = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith('[content omitted:');
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -233,11 +240,21 @@ function TableHeader({
   maxLength,
   expandedText,
   resourceId,
+  loadExpandedText,
   className,
-}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
+}: TruncatedTextProps & {
+  expandedText?: string;
+  resourceId?: string;
+  loadExpandedText?: () => Promise<string | undefined>;
+  className?: string;
+}) {
   const [promptOpen, setPromptOpen] = React.useState(false);
+  const [fullText, setFullText] = React.useState(expandedText);
   const handlePromptOpen = () => {
     setPromptOpen(true);
+    if (isOmittedText(expandedText) && loadExpandedText) {
+      void loadExpandedText().then((value) => value && setFullText(value));
+    }
   };
   const handlePromptClose = () => {
     setPromptOpen(false);
@@ -265,7 +282,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={expandedText}
+              prompt={fullText ?? expandedText}
             />
           )}
           {resourceId && (
@@ -287,6 +304,41 @@ function TableHeader({
         </>
       )}
     </div>
+  );
+}
+
+function HydratedText({
+  value,
+  loadValue,
+  maxLength,
+}: {
+  value: string;
+  loadValue: () => Promise<string | undefined>;
+  maxLength: number;
+}) {
+  const [fullValue, setFullValue] = React.useState<string>();
+  const [loading, setLoading] = React.useState(false);
+
+  if (fullValue || !isOmittedText(value)) {
+    return <TruncatedText text={fullValue ?? value} maxLength={maxLength} />;
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          setFullValue(await loadValue());
+        } finally {
+          setLoading(false);
+        }
+      }}
+    >
+      {loading ? 'Loading...' : 'Load value'}
+    </Button>
   );
 }
 
@@ -599,6 +651,18 @@ function renderVariableCell({
         lightboxImage={lightboxImage}
         maxTextLength={maxTextLength}
         toggleLightbox={toggleLightbox}
+      />
+    );
+  }
+  if (isOmittedText(value) && varName === injectVarName && output?.id) {
+    return (
+      <HydratedText
+        value={value}
+        maxLength={maxTextLength}
+        loadValue={async () => {
+          const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
+          return getActualPrompt(detail?.response as Parameters<typeof getActualPrompt>[0]);
+        }}
       />
     );
   }
@@ -1226,6 +1290,7 @@ function PromptColumnHeader({
   passingTestCounts,
   metricTotals,
   config,
+  evalId,
   filterMode,
   headPromptCount,
   maxTextLength,
@@ -1246,6 +1311,7 @@ function PromptColumnHeader({
   passingTestCounts: PromptSummaryMetric[];
   metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
+  evalId: string | null;
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
   maxTextLength: number;
@@ -1319,6 +1385,26 @@ function PromptColumnHeader({
         expandedText={prompt.raw}
         maxLength={maxTextLength}
         resourceId={prompt.id}
+        loadExpandedText={
+          isOmittedText(prompt.raw) && evalId
+            ? async () => {
+                const prompts = (await fetchEvalConfig(evalId)).config.prompts;
+                const values = Array.isArray(prompts)
+                  ? prompts
+                  : prompts && typeof prompts === 'object'
+                    ? Object.values(prompts)
+                    : [prompts];
+                const fullPrompt = values[idx];
+                if (typeof fullPrompt === 'string') {
+                  return fullPrompt;
+                }
+                if (fullPrompt && typeof fullPrompt === 'object') {
+                  const raw = (fullPrompt as Record<string, unknown>).raw;
+                  return typeof raw === 'string' ? raw : undefined;
+                }
+              }
+            : undefined
+        }
       />
       {renderPromptMetricDetails({
         metrics,
@@ -2228,6 +2314,26 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
+                const output = info.row.original.outputs?.[0];
+                if (isOmittedText(value) && output?.id) {
+                  return (
+                    <HydratedText
+                      value={value}
+                      maxLength={maxTextLength}
+                      loadValue={async () => {
+                        const detailEvalId = output.evalId || evalId;
+                        if (!detailEvalId) {
+                          return undefined;
+                        }
+                        const detail = await prefetchEvalResultDetail(detailEvalId, output.id);
+                        const vars = detail?.metadata?.transformDisplayVars as
+                          | Record<string, unknown>
+                          | undefined;
+                        return typeof vars?.[varName] === 'string' ? vars[varName] : undefined;
+                      }}
+                    />
+                  );
+                }
                 return (
                   <div className="cell">
                     <TruncatedText text={value} maxLength={maxTextLength} />
@@ -2240,7 +2346,13 @@ function ResultsTable({
         ),
       }),
     ];
-  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
+  }, [
+    columnHelper,
+    evalId,
+    maxTextLength,
+    transformDisplayVarColumnSizes,
+    transformDisplayVarKeys,
+  ]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -2308,6 +2420,7 @@ function ResultsTable({
                 passingTestCounts={passingTestCounts}
                 metricTotals={metricTotals}
                 config={config}
+                evalId={evalId}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
