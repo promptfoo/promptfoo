@@ -112,6 +112,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private initializationWaiters = 0;
+  private lastInitializationWaitCancelled = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
@@ -143,15 +145,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
       const mcpClient = this.mcpClient;
-      try {
-        await this.initializationPromise;
-      } finally {
+      const cleanup = (async () => {
         try {
-          await mcpClient.cleanup();
+          await this.initializationPromise;
         } finally {
-          this.mcpClient = null;
+          try {
+            await mcpClient.cleanup();
+          } finally {
+            this.mcpClient = null;
+          }
         }
+      })();
+      if (this.lastInitializationWaitCancelled && this.initializationWaiters === 0) {
+        // Teardown must not rejoin startup abandoned by its last caller. The
+        // shared work still owns eventual resource cleanup, including late failure.
+        this.mcpClient = null;
+        void cleanup.catch((error) => {
+          logger.debug('MCP cleanup after cancelled initialization failed', { error });
+        });
+        return;
       }
+      await cleanup;
     }
   }
 
@@ -397,7 +411,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     throwIfAborted(callApiOptions?.abortSignal);
     if (this.initializationPromise != null) {
-      await waitForPromiseWithAbort(this.initializationPromise, callApiOptions?.abortSignal);
+      this.initializationWaiters++;
+      let cancelled = false;
+      try {
+        await waitForPromiseWithAbort(this.initializationPromise, callApiOptions?.abortSignal);
+      } catch (error) {
+        cancelled = isCallerAbortError(error, callApiOptions?.abortSignal, {
+          requireReasonMatch: true,
+        });
+        throw error;
+      } finally {
+        this.initializationWaiters--;
+        if (this.initializationWaiters === 0) {
+          this.lastInitializationWaitCancelled = cancelled;
+        }
+      }
     }
     throwIfAborted(callApiOptions?.abortSignal);
     if (this.requiresApiKey() && !this.getApiKey()) {

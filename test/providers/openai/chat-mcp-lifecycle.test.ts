@@ -7,6 +7,8 @@ import logger from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import * as mcpUtil from '../../../src/providers/mcp/util';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { ProviderResponse } from '../../../src/types/providers';
@@ -293,6 +295,185 @@ describe('Chat MCP caller lifetime', () => {
       }
     },
   );
+
+  it.each(['success', 'failure'] as const)(
+    'finishes cancelled startup cleanup before its late %s and closes registered resources',
+    async (outcome) => {
+      const connection = createDeferred<void>();
+      const connecting = createDeferred<void>();
+      const closed = createDeferred<void>();
+      const connections: Array<{ client: Client; transport: unknown }> = [];
+      vi.mocked(Client.prototype.connect).mockImplementation(function (this: Client, transport) {
+        connections.push({ client: this, transport });
+        if (connections.length === 1) {
+          return Promise.resolve();
+        }
+        connecting.resolve();
+        return connection.promise;
+      });
+      const expectedClosures = outcome === 'success' ? 2 : 1;
+      vi.mocked(Client.prototype.close).mockImplementation(async () => {
+        if (vi.mocked(Client.prototype.close).mock.calls.length === expectedClosures) {
+          closed.resolve();
+        }
+      });
+      let mcp!: MCPClient;
+      const initialize = MCPClient.prototype.initialize;
+      vi.spyOn(MCPClient.prototype, 'initialize').mockImplementation(function (this: MCPClient) {
+        mcp = this;
+        return initialize.call(this);
+      });
+      const target = new OpenAiChatCompletionProvider('fixture', {
+        config: {
+          apiKey: 'fixture-key',
+          mcp: {
+            enabled: true,
+            servers: [
+              { name: 'stable', command: 'fixture-mcp-stable' },
+              { name: 'pending', command: 'fixture-mcp-pending' },
+            ],
+          },
+        },
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const wrapped = wrapProviderWithRateLimiting(target, registry);
+      const controller = new AbortController();
+      const reason = new Error('stop waiting for MCP startup');
+      const caller = observe(
+        wrapped.callApi('fixture', undefined, { abortSignal: controller.signal }),
+      );
+      await connecting.promise;
+      controller.abort(reason);
+      await caller.done;
+      let cleanupSettled = false;
+      let cleanupError: unknown;
+      const cleanup = target.cleanup().then(
+        () => {
+          cleanupSettled = true;
+        },
+        (error: unknown) => {
+          cleanupSettled = true;
+          cleanupError = error;
+        },
+      );
+
+      try {
+        await nextTurn();
+        expect(caller.state.error).toMatchObject({
+          name: 'AbortError',
+          message: reason.message,
+          cause: reason,
+        });
+        expect(Object.values(registry.getMetrics())).toEqual([
+          expect.objectContaining({ activeRequests: 0, failedRequests: 1 }),
+        ]);
+        expect(cleanupSettled).toBe(true);
+        expect(cleanupError).toBeUndefined();
+        expect(Client.prototype.close).not.toHaveBeenCalled();
+        expect(mcp.connectedServers).toEqual(['stable']);
+        await expect(target.cleanup()).resolves.toBeUndefined();
+
+        if (outcome === 'failure') {
+          connection.reject(new Error('late MCP connection failure'));
+        } else {
+          connection.resolve();
+        }
+        await closed.promise;
+        await nextTurn();
+        expect(cleanupError).toBeUndefined();
+        expect(caller.state.error).toMatchObject({ name: 'AbortError', cause: reason });
+        expect(Client.prototype.close).toHaveBeenCalledTimes(expectedClosures);
+        expect(StdioClientTransport.prototype.close).toHaveBeenCalledTimes(expectedClosures);
+        for (const { client, transport } of connections.slice(0, expectedClosures)) {
+          expect(
+            vi.mocked(Client.prototype.close).mock.contexts.filter((x) => x === client),
+          ).toHaveLength(1);
+          expect(
+            vi
+              .mocked(StdioClientTransport.prototype.close)
+              .mock.contexts.filter((x) => x === transport),
+          ).toHaveLength(1);
+        }
+        expect(mcp.connectedServers).toEqual([]);
+        expect(mcp.getAllTools()).toEqual([]);
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+      } finally {
+        connection.resolve();
+        await cleanup;
+        await mcp.cleanup();
+        registry.dispose();
+      }
+    },
+  );
+
+  it('keeps normal cleanup awaited after another initialization caller survives', async () => {
+    const connection = createDeferred<void>();
+    const connecting = createDeferred<void>();
+    vi.mocked(Client.prototype.connect).mockImplementation(() => {
+      connecting.resolve();
+      return connection.promise;
+    });
+    vi.mocked(Client.prototype.listTools).mockResolvedValue({ tools: [] });
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'survived' }, finish_reason: 'stop' }],
+        }),
+      ),
+    );
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: { enabled: true, server: { command: 'fixture-mcp' } },
+      },
+    });
+    const controller = new AbortController();
+    const stopped = observe(
+      target.callApi('cancelled', undefined, { abortSignal: controller.signal }),
+    );
+    await connecting.promise;
+    const survivor = observe(target.callApi('survivor'));
+    controller.abort('only the first caller stopped');
+    await stopped.done;
+    expect(stopped.state.error).toMatchObject({
+      name: 'AbortError',
+      cause: 'only the first caller stopped',
+    });
+    expect(survivor.state.settled).toBe(false);
+
+    const closing = createDeferred<void>();
+    const close = createDeferred<void>();
+    vi.mocked(Client.prototype.close).mockImplementation(() => {
+      closing.resolve();
+      return close.promise;
+    });
+    let cleanup: Promise<void> | undefined;
+    try {
+      connection.resolve();
+      await survivor.done;
+      expect(survivor.state.error).toBeUndefined();
+      expect(survivor.state.value).toMatchObject({ output: 'survived' });
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      let cleanupSettled = false;
+      cleanup = target.cleanup().then(() => {
+        cleanupSettled = true;
+      });
+      await closing.promise;
+      await nextTurn();
+      expect(cleanupSettled).toBe(false);
+      close.resolve();
+      await cleanup;
+      expect(Client.prototype.connect).toHaveBeenCalledOnce();
+      expect(Client.prototype.close).toHaveBeenCalledOnce();
+      expect(StdioClientTransport.prototype.close).toHaveBeenCalledOnce();
+    } finally {
+      connection.resolve();
+      close.resolve();
+      await survivor.done;
+      await cleanup;
+      await target.cleanup();
+    }
+  });
 
   it('releases registered resources after partial initialization fails and preserves that error', async () => {
     const connected: Array<{ client: Client; transport: unknown }> = [];
