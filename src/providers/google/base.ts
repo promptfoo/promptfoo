@@ -378,6 +378,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     validateFunctionCall(output, this.config.tools, vars);
   }
 
+  getAudioInputFormat(): 'google' | undefined {
+    return this.modelName.startsWith('gemini') ? 'google' : undefined;
+  }
+
   /**
    * Get the provider ID string.
    * Format: 'google:{model}' for AI Studio, 'vertex:{model}' for Vertex AI
