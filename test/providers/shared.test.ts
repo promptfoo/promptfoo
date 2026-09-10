@@ -17,10 +17,13 @@ import {
   toTitleCase,
   transformToolChoice,
   transformTools,
+  warmLivePricing,
 } from '../../src/providers/shared';
+import { fetchWithTimeout } from '../../src/util/fetch';
 import { createMockProvider } from '../factories/provider';
 
 vi.mock('../../src/envars');
+vi.mock('../../src/util/fetch', () => ({ fetchWithTimeout: vi.fn() }));
 
 describe('Shared Provider Functions', () => {
   beforeEach(() => {
@@ -695,6 +698,24 @@ describe('Shared Provider Functions', () => {
       it('should pass through for unknown format', () => {
         expect(transformTools(sampleTools, 'unknown' as any)).toEqual(sampleTools);
       });
+    });
+  });
+
+  describe('warmLivePricing', () => {
+    it('delegates to the live pricing cache refresh', async () => {
+      vi.mocked(getEnvBool).mockReturnValueOnce(true);
+      await warmLivePricing();
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'https://openrouter.ai/api/v1/models',
+        { headers: { Accept: 'application/json' } },
+        10_000,
+      );
+    });
+
+    it('resolves without fetching when live pricing is disabled', async () => {
+      vi.mocked(getEnvBool).mockReturnValue(false);
+      await expect(warmLivePricing()).resolves.toBeUndefined();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
     });
   });
 });
