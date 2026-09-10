@@ -151,7 +151,7 @@ export class OTLPTracingExporter implements TracingExporter {
           : OTLP_SPAN_KIND_INTERNAL,
       startTimeUnixNano: String(startTime * 1_000_000),
       endTimeUnixNano: endTime ? String(endTime * 1_000_000) : undefined,
-      attributes: this.attributesToOTLP(this.getSpanAttributes(span)),
+      attributes: this.attributesToOTLP(this.getSpanAttributes(span), span),
       status: this.getSpanStatus(span),
     };
   }
@@ -372,14 +372,14 @@ export class OTLPTracingExporter implements TracingExporter {
     }
   }
 
-  private attributesToOTLP(attributes: Record<string, unknown>): any[] {
+  private attributesToOTLP(attributes: Record<string, unknown>, span: Span<any>): any[] {
     return Object.entries(attributes)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => ({
         key: sanitizeCredentialText(key),
         value: this.valueToOTLP(
           sanitizeAttributeByKey(key, value),
-          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key),
+          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) && Object.hasOwn(span.traceMetadata ?? {}, key),
         ),
       }));
   }
@@ -649,7 +649,7 @@ function sanitizeCredentialText(value: string): string {
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
-      /(\b(?:Authorization|Cookie)\s*[:=][ \t]*)[^\r\n]*/gi,
+      /(\b(?:Authorization\s*[:=]|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
@@ -844,6 +844,11 @@ function sanitizeStructuredAttribute(
         writable: true,
       });
     }
+  }
+
+  if (Buffer.byteLength(safeJsonStringify(root), 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+    state.changed = true;
+    return '<redacted>';
   }
 
   return root;

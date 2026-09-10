@@ -766,6 +766,61 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'sanitizes custom linkage and bounds native arrays without consuming trailing code in %s',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'custom',
+            name: 'lookup',
+            data: {
+              'evaluation.id': 'sk-abcdefghijklmnopqrstuvwxyz',
+              'test.case.id': 'sk-abcdefghijklmnopqrstuvwxyz',
+              chunks: ['x'.repeat(65_537)],
+              aggregate: Array.from({ length: 65 }, () => 'x'.repeat(1024)),
+              script: 'document.cookie = serializePreferences(settings); return response;',
+            },
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde0',
+          spanData: { type: 'custom', name: 'lookup', data: { 'evaluation.id': 'spoofed' } },
+          traceMetadata: {
+            'promptfoo.otlp_format': format,
+            'evaluation.id': 'eval-trusted',
+            'test.case.id': 'case-trusted',
+          },
+          error: null,
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+      const attributes = getAttributes(spans[0]);
+      expect.soft(attributes['evaluation.id']).toBe('<REDACTED_API_KEY>');
+      expect.soft(attributes['test.case.id']).toBe('<REDACTED_API_KEY>');
+      expect.soft(attributes.chunks === '<redacted>').toBe(true);
+      expect.soft(attributes.aggregate === '<redacted>').toBe(true);
+      expect.soft(attributes.script).toBe('document.cookie = <redacted>; return response;');
+      expect(getAttributes(spans[1])).toMatchObject({
+        'evaluation.id': 'eval-trusted',
+        'test.case.id': 'case-trusted',
+      });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts resource names, equals-delimited headers, and private keys in %s',
     async (format) => {
       const exporter = new OTLPTracingExporter();
