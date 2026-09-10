@@ -1927,8 +1927,12 @@ describe('EvalResult', () => {
       {
         name: 'prompt text',
         env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
-        removed: ['tool.output', 'tool.result', 'ai.toolCall.result', 'codex.output'],
+        removed: [],
         retained: [
+          'tool.output',
+          'tool.result',
+          'ai.toolCall.result',
+          'codex.output',
           ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
           'codex.command',
           'codex.search.query',
@@ -1943,6 +1947,10 @@ describe('EvalResult', () => {
         name: 'response output',
         env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' },
         removed: [
+          'tool.output',
+          'tool.result',
+          'ai.toolCall.result',
+          'codex.output',
           ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
           'codex.command',
           'codex.search.query',
@@ -1950,7 +1958,7 @@ describe('EvalResult', () => {
           'codex.reasoning',
           'codex.reasoning.summary',
         ],
-        retained: ['tool.output', 'tool.result', 'ai.toolCall.result', 'codex.output'],
+        retained: [],
         expectedSearchName: 'search "[output stripped]"',
         expectedCommandName: 'exec [output stripped]',
       },
@@ -2137,6 +2145,31 @@ describe('EvalResult', () => {
             }
           }
         }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('projects grading metadata in JSONL artifacts under content strip flags', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const artifact = sanitizeResultForJsonlArtifact(
+          createEvaluateResult({
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'failed',
+              metadata: {
+                renderedGradingPrompt: 'JSONL_GRADING_PROMPT_SECRET',
+                pluginId: 'harmful',
+              },
+            } as any,
+          }),
+        );
+
+        expect(artifact.gradingResult?.metadata).toEqual({ pluginId: 'harmful' });
+        expect(JSON.stringify(artifact)).not.toContain('JSONL_GRADING_PROMPT_SECRET');
       } finally {
         restoreEnv();
       }

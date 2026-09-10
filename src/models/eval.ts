@@ -305,7 +305,7 @@ function jsonHistoryForRedteamReport(
   }
 
   const promptFields = stripFlags.shouldStripPromptText
-    ? []
+    ? ['prompt']
     : ['prompt', 'promptAudio', 'promptImage'];
   const outputFields = stripFlags.shouldStripResponseOutput
     ? []
@@ -337,6 +337,8 @@ function jsonHistoryForRedteamReport(
             CASE
               WHEN history_field.type = 'true' THEN json('true')
               WHEN history_field.type = 'false' THEN json('false')
+              WHEN history_field.key = 'prompt' AND ${stripFlags.shouldStripPromptText}
+                THEN '[prompt stripped]'
               WHEN history_field.key IN ('prompt', 'output')
                 THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
               WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
@@ -781,18 +783,61 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
           .filter((plugin) => plugin !== undefined)
       : undefined
   ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
+  const frameworks = Array.isArray(config.redteam?.frameworks)
+    ? config.redteam.frameworks.filter((framework) => typeof framework === 'string')
+    : undefined;
 
   return {
     ...(config.description !== undefined && { description: config.description }),
     ...(config.redteam && {
       redteam: {
         ...(config.redteam.injectVar !== undefined && { injectVar: config.redteam.injectVar }),
-        ...(config.redteam.frameworks !== undefined && { frameworks: config.redteam.frameworks }),
+        ...(frameworks !== undefined && { frameworks }),
         ...(plugins !== undefined && { plugins }),
       },
     }),
     ...(provider && { providers: [provider] }),
   };
+}
+
+export function projectConfigForOutput(
+  config: Partial<UnifiedConfig>,
+  stripFlags: OutputStripFlags,
+): Partial<UnifiedConfig> {
+  if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripTestVars) {
+    return config;
+  }
+  const projectTest = (test: unknown) =>
+    isRecord(test)
+      ? {
+          ...test,
+          ...(stripFlags.shouldStripPromptText && 'prompt' in test
+            ? { prompt: '[prompt stripped]' }
+            : {}),
+          ...(stripFlags.shouldStripTestVars && 'vars' in test ? { vars: {} } : {}),
+        }
+      : test;
+  const projectScenario = (scenario: unknown) =>
+    isRecord(scenario)
+      ? {
+          ...scenario,
+          ...(Array.isArray(scenario.tests) ? { tests: scenario.tests.map(projectTest) } : {}),
+          ...(scenario.defaultTest === undefined
+            ? {}
+            : { defaultTest: projectTest(scenario.defaultTest) }),
+        }
+      : scenario;
+  return {
+    ...config,
+    ...(Array.isArray(config.prompts) && {
+      prompts: config.prompts.map((prompt) =>
+        stripFlags.shouldStripPromptText ? projectPromptForOutput(prompt as Prompt, true) : prompt,
+      ),
+    }),
+    ...(Array.isArray(config.tests) && { tests: config.tests.map(projectTest) }),
+    ...(config.defaultTest !== undefined && { defaultTest: projectTest(config.defaultTest) }),
+    ...(Array.isArray(config.scenarios) && { scenarios: config.scenarios.map(projectScenario) }),
+  } as Partial<UnifiedConfig>;
 }
 
 function projectSummaryForRedteamReport(
@@ -2608,7 +2653,7 @@ export default class Eval {
       config:
         resultProjection === 'redteamReport'
           ? projectConfigForRedteamReport(this.config)
-          : this.config,
+          : projectConfigForOutput(this.config, outputStripFlags),
       author: this.author || null,
       prompts:
         stripFlags === undefined

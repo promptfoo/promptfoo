@@ -1376,6 +1376,57 @@ describe('evaluator', () => {
       });
     });
 
+    it('applies prompt and variable stripping to full exported config copies', async () => {
+      const eval1 = new Eval({});
+      eval1.config = {
+        prompts: [{ id: 'prompt-id', raw: 'CONFIG_PROMPT_SECRET', label: 'CONFIG_LABEL_SECRET' }],
+        tests: [{ prompt: 'TEST_PROMPT_SECRET', vars: { input: 'TEST_VAR_SECRET' } }],
+        defaultTest: {
+          prompt: 'DEFAULT_PROMPT_SECRET',
+          vars: { input: 'DEFAULT_VAR_SECRET' },
+        },
+        scenarios: [
+          {
+            config: [{ input: 'scenario' }],
+            tests: [{ prompt: 'SCENARIO_PROMPT_SECRET', vars: { input: 'SCENARIO_VAR_SECRET' } }],
+            defaultTest: {
+              prompt: 'SCENARIO_DEFAULT_PROMPT_SECRET',
+              vars: { input: 'SCENARIO_DEFAULT_VAR_SECRET' },
+            },
+          },
+        ],
+      } as any;
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ includeTraces: false });
+        const config = projected.config as any;
+
+        expect(JSON.stringify(config)).not.toContain('_SECRET');
+        expect(config.prompts[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        });
+        expect(config.tests[0]).toMatchObject({
+          prompt: '[prompt stripped]',
+          vars: {},
+        });
+        expect(config.defaultTest).toMatchObject({
+          prompt: '[prompt stripped]',
+          vars: {},
+        });
+        expect(config.scenarios[0]).toMatchObject({
+          tests: [{ prompt: '[prompt stripped]', vars: {} }],
+          defaultTest: { prompt: '[prompt stripped]', vars: {} },
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should include persisted variable display order', async () => {
       const eval1 = new Eval({}, { vars: ['zebra', 'apple'] });
 
@@ -2061,6 +2112,20 @@ describe('evaluator', () => {
       expect(JSON.stringify(projected.config)).not.toContain('plugin-secret');
       expect(JSON.stringify(projected.config)).not.toContain('policy-secret');
       expect(JSON.stringify(projected.config)).not.toContain('policy-object-secret');
+    });
+
+    it('omits malformed framework entries from compact config', async () => {
+      const eval1 = new Eval({});
+      eval1.config = {
+        redteam: {
+          frameworks: ['owasp:llm', { secret: 'FRAMEWORK_SECRET' }, 7] as any,
+        },
+      };
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.config.redteam?.frameworks).toEqual(['owasp:llm']);
+      expect(JSON.stringify(projected.config)).not.toContain('FRAMEWORK_SECRET');
     });
 
     it('preserves safe singleton and named Claude Agent SDK tools in compact config', async () => {

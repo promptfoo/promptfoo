@@ -61,10 +61,6 @@ function hasAnyStripFlag(flags: OutputStripFlags): boolean {
 const TRACE_PROMPT_TEXT_ATTRIBUTE_KEYS = [
   PromptfooAttributes.PROMPT_LABEL,
   PromptfooAttributes.REQUEST_BODY,
-  'tool.output',
-  'tool.result',
-  'ai.toolCall.result',
-  'codex.output',
 ] as const;
 
 // OTLP log bodies are persisted by the receiver as `otel.log.body` and can carry
@@ -74,6 +70,10 @@ const OTEL_LOG_BODY_ATTRIBUTE_KEY = 'otel.log.body';
 
 const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
   PromptfooAttributes.RESPONSE_BODY,
+  'tool.output',
+  'tool.result',
+  'ai.toolCall.result',
+  'codex.output',
   ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
   'codex.command',
   'codex.search.query',
@@ -1186,7 +1186,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResultForOutput(redacted.gradingResult, stripFlags),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata,
     error: projectErrorForOutput(artifactResult.error as EvaluateResult['error'], stripFlags),

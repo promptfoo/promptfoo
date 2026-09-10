@@ -13,8 +13,10 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import Eval, { projectConfigForOutput } from '../models/eval';
 import {
   asEvaluateResult,
+  getOutputStripFlags,
   getResultIndexKey,
   projectTracesForOutput,
   sanitizeResultForJsonlArtifact,
@@ -32,7 +34,6 @@ import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputForm
 import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
-import type Eval from '../models/eval';
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
@@ -332,7 +333,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, {
+  return sanitizeObject(projectConfigForOutput(config, getOutputStripFlags()), {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
