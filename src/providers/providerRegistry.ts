@@ -31,6 +31,7 @@ export class ProviderRegistry {
   private providers: Set<ProviderLifecycle> = new Set();
   private shutdownRegistered: boolean = false;
   private shutdownPromise?: Promise<void>;
+  private inCleanupCallback = false;
   private readonly shouldRegisterProcessHandlers: boolean;
 
   constructor({ registerProcessHandlers = true }: ProviderRegistryOptions = {}) {
@@ -57,8 +58,12 @@ export class ProviderRegistry {
   private async cleanupResource(provider: ProviderLifecycle): Promise<void> {
     try {
       const cleanup = provider.shutdown ?? provider.cleanup;
-      await cleanup.call(provider);
+      this.inCleanupCallback = true;
+      const result = cleanup.call(provider);
+      this.inCleanupCallback = false;
+      await result;
     } catch (error) {
+      this.inCleanupCallback = false;
       logger.warn(`Error cleaning up registered resource: ${error}`);
     }
   }
@@ -88,6 +93,16 @@ export class ProviderRegistry {
   }
 
   shutdownAll(): Promise<void> {
+    if (this.inCleanupCallback) {
+      const providers = Array.from(this.providers);
+      for (const provider of providers) {
+        this.providers.delete(provider);
+      }
+      return Promise.all(providers.map((provider) => this.cleanupResource(provider))).then(
+        () => undefined,
+      );
+    }
+
     if (this.shutdownPromise !== undefined && this.providers.size === 0) {
       return this.shutdownPromise;
     }

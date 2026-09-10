@@ -1629,3 +1629,17 @@ export async function getProviderFactories(
   }
   return providerPluginRegistry.getFactories(providerPath, providerMap);
 }
+
+export async function getProviderFactory(
+  providerPath: string,
+): Promise<ProviderFactory | undefined> {
+  const builtinFactories = await builtinProviderPluginRegistry.getFactories(providerPath, []);
+  if (builtinFactories.length > 0) {
+    return builtinFactories[0];
+  }
+
+  const factories = await providerPluginRegistry.getFactories(providerPath, providerMap);
+  return factories === providerMap
+    ? providerMap.find((factory) => factory.test(providerPath))
+    : factories[0];
+}

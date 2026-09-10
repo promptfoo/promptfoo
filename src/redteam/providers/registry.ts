@@ -85,6 +85,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === REDTEAM_PROVIDER_PATHS.voiceCrescendo,
+    create: async (_providerPath, providerOptions) => {
+      const { VoiceCrescendoProvider } = await import('./voiceCrescendo/index');
+      return new VoiceCrescendoProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === REDTEAM_PROVIDER_PATHS.iterative,
     create: async (_providerPath, providerOptions) => {
       const { default: RedteamIterativeProvider } = await import('./iterative');

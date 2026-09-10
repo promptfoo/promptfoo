@@ -57,14 +57,21 @@ function getRuntimeModuleSpecifiers(sourceText: string, filePath: string): strin
       if (runsAtRuntime) {
         specifiers.push(node.moduleSpecifier.text);
       }
-    } else if (
-      ts.isCallExpression(node) &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteralLike(node.arguments[0]) &&
-      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
-    ) {
-      specifiers.push(node.arguments[0].text);
+    } else if (ts.isCallExpression(node)) {
+      const expression = node.expression;
+      const isRuntimeLoad =
+        expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(expression) && expression.text === 'require') ||
+        (ts.isPropertyAccessExpression(expression) &&
+          ts.isIdentifier(expression.expression) &&
+          ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
+            (expression.expression.text === 'module' && expression.name.text === 'require')));
+      if (isRuntimeLoad) {
+        if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
+          throw new Error('Provider plugin runtime loads must use one static string specifier');
+        }
+        specifiers.push(node.arguments[0].text);
+      }
     }
 
     ts.forEachChild(node, visit);
@@ -156,5 +163,15 @@ describe('provider plugin package boundary', () => {
     );
 
     expect(violations).toEqual([]);
+  });
+
+  it.each([
+    'import(name)',
+    "import('./module', { with: { type: 'json' } })",
+    'module.require(name)',
+  ])('fails closed for unsupported runtime load: %s', (source) => {
+    expect(() => getRuntimeModuleSpecifiers(source, 'fixture.ts')).toThrow(
+      'Provider plugin runtime loads must use one static string specifier',
+    );
   });
 });
