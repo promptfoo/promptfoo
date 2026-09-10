@@ -1103,35 +1103,15 @@ function recursiveSanitize(
   return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, redactStringValues);
 }
 
-function hasSensitiveFields(value: unknown, seen = new WeakSet<object>()): boolean {
-  if (!value || typeof value !== 'object' || seen.has(value)) {
+function hasUnsafeJsonSerializer(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || typeof (value as any).toJSON !== 'function') {
     return false;
   }
-  // Built-in serializers do not rename custom credential properties.
-  if (Buffer.isBuffer(value)) {
-    return value.toJSON !== Buffer.prototype.toJSON;
-  }
-  if (value instanceof URL && value.toJSON === URL.prototype.toJSON) {
-    return false;
-  }
-
-  for (
-    let current = value;
-    current && current !== Object.prototype && !seen.has(current);
-    current = Object.getPrototypeOf(current)
-  ) {
-    seen.add(current);
-    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(current))) {
-      if (
-        isSecretEnvVarName(key) ||
-        (current === value && descriptor.get) ||
-        hasSensitiveFields(descriptor.value, seen)
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return !(
+    (Buffer.isBuffer(value) && value.toJSON === Buffer.prototype.toJSON) ||
+    (value instanceof URL && value.toJSON === URL.prototype.toJSON) ||
+    (value instanceof Date && value.toJSON === Date.prototype.toJSON)
+  );
 }
 
 /**
@@ -1178,6 +1158,9 @@ export function sanitizeObject(
     if (typeof obj !== 'object') {
       return obj;
     }
+    if (hasUnsafeJsonSerializer(obj)) {
+      return REDACTED;
+    }
 
     const ancestors: object[] = [];
     const safeObj = JSON.parse(
@@ -1192,14 +1175,16 @@ export function sanitizeObject(
         // Keep original credential fields when toJSON would hide their names.
         const originalValue = descriptor?.value;
         const value =
-          originalValue instanceof Error
-            ? {
-                name: originalValue.name,
-                message: redactErrorMessages ? REDACTED : originalValue.message,
-              }
-            : originalValue !== val && hasSensitiveFields(originalValue)
-              ? originalValue
-              : val;
+          originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
+            ? sanitizeUrl(val as string)
+            : originalValue instanceof Error
+              ? {
+                  name: originalValue.name,
+                  message: redactErrorMessages ? REDACTED : originalValue.message,
+                }
+              : originalValue !== val && hasUnsafeJsonSerializer(originalValue)
+                ? REDACTED
+                : val;
         if (typeof value === 'object' && value !== null) {
           while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
             ancestors.pop();

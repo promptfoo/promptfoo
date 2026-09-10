@@ -84,7 +84,9 @@ describe('EvalResult', () => {
         },
         testCase: {
           vars: { image: opaqueInput, apiKey: 'vars-fixture' },
+          providerOutput: opaqueInput,
           options: {
+            rubricPrompt: opaqueInput,
             provider: { id: 'fixture', config: { opaque: opaqueInput } },
             clientState: 'sk-abcdefghijklmnopqrstuvwxyz',
           },
@@ -113,6 +115,8 @@ describe('EvalResult', () => {
       expect(sanitized.prompt.raw).toBe(opaqueInput);
       expect(sanitized.prompt.config?.opaque).toBe('[REDACTED]');
       expect(sanitized.testCase.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
+      expect(sanitized.testCase.providerOutput).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.rubricPrompt).toBe(opaqueInput);
       expect(sanitized.testCase.options?.provider).toEqual({
         id: 'fixture',
         config: { opaque: '[REDACTED]' },
@@ -141,6 +145,25 @@ describe('EvalResult', () => {
       }
     },
   );
+
+  it('reads test-case accessors once while preserving their values', () => {
+    let reads = 0;
+    const testCase = { options: {}, assert: [] } as AtomicTestCase;
+    Object.defineProperty(testCase, 'vars', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return { prompt: 'fixture input' };
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({ testCase });
+
+    expect(sanitized.testCase.vars).toEqual({ prompt: 'fixture input' });
+    expect(reads).toBe(1);
+  });
 
   describe('sanitizeProvider', () => {
     it.each([
@@ -271,7 +294,7 @@ describe('EvalResult', () => {
       expect(serialized).not.toContain('abc8Q~someSecretValue');
     });
 
-    it('redacts original credential fields before custom JSON remapping', () => {
+    it('fails closed before custom JSON remapping', () => {
       const credentials = {
         apiKey: 'short-fixture',
         region: 'local',
@@ -280,7 +303,7 @@ describe('EvalResult', () => {
         },
       };
       const result = sanitizeProvider({ id: 'fixture', config: { connection: credentials } });
-      expect(result.config?.connection).toEqual({ apiKey: '[REDACTED]', region: 'local' });
+      expect(result.config?.connection).toBe('[REDACTED]');
       expect(JSON.stringify(result)).not.toContain('short-fixture');
     });
 

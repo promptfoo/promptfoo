@@ -1064,23 +1064,26 @@ describe('sanitizeObject', () => {
   describe('class instances and prototypes', () => {
     it('preserves URL and Buffer JSON representations', () => {
       expect(
-        sanitizeObject({ endpoint: new URL('https://example.com/path'), bytes: Buffer.from('ok') }),
+        sanitizeObject({
+          endpoint: new URL('https://user:pass@example.com/path?token=fixture'),
+          bytes: Buffer.from('ok'),
+        }),
       ).toEqual({
-        endpoint: 'https://example.com/path',
+        endpoint: 'https://***:***@example.com/path?token=%5BREDACTED%5D',
         bytes: { type: 'Buffer', data: [111, 107] },
       });
     });
 
-    it('preserves safe custom JSON projections', () => {
-      class Duration {
-        constructor(public milliseconds: number) {}
+    it('fails closed for custom JSON projections', () => {
+      class Credential {
+        #token = 'fixture-private-token';
         toJSON() {
-          return { seconds: this.milliseconds / 1000 };
+          return { message: this.#token };
         }
       }
 
-      expect(sanitizeObject({ duration: new Duration(2500) })).toEqual({
-        duration: { seconds: 2.5 },
+      expect(sanitizeObject({ credential: new Credential() })).toEqual({
+        credential: '[REDACTED]',
       });
     });
 

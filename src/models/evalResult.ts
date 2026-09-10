@@ -202,15 +202,29 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     return testCase;
   }
   try {
-    const sanitized = sanitizeForDbWithSecrets(testCase);
-    if (testCase.vars) {
-      sanitized.vars = sanitizeForDbWithSecrets(testCase.vars, false);
+    const captured = { ...testCase };
+    const options = captured.options && { ...captured.options };
+    if (options) {
+      captured.options = options;
     }
-    if (testCase.provider) {
-      sanitized.provider = sanitizeProvider(testCase.provider);
+    const sanitized = sanitizeForDbWithSecrets(captured);
+    if (captured.vars) {
+      sanitized.vars = sanitizeForDbWithSecrets(captured.vars, false);
     }
-    if (testCase.assert) {
-      sanitized.assert = testCase.assert.map(sanitizeAssertionForDb);
+    if (captured.provider) {
+      sanitized.provider = sanitizeProvider(captured.provider);
+    }
+    if (captured.providerOutput !== undefined) {
+      sanitized.providerOutput = sanitizeForDbWithSecrets(captured.providerOutput, false);
+    }
+    if (options?.rubricPrompt !== undefined) {
+      sanitized.options = {
+        ...sanitized.options,
+        rubricPrompt: sanitizeForDbWithSecrets(options.rubricPrompt, false),
+      };
+    }
+    if (captured.assert) {
+      sanitized.assert = captured.assert.map(sanitizeAssertionForDb);
     }
     return sanitized;
   } catch {
