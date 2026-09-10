@@ -657,6 +657,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
+    let errorOrigin: 'tool' | undefined;
     try {
       const refusal =
         completedRefusal ??
@@ -853,6 +854,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                   throwIfAborted(callApiOptions?.abortSignal);
                 }
                 if (callApiOptions?.abortSignal?.aborted) {
+                  errorOrigin = 'tool';
                   throw error;
                 }
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
@@ -895,6 +897,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 throwIfAborted(callApiOptions?.abortSignal);
               }
               if (callApiOptions?.abortSignal?.aborted) {
+                errorOrigin = 'tool';
                 throw error;
               }
               // If callback fails, fall back to original behavior (return the function call)
@@ -1002,6 +1005,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {
+          ...(errorOrigin && { errorOrigin }),
           http: {
             status,
             statusText,

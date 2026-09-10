@@ -103,13 +103,10 @@ export async function executeProviderFunctionCallback({
     }
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const result = await waitForPromiseWithAbort(
-      withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
-        throwIfAborted(abortSignal);
-        return callback(args);
-      }),
-      abortSignal,
-    );
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+      throwIfAborted(abortSignal);
+      return waitForPromiseWithAbort(Promise.resolve(callback(args)), abortSignal);
+    });
     throwIfAborted(abortSignal);
 
     if (result === undefined || result === null) {
