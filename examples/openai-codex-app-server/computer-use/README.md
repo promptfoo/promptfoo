@@ -72,8 +72,9 @@ a passing result.
 
 The runner forwards additional arguments as the Promptfoo command and resolves
 relative paths from this example directory. Promptfoo's own state (database,
-logs) is redirected to the owner-only `.tmp/promptfoo-home`, so custom commands
-write only that contained state plus the output path that you explicitly pass.
+logs, cache, and media) is redirected to the owner-only `.tmp/promptfoo-home`,
+so custom commands write only that contained state plus the output path that
+you explicitly pass.
 
 ## Run a bounded red team
 

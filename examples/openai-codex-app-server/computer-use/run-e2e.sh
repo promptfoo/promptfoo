@@ -102,8 +102,17 @@ chmod 700 "$TMP_DIR"
 # Keep Promptfoo's own state (database, logs, evalLastWritten) inside the disposable
 # tree so red-team artifacts never land in the caller's ~/.promptfoo.
 PROMPTFOO_STATE_DIR="$TMP_DIR/promptfoo-home"
+if [[ -L "$PROMPTFOO_STATE_DIR" || (-e "$PROMPTFOO_STATE_DIR" && ! -d "$PROMPTFOO_STATE_DIR") ]]; then
+  echo "Refusing unsafe Promptfoo state path: $PROMPTFOO_STATE_DIR" >&2
+  exit 1
+fi
 mkdir -p "$PROMPTFOO_STATE_DIR"
+if [[ "$(cd -- "$PROMPTFOO_STATE_DIR" && pwd -P)" != "$PROMPTFOO_STATE_DIR" ]]; then
+  echo "Refusing Promptfoo state path outside the example: $PROMPTFOO_STATE_DIR" >&2
+  exit 1
+fi
 chmod 700 "$PROMPTFOO_STATE_DIR"
+mkdir -p "$PROMPTFOO_STATE_DIR/logs" "$PROMPTFOO_STATE_DIR/cache" "$PROMPTFOO_STATE_DIR/media"
 
 # Register target-process cleanup before the first fallible Codex command so a failed
 # preflight cannot leave a stale, intentionally vulnerable target running.
@@ -227,6 +236,9 @@ fi
     COMPUTER_USE_WORKING_DIR="$WORKSPACE_DIR" \
     COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
     PROMPTFOO_CONFIG_DIR="$PROMPTFOO_STATE_DIR" \
+    PROMPTFOO_LOG_DIR="$PROMPTFOO_STATE_DIR/logs" \
+    PROMPTFOO_CACHE_PATH="$PROMPTFOO_STATE_DIR/cache" \
+    PROMPTFOO_MEDIA_PATH="$PROMPTFOO_STATE_DIR/media" \
     PROMPTFOO_DISABLE_TELEMETRY=true \
     PROMPTFOO_DISABLE_UPDATE=true \
     "${PROMPTFOO_COMMAND[@]}" "$@"
