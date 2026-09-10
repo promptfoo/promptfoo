@@ -27,7 +27,12 @@ import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
+import {
+  normalizeTools,
+  resolveGoogleToolConfig,
+  stripExecutableToolFileReferences,
+  validateFunctionCall,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -643,27 +648,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
-    const passthroughToolConfig = config.passthrough?.toolConfig ?? config.passthrough?.tool_config;
-    const effectiveToolConfig = (passthroughToolConfig ??
-      config.toolConfig ??
-      config.tool_config) as
-      | {
-          functionCallingConfig?: {
-            streamFunctionCallArguments?: boolean;
-            stream_function_call_arguments?: boolean;
-          };
-          function_calling_config?: {
-            streamFunctionCallArguments?: boolean;
-            stream_function_call_arguments?: boolean;
-          };
-        }
-      | undefined;
-    const functionCallingConfig =
-      effectiveToolConfig?.functionCallingConfig ?? effectiveToolConfig?.function_calling_config;
+    const { toolConfig } = resolveGoogleToolConfig(config);
     const streamsFunctionCallArguments =
       config.streaming === true &&
-      (functionCallingConfig?.streamFunctionCallArguments === true ||
-        functionCallingConfig?.stream_function_call_arguments === true);
+      toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true;
     const functionCalls = streamsFunctionCallArguments
       ? assembleStreamedFunctionCalls(parts)
       : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
@@ -671,17 +659,18 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       return output;
     }
 
+    const normalizedOutput = streamsFunctionCallArguments
+      ? restoreStreamedFunctionCallParts(parts, functionCalls)
+      : output;
     if (!config.functionToolCallbacks) {
-      return streamsFunctionCallArguments
-        ? restoreStreamedFunctionCallParts(parts, functionCalls)
-        : output;
+      return normalizedOutput;
     }
 
     const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
       if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
-        return output;
+        return normalizedOutput;
       }
       try {
         const args =
@@ -690,12 +679,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
             : (functionCall.args ?? {});
         preparedCalls.push({ functionName, args: JSON.stringify(args), callId: functionCall.id });
       } catch {
-        return output;
+        return normalizedOutput;
       }
     }
 
     if (preparedCalls.length === 0) {
-      return output;
+      return normalizedOutput;
     }
 
     const results = [];
@@ -703,13 +692,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       try {
         results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch {
-        // executeFunctionCallback already logs the error. Preserve the original
+        // executeFunctionCallback already logs the error. Preserve normalized
         // model output when a callback cannot be executed.
-        return output;
+        return normalizedOutput;
       }
     }
     if (results.length === 1) {
-      return results[0] ?? output;
+      return results[0] ?? normalizedOutput;
     }
     return results
       .map((result) => {

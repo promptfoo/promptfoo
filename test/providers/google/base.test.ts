@@ -70,7 +70,8 @@ vi.mock('../../../src/providers/google/auth', () => ({
   },
 }));
 
-vi.mock('../../../src/providers/google/util', () => ({
+vi.mock('../../../src/providers/google/util', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/providers/google/util')>()),
   normalizeTools: vi.fn((tools) => tools),
 }));
 
@@ -894,6 +895,126 @@ describe('GoogleGenericProvider', () => {
       expect(callback).toHaveBeenCalledWith('{"city":"Boston"}');
       expect(result).toBe('streamed');
     });
+
+    it.each([
+      { toolConfig: { retrievalConfig: { languageCode: 'en' } } },
+      { tool_config: { retrieval_config: { language_code: 'en' } } },
+      { toolConfig: { functionCallingConfig: { mode: 'AUTO' } } },
+      { tool_config: { function_calling_config: { mode: 'AUTO' } } },
+    ])(
+      'merges streamed argument settings with unrelated passthrough config',
+      async (passthrough) => {
+        const callback = vi.fn().mockResolvedValue('streamed');
+        const provider = new TestGoogleProvider('gemini-3.8-flash');
+        const result = await provider['executeFunctionToolCallbacks'](
+          [
+            { functionCall: { name: 'weather', willContinue: true } },
+            { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
+          ],
+          {
+            streaming: true,
+            toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+            passthrough,
+            functionToolCallbacks: { weather: callback },
+          },
+          false,
+        );
+
+        expect(result).toBe('streamed');
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"city":"Boston"}');
+      },
+    );
+
+    it('honors passthrough disabling of streamed arguments', async () => {
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const parts = [
+        { functionCall: { name: 'weather', willContinue: true } },
+        { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
+      ];
+      const result = await provider['executeFunctionToolCallbacks'](
+        parts,
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          passthrough: {
+            tool_config: { function_calling_config: { stream_function_call_arguments: false } },
+          },
+        },
+        false,
+      );
+
+      expect(result).toBe(parts);
+    });
+
+    it('preserves assembled calls and non-call parts with a partial callback map', async () => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { text: 'Before the calls' },
+          {
+            functionCall: {
+              id: 'configured-1',
+              name: 'configured',
+              args: '{"city":"Bos',
+              willContinue: true,
+            },
+            thoughtSignature: 'call-signature',
+          },
+          { functionCall: { id: 'configured-1', args: 'ton"}', willContinue: false } },
+          {
+            functionCall: {
+              id: 'missing-1',
+              name: 'missing',
+              partialArgs: [{ jsonPath: '$.city', stringValue: 'Seattle' }],
+            },
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { configured: callback },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        { text: 'Before the calls' },
+        {
+          functionCall: { id: 'configured-1', name: 'configured', args: { city: 'Boston' } },
+          thoughtSignature: 'call-signature',
+        },
+        { functionCall: { id: 'missing-1', name: 'missing', args: { city: 'Seattle' } } },
+      ]);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it.each(['returns no value', 'throws'])(
+      'preserves assembled calls when a callback %s',
+      async (outcome) => {
+        const callback = vi.fn().mockImplementation(() => {
+          if (outcome === 'throws') {
+            throw new Error('Callback failed');
+          }
+        });
+        const provider = new TestGoogleProvider('gemini-3.8-flash');
+        const result = await provider['executeFunctionToolCallbacks'](
+          [
+            { functionCall: { name: 'weather', willContinue: true } },
+            { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
+          ],
+          {
+            streaming: true,
+            toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+            functionToolCallbacks: { weather: callback },
+          },
+          false,
+        );
+
+        expect(result).toEqual([{ functionCall: { name: 'weather', args: { city: 'Boston' } } }]);
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"city":"Boston"}');
+      },
+    );
 
     it('should preserve buffered fragments when a later fragment is valid JSON on its own', async () => {
       const callback = vi.fn().mockResolvedValue('streamed');
