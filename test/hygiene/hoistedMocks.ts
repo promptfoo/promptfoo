@@ -40,6 +40,8 @@ type Context = {
   phase: 'collection' | 'hoisted' | 'setup' | 'reset' | 'ownership';
   guards: ReadonlyMap<string, boolean>;
   hookGuards?: GuardPath;
+  hookResets?: Set<string>;
+  hookHasReset?: boolean;
   allocations: Set<string>;
   references?: Set<string>;
 };
@@ -161,6 +163,7 @@ export function findHoistedPersistentMockWithoutReset(
   const mockSuites = new Map<string, Suite>();
   const suites = new Set<Suite>();
   const suitesWithTests = new Set<Suite>();
+  const mockNames = new Map<string, Set<string>>();
   const rootSuite = suite();
   let targetSuites: Suite[] = [];
   const hoistedMocks = new Set<string>();
@@ -168,11 +171,17 @@ export function findHoistedPersistentMockWithoutReset(
   const implementationMocks = new Map<string, Set<string>>();
   const reusedMocks = new Set<string>();
   const setupCallbacks: {
-    callback: Value;
+    callback: Extract<Value, { kind: 'function' }>;
     context: Context;
     call: Node;
     api: string;
   }[] = [];
+  const testCallbacks: {
+    callback: Extract<Value, { kind: 'function' }>;
+    context: Context;
+    node: Node;
+  }[] = [];
+  const scopedSetupSetters = new Map<string, { suite: Suite; node: Node }[]>();
   const controlLabels = new Map<Node, Set<string>>();
   const birthGuards = new Map<string, Map<string, boolean>[]>();
   const callCache = new Map<string, CachedCall>();
@@ -248,6 +257,7 @@ export function findHoistedPersistentMockWithoutReset(
 
   function recordReset(keys: Iterable<string>, context: Context) {
     for (const key of keys) {
+      context.hookResets?.add(key);
       const coverage = resetCoverage.get(key) ?? new Map<Suite, ValueSlot>();
       for (const target of targetSuites) {
         if (withinSuite(target, context.suite)) {
@@ -510,6 +520,13 @@ export function findHoistedPersistentMockWithoutReset(
     target: Scope | 'assignment',
     directFunction: boolean,
   ) {
+    if (context.phase === 'collection') {
+      for (const key of mockKeys(value)) {
+        const names = mockNames.get(key) ?? new Set<string>();
+        names.add(name);
+        mockNames.set(key, names);
+      }
+    }
     const binding =
       target === 'assignment' ? lookup(name, context.scope) : target.bindings.get(name);
     const previous = binding?.value ?? UNKNOWN;
@@ -972,6 +989,10 @@ export function findHoistedPersistentMockWithoutReset(
       }
     } else if (TEST_APIS.has(base) && !curried && !api.endsWith('.todo') && args.length >= 2) {
       suitesWithTests.add(context.suite);
+      const callback = args.at(-1);
+      if (callback?.kind === 'function') {
+        testCallbacks.push({ callback, context, node });
+      }
     }
     return { kind: 'api', name: curried ? base : api };
   }
@@ -1089,6 +1110,17 @@ export function findHoistedPersistentMockWithoutReset(
 
   function recordPersistentSetter(receiver: Value, method: string, node: Node, context: Context) {
     if (context.phase === 'reset' && !hasConditionalSetup(context) && !method.endsWith('Once')) {
+      if (context.hookHasReset) {
+        return;
+      }
+      for (const key of mockKeys(receiver)) {
+        if (context.hookResets?.has(key)) {
+          continue;
+        }
+        const setups = scopedSetupSetters.get(key) ?? [];
+        setups.push({ suite: context.suite, node });
+        scopedSetupSetters.set(key, setups);
+      }
       return;
     }
     for (let part of members(receiver)) {
@@ -2420,11 +2452,38 @@ export function findHoistedPersistentMockWithoutReset(
           invoke(
             hook.callback,
             hookArguments(hook.api),
-            { ...hook.context, phase, hookGuards: hook.context.guards },
+            {
+              ...hook.context,
+              phase,
+              hookGuards: hook.context.guards,
+              hookResets: new Set(),
+              hookHasReset: /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/.test(
+                file.source.slice(hook.callback.node.start, hook.callback.node.end),
+              ),
+            },
             hook.call,
             { root: true },
           );
         }
+      }
+    }
+    for (const [key, setups] of scopedSetupSetters) {
+      const names = mockNames.get(key);
+      if (!names) {
+        continue;
+      }
+      const leaks = testCallbacks.some(({ callback, context, node }) => {
+        if (setups.some(({ suite }) => withinSuite(context.suite, suite))) {
+          return false;
+        }
+        const source = file.source.slice(callback.node.start, callback.node.end);
+        if (![...names].some((name) => new RegExp(`\\b${name}\\b`).test(source))) {
+          return false;
+        }
+        return callbackReferences(callback, context, node).has(key);
+      });
+      if (leaks) {
+        setters.set(key, setups[0].node);
       }
     }
     for (const key of setters.keys()) {

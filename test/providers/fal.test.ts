@@ -323,6 +323,7 @@ describe('Fal Provider', () => {
       };
 
       beforeEach(() => {
+        mockSubscribe.mockReset();
         mockSubscribe.mockResolvedValue(mockResponse);
       });
 

@@ -2065,4 +2065,11 @@ describe('hoisted mock provenance', () => {
       beforeEach(() => mock.mockReturnValueOnce(1)); it('a', () => {});`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
+
+  it('does not let suite-local setup leak into a sibling that uses the mock', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      describe('first', () => { beforeEach(() => mock.mockReturnValue(1)); it('a', () => mock()); });
+      describe('second', () => { it('b', () => mock()); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
 });
