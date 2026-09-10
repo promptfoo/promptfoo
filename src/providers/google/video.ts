@@ -1144,12 +1144,6 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: ratioValidation.message };
     }
 
-    // Validate duration
-    const durationValidation = validateDuration(model, durationSeconds, effectiveConfig);
-    if (!durationValidation.valid) {
-      return { error: durationValidation.message };
-    }
-
     // Validate resolution
     const resolutionValidation = validateResolution(
       model,
@@ -1159,6 +1153,12 @@ export class GoogleVideoProvider implements ApiProvider {
     );
     if (!resolutionValidation.valid) {
       return { error: resolutionValidation.message };
+    }
+
+    // Validate duration
+    const durationValidation = validateDuration(model, durationSeconds, effectiveConfig);
+    if (!durationValidation.valid) {
+      return { error: durationValidation.message };
     }
 
     const startTime = Date.now();
