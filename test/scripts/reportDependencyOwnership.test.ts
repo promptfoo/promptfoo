@@ -675,6 +675,18 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
+  it('resolves source aliases under configured roots outside src', () => {
+    write('internal/shared.ts', 'export {};');
+    write('src/index.ts', "import '@internal/shared';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      aliases: { ...config.aliases, '@internal': 'internal' },
+      layers: [{ name: 'runtime', roots: ['src', 'internal'], allowedDependencies: [] }],
+    });
+
+    expect(report.undeclaredUsages).toEqual([]);
+  });
+
   it('recognizes existing assets through source aliases', () => {
     write('src/app/src/assets/logo.svg', '<svg />');
     write('src/app/src/assets/style.css', 'body {}');
