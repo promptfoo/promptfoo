@@ -11,7 +11,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   test,
 }: AssertionParams): Promise<GradingResult> => {
   // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
 
   // Check for MCP tool results in the output
   if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
