@@ -403,7 +403,7 @@ export function reportDependencyOwnership(
     const manifest = manifestFor(file, manifests);
     const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
     const result = parseSync(file, source, {
-      ...(file.endsWith('.js') ? { lang: 'jsx' as const } : {}),
+      ...(/\.(?:jsx?|mjs|cjs)$/.test(file) ? { lang: 'jsx' as const } : {}),
     });
     if (result.errors.length > 0) {
       throw new Error(`Could not parse ${file}: ${result.errors[0].message}`);
@@ -417,23 +417,28 @@ export function reportDependencyOwnership(
       kind: Reference['kind'],
       dependency = getPackageName(specifier),
     ) => {
+      const fileSpecifier = specifier.split(/[?#]/, 1)[0];
+      const declaredDependency =
+        dependency !== undefined &&
+        sections.some((section) =>
+          Object.hasOwn(packages.get(manifest)?.[section] ?? {}, dependency),
+        );
       const alias = Object.entries(config.aliases ?? {})
         .sort(([left], [right]) => right.length - left.length)
-        .find(([prefix]) => specifier === prefix || specifier.startsWith(`${prefix}/`));
+        .find(([prefix]) => fileSpecifier === prefix || fileSpecifier.startsWith(`${prefix}/`));
       const aliasedFile = alias
-        ? path.resolve(repoRoot, alias[1] + specifier.slice(alias[0].length))
+        ? path.resolve(repoRoot, alias[1] + fileSpecifier.slice(alias[0].length))
         : undefined;
       // Workspace names remain dependencies and need declarations, even when a broad
       // source alias shares their scope (for example @promptfoo/*).
       if (
         !dependency ||
         dependency === packages.get(manifest)?.name ||
-        ((aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) ||
+        (((!declaredDependency &&
+          aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`))) ||
           (aliasedFile && fs.existsSync(aliasedFile) && fs.statSync(aliasedFile).isFile()) ||
-          resolveInternalModule(repoRoot, file, specifier, config.aliases, configuredRoots)) &&
+          resolveInternalModule(repoRoot, file, fileSpecifier, config.aliases, configuredRoots)) &&
           !packageNames.includes(dependency)) ||
-        specifier === 'src' ||
-        specifier.startsWith('src/') ||
         /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(specifier)
       ) {
         return;
@@ -498,7 +503,7 @@ export function reportDependencyOwnership(
         }
       }
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum)\s*\{/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum|template)\s*\{/g,
       )) {
         const start = tag.index + tag[0].length;
         let depth = 1;

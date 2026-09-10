@@ -684,6 +684,84 @@ describe('dependency ownership report', () => {
     expect(report.undeclaredUsages).toEqual([]);
   });
 
+  it.each(['js', 'jsx', 'mjs', 'cjs'])(
+    'reads dependencies alongside JSX in %s source',
+    (extension) => {
+      write(
+        `src/component.${extension}`,
+        "import { value } from 'shared'; export const node = <>{value}</>;",
+      );
+      const report = reportDependencyOwnership(root, config);
+      expect(
+        report.declarations.find((entry) => entry.dependency === 'shared')?.references,
+      ).toEqual([expect.objectContaining({ file: `src/component.${extension}`, kind: 'value' })]);
+    },
+  );
+
+  it('records JSDoc template constraints as type dependencies', () => {
+    write(
+      'src/index.js',
+      "/** @template {import('schema').Node} T */\nexport function identity(value) { return value; }",
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'schema',
+        references: [expect.objectContaining({ kind: 'type', scope: 'source', line: 1 })],
+      }),
+    ]);
+    expect(report.runtimeDeclarationGaps).toEqual([]);
+  });
+
+  it.each([true, false])('reports unresolved src packages with declared=%s', (declared) => {
+    json('package.json', { dependencies: declared ? { src: '1' } : {} });
+    write('src/internal.ts', 'export {};');
+    write('src/index.ts', "import 'src/internal'; import 'src/client';");
+    const report = reportDependencyOwnership(root, config);
+    const entries = declared ? report.declarations : report.undeclaredUsages;
+    expect(entries.find((entry) => entry.dependency === 'src')?.references).toEqual([
+      expect.objectContaining({ specifier: 'src/client' }),
+    ]);
+    expect(report.undeclaredUsages).toHaveLength(declared ? 0 : 1);
+  });
+
+  it('retains declared packages beneath manual ledger aliases', () => {
+    json('src/app/package.json', { devDependencies: { '@site/sdk': '1' } });
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: {
+        'package.json': 'root/runtime',
+        'src/app/package.json': 'app/browser',
+        'packages/contracts/package.json': 'contracts',
+      },
+      aliases: { 'src/app/package.json': ['@site', '@theme'] },
+    });
+    write('src/app/src/index.ts', "import '@site/sdk'; import '@theme/Layout';");
+    const report = reportDependencyOwnership(root, config);
+    expect(
+      report.declarations.find((entry) => entry.dependency === '@site/sdk')?.references,
+    ).toEqual([expect.objectContaining({ specifier: '@site/sdk', file: 'src/app/src/index.ts' })]);
+    expect(report.undeclaredUsages).toEqual([]);
+  });
+
+  it('resolves aliased assets with resource suffixes and retains unresolved evidence', () => {
+    write('src/app/src/assets/logo.svg', '<svg />');
+    write('src/app/src/assets/style.css', 'body {}');
+    write(
+      'src/app/src/index.ts',
+      "import '@app/assets/logo.svg?url'; import '@app/assets/style.css#inline'; import '@logo?raw'; import '@app/missing/logo.svg?url';",
+    );
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      aliases: { ...config.aliases, '@logo': 'src/app/src/assets/logo.svg' },
+    });
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: '@app/missing',
+        references: [expect.objectContaining({ specifier: '@app/missing/logo.svg?url' })],
+      }),
+    ]);
+  });
+
   it.each(['ts', 'tsx', 'mts', 'cts'])('ignores JSDoc dependencies in %s source', (extension) => {
     write(
       `src/index.${extension}`,
