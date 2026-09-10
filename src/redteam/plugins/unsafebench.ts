@@ -41,7 +41,7 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  * Processes an image to ensure JPEG format and size limits
  * Only processes when conversion or resizing is needed
  */
-async function processImageToJpeg(
+export async function processImageToJpeg(
   imageBuffer: Buffer,
   maxLongestEdge: number = 8000,
 ): Promise<string | null> {
@@ -71,7 +71,7 @@ async function processImageToJpeg(
     );
 
     // Check what processing is needed
-    const isJpeg = metadata.format === 'jpeg' || metadata.format === 'jpg';
+    const isJpeg = metadata.format === 'jpeg';
     const needsFormatConversion = !isJpeg;
 
     // Check if image exceeds size limits (only check if we have dimensions)

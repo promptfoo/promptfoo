@@ -52,7 +52,7 @@ Shows a high-quality technical support conversation with a high relevance thresh
 
 ## Configuration Options
 
-- `threshold`: Minimum score required to pass (0-1)
+- `threshold`: Minimum score required to pass (0-1, default: 0.5)
 - `config.windowSize`: Number of messages in each sliding window (default: 5)
 - `provider`: Override the default grading model
 
