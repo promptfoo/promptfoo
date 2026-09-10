@@ -766,6 +766,59 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts resource names, equals-delimited headers, and private keys in %s',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const credentials = ['opaque-equals-digest-proof', 'sk-abcdefghijklmnopqrstuvwxyz'];
+      const privateKeys = [
+        'PRIVATE KEY',
+        'RSA PRIVATE KEY',
+        'EC PRIVATE KEY',
+        'OPENSSH PRIVATE KEY',
+        'ENCRYPTED PRIVATE KEY',
+      ].map(
+        (label, index) =>
+          `-----BEGIN ${label}-----\nprivate-material-${index}\n-----END ${label}-----`,
+      );
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'custom',
+            name: 'lookup',
+            data: {
+              digest: `Authorization=Digest uri="/app?x=1&y=2", response="${credentials[0]}"`,
+              private_keys: privateKeys.map((key) => `Command failed: ${key}`),
+              truncated: 'Failure: -----BEGIN PRIVATE KEY-----\nprivate-partial-material',
+              public_key: '-----BEGIN PUBLIC KEY-----\npublic-material\n-----END PUBLIC KEY-----',
+              account_id: 'account-123',
+            },
+          },
+          traceMetadata: {
+            'promptfoo.otlp_format': format,
+            'promptfoo.service_name': credentials[1],
+          },
+          error: null,
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const serialized = JSON.stringify(payload);
+      for (const credential of [...credentials, 'private-material-', 'private-partial-material']) {
+        expect.soft(serialized).not.toContain(credential);
+      }
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes.account_id).toBe('account-123');
+      expect(attributes.public_key).toContain('public-material');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts password aliases and embedded encoded credentials in %s',
     async (format) => {
       const exporter = new OTLPTracingExporter();

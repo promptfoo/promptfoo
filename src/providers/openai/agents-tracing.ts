@@ -104,8 +104,9 @@ export class OTLPTracingExporter implements TracingExporter {
     const defaultServiceName = getTracingServiceName();
 
     for (const span of spans) {
-      const serviceName =
-        getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName;
+      const serviceName = sanitizeCredentialText(
+        getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName,
+      );
       const serviceSpans = spansByService.get(serviceName) ?? [];
       serviceSpans.push(span);
       spansByService.set(serviceName, serviceSpans);
@@ -614,6 +615,10 @@ function parseStructuredJson(value: string): unknown {
 }
 
 function sanitizeCredentialText(value: string): string {
+  if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(value)) {
+    return '<redacted>';
+  }
+
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
   for (const [, key] of value.matchAll(/\\+"([A-Za-z][A-Za-z\d_.-]*)\\+"\s*:/g)) {
     if (isCredentialAttributeKey(key)) {
@@ -644,11 +649,7 @@ function sanitizeCredentialText(value: string): string {
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
-      /(\b(?:Authorization|Cookie)\s*:[ \t]*)[^\r\n]*/gi,
-      (_match, prefix: string) => `${prefix}<redacted>`,
-    )
-    .replace(
-      /(\bAuthorization\s*=\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
+      /(\b(?:Authorization|Cookie)\s*[:=][ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
