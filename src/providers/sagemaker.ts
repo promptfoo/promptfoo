@@ -274,12 +274,19 @@ interface RuntimeEndpoint {
   useDualstackEndpoint: boolean;
 }
 
+interface RuntimeCredentials {
+  scope: CredentialScope;
+  provider: RuntimeConfigAwsCredentialIdentityProvider;
+  reusable: boolean;
+}
+
 interface RuntimeInitialization {
   scope: CredentialScope;
   endpoint: RuntimeEndpoint;
   retry: RuntimeRetryState;
   defaults: RuntimeDefaultsState;
   promise: Promise<SageMakerRuntimeClient>;
+  credentials?: RuntimeCredentials;
 }
 
 interface SageMakerOptions extends ProviderOptions {
@@ -291,17 +298,14 @@ interface SageMakerOptions extends ProviderOptions {
  */
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
-  sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
+  #sagemakerRuntime?: any; // SageMaker runtime client
+  #initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
   private readonly runtimeClients = new Map<SageMakerRuntimeClient, string>();
   private readonly runtimeClockOffsets = new Map<string, number>();
   readonly #runtimeInitializations: RuntimeInitialization[] = [];
   private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
   private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
-  #retainedCredentials?: {
-    scope: CredentialScope;
-    provider: RuntimeConfigAwsCredentialIdentityProvider;
-  };
+  #retainedCredentials?: RuntimeCredentials;
   private runtimeGeneration = 0;
   private readonly activeRequests = new Set<AbortController>();
   config: SageMakerConfig;
@@ -335,6 +339,14 @@ abstract class SageMakerGenericProvider {
     telemetry.record('feature_used', {
       feature: 'sagemaker',
     });
+  }
+
+  get sagemakerRuntime(): any {
+    return this.#sagemakerRuntime;
+  }
+
+  set sagemakerRuntime(client: any) {
+    this.#sagemakerRuntime = client;
   }
 
   id(): string {
@@ -512,7 +524,7 @@ abstract class SageMakerGenericProvider {
   async getSageMakerRuntimeInstance(region?: string, generation = this.runtimeGeneration) {
     this.assertRuntimeGeneration(generation);
     // A caller-supplied client is borrowed, not part of the provider's region pool.
-    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.initializedRuntime?.client) {
+    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime?.client) {
       return this.sagemakerRuntime;
     }
 
@@ -558,6 +570,7 @@ abstract class SageMakerGenericProvider {
     this.assertRuntimeGeneration(generation);
     let entry = this.#runtimeInitializations.find(
       (candidate) =>
+        candidate.credentials?.reusable !== false &&
         candidate.endpoint.url === endpoint.url &&
         candidate.endpoint.useFipsEndpoint === endpoint.useFipsEndpoint &&
         candidate.endpoint.useDualstackEndpoint === endpoint.useDualstackEndpoint &&
@@ -571,7 +584,7 @@ abstract class SageMakerGenericProvider {
         endpoint,
         retry: retryState,
         defaults: defaultsState,
-        promise: (async () => {
+        promise: Promise.resolve().then(async () => {
           const { SageMakerRuntimeClient } = await import(
             '@aws-sdk/client-sagemaker-runtime'
           ).catch(importError);
@@ -585,7 +598,8 @@ abstract class SageMakerGenericProvider {
           ) {
             this.#retainedCredentials = undefined;
           }
-          const retainedCredentials = this.#retainedCredentials?.provider;
+          const retainedState = this.#retainedCredentials;
+          const retainedCredentials = retainedState?.provider;
           let credentials =
             retainedCredentials ?? (await this.getCredentials(scope, scope.environment));
           if (!credentials) {
@@ -605,6 +619,35 @@ abstract class SageMakerGenericProvider {
             const isolated: RuntimeConfigAwsCredentialIdentityProvider = (options) =>
               chain({ ...options, callerClientConfig });
             credentials = isolated;
+          }
+          const credentialProvider = typeof credentials === 'function' ? credentials : undefined;
+          const credentialState = credentialProvider
+            ? (retainedState ?? { scope, provider: credentialProvider, reusable: true })
+            : undefined;
+          initialization.credentials = credentialState;
+          if (credentialProvider && credentialState && !(scope.profile && retainedState)) {
+            credentials = async (options) => {
+              const inputsMatch = Object.entries(scope.environment).every(
+                ([name, value]) => process.env[name] === value,
+              );
+              try {
+                return await credentialProvider(options);
+              } finally {
+                if (
+                  !inputsMatch ||
+                  Object.entries(scope.environment).some(
+                    ([name, value]) => process.env[name] !== value,
+                  )
+                ) {
+                  // A lazy chain may observe newer inputs. Keep active requests owned,
+                  // but never reuse their client or credentials under the old scope.
+                  credentialState.reusable = false;
+                  if (this.#retainedCredentials === credentialState) {
+                    this.#retainedCredentials = undefined;
+                  }
+                }
+              }
+            };
           }
           const retryStrategy = await retryState.provider?.();
           this.assertRuntimeGeneration(generation);
@@ -646,19 +689,14 @@ abstract class SageMakerGenericProvider {
           if (client.config?.retryStrategy) {
             retryState.provider = client.config.retryStrategy;
           }
-          if (!(scope.accessKeyId && scope.secretAccessKey) && typeof credentials === 'function') {
-            // Keep SDK credential memoization, including the default chain's background refresh.
-            this.#retainedCredentials = {
-              scope,
-              provider: scope.profile
-                ? (retainedCredentials ?? client.config.credentials)
-                : credentials,
-            };
+          if (credentialState && scope.profile) {
+            // Explicit profiles need the SDK memoizer; default chains retain their own refresh.
+            credentialState.provider = retainedCredentials ?? client.config.credentials;
           }
           this.runtimeClients.set(client, runtimeRegion);
           logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
           return client;
-        })(),
+        }),
       };
       this.#runtimeInitializations.push(initialization);
       entry = initialization;
@@ -674,9 +712,12 @@ abstract class SageMakerGenericProvider {
       throw error;
     }
     this.assertRuntimeGeneration(generation);
-    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.initializedRuntime?.client) {
+    if (entry.credentials?.reusable) {
+      this.#retainedCredentials = entry.credentials;
+    }
+    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.#initializedRuntime?.client) {
       this.sagemakerRuntime = runtime;
-      this.initializedRuntime = { client: runtime, region: runtimeRegion };
+      this.#initializedRuntime = { client: runtime, region: runtimeRegion };
     }
     return runtime;
   }
@@ -725,7 +766,7 @@ abstract class SageMakerGenericProvider {
     if (clients.includes(this.sagemakerRuntime)) {
       this.sagemakerRuntime = undefined;
     }
-    this.initializedRuntime = undefined;
+    this.#initializedRuntime = undefined;
     for (const client of clients) {
       try {
         client.destroy();
