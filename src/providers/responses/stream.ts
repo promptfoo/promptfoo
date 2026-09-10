@@ -1001,9 +1001,9 @@ function parseSseEvent(
   chunk: string,
   providerName: string,
   logger: ResponsesStreamLogger,
-): ResponsesStreamEvent | undefined {
+): ResponsesStreamEvent | null | undefined {
   const data = chunk
-    .split(/\r?\n/)
+    .split(/\r\n|\r|\n/)
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.slice('data:'.length).trimStart())
     .join('\n')
@@ -1019,7 +1019,7 @@ function parseSseEvent(
     logger.debug(`[${providerName} Responses] Ignoring malformed SSE payload`, {
       dataLength: data.length,
     });
-    return undefined;
+    return null;
   }
 }
 
@@ -1040,9 +1040,12 @@ export async function readResponsesStream(
   let bufferedEventFragments: string[] = [];
   let bufferedEventBatches: string[] = [];
   let separatorState = 0;
+  let previousWasCarriageReturn = false;
+  let skipLineFeed = false;
   let readsSinceYield = 0;
   let eventsSinceYield = 0;
   let latestResponse: any;
+  let sawMalformedSsePayload = false;
   let latestResponseEventType: string | undefined;
   let latestResponseEventCount: number | undefined;
   let outputText = '';
@@ -1325,6 +1328,9 @@ export async function readResponsesStream(
     }
 
     const event = parseSseEvent(chunk, providerName, logger);
+    if (event === null) {
+      sawMalformedSsePayload = true;
+    }
     const snapshotOutput = Array.isArray(event?.response?.output)
       ? event.response.output
       : Array.isArray(event?.output)
@@ -1718,21 +1724,36 @@ export async function readResponsesStream(
     let segmentStart = 0;
     for (let index = 0; index < decoded.length; index++) {
       const char = decoded[index];
+      if (skipLineFeed && char === '\n') {
+        segmentStart = index + 1;
+        skipLineFeed = false;
+        previousWasCarriageReturn = false;
+        continue;
+      }
+      skipLineFeed = false;
+
       let complete = false;
-      if (char === '\n') {
-        complete = separatorState === 1 || separatorState === 3;
+      if (char === '\r') {
+        complete = separatorState === 1;
         separatorState = complete ? 0 : 1;
-      } else if (char === '\r') {
-        separatorState = separatorState === 1 ? 3 : 2;
+        previousWasCarriageReturn = true;
+        skipLineFeed = complete;
+      } else if (char === '\n') {
+        if (!previousWasCarriageReturn) {
+          complete = separatorState === 1;
+          separatorState = complete ? 0 : 1;
+        }
+        previousWasCarriageReturn = false;
       } else {
         separatorState = 0;
+        previousWasCarriageReturn = false;
       }
       if (!complete) {
         continue;
       }
 
       appendEventFragment(decoded.slice(segmentStart, index + 1), true);
-      const chunk = takeBufferedEvent().replace(/\r?\n\r?\n$/, '');
+      const chunk = takeBufferedEvent().replace(/(?:\r\n|\r|\n){2}$/, '');
       if (chunk.length > MAX_STREAM_SERIALIZED_OUTPUT_CHARS) {
         throw new Error(
           `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_CHARS} characters of output (event data)`,
@@ -2035,6 +2056,13 @@ export async function readResponsesStream(
         ? { ...latestResponse, output: finalizedStreamOutput.filter((item) => item !== undefined) }
         : latestResponse,
     );
+  }
+
+  if (
+    sawMalformedSsePayload &&
+    (latestResponse || outputText || finalizedNonMessageItems.size > 0)
+  ) {
+    throw new Error(`${providerName} streaming response included malformed SSE payload`);
   }
 
   if (

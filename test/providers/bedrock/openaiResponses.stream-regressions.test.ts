@@ -149,6 +149,7 @@ describe('Responses stream regressions', () => {
   it.each([
     '\n',
     '\r\n',
+    '\r',
   ])('parses single-byte-chunk SSE events with %j line endings', async (eol) => {
     const body = new TextEncoder().encode(
       [
@@ -182,12 +183,22 @@ describe('Responses stream regressions', () => {
     ]);
   });
 
-  it('does not treat an extra carriage return inside a multiline data event as a separator', async () => {
+  it('rejects malformed SSE after streamed draft text', async () => {
+    const response = new Response(
+      'data: {"type":"response.output_text.delta","delta":"UNSAFE_DRAFT"}\n\n' +
+        'data: {"type":"response.refusal.done"\n\n',
+    );
+
+    await expect(readResponsesStream(response, 'test', { debug: vi.fn() })).rejects.toThrow(
+      /malformed SSE payload/i,
+    );
+  });
+
+  it('parses multiline data with CRLF line endings', async () => {
     const body = new TextEncoder().encode(
-      'event: response.output_text.done\n' +
-        'data: {"type":"response.output_text.done",\n' +
-        '\r\r\n' +
-        'data: "output_index":0,"content_index":0,"text":"hello"}\n\n',
+      'event: response.output_text.done\r\n' +
+        'data: {"type":"response.output_text.done",\r\n' +
+        'data: "output_index":0,"content_index":0,"text":"hello"}\r\n\r\n',
     );
     let index = 0;
     const stream = new ReadableStream<Uint8Array>({
