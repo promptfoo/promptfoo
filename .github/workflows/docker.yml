@@ -141,6 +141,17 @@ env:
         '    ln -s /app/' + packageJson.bin.pf + ' /usr/local/bin/pf && \\',
       ].join('\n'),
     );
+
+    if (process.env.PYTHON_VERSION) {
+      const pythonPackage = /python3~=\d+\.\d+/;
+      if (!pythonPackage.test(dockerfile)) {
+        throw new Error('Could not locate the historical Python minor pin');
+      }
+      dockerfile = dockerfile
+        .replace(/^(\s*RUN apk add)/m, 'ARG PYTHON_VERSION\n$1')
+        .replace(pythonPackage, 'python3~=${PYTHON_VERSION}');
+    }
+
     fs.writeFileSync(dockerfilePath, dockerfile);
     console.log('Linked the historical release CLI from local build artifacts');
 
@@ -227,7 +238,7 @@ jobs:
 
           http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $token" \
-            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json' \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
             "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
 
           case "$http_code" in

@@ -20,6 +20,7 @@ function legacyDockerfile(): string {
   return [
     '# syntax=docker/dockerfile:1',
     'FROM node:24.7.0-alpine AS base',
+    'RUN apk add --no-cache python3~=3.12 py3-pip',
     '',
     'FROM base AS server',
     'WORKDIR /app',
@@ -165,6 +166,18 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
       'ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo',
     );
     expect(result.dockerfile).toContain('ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf');
+  });
+
+  it('replaces the historical Python minor when requested', () => {
+    const result = run(
+      { dockerfile: legacyDockerfile(), bin: 'dist/src/entrypoint.js' },
+      { PYTHON_VERSION: '3.14' },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.dockerfile).toContain('ARG PYTHON_VERSION');
+    expect(result.dockerfile).toContain('python3~=${PYTHON_VERSION}');
+    expect(result.dockerfile).not.toContain('python3~=3.12');
   });
 
   it('excludes test files from both historical tsconfig include shapes', () => {
