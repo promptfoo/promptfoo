@@ -153,7 +153,7 @@ describe('RedteamMischievousUserProvider', () => {
     });
   });
 
-  it('does not charge Promptfoo response-cache hits', async () => {
+  it('retains cached logical usage without charging Promptfoo response-cache hits', async () => {
     mockUserProviderCallApi.mockResolvedValueOnce({
       cached: true,
       output: 'user response',
@@ -171,8 +171,25 @@ describe('RedteamMischievousUserProvider', () => {
 
     const result = await provider.callApi('test prompt', context);
 
-    expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 0 });
-    expect(result.tokenUsage?.attacker).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({
+      total: 200,
+      prompt: 120,
+      completion: 80,
+      cached: 200,
+      numRequests: 1,
+      attacker: {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 100,
+        numRequests: 1,
+      },
+      incurredTokenUsage: {
+        total: 0,
+        numRequests: 0,
+        attacker: { total: 0, numRequests: 0 },
+      },
+    });
   });
 
   it('retains provider-side cached tokens from a fresh attacker request', async () => {

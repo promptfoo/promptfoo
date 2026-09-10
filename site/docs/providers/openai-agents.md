@@ -38,7 +38,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5-mini
+        model: gpt-5.6-luna
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
@@ -128,7 +128,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -163,12 +163,12 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-5-mini
+        model: gpt-5.6-luna
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5-mini
+            model: gpt-5.6-luna
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
@@ -474,7 +474,7 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine whether order 123 shipped and tell the user the correct status'
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-5.6-luna
 ```
 
 See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
@@ -558,6 +558,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [Codex Security SDK](/docs/providers/openai-codex-security) - Repository scans, finding validation, coverage, and scan cost evals
 - [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
 - [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import styles from './A2ACollaborationDemo.module.css';
 
 interface Message {

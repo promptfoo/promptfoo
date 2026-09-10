@@ -27,12 +27,11 @@ keywords:
 
 # Deterministic metrics
 
-These metrics are created by logical tests that are run on LLM output.
+These assertions can check LLM output or provider metadata directly. Configured scripts, webhooks, and grouped assertions may still depend on external services.
 
 | Assertion Type                                                  | Returns true if...                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
-| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold      |
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
@@ -42,7 +41,6 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
-| [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
@@ -65,18 +63,26 @@ These metrics are created by logical tests that are run on LLM output.
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
-| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
-| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
-| [similar](#similar)                                             | Embedding similarity is above threshold                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
+
+The [F-score](#f-score) section describes a derived metric built from named JavaScript assertions, not an assertion type.
+
+These checks use an additional model or external inference service. Their sections remain here for existing links:
+
+| Check                       | Requires                           |
+| --------------------------- | ---------------------------------- |
+| [classifier](#classifier)   | A HuggingFace classifier           |
+| [pi](#pi)                   | A Pi Labs scorer                   |
+| [select-best](#select-best) | A grading model to compare outputs |
+| [similar](#similar)         | An embedding model                 |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -287,9 +293,9 @@ See [`is-sql`](#is-sql) for advanced usage, including specific database types an
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
+The `cost` assertion checks whether the cost reported by the selected provider is at or below a specified threshold.
 
-This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
+This requires the provider to return cost information; an unknown cost cannot be checked. Use `--no-cache` when comparing fresh inference costs, because response-cache cost reporting depends on the provider.
 
 Example:
 
@@ -605,7 +611,21 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
+
+For example, this OpenAI Responses item matches `value: [get_weather]`:
+
+```json
+{
+  "type": "function_call",
+  "id": "fc_1",
+  "call_id": "call_1",
+  "name": "get_weather",
+  "arguments": "{\"city\":\"NYC\"}"
+}
+```
+
+Responses providers serialize calls this way when `functionToolCallbacks` is not configured, so no output transform is needed. The assertion compares tool names only; it does not validate arguments.
 
 The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
 
@@ -679,6 +699,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenAI Codex Security, by recording the selected native scan or finding-validation operation.
 - OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
@@ -1576,7 +1597,7 @@ The F-score will be calculated automatically after the eval completes. A score c
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
+See [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
 
 ### Finish Reason
 
@@ -1826,7 +1847,7 @@ tests:
 
 ### Classifier
 
-The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+The `classifier` assertion runs the LLM output through a compatible HuggingFace text-classification or token-classification endpoint. A model on the Hub must also be hosted for the required task, or deployed to your own endpoint. This is useful for:
 
 - Sentiment analysis
 - Toxicity detection
@@ -1844,12 +1865,15 @@ assert:
     threshold: 0.5
 ```
 
-Example for PII detection (using negation):
+Example for PII detection (using negation). The gated `bigcode/starpii` model currently has no Inference Provider deployment; set `HF_STARPII_ENDPOINT` to a compatible token-classification endpoint you have deployed. See [classifier setup](./classifier.md#pii-detection-example).
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     threshold: 0.75
 ```
 

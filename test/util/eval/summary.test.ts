@@ -367,6 +367,73 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Probes: 2');
     });
 
+    it('reports cached scan footprint separately from tokens actually incurred', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-logical-and-incurred-usage',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 295,
+          prompt: 201,
+          completion: 94,
+          cached: 295,
+          numRequests: 1,
+          assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 0,
+            numRequests: 0,
+            assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 332');
+      expect(output).toContain('Target: 295');
+      expect(output).toContain('Grading: 37');
+      expect(output).toContain('Incurred Tokens: 37');
+      expect(output).toContain('Cached Savings: 295');
+      expect(output).toContain('Actual Target Requests: 0');
+      expect(output).toContain('Probes: 1');
+    });
+
+    it('omits redundant incurred accounting when all provider responses were fresh', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-fresh-usage-only',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          numRequests: 1,
+          incurredTokenUsage: { total: 100, numRequests: 1 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 100');
+      expect(output).not.toContain('Incurred Tokens:');
+    });
+
     it('derives category totals from prompt and completion usage when total is absent', () => {
       const aggregatedUsage = createEmptyTokenUsage();
       accumulateTokenUsage(aggregatedUsage, {

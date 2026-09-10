@@ -465,10 +465,8 @@ async function sendChunkedResults(
   // Prepare headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
@@ -813,7 +811,7 @@ export async function createShareableModelAuditUrl(
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;

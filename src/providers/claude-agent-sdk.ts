@@ -322,14 +322,19 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
 export const FS_READONLY_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
 
 // Claude Agent SDK supports these model aliases in addition to full model names
-// See: https://docs.anthropic.com/en/docs/claude-agent-sdk/model-config
+// See: https://code.claude.com/docs/en/model-config
 export const CLAUDE_CODE_MODEL_ALIASES = [
   'default',
+  'best',
+  'fable',
+  'fable[1m]',
   'sonnet',
   'opus',
   'haiku',
   'sonnet[1m]',
+  'opus[1m]',
   'opusplan',
+  'opusplan[1m]',
 ];
 
 /**
@@ -1281,6 +1286,7 @@ function mcpServerContainsCacheSensitiveData(server: MCPServerConfig): boolean {
   if (
     server.auth ||
     Object.keys(server.headers ?? {}).length > 0 ||
+    Object.keys(server.env ?? {}).length > 0 ||
     (server.args?.length ?? 0) > 0
   ) {
     return true;
@@ -1477,6 +1483,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
     // existing nested-agent evals working unless an env override opts out.
     env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
+
+    // SDK 0.3.233 removes task tools from newer models by default. Preserve
+    // allow_all_tools behavior unless the user explicitly opts out.
+    if (config.allow_all_tools) {
+      env.CLAUDE_CODE_ENABLE_TODO_TOOLS ??= '1';
+    }
 
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {

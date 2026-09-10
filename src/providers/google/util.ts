@@ -231,7 +231,11 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
     delete sanitized[field];
   }
 
-  if (modelName.startsWith('gemini-3.7-flash') || modelName === 'gemini-flash-latest') {
+  if (
+    modelName.startsWith('gemini-3.8-flash') ||
+    modelName.startsWith('gemini-3.7-flash') ||
+    modelName === 'gemini-flash-latest'
+  ) {
     for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
       const thinkingConfig = config as
         | {
@@ -246,13 +250,13 @@ export function removeDeprecatedGeminiGenerationParams<T extends Record<string, 
         thinkingConfig?.thinking_budget !== undefined
       ) {
         throw new Error(
-          'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).',
+          `${modelName} does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).`,
         );
       }
       const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
       if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
         throw new Error(
-          'Gemini 3.7 Flash does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+          `${modelName} does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.`,
         );
       }
     }
