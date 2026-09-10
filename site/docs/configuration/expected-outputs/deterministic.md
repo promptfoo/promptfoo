@@ -615,6 +615,8 @@ This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `fu
 
 In mixed text, JSON calls must start and end on their own lines and may span multiple lines. Inline JSON examples and Markdown code fences are ignored. Complete calls after an unfinished JSON fragment can still be scored.
 
+Complete calls inside malformed JSON blocks can also be recovered. If deeply nested malformed output exceeds the parsing work limit, the assertion fails with an explanation instead of reporting a partial F1 score. This failure also applies to `not-tool-call-f1`.
+
 For example, this OpenAI Responses item matches `value: [get_weather]`:
 
 ```json
