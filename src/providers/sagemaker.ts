@@ -386,8 +386,8 @@ abstract class SageMakerGenericProvider {
       });
       return fromIni({
         profile,
-        filepath: environment?.AWS_SHARED_CREDENTIALS_FILE,
-        configFilepath: environment?.AWS_CONFIG_FILE,
+        filepath: environment?.AWS_SHARED_CREDENTIALS_FILE || undefined,
+        configFilepath: environment?.AWS_CONFIG_FILE || undefined,
       });
     }
 
@@ -411,8 +411,8 @@ abstract class SageMakerGenericProvider {
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
       const profiles = await parseKnownFiles({
-        filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
-        configFilepath: environment.AWS_CONFIG_FILE,
+        filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
+        configFilepath: environment.AWS_CONFIG_FILE || undefined,
       });
       const inputs = profileCredentialInputs(profiles, selectedProfile || 'default');
       if (inputs) {
@@ -446,8 +446,8 @@ abstract class SageMakerGenericProvider {
             },
             {
               profile: environment.AWS_PROFILE,
-              filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
-              configFilepath: environment.AWS_CONFIG_FILE,
+              filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
+              configFilepath: environment.AWS_CONFIG_FILE || undefined,
             },
           )();
           if (ignoreEndpoints) {
@@ -608,8 +608,8 @@ abstract class SageMakerGenericProvider {
             );
             credentials = defaultProvider({
               profile: scope.environment.AWS_PROFILE,
-              filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE,
-              configFilepath: scope.environment.AWS_CONFIG_FILE,
+              filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
+              configFilepath: scope.environment.AWS_CONFIG_FILE || undefined,
             });
           }
           if (!retainedCredentials && typeof credentials === 'function') {
