@@ -415,7 +415,13 @@ abstract class SageMakerGenericProvider {
         configFilepath: environment.AWS_CONFIG_FILE || undefined,
       });
       const inputs = profileCredentialInputs(profiles, selectedProfile || 'default');
-      if (inputs) {
+      // A missing Environment source can continue to later default-chain providers.
+      // Explicit profiles use fromIni alone and have no such fallback.
+      const canFallThrough =
+        !profile &&
+        inputs?.includes('AWS_ACCESS_KEY_ID') &&
+        !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY);
+      if (inputs && !canFallThrough) {
         const used = new Set([
           ...inputs,
           'AWS_CONFIG_FILE',
