@@ -1,6 +1,6 @@
 ---
 title: 'Trace-Based Agent Evals: Tool Calls, Trajectories, and CI'
-description: Evaluate agent outputs and OpenTelemetry traces with Promptfoo assertions for tools, ordering, latency, and errors.
+description: Evaluate agent answers and OpenTelemetry traces with Promptfoo assertions for tool use, ordering, latency, errors, retrieval quality, and faithful context use.
 keywords:
   - agent evaluation
   - OpenTelemetry
@@ -45,7 +45,7 @@ Inspect `output.json` for row success, score, errors, and trace identifiers. Exp
 
 Enable the local receiver and fail loudly if its port cannot bind:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   failOnReceiverStartFailure: true
@@ -112,9 +112,10 @@ A trace proves retrieval ran; it does not prove the retrieved context was releva
 tests:
   - vars:
       context: file://retrieved-context.txt
+      query: What evidence supports the answer?
     assert:
       - type: context-faithfulness
-        value: '{{ context }}'
+        threshold: 0.8
 ```
 
 Use `contextTransform` when the provider response carries retrieved documents. Keep trace checks alongside that grader to prove retrieval occurred.
@@ -126,6 +127,7 @@ Use an isolated config directory per job and fail if the receiver cannot start:
 ```yaml
 permissions:
   actions: read
+  contents: read
 
 jobs:
   agent-eval:
@@ -136,13 +138,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run trace eval
         run: npx promptfoo eval -c promptfooconfig.yaml --no-cache -o eval-output.json
-      - name: Download baseline
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh run list --workflow agent-eval.yml --branch main --status success --limit 1
 ```
 
-Compare exported rows in a later CI step. A JavaScript assertion runs before row aggregation, so it cannot compare the current row's final aggregate or component scores.
+A JavaScript assertion runs before row aggregation, so it cannot compare the current row's final aggregate or component scores.
 
 For latency across runs, pool raw span durations from `.traces[].spans[]` before calculating p95. Comparing one already-aggregated percentile per row measures row statistics, not the percentile of all spans.
 
