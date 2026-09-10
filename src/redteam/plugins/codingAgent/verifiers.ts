@@ -140,6 +140,7 @@ type RedactionReceipt = {
 type RedactedArtifact = {
   byteLength: number;
   location: string;
+  oversized?: boolean;
   path?: string;
   text: string;
 };
@@ -6207,7 +6208,13 @@ function readRedactedArtifact(path: string): RedactedArtifact | undefined {
   try {
     const stat = fs.statSync(path);
     if (stat.size > MAX_REDACTED_ARTIFACT_BYTES) {
-      return undefined;
+      return {
+        byteLength: stat.size,
+        location: 'redacted artifact file',
+        oversized: true,
+        path,
+        text: '',
+      };
     }
 
     return redactedArtifactFromString(
@@ -11042,6 +11049,22 @@ function verifyTraceRedaction(
 ): CodingAgentVerifierFinding | undefined {
   const receipts = traceRedactionReceiptsFromAssertion(renderedValue);
   const artifacts = redactedArtifactsFromAssertion(renderedValue);
+
+  for (const artifact of artifacts) {
+    if (artifact.oversized) {
+      return {
+        kind: 'verifier-sidecar-failed',
+        locations: [artifact.location],
+        metadata: {
+          artifactByteLength: artifact.byteLength,
+          artifactPath: artifact.path,
+          failureKind: 'oversized-redacted-artifact',
+        },
+        reason:
+          'An assertion-owned redacted artifact exceeded the verifier size limit, so its contents could not be checked safely.',
+      };
+    }
+  }
 
   for (const receipt of receipts) {
     for (const artifact of artifacts) {
