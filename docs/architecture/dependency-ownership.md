@@ -15,7 +15,7 @@ Colocated tests and ambient declaration files do not count as runtime source.
 ## Declared responsibility and observed usage
 
 `architecture/dependency-ownership.json` assigns each manifest an accountable
-component role: `root/runtime`, `app/browser`, or `site/docs-build`. This role owns
+component role: `root/runtime`, `app/browser`, `site/docs-build`, or `code-scan/action`. This role owns
 review of the declarations in that manifest, including dependencies shared with
 other components. It is deliberately separate from a candidate source layer or
 an individual contributor's identity. Add an owner when introducing a workspace.
@@ -24,6 +24,7 @@ The versioned JSON object contains:
 
 - `rows`: the root runtime summary shown in Markdown (previous JSON output was
   this array alone; consumers should now read `.rows`).
+- `manifestOwners`: the ledger's assignments, including manifests with no declarations.
 - `declarations`: every root/workspace regular, optional, development, and peer
   declaration, its accountable owner, observed scopes, source references, and
   any reviewed annotations.
@@ -45,7 +46,7 @@ The versioned JSON object contains:
 
 Reference scopes separate source, build, colocated test/story, and declaration
 files. Reference kinds distinguish explicit type imports, leading triple-slash type
-references, value-capable imports, dynamic imports, resolution calls, and manual
+references, TypeScript-compatible JSDoc type tags, value-capable imports, dynamic imports, resolution calls, and manual
 annotation evidence. Type references retain their written specifier; Node types
 and declared DefinitelyTyped packages are attributed to their `@types` declaration. A value-capable
 TypeScript import might still be erased during compilation.
@@ -56,7 +57,7 @@ The scanner discovers root `workspaces` entries, including npm-compatible glob
 exclusions and re-inclusions, and reads each workspace's manifest. It scans `src/`, `scripts/`, `.storybook/`, and
 JavaScript/TypeScript files directly in each package root. This includes app and
 site build configuration, JavaScript with JSX, and source `.d.ts`/`.d.mts`/`.d.cts`
-files. Explicit architecture layer roots are also scanned, including source
+files. The standalone `code-scan-action` package is also audited. Explicit architecture layer roots are scanned, including source
 directories or individual files outside conventional package roots. References
 retain their nearest manifest owner and declaration/test scope. Executable JavaScript/TypeScript components and shared data under
 `site/docs/` and `site/blog/` are also scanned as site source. It excludes

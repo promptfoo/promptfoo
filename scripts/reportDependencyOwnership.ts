@@ -424,8 +424,46 @@ export function reportDependencyOwnership(
       add(reference, reference.specifier, 'type', reference.dependency);
     }
     for (const comment of result.comments) {
-      for (const match of comment.value.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-        add(comment, match[1], 'type');
+      if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
+        continue;
+      }
+      // Keep offsets intact while removing JSDoc line prefixes.
+      const body = comment.value.replace(
+        /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
+        (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
+      );
+      for (const tag of body.matchAll(
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum)\s*\{/g,
+      )) {
+        const start = tag.index + tag[0].length;
+        let depth = 1;
+        // Quoted braces belong to string/template types, not the enclosing type tag.
+        for (const token of body
+          .slice(start)
+          .matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|[{}]/g)) {
+          if (token[0] === '{') {
+            depth++;
+          } else if (token[0] === '}') {
+            depth--;
+          }
+          if (depth !== 0) {
+            continue;
+          }
+          const prefix = 'type Dependency = ';
+          const type = parseSync('jsdoc.ts', prefix + body.slice(start, start + token.index));
+          if (type.errors.length === 0 && type.program.body.length === 1) {
+            new Visitor({
+              TSImportType(node) {
+                add(
+                  { start: comment.start + 2 + start + node.start - prefix.length },
+                  node.source.value,
+                  'type',
+                );
+              },
+            }).visit(type.program);
+          }
+          break;
+        }
       }
     }
     new Visitor({
@@ -599,6 +637,7 @@ export function reportDependencyOwnership(
     });
   return {
     schemaVersion: 1,
+    manifestOwners: ledger.manifestOwners,
     rows,
     declarations,
     undeclaredUsages,
@@ -631,7 +670,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const manifest of report.coverage.manifests) {
       const entries = report.declarations.filter((entry) => entry.manifest === manifest);
       console.log(
-        `- ${manifest}: ${entries[0]?.owner ?? 'unassigned'} (${entries.length} declarations)`,
+        `- ${manifest}: ${report.manifestOwners[manifest] ?? 'unassigned'} (${entries.length} declarations)`,
       );
     }
     console.log('\nRoot source imports outside runtime dependencies:');

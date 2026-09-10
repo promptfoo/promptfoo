@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,6 +29,7 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dependency-ownership-'));
   json('package.json', {
     name: 'promptfoo',
+    type: 'module',
     dependencies: { shared: '1' },
     workspaces: ['src/app', 'packages/*'],
   });
@@ -532,6 +534,61 @@ describe('dependency ownership report', () => {
     expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
       expect.objectContaining({ kind: 'type', specifier: 'shared' }),
     ]);
+  });
+
+  it('ignores prose and examples while retaining JSDoc type references', () => {
+    write(
+      'src/index.js',
+      [
+        "// Example: import('line-example')",
+        "/* import('block-example') */",
+        "/** Example: import('doc-example') */",
+        "/** @example import('tag-example') */",
+        "/** @type {string} Example: import('type-description') */",
+        "/** @type {import('shared').Thing} */",
+        'let value;',
+        '/**',
+        " * @param {{label: string, nested: {value: import('shared').Thing}}} options",
+        " * @returns {Promise<import('shared').Thing>}",
+        ' */',
+        'function load(options) { return options.nested.value; }',
+      ].join('\n'),
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
+      expect.objectContaining({ kind: 'type', line: 6 }),
+      expect.objectContaining({ kind: 'type', line: 9 }),
+      expect.objectContaining({ kind: 'type', line: 10 }),
+    ]);
+  });
+
+  it('prints the assigned owner of a workspace with no declarations', () => {
+    json('src/app/package.json', { name: 'app', private: true });
+    json('architecture/layers.json', { ...config, aliases: {} });
+    write('src/index.ts', 'export {};');
+    for (const script of ['reportDependencyOwnership.ts', 'architectureUtils.ts']) {
+      write(
+        `scripts/${script}`,
+        fs.readFileSync(path.join(process.cwd(), 'scripts', script), 'utf8'),
+      );
+    }
+    fs.symlinkSync(
+      path.join(process.cwd(), 'node_modules'),
+      path.join(root, 'node_modules'),
+      'dir',
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        import.meta.resolve('tsx'),
+        fs.realpathSync(path.join(root, 'scripts/reportDependencyOwnership.ts')),
+      ],
+      { encoding: 'utf8' },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('src/app/package.json: app/browser (0 declarations)');
   });
 
   it('records documented computed usage without pretending it is a literal import', () => {
