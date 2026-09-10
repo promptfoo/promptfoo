@@ -56,6 +56,30 @@ describe('package artifact readiness', () => {
     fs.writeFileSync(absolutePath, contents);
   }
 
+  it.each([
+    [{ artifacts: null }, 'contains invalid artifacts'],
+    [{ entrypoint: null }, 'must declare a string entrypoint'],
+  ])('rejects malformed candidate config: %s', (override, message) => {
+    write('src/index.ts', 'export {};');
+    write(
+      'architecture/package-candidates.json',
+      JSON.stringify({
+        candidates: [
+          {
+            name: 'fixture',
+            entrypoint: 'src/index.ts',
+            allowedExternal: [],
+            allowedBuiltins: [],
+            maxSourceFiles: 1,
+            ...override,
+          },
+        ],
+      }),
+    );
+
+    expect(() => readPackageCandidateConfig(packageRoot)).toThrow(message);
+  });
+
   it('measures the emitted runtime graph and reports missing or escaping imports', () => {
     write(
       'dist/index.js',

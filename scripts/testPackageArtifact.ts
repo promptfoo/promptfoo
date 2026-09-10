@@ -269,6 +269,47 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function runInstalledEval(consumerDir: string, configDir: string): void {
+  const configPath = path.join(consumerDir, 'promptfooconfig.yaml');
+  const outputPath = path.join(consumerDir, 'eval.json');
+  fs.writeFileSync(
+    configPath,
+    'prompts: [hello]\nproviders: [echo]\ntests:\n  - assert:\n      - type: equals\n        value: hello\n',
+  );
+  const binPath = path.join(
+    consumerDir,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'promptfoo.cmd' : 'promptfoo',
+  );
+  const envOverrides = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  if (process.platform === 'win32') {
+    run(
+      process.env.ComSpec || 'cmd.exe',
+      ['/d', '/s', '/c', `"${binPath}" eval --no-cache -c "${configPath}" -o "${outputPath}"`],
+      consumerDir,
+      envOverrides,
+    );
+  } else {
+    run(
+      binPath,
+      ['eval', '--no-cache', '-c', configPath, '-o', outputPath],
+      consumerDir,
+      envOverrides,
+    );
+  }
+  const output = JSON.parse(fs.readFileSync(outputPath, 'utf8')) as {
+    results?: { stats?: { successes?: number; failures?: number; errors?: number } };
+  };
+  assert.equal(output.results?.stats?.successes, 1);
+  assert.equal(output.results?.stats?.failures, 0);
+  assert.equal(output.results?.stats?.errors, 0);
+}
+
 function writeConsumerScripts(consumerDir: string, candidateSpecifiers: string[]): void {
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
@@ -653,6 +694,7 @@ function main(): void {
         packResult.version,
       );
     }
+    runInstalledEval(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${path.basename(tarballPath)}`);
   } finally {

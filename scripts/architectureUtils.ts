@@ -268,18 +268,57 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
-function getLiteralRuntimeCallSpecifier(node: ts.CallExpression): string | undefined {
+function isRuntimeLoaderExpression(node: ts.Expression): boolean {
+  return (
+    (ts.isIdentifier(node) && node.text === 'require') ||
+    (ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ((node.expression.text === 'require' && node.name.text === 'resolve') ||
+        (node.expression.text === 'module' && node.name.text === 'require')))
+  );
+}
+
+function getRuntimeLoaderAlias(node: ts.VariableDeclaration): string | undefined {
+  if (!ts.isIdentifier(node.name) || !node.initializer) {
+    return undefined;
+  }
+  if (isRuntimeLoaderExpression(node.initializer)) {
+    return node.name.text;
+  }
+  return ts.isCallExpression(node.initializer) &&
+    ts.isIdentifier(node.initializer.expression) &&
+    node.initializer.expression.text === 'createRequire'
+    ? node.name.text
+    : undefined;
+}
+
+function getRuntimeLoaderAliases(sourceFile: ts.SourceFile): Set<string> {
+  const aliases = new Set<string>();
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node)) {
+      const alias = getRuntimeLoaderAlias(node);
+      if (alias) {
+        aliases.add(alias);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return aliases;
+}
+
+function getLiteralRuntimeCallSpecifier(
+  node: ts.CallExpression,
+  loaderAliases: Set<string> = new Set(),
+): string | undefined {
   if (node.arguments.length === 0 || !ts.isStringLiteralLike(node.arguments[0])) {
     return undefined;
   }
   const expression = node.expression;
   const isRuntimeModuleCall =
     expression.kind === ts.SyntaxKind.ImportKeyword ||
-    (ts.isIdentifier(expression) && expression.text === 'require') ||
-    (ts.isPropertyAccessExpression(expression) &&
-      ts.isIdentifier(expression.expression) &&
-      ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
-        (expression.expression.text === 'module' && expression.name.text === 'require')));
+    isRuntimeLoaderExpression(expression) ||
+    (ts.isIdentifier(expression) && loaderAliases.has(expression.text));
   return isRuntimeModuleCall ? node.arguments[0].text : undefined;
 }
 
@@ -292,10 +331,11 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
     filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const specifiers: string[] = [];
+  const loaderAliases = getRuntimeLoaderAliases(sourceFile);
 
   function addStaticCallSpecifier(node: ts.CallExpression): void {
-    const specifier = getLiteralRuntimeCallSpecifier(node);
-    if (specifier) {
+    const specifier = getLiteralRuntimeCallSpecifier(node, loaderAliases);
+    if (specifier !== undefined) {
       specifiers.push(specifier);
     }
   }
@@ -352,10 +392,11 @@ export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: str
     filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const specifiers: string[] = [];
+  const loaderAliases = getRuntimeLoaderAliases(sourceFile);
 
   function addCallSpecifier(node: ts.CallExpression): void {
-    const specifier = getLiteralRuntimeCallSpecifier(node);
-    if (specifier) {
+    const specifier = getLiteralRuntimeCallSpecifier(node, loaderAliases);
+    if (specifier !== undefined) {
       specifiers.push(specifier);
     }
   }

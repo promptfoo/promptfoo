@@ -130,7 +130,8 @@ function validateArtifactConfig(
   const artifacts = candidate.artifacts;
   if (
     artifacts !== undefined &&
-    (typeof artifacts !== 'object' ||
+    (artifacts === null ||
+      typeof artifacts !== 'object' ||
       Object.entries(artifacts).some(
         ([format, artifactPath]) =>
           !['esm', 'cjs'].includes(format) ||
@@ -196,9 +197,7 @@ function validatePackageCandidate(
   names.add(candidate.name);
 
   if (typeof candidate.entrypoint !== 'string') {
-    throw new Error(
-      `Package candidate "${candidate.name}" entrypoint "${candidate.entrypoint}" does not exist.`,
-    );
+    throw new Error(`Package candidate "${candidate.name}" must declare a string entrypoint.`);
   }
   const entrypointPath = path.join(repoRoot, candidate.entrypoint);
   if (!fs.existsSync(entrypointPath) || !fs.statSync(entrypointPath).isFile()) {

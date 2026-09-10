@@ -58,12 +58,20 @@ describe('extractRuntimeModuleSpecifiers', () => {
       const required = require('cjs-require');
       const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
       const moduleRequired = module.require('module-require');
+      const load = require;
+      const aliased = load('aliased-require');
+      const fromCreateRequire = createRequire(import.meta.url);
+      const created = fromCreateRequire('created-require');
+      const empty = require('');
       type Imported = import('import-type').Imported;
       void runtimeDefault;
       void runtimeValue;
       void required;
       void resolvedWithPaths;
       void moduleRequired;
+      void aliased;
+      void created;
+      void empty;
     `;
 
     expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
@@ -76,6 +84,9 @@ describe('extractRuntimeModuleSpecifiers', () => {
       'cjs-require',
       'cjs-resolve-with-paths',
       'module-require',
+      'aliased-require',
+      'created-require',
+      '',
     ]);
   });
 });
@@ -104,6 +115,8 @@ describe('computeRuntimeDependencyClosure', () => {
         import type { TypeOnly } from './types';
         import { runtime } from './runtime';
         export { runtime };
+        export const later = () => load('yaml');
+        const load = require;
         void import('./lazy');
       `,
     );
@@ -121,14 +134,14 @@ describe('computeRuntimeDependencyClosure', () => {
     expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toEqual({
       entrypoint: 'src/index.ts',
       files: ['src/index.ts', 'src/lazy.ts', 'src/runtime.ts'],
-      externalDependencies: ['@scope/runtime', 'external-runtime'],
+      externalDependencies: ['@scope/runtime', 'external-runtime', 'yaml'],
       nodeBuiltins: ['fs'],
       unresolvedInternalImports: [],
     });
   });
 
   it('reports unresolved internal runtime imports', () => {
-    write('src/index.ts', "import './missing.json'; import '';");
+    write('src/index.ts', "import './missing.json'; import ''; require('');");
 
     expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
       unresolvedInternalImports: ['src/index.ts: ./missing.json', 'src/index.ts: <empty>'],
