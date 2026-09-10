@@ -67,6 +67,7 @@ describe('SageMaker default SDK credentials across idle cleanup', () => {
   let destroyedHandlers: Set<HttpHandler>;
   let providers: SageMakerCompletionProvider[];
   let ssoReply: (generation: number) => Promise<ReturnType<typeof response>>;
+  let stsReply: (call: TransportCall, generation: number) => Promise<ReturnType<typeof response>>;
   let sageReply: (call: TransportCall) => Promise<ReturnType<typeof response>>;
   let originalProcessInterceptor: unknown;
 
@@ -159,6 +160,18 @@ sso_role_name = TestRole
           expiration: Date.now() + hour,
         },
       });
+    stsReply = async ({ request }, generation) => {
+      const action = new URLSearchParams(String(request.body)).get('Action');
+      expect(['AssumeRole', 'AssumeRoleWithWebIdentity']).toContain(action);
+      return response(
+        `<${action}Response xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+<${action}Result><Credentials>
+<AccessKeyId>STS_${generation}</AccessKeyId><SecretAccessKey>offline-sts-secret</SecretAccessKey>
+<SessionToken>offline-sts-session</SessionToken><Expiration>${new Date(Date.now() + hour).toISOString()}</Expiration>
+</Credentials></${action}Result></${action}Response>`,
+        'text/xml',
+      );
+    };
     const destroy = NodeHttpHandler.prototype.destroy;
     vi.spyOn(NodeHttpHandler.prototype, 'destroy').mockImplementation(function (this: HttpHandler) {
       destroyedHandlers.add(this);
@@ -180,20 +193,18 @@ sso_role_name = TestRole
         ssoCalls.push(call);
         return ssoReply(ssoCalls.length);
       }
-      if (request.hostname.startsWith('sts.')) {
+      if (
+        request.hostname.startsWith('sts.') ||
+        request.hostname === 'sts-fips.us-east-1.amazonaws.com'
+      ) {
         stsCalls.push(call);
-        const action = new URLSearchParams(String(request.body)).get('Action');
-        expect(['AssumeRole', 'AssumeRoleWithWebIdentity']).toContain(action);
-        return response(
-          `<${action}Response xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
-<${action}Result><Credentials>
-<AccessKeyId>STS_${stsCalls.length}</AccessKeyId><SecretAccessKey>offline-sts-secret</SecretAccessKey>
-<SessionToken>offline-sts-session</SessionToken><Expiration>${new Date(Date.now() + hour).toISOString()}</Expiration>
-</Credentials></${action}Result></${action}Response>`,
-          'text/xml',
-        );
+        return stsReply(call, stsCalls.length);
       }
-      expect(request.hostname).toMatch(/^runtime\.sagemaker\./);
+      expect(
+        request.hostname.startsWith('runtime.sagemaker.') ||
+          request.hostname === 'runtime-fips.sagemaker.us-east-1.amazonaws.com' ||
+          request.hostname === 'runtime.sagemaker-fips.us-east-1.amazonaws.com',
+      ).toBe(true);
       sageCalls.push(call);
       return sageReply(call);
     });
@@ -422,6 +433,155 @@ sso_role_name = TestRole
     expect(result.error).not.toContain('Please install');
     expect(sageCalls).toHaveLength(0);
   });
+
+  it.each(['changed endpoint', 'FIPS', 'dualstack', 'equivalent'] as const)(
+    'refreshes an explicit role using %s effective ambient STS policy',
+    async (policy) => {
+      const sameEndpoint = policy === 'equivalent';
+      const serviceEndpoint = policy === 'changed endpoint' || sameEndpoint;
+      const firstHostname = serviceEndpoint
+        ? 'sts.ambient-a.invalid'
+        : 'sts.us-east-1.amazonaws.com';
+      const nextHostname = sameEndpoint
+        ? firstHostname
+        : policy === 'FIPS'
+          ? 'sts-fips.us-east-1.amazonaws.com'
+          : policy === 'dualstack'
+            ? 'sts.us-east-1.api.aws'
+            : 'sts.ambient-b.invalid';
+      // Both ambient profiles and service sections exist before the first SDK
+      // parse. Only the ambient selector changes; no file-cache mutation is used.
+      await configure(
+        `[profile role]
+role_arn = arn:aws:iam::123456789012:role/Target
+source_profile = source
+role_session_name = offline-profile-session
+[profile source]
+aws_access_key_id = STATIC_SOURCE
+aws_secret_access_key = static-secret
+[profile ambient-a]
+${serviceEndpoint ? 'services = helper-a' : 'use_fips_endpoint = false\nuse_dualstack_endpoint = false'}
+[profile ambient-b]
+${serviceEndpoint ? 'services = helper-b' : `use_fips_endpoint = ${policy === 'FIPS'}\nuse_dualstack_endpoint = ${policy === 'dualstack'}`}
+[services helper-a]
+sts =
+  endpoint_url = https://sts.ambient-a.invalid
+[services helper-b]
+sts =
+  endpoint_url = https://sts.ambient-${sameEndpoint ? 'a' : 'b'}.invalid
+`,
+        'ambient-a',
+      );
+      stsReply = async ({ request }) => {
+        const parameters = new URLSearchParams(String(request.body));
+        expect(parameters.get('Action')).toBe('AssumeRole');
+        expect(parameters.get('RoleArn')).toBe('arn:aws:iam::123456789012:role/Target');
+        expect(parameters.get('RoleSessionName')).toBe('offline-profile-session');
+        expect(request.headers.authorization).toContain('Credential=STATIC_SOURCE/');
+        expect([firstHostname, nextHostname]).toContain(request.hostname);
+        const identity = request.hostname === firstHostname ? 'STS_A' : 'STS_B';
+        return response(
+          `<AssumeRoleResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+<AssumeRoleResult><Credentials>
+<AccessKeyId>${identity}</AccessKeyId><SecretAccessKey>offline-sts-secret</SecretAccessKey>
+<SessionToken>offline-sts-session</SessionToken><Expiration>${new Date(Date.now() + hour).toISOString()}</Expiration>
+</Credentials></AssumeRoleResult></AssumeRoleResponse>`,
+          'text/xml',
+        );
+      };
+      const firstSigned = deferred<void>();
+      const releaseFirst = deferred<ReturnType<typeof response>>();
+      sageReply = async ({ request }) => {
+        if (JSON.parse(String(request.body)).prompt === 'held explicit role') {
+          firstSigned.resolve();
+          return releaseFirst.promise;
+        }
+        return response({ output: 'offline response' });
+      };
+      const provider = createProvider({ profile: 'role', region: 'us-east-1' });
+      let firstSettled = false;
+      const first = provider.callApi('held explicit role').then((result) => {
+        firstSettled = true;
+        return result;
+      });
+      try {
+        await firstSigned.promise;
+        expect(sageCalls[0].request.headers.authorization).toContain('Credential=STS_A/');
+        expect(stsCalls[0].request.hostname).toBe(firstHostname);
+        vi.stubEnv('AWS_PROFILE', 'ambient-b');
+        if (sameEndpoint) {
+          vi.setSystemTime(startTime.getTime() + 120_000);
+          expect(await provider.callApi('equivalent policy before expiry')).toMatchObject({
+            output: 'offline response',
+          });
+          expect(sageCalls.at(-1)!.request.headers.authorization).toContain('Credential=STS_A/');
+          expect(stsCalls).toHaveLength(1);
+        }
+        // The real outer credential memoizer now requires a fromIni refresh.
+        // Its retained roleAssumer must reflect the effective ambient policy.
+        vi.setSystemTime(startTime.getTime() + 70 * 60_000);
+        expect(await provider.callApi('explicit role after expiry')).toMatchObject({
+          output: 'offline response',
+        });
+        expect(sageCalls.at(-1)!.request.headers.authorization).toContain(
+          `Credential=STS_${sameEndpoint ? 'A' : 'B'}/`,
+        );
+        expect(stsCalls.map(({ request }) => request.hostname)).toEqual([
+          firstHostname,
+          nextHostname,
+        ]);
+        if (sameEndpoint) {
+          expect(stsCalls[1].handler).toBe(stsCalls[0].handler);
+        } else {
+          expect(stsCalls[1].handler).not.toBe(stsCalls[0].handler);
+          expect(sageCalls.at(-1)!.handler).not.toBe(sageCalls[0].handler);
+        }
+        expect(firstSettled).toBe(false);
+        expect([...handlers].every((handler) => !destroyedHandlers.has(handler))).toBe(true);
+      } finally {
+        releaseFirst.resolve(response({ output: 'offline response' }));
+        expect((await first).error).toBeUndefined();
+      }
+      expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+      expect(stsCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+    },
+  );
+
+  it.each(['configured keys', 'static profile'] as const)(
+    'keeps %s independent of ambient STS service-profile changes',
+    async (source) => {
+      await configure(
+        `[profile configured]
+aws_access_key_id = FILE_STATIC
+aws_secret_access_key = file-secret
+[profile ambient-a]
+services = helper-a
+[profile ambient-b]
+services = helper-b
+[services helper-a]
+sts =
+  endpoint_url = https://sts.ambient-a.invalid
+[services helper-b]
+sts =
+  endpoint_url = https://sts.ambient-b.invalid
+`,
+        'ambient-a',
+      );
+      const provider = createProvider({
+        profile: 'configured',
+        ...(source === 'configured keys'
+          ? { accessKeyId: 'EXPLICIT', secretAccessKey: 'explicit-secret' }
+          : {}),
+      });
+      const key = source === 'configured keys' ? 'EXPLICIT' : 'FILE_STATIC';
+      await expectSignedRow(provider, key);
+      vi.stubEnv('AWS_PROFILE', 'ambient-b');
+      vi.setSystemTime(startTime.getTime() + 70 * 60_000);
+      await expectSignedRow(provider, key);
+      expect(stsCalls).toHaveLength(0);
+      expect(ssoCalls).toHaveLength(0);
+    },
+  );
 
   it.each([
     ['AWS_ACCESS_KEY_ID', 'SHADOWED'],
@@ -702,6 +862,103 @@ sso_role_name = TestRole
       }
     },
   );
+
+  it('does not reuse an implicit SSO state populated after a passive token-read pause', async () => {
+    await configure();
+    vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'https://sso-a.invalid');
+    ssoReply = async (generation) => {
+      const hostname = ssoCalls[generation - 1].request.hostname;
+      expect(['sso-a.invalid', 'sso-b.invalid']).toContain(hostname);
+      return response({
+        roleCredentials: {
+          accessKeyId: hostname === 'sso-a.invalid' ? 'SSO_A' : 'SSO_B',
+          secretAccessKey: 'offline-secret',
+          sessionToken: 'offline-session',
+          expiration: Date.now() + hour,
+        },
+      });
+    };
+    const firstSigned = deferred<void>();
+    const releaseFirst = deferred<ReturnType<typeof response>>();
+    sageReply = async ({ request }) => {
+      if (JSON.parse(String(request.body)).prompt === 'held passive east') {
+        firstSigned.resolve();
+        return releaseFirst.promise;
+      }
+      return response({ output: 'offline response' });
+    };
+    const provider = createProvider({ region: 'us-east-1' });
+    const tokenRecord = externalDataInterceptor.getTokenRecord();
+    const tokenReadStarted = deferred<void>();
+    const tokenRead = deferred<{ accessToken: string; expiresAt: string }>();
+    const token = {
+      accessToken: 'offline-sso-token',
+      expiresAt: new Date(startTime.getTime() + 2 * hour).toISOString(),
+    };
+    const originalToken = Object.getOwnPropertyDescriptor(tokenRecord, startUrl)!;
+    let firstSettled = false;
+    const first = provider.callApi('held passive east').then((result) => {
+      firstSettled = true;
+      return result;
+    });
+    try {
+      await firstSigned.promise;
+      expect(sageCalls[0].request.headers.authorization).toContain('Credential=SSO_A/');
+      vi.setSystemTime(startTime.getTime() + 56 * 60_000);
+      // getSSOTokenFromFile is still the real async SDK function. Returning a
+      // pending token-cache value pauses it before SSOClient construction.
+      Object.defineProperty(tokenRecord, startUrl, {
+        configurable: true,
+        get: () => {
+          tokenReadStarted.resolve();
+          return tokenRead.promise;
+        },
+      });
+      expect(await provider.callApi('cached passive east')).toMatchObject({
+        output: 'offline response',
+      });
+      expect(sageCalls[1].request.headers.authorization).toContain('Credential=SSO_A/');
+      await tokenReadStarted.promise;
+      expect(ssoCalls).toHaveLength(1);
+
+      // The cached public call and its before/after consistency checks are over.
+      // Only the still-pending SDK passive refresh can now consume endpoint B.
+      vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'https://sso-b.invalid');
+      Object.defineProperty(tokenRecord, startUrl, { ...originalToken, value: token });
+      tokenRead.resolve(token);
+      await vi.waitFor(() => expect(ssoCalls).toHaveLength(2));
+      expect(ssoCalls[1].request.hostname).toBe('sso-b.invalid');
+      // The intercepted HTTP response is fully buffered. Drain its promise work
+      // without asking the old credential provider to observe endpoint B.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      provider.config.region = 'us-west-2';
+      expect(await provider.callApi('passive west')).toMatchObject({ output: 'offline response' });
+      expect(sageCalls[2].request.headers.authorization).toContain('Credential=SSO_B/');
+      vi.stubEnv('AWS_ENDPOINT_URL_SSO', 'https://sso-a.invalid');
+      provider.config.region = 'us-east-1';
+      expect(await provider.callApi('restored passive east')).toMatchObject({
+        output: 'offline response',
+      });
+      expect(sageCalls[3].request.headers.authorization).toContain('Credential=SSO_A/');
+      expect(sageCalls[3].handler).not.toBe(sageCalls[0].handler);
+      expect(ssoCalls.map(({ request }) => request.hostname)).toEqual([
+        'sso-a.invalid',
+        'sso-b.invalid',
+        'sso-b.invalid',
+        'sso-a.invalid',
+      ]);
+      expect(firstSettled).toBe(false);
+      expect([...handlers].every((handler) => !destroyedHandlers.has(handler))).toBe(true);
+    } finally {
+      Object.defineProperty(tokenRecord, startUrl, originalToken);
+      tokenRead.resolve(token);
+      releaseFirst.resolve(response({ output: 'offline response' }));
+      expect((await first).error).toBeUndefined();
+    }
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+    expect(ssoCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+  });
 
   it.each(['SDK baseline', 'SageMaker'] as const)(
     '%s preserves passive refresh, forced coalescing, and recovery after expiry',

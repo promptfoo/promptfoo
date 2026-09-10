@@ -244,6 +244,7 @@ type CredentialScope = Pick<
 > & {
   region: string;
   environment: Record<string, string | undefined>;
+  helperEndpointPolicy?: string;
 };
 
 function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
@@ -253,6 +254,7 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.accessKeyId === right.accessKeyId &&
     left.secretAccessKey === right.secretAccessKey &&
     left.sessionToken === right.sessionToken &&
+    left.helperEndpointPolicy === right.helperEndpointPolicy &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
     Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
   );
@@ -425,6 +427,7 @@ abstract class SageMakerGenericProvider {
     const environment: CredentialScope['environment'] = Object.fromEntries(
       CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
     );
+    let helperEndpointPolicy: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
@@ -452,6 +455,21 @@ abstract class SageMakerGenericProvider {
         ]);
         const helperEndpoints = inputs.filter((name) => name.startsWith('AWS_ENDPOINT_URL_'));
         if (helperEndpoints.length) {
+          if (profile) {
+            // Credential profile selection does not pin the nested clients' ambient
+            // service configuration. Compare effective policies, not profile names.
+            helperEndpointPolicy = JSON.stringify(
+              await Promise.all(
+                helperEndpoints.map((name) =>
+                  this.getEndpointPolicy(
+                    smithyConfig,
+                    name.slice('AWS_ENDPOINT_URL_'.length),
+                    environment,
+                  ),
+                ),
+              ),
+            );
+          }
           // Nested SDK clients resolve endpoint policy from the ambient AWS profile,
           // independently of the profile selected for credentials.
           const ignoreEndpoints = await loadConfig(
@@ -489,11 +507,13 @@ abstract class SageMakerGenericProvider {
         }
       }
     }
-    return { region, profile, environment };
+    return { region, profile, environment, helperEndpointPolicy };
   }
 
-  private async getRuntimeEndpoint(
+  private async getEndpointPolicy(
     smithyConfig: typeof import('@smithy/core/config'),
+    service = 'SAGEMAKER_RUNTIME',
+    environment?: CredentialScope['environment'],
   ): Promise<RuntimeEndpoint> {
     const {
       booleanSelector,
@@ -503,40 +523,76 @@ abstract class SageMakerGenericProvider {
       NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
       SelectorType,
     } = smithyConfig;
-    const useFipsEndpoint = await loadConfig(NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS)();
-    const useDualstackEndpoint = await loadConfig(NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS)();
+    const configFiles = environment
+      ? {
+          profile: environment.AWS_PROFILE,
+          filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
+          configFilepath: environment.AWS_CONFIG_FILE || undefined,
+        }
+      : undefined;
+    const useFipsEndpoint = await loadConfig(
+      {
+        ...NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS,
+        environmentVariableSelector: (env) =>
+          NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS.environmentVariableSelector(environment ?? env),
+      },
+      configFiles,
+    )();
+    const useDualstackEndpoint = await loadConfig(
+      {
+        ...NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
+        environmentVariableSelector: (env) =>
+          NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS.environmentVariableSelector(
+            environment ?? env,
+          ),
+      },
+      configFiles,
+    )();
     // Match the runtime SDK's configured HTTP endpoint precedence. This is separate
     // from both the SageMaker deployment name and the credential helpers' endpoints.
-    const ignored = await loadConfig({
-      environmentVariableSelector: (env) =>
-        booleanSelector(env, 'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', SelectorType.ENV),
-      configFileSelector: (profile) =>
-        booleanSelector(profile, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
-      default: false,
-    })();
+    const ignored = await loadConfig(
+      {
+        environmentVariableSelector: (env) =>
+          booleanSelector(
+            environment ?? env,
+            'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+            SelectorType.ENV,
+          ),
+        configFileSelector: (profile) =>
+          booleanSelector(profile, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
+        default: false,
+      },
+      configFiles,
+    )();
     if (ignored) {
       return { url: undefined, useFipsEndpoint, useDualstackEndpoint };
     }
-    const url = await loadConfig({
-      environmentVariableSelector: (env) =>
-        env.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME || env.AWS_ENDPOINT_URL || undefined,
-      configFileSelector: (profile, config) => {
-        if (profile.services) {
-          const services = config?.[`services${CONFIG_PREFIX_SEPARATOR}${profile.services}`];
-          if (!services) {
-            throw new Error(
-              `The services section "${profile.services}" specified in the profile is not present in the shared configuration file.`,
-            );
+    const url = await loadConfig(
+      {
+        environmentVariableSelector: (env) =>
+          (environment ?? env)[`AWS_ENDPOINT_URL_${service}`] ||
+          (environment ?? env).AWS_ENDPOINT_URL ||
+          undefined,
+        configFileSelector: (profile, config) => {
+          if (profile.services) {
+            const services = config?.[`services${CONFIG_PREFIX_SEPARATOR}${profile.services}`];
+            if (!services) {
+              throw new Error(
+                `The services section "${profile.services}" specified in the profile is not present in the shared configuration file.`,
+              );
+            }
+            const endpoint =
+              services[`${service.toLowerCase()}${CONFIG_PREFIX_SEPARATOR}endpoint_url`];
+            if (endpoint) {
+              return endpoint;
+            }
           }
-          const endpoint = services[`sagemaker_runtime${CONFIG_PREFIX_SEPARATOR}endpoint_url`];
-          if (endpoint) {
-            return endpoint;
-          }
-        }
-        return profile.endpoint_url || undefined;
+          return profile.endpoint_url || undefined;
+        },
+        default: undefined,
       },
-      default: undefined,
-    })();
+      configFiles,
+    )();
     return { url, useFipsEndpoint, useDualstackEndpoint };
   }
 
@@ -562,7 +618,7 @@ abstract class SageMakerGenericProvider {
     const smithyConfig = await import('@smithy/core/config').catch(importError);
     const runtimeRegion = region ?? this.getRegion();
     const scope = await this.getCredentialScope(runtimeRegion, smithyConfig);
-    const endpoint = await this.getRuntimeEndpoint(smithyConfig);
+    const endpoint = await this.getEndpointPolicy(smithyConfig);
     this.assertRuntimeGeneration(generation);
     const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
     let retry = this.runtimeRetryStates.get(runtimeRegion);
@@ -624,11 +680,15 @@ abstract class SageMakerGenericProvider {
           const retainedCredentials = retainedState?.provider;
           let credentials =
             retainedCredentials ?? (await this.getCredentials(scope, scope.environment));
-          if (!credentials) {
-            const { defaultProvider } = await import('@aws-sdk/credential-provider-node').catch(
+          let credentialsTreatedAsExpired:
+            | typeof import('@aws-sdk/credential-provider-node').credentialsTreatedAsExpired
+            | undefined;
+          if (!credentials || (!scope.profile && typeof credentials === 'function')) {
+            const defaultChain = await import('@aws-sdk/credential-provider-node').catch(
               importError,
             );
-            credentials = defaultProvider({
+            credentialsTreatedAsExpired = defaultChain.credentialsTreatedAsExpired;
+            credentials ??= defaultChain.defaultProvider({
               profile: scope.environment.AWS_PROFILE,
               filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
               configFilepath: scope.environment.AWS_CONFIG_FILE || undefined,
@@ -649,18 +709,40 @@ abstract class SageMakerGenericProvider {
           initialization.credentials = credentialState;
           if (credentialProvider && credentialState && !(scope.profile && retainedState)) {
             credentials = async (options) => {
-              const inputsMatch = Object.entries(scope.environment).every(
-                ([name, value]) => process.env[name] === value,
-              );
-              try {
-                return await credentialProvider(options);
-              } finally {
+              const inputsMatch = async () => {
                 if (
-                  !inputsMatch ||
                   Object.entries(scope.environment).some(
                     ([name, value]) => process.env[name] !== value,
                   )
                 ) {
+                  return false;
+                }
+                if (scope.helperEndpointPolicy === undefined) {
+                  return true;
+                }
+                try {
+                  return (
+                    (await this.getCredentialScope(runtimeRegion, smithyConfig))
+                      .helperEndpointPolicy === scope.helperEndpointPolicy
+                  );
+                } catch {
+                  // An invalid later configuration cannot validate this retained state.
+                  // Leave the current credential result/error to the SDK.
+                  return false;
+                }
+              };
+              const initiallyMatched = await inputsMatch();
+              let passiveRefreshPossible = false;
+              try {
+                const resolved = await credentialProvider(options);
+                // The default chain may return cached credentials while refreshing
+                // in the background. Its later input reads outlive this guard.
+                passiveRefreshPossible =
+                  !(options && 'forceRefresh' in options && options.forceRefresh) &&
+                  !!credentialsTreatedAsExpired?.(resolved);
+                return resolved;
+              } finally {
+                if (passiveRefreshPossible || !initiallyMatched || !(await inputsMatch())) {
                   // A lazy chain may observe newer inputs. Keep active requests owned,
                   // but never reuse their client or credentials under the old scope.
                   credentialState.reusable = false;
