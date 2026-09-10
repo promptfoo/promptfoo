@@ -48,7 +48,7 @@ The versioned JSON object contains:
 
 Reference scopes separate source, build, colocated test/story, and declaration
 files. Reference kinds distinguish explicit type imports, leading triple-slash type
-references, TypeScript-compatible JSDoc type tags and `@import` declarations, value-capable imports, dynamic imports, resolution calls, and manual
+references, JSDoc type tags and `@import` declarations in JavaScript files, value-capable imports, dynamic imports, resolution calls, and manual
 annotation evidence. Type references retain their written specifier; Node types
 and installed DefinitelyTyped entries are attributed to their `@types` package.
 Installed type entries are checked along the referencing file's default Node lookup paths;
@@ -70,6 +70,7 @@ within each workspace, plus configured architecture ignored roots. Workspace
 manifest discovery only excludes `node_modules` and explicit workspace exclusions;
 a workspace may itself live under a directory named `build` or `dist`. Tests outside those source roots, Markdown/MDX, CSS imports,
 package-script shell commands, tsconfig files (including `compilerOptions.types`),
+JSX runtime pragmas such as `@jsxImportSource`, package `imports` maps,
 and custom loader functions are not parsed. Named `createRequire` results are not
 tracked: they can resolve against another package, such as the installed-package
 checks in `scripts/testPackageArtifact.ts`. These uses need separate dependency evidence.
