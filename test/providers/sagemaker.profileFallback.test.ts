@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { createRequire } from 'node:module';
@@ -19,6 +20,12 @@ const requireFromTest = createRequire(import.meta.url);
 const requireFromWebIdentity = createRequire(
   requireFromTest.resolve('@aws-sdk/credential-provider-web-identity'),
 );
+const requireFromLogin = createRequire(
+  requireFromTest.resolve('@aws-sdk/credential-provider-login'),
+);
+const { SigninClient, CreateOAuth2TokenCommand } = requireFromLogin(
+  '@aws-sdk/nested-clients/signin',
+) as typeof import('@aws-sdk/nested-clients/signin');
 const { externalDataInterceptor, getHomeDir } = requireFromWebIdentity(
   '@smithy/core/config',
 ) as typeof import('@smithy/core/config');
@@ -74,6 +81,65 @@ describe('SageMaker implicit profile fallback ownership', () => {
       `[profile fallback]\nrole_arn = ${profileRole}\ncredential_source = Ec2InstanceMetadata\n`,
     );
     setEnvironment({ AWS_EC2_METADATA_SERVICE_ENDPOINT: 'http://synthetic-metadata.invalid' });
+  }
+
+  function useLoginProfile(mode: 'transient' | 'missing' | 'denied' = 'transient') {
+    const session = 'synthetic-fallback-login-session';
+    const directory = '/synthetic-sage-fallback/login';
+    const filename = path.join(
+      directory,
+      `${createHash('sha256').update(session).digest('hex')}.json`,
+    );
+    externalDataInterceptor.interceptFile(
+      '/synthetic-sage-fallback/config',
+      `[profile fallback]\nlogin_session = ${session}\nregion = us-east-1\n`,
+    );
+    setEnvironment({ AWS_LOGIN_CACHE_DIRECTORY: directory });
+    // The real login provider reads this promises object's method at call time,
+    // including when its native CJS module was loaded by an earlier test file.
+    const readToken = vi.spyOn(fs, 'readFile').mockImplementation(async (requested, encoding) => {
+      if (requested !== filename) {
+        unexpectedReads++;
+        throw new Error('Unexpected login-file read in fallback fixture');
+      }
+      expect(encoding).toBe('utf8');
+      if (mode === 'missing') {
+        throw new Error('Synthetic login token is missing');
+      }
+      return JSON.stringify({
+        accessToken: {
+          accessKeyId: 'LOGIN',
+          secretAccessKey: 'synthetic-login-secret',
+          sessionToken: 'synthetic-login-session',
+          accountId: '123456789012',
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+        clientId: 'synthetic-login-client',
+        refreshToken: 'synthetic-login-refresh',
+        dpopKey: 'unused-synthetic-key-send-is-mocked',
+      });
+    });
+    // Only the Signin service send boundary is mocked. The SDK validates and
+    // expires the token, constructs the command, and determines continuability;
+    // STS parsing and Sage signing still use the existing real SDK HTTP fixture.
+    const send = vi.spyOn(SigninClient.prototype, 'send').mockImplementation(async (command) => {
+      expect(command).toBeInstanceOf(CreateOAuth2TokenCommand);
+      expect(command.input).toEqual({
+        tokenInput: {
+          clientId: 'synthetic-login-client',
+          refreshToken: 'synthetic-login-refresh',
+          grantType: 'refresh_token',
+        },
+      });
+      if (mode === 'denied') {
+        throw Object.assign(new Error('Synthetic login denial'), {
+          name: 'AccessDeniedException',
+          error: 'INSUFFICIENT_PERMISSIONS',
+        });
+      }
+      throw new Error('Synthetic transient Signin failure');
+    });
+    return { readToken, send };
   }
 
   function setEnvironment(values: Record<string, string | undefined>) {
@@ -336,6 +402,101 @@ describe('SageMaker implicit profile fallback ownership', () => {
     await loadProvider();
     await overlap(() => {}, ['FALLBACK_A', 'FALLBACK_A', 'FALLBACK_A'], true);
     expect(stsRequests).toHaveLength(2);
+  });
+
+  it.each(['role', 'token'] as const)(
+    'keeps reachable %s fallback inputs after an expired login refresh fails transiently',
+    async (input) => {
+      await loadProvider();
+      const login = useLoginProfile();
+      await overlap(
+        () =>
+          setEnvironment(
+            input === 'role' ? { AWS_ROLE_ARN: roleB } : { AWS_WEB_IDENTITY_TOKEN_FILE: tokenB },
+          ),
+        ['FALLBACK_A', 'FALLBACK_B', 'FALLBACK_B'],
+        false,
+      );
+      expect(login.send).toHaveBeenCalledTimes(3);
+      expect(login.readToken).toHaveBeenCalledTimes(6);
+      expect(stsRequests.map(({ params }) => params.get('Action'))).toEqual(
+        Array(3).fill('AssumeRoleWithWebIdentity'),
+      );
+      expect(stsRequests.map(({ params }) => params.get('RoleArn'))).toEqual(
+        input === 'role' ? [roleA, roleB, roleB] : [roleA, roleA, roleA],
+      );
+      expect(stsRequests.map(({ params }) => params.get('WebIdentityToken'))).toEqual(
+        input === 'token'
+          ? ['synthetic-token-a', 'synthetic-token-b', 'synthetic-token-b']
+          : Array(3).fill('synthetic-token-a'),
+      );
+      expect(metadataRequests).toHaveLength(0);
+    },
+  );
+
+  it('reuses stable login fallback credentials while the original request remains active', async () => {
+    await loadProvider();
+    const login = useLoginProfile();
+    await overlap(() => {}, ['FALLBACK_A', 'FALLBACK_A', 'FALLBACK_A'], true);
+    expect(login.send).toHaveBeenCalledTimes(2);
+    expect(login.readToken).toHaveBeenCalledTimes(4);
+    expect(stsRequests).toHaveLength(2);
+    expect(metadataRequests).toHaveLength(0);
+  });
+
+  it('does not continue an explicit login profile after an expired transient refresh failure', async () => {
+    const selected = await loadProvider({ profile: 'fallback' });
+    const login = useLoginProfile();
+    expect(await selected.callApi('explicit login profile')).toMatchObject({
+      error: expect.stringContaining(
+        'Failed to refresh token: Error: Synthetic transient Signin failure',
+      ),
+    });
+    expect(login.send).toHaveBeenCalledTimes(1);
+    expect(login.readToken).toHaveBeenCalledTimes(2);
+    expect(stsRequests).toHaveLength(0);
+    expect(sageRequests).toHaveLength(0);
+    expect(metadataRequests).toHaveLength(0);
+    expect(selected.sagemakerRuntime).toBeUndefined();
+  });
+
+  it.each(['missing', 'denied'] as const)(
+    'does not continue a terminal %s login failure into web identity',
+    async (mode) => {
+      const selected = await loadProvider();
+      const login = useLoginProfile(mode);
+      expect(await selected.callApi('terminal login failure')).toMatchObject({
+        error: expect.stringContaining(
+          mode === 'missing'
+            ? 'Synthetic login token is missing'
+            : 'Unable to refresh credentials due to insufficient permissions',
+        ),
+      });
+      expect(login.send).toHaveBeenCalledTimes(mode === 'missing' ? 0 : 1);
+      expect(login.readToken).toHaveBeenCalledTimes(mode === 'missing' ? 1 : 2);
+      expect(stsRequests).toHaveLength(0);
+      expect(sageRequests).toHaveLength(0);
+      expect(metadataRequests).toHaveLength(0);
+      expect(selected.sagemakerRuntime).toBeUndefined();
+    },
+  );
+
+  it('keeps configured static credentials ahead of an expired login profile', async () => {
+    const selected = await loadProvider({
+      accessKeyId: 'CONFIG',
+      secretAccessKey: 'synthetic-config-secret',
+    });
+    const login = useLoginProfile();
+    expect(await selected.callApi('configured credentials with login profile')).toMatchObject({
+      output: 'synthetic fallback response',
+    });
+    expect(sageRequests[0].request.headers.authorization).toContain('Credential=CONFIG/');
+    expect(login.readToken).not.toHaveBeenCalled();
+    expect(login.send).not.toHaveBeenCalled();
+    expect(stsRequests).toHaveLength(0);
+    expect(metadataRequests).toHaveLength(0);
+    expect(selected.sagemakerRuntime).toBeUndefined();
+    expect(sageRequests.every(({ handler }) => destroyed.has(handler))).toBe(true);
   });
 
   it('retains reachable fallback inputs after a continuable metadata failure', async () => {

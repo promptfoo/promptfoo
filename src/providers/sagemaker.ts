@@ -234,7 +234,8 @@ function profileCredentialInputs(
   ) {
     return credentialHelperInputs('SSO', ...(data.sso_session ? ['SSO_OIDC'] : []));
   }
-  if (data.login_session) {
+  // An expired login refresh can continue to other default-chain sources.
+  if (data.login_session && !defaultChainEnvironment) {
     return [...credentialHelperInputs('SIGNIN'), 'AWS_LOGIN_CACHE_DIRECTORY'];
   }
   return undefined;
