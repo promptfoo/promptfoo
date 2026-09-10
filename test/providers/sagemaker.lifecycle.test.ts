@@ -413,6 +413,55 @@ describe('SageMaker runtime lifecycle', () => {
         : provider.callApi('A garden', undefined, { abortSignal });
     }
 
+    it('keeps an active send alive during evaluation-complete cleanup and releases it once idle', async () => {
+      const provider = createProvider();
+      const started = deferred<AbortSignal>();
+      const finished = deferred<void>();
+      mockSend.mockImplementationOnce((_command, region, { abortSignal }) => {
+        let onAbort!: () => void;
+        const aborted = new Promise<never>((_resolve, reject) => {
+          onAbort = () => reject(abortSignal.reason);
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+        });
+        started.resolve(abortSignal);
+        return Promise.race([finished.promise, aborted])
+          .then(() => response(region))
+          .finally(() => abortSignal.removeEventListener('abort', onAbort));
+      });
+      const result = call(provider);
+      void result.catch(() => {});
+
+      try {
+        const signal = await Promise.race([
+          started.promise,
+          result.then(() => {
+            throw new Error('Request finished before its expected SDK send');
+          }),
+        ]);
+        // Widen only this call site so the regression also compiles against the
+        // previous no-argument API, which treats this notification as shutdown.
+        const cleanup: (context?: { reason: 'evaluation-complete' }) => void =
+          provider.cleanup.bind(provider);
+        cleanup({ reason: 'evaluation-complete' });
+        expect(signal.aborted).toBe(false);
+        expect(runtimes[0].destroy).not.toHaveBeenCalled();
+
+        finished.resolve();
+        expect(await result).toMatchObject(
+          kind === 'completion' ? { output: 'us-east-1' } : { embedding: [0.1, 0.2] },
+        );
+        expect(runtimes[0].send).toHaveBeenCalledOnce();
+        expect(runtimes[0].destroy).toHaveBeenCalledOnce();
+        cleanup({ reason: 'evaluation-complete' });
+        provider.cleanup();
+        expect(runtimes[0].destroy).toHaveBeenCalledOnce();
+      } finally {
+        finished.resolve();
+        provider.cleanup();
+        await Promise.allSettled([result]);
+      }
+    });
+
     it('aborts an active send when cleaned up', async () => {
       const provider = createProvider();
       const started = deferred<AbortSignal>();

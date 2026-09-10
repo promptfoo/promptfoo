@@ -23,6 +23,7 @@ import {
 } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import {
@@ -36,7 +37,9 @@ import {
   getErrorResultIds,
   recalculatePromptMetrics,
 } from '../../src/node/retry';
+import * as defaultProvidersModule from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
+import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -80,6 +83,28 @@ vi.mock('../../src/redteam/shared', async (importOriginal) => {
 });
 vi.mock('../../src/share');
 vi.mock('../../src/table');
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
+
+const sageCleanupMocks = vi.hoisted(() => ({
+  runtimeClient: vi.fn(),
+  command: vi.fn(),
+  send: vi.fn(),
+  destroy: vi.fn(),
+}));
+
+vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
+  SageMakerRuntimeClient: sageCleanupMocks.runtimeClient,
+  InvokeEndpointCommand: sageCleanupMocks.command,
+}));
+vi.mock('@smithy/core/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smithy/core/config')>()),
+  // These ownership tests do not depend on ambient AWS files or defaults discovery.
+  loadConfig:
+    ({ default: value }: { default: unknown }) =>
+    async () =>
+      value,
+  resolveDefaultsModeConfig: () => async () => 'legacy',
+}));
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
@@ -2423,6 +2448,207 @@ describe('evalCommand', () => {
       vi.mocked(resolveConfigs).mockReset();
     }
   });
+
+  it.each(['watch grader', 'independent evaluations'] as const)(
+    'keeps a real Sage request active after another run finishes: %s',
+    async (mode) => {
+      const makeRequest = () => {
+        let start!: (signal: AbortSignal) => void;
+        let finish!: () => void;
+        const started = new Promise<AbortSignal>((resolve) => {
+          start = resolve;
+        });
+        const response = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return { start, started, response, finish };
+      };
+      const requestA = makeRequest();
+      const requestB = makeRequest();
+      const graderOutput = { pass: true, score: 1, reason: 'Grader B completed' };
+      const calls: Promise<unknown>[] = [];
+      sageCleanupMocks.destroy.mockReset();
+      sageCleanupMocks.command.mockReset().mockImplementation(function (input) {
+        return input;
+      });
+      sageCleanupMocks.runtimeClient.mockReset().mockImplementation(function () {
+        return { send: sageCleanupMocks.send, destroy: sageCleanupMocks.destroy };
+      });
+      sageCleanupMocks.send
+        .mockReset()
+        .mockImplementation((command, { abortSignal }: { abortSignal: AbortSignal }) => {
+          const prompt = JSON.parse(command.Body).prompt;
+          expect(['A', 'B']).toContain(prompt);
+          const request = prompt === 'A' ? requestA : requestB;
+          let onAbort!: () => void;
+          const aborted = new Promise<never>((_resolve, reject) => {
+            onAbort = () => reject(abortSignal.reason);
+            abortSignal.addEventListener('abort', onAbort, { once: true });
+          });
+          request.start(abortSignal);
+          const result = Promise.race([request.response, aborted])
+            .then(() => ({
+              Body: new TextEncoder().encode(
+                JSON.stringify({
+                  output:
+                    prompt === 'B' && mode === 'watch grader'
+                      ? JSON.stringify(graderOutput)
+                      : prompt,
+                }),
+              ),
+            }))
+            .finally(() => abortSignal.removeEventListener('abort', onAbort));
+          calls.push(result);
+          return result;
+        });
+      const provider = new SageMakerCompletionProvider('cleanup-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          accessKeyId: 'SYNTHETIC_CLEANUP_KEY',
+          secretAccessKey: 'synthetic-cleanup-secret',
+        },
+      });
+      const otherProvider = {
+        id: () => 'other-watch-target',
+        callApi: vi.fn(async () => ({ output: 'other target output' })),
+        cleanup: vi.fn(async () => {}),
+      } satisfies ApiProvider;
+      const defaultProvidersSpy = vi
+        .spyOn(defaultProvidersModule, 'getDefaultProviders')
+        .mockResolvedValue({
+          embeddingProvider: otherProvider,
+          gradingJsonProvider: otherProvider,
+          gradingProvider: otherProvider,
+          moderationProvider: otherProvider,
+          suggestionsProvider: otherProvider,
+          synthesizeProvider: otherProvider,
+        });
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      const loadDefaultConfigSpy = vi
+        .spyOn(defaultConfigModule, 'loadDefaultConfig')
+        .mockResolvedValue({ defaultConfig: config, defaultConfigPath: undefined });
+      const suiteA: TestSuite = { prompts: [], providers: [provider] };
+      const suiteB: TestSuite =
+        mode === 'watch grader'
+          ? {
+              prompts: [],
+              providers: [otherProvider],
+              defaultTest: { options: { provider, rubricPrompt: 'B' } },
+            }
+          : { prompts: [], providers: [provider] };
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(resolveConfigs).mockReset();
+      const suites =
+        mode === 'watch grader'
+          ? [{ prompts: [], providers: [] }, suiteA, suiteB]
+          : [suiteA, suiteB];
+      for (const testSuite of suites) {
+        vi.mocked(resolveConfigs).mockResolvedValueOnce({
+          config,
+          testSuite,
+          basePath: path.dirname(defaultConfigPath),
+        });
+      }
+      const outputs: unknown[] = [];
+      let targetCalls = 0;
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementation(async (suite, evalRecord) => {
+          if (suite.providers[0] === otherProvider) {
+            const targetResult = await otherProvider.callApi();
+            const defaultTest = suite.defaultTest;
+            if (!defaultTest || typeof defaultTest === 'string') {
+              throw new Error('Expected the resolved grader configuration');
+            }
+            expect(defaultTest.options?.provider).toBe(provider);
+            // Keep the real matcher and supplied-provider resolution active. Sage
+            // appears only as this run's grader, not in its top-level providers.
+            outputs.push(
+              await matchesLlmRubric(
+                'The target answer is acceptable',
+                targetResult.output,
+                defaultTest.options,
+                {},
+                { type: 'llm-rubric', value: 'The target answer is acceptable' },
+                { throwOnError: true },
+              ),
+            );
+          } else if (suite.providers.length > 0) {
+            expect(suite.providers[0]).toBe(provider);
+            outputs.push(await suite.providers[0].callApi(targetCalls++ === 0 ? 'A' : 'B'));
+          }
+          return evalRecord as Eval;
+        });
+      const pending: Promise<unknown>[] = [];
+      const observe = (evaluation: Promise<unknown>) => {
+        pending.push(evaluation);
+        // Attach rejection handling immediately; assertions still await the original.
+        void evaluation.catch(() => {});
+        return evaluation;
+      };
+      const waitForSend = (request: ReturnType<typeof makeRequest>, evaluation: Promise<unknown>) =>
+        Promise.race([
+          request.started,
+          evaluation.then(() => {
+            throw new Error('Evaluation finished before its expected Sage send');
+          }),
+        ]);
+
+      try {
+        let startA: () => Promise<unknown>;
+        let startB: () => Promise<unknown>;
+        if (mode === 'watch grader') {
+          await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+          const onChange = chokidarMocks.handlers.get('change');
+          expect(onChange).toBeDefined();
+          startA = () => Promise.resolve(onChange!(defaultConfigPath));
+          startB = () => Promise.resolve(onChange!('prompt.txt'));
+        } else {
+          startA = () => doEval({ write: false }, config, undefined, {});
+          startB = () => doEval({ write: false }, config, undefined, {});
+        }
+        const evaluationA = observe(startA());
+        const signalA = await waitForSend(requestA, evaluationA);
+        const evaluationB = observe(startB());
+        const signalB = await waitForSend(requestB, evaluationB);
+        expect(signalA).not.toBe(signalB);
+        expect(sageCleanupMocks.runtimeClient).toHaveBeenCalledOnce();
+        expect(sageCleanupMocks.send).toHaveBeenCalledTimes(2);
+
+        requestA.finish();
+        await evaluationA;
+
+        expect(outputs[0]).toMatchObject({ output: 'A' });
+        expect(signalB.aborted).toBe(false);
+        expect(sageCleanupMocks.destroy).not.toHaveBeenCalled();
+        requestB.finish();
+        await evaluationB;
+        expect(outputs).toHaveLength(2);
+        expect(outputs[1]).toMatchObject(mode === 'watch grader' ? graderOutput : { output: 'B' });
+        expect(sageCleanupMocks.destroy).toHaveBeenCalledOnce();
+        if (mode === 'watch grader') {
+          expect(otherProvider.callApi).toHaveBeenCalledOnce();
+          expect(otherProvider.cleanup).toHaveBeenCalledOnce();
+        }
+        provider.cleanup();
+        expect(sageCleanupMocks.destroy).toHaveBeenCalledOnce();
+      } finally {
+        requestA.finish();
+        requestB.finish();
+        provider.cleanup();
+        await Promise.allSettled([...pending, ...calls]);
+        defaultProvidersSpy.mockRestore();
+        loadDefaultConfigSpy.mockRestore();
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(resolveConfigs).mockReset();
+        sageCleanupMocks.runtimeClient.mockReset();
+        sageCleanupMocks.command.mockReset();
+        sageCleanupMocks.send.mockReset();
+        sageCleanupMocks.destroy.mockReset();
+      }
+    },
+  );
 
   it('should handle redteam config', async () => {
     const cmdObj = {};

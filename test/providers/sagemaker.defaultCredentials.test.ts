@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -107,6 +108,75 @@ sso_role_name = TestRole
     expect(sageCalls.at(-1)?.request.headers.authorization).toContain(`Credential=${key}/`);
     expect(provider.sagemakerRuntime).toBeUndefined();
     expect(destroyedHandlers.has(sageCalls.at(-1)!.handler)).toBe(true);
+  }
+
+  function metadataTransport(identities: Record<string, string>, tokenStatus = 200) {
+    const calls: { options: http.RequestOptions; destroy: ReturnType<typeof vi.fn> }[] = [];
+    vi.mocked(http.request).mockImplementation((options) => {
+      const selected = options as http.RequestOptions;
+      const identity = identities[String(selected.hostname)];
+      expect(identity, 'every metadata destination must be explicitly declared').toBeDefined();
+      expect(selected.protocol).toBe('http:');
+      expect(selected.timeout).toBe(1000);
+      let body: string;
+      let statusCode = 200;
+      if (selected.path === '/latest/api/token') {
+        expect(selected.method).toBe('PUT');
+        expect(selected.headers).toEqual({ 'x-aws-ec2-metadata-token-ttl-seconds': '21600' });
+        body = `metadata-token-${identity}`;
+        statusCode = tokenStatus;
+      } else {
+        expect(selected.method).toBe('GET');
+        expect(selected.headers).toEqual({
+          'x-aws-ec2-metadata-token': `metadata-token-${identity}`,
+        });
+        expect([
+          '/latest/meta-data/iam/security-credentials/',
+          '/latest/meta-data/iam/security-credentials/instance-role',
+        ]).toContain(selected.path);
+        body = selected.path?.endsWith('/instance-role')
+          ? JSON.stringify({
+              AccessKeyId: `IMDS_${identity}`,
+              SecretAccessKey: `metadata-secret-${identity}`,
+              Token: `metadata-session-${identity}`,
+              Expiration: new Date(Date.now() + hour).toISOString(),
+            })
+          : 'instance-role';
+      }
+      const destroy = vi.fn();
+      calls.push({ options: selected, destroy });
+      const request = Object.assign(new EventEmitter(), {
+        end: () => {
+          queueMicrotask(() => {
+            const incoming = Object.assign(new EventEmitter(), { statusCode });
+            request.emit('response', incoming);
+            if (statusCode === 200) {
+              incoming.emit('data', Buffer.from(body));
+              incoming.emit('end');
+            }
+          });
+          return request;
+        },
+        destroy,
+      });
+      return request as unknown as http.ClientRequest;
+    });
+    stsReply = async ({ request }) => {
+      const parameters = new URLSearchParams(String(request.body));
+      expect(parameters.get('Action')).toBe('AssumeRole');
+      expect(parameters.get('RoleArn')).toBe('arn:aws:iam::123456789012:role/MetadataRole');
+      const identity = /Credential=IMDS_([^/]+)\//.exec(request.headers.authorization)?.[1];
+      expect(Object.values(identities)).toContain(identity);
+      return response(
+        `<AssumeRoleResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+<AssumeRoleResult><Credentials>
+<AccessKeyId>ROLE_${identity}</AccessKeyId><SecretAccessKey>offline-sts-secret</SecretAccessKey>
+<SessionToken>offline-sts-session</SessionToken><Expiration>${new Date(Date.now() + hour).toISOString()}</Expiration>
+</Credentials></AssumeRoleResult></AssumeRoleResponse>`,
+        'text/xml',
+      );
+    };
+    return calls;
   }
 
   beforeEach(async () => {
@@ -583,6 +653,138 @@ sts =
     },
   );
 
+  it.each(['endpoint', 'recursive endpoint mode'] as const)(
+    'selects an explicit metadata role from the changed ambient %s',
+    async (selection) => {
+      const mode = selection === 'recursive endpoint mode';
+      const firstHost = mode ? '169.254.169.254' : 'metadata-a.invalid';
+      const nextHost = mode ? 'fd00:ec2::254' : 'metadata-b.invalid';
+      const metadata = metadataTransport({ [firstHost]: 'A', [nextHost]: 'B' });
+      await configure(
+        `[profile role]
+role_arn = arn:aws:iam::123456789012:role/MetadataRole
+${mode ? 'source_profile = metadata-source\n[profile metadata-source]' : ''}
+credential_source = Ec2InstanceMetadata
+[profile ambient-a]
+${mode ? 'ec2_metadata_service_endpoint_mode = IPv4' : 'ec2_metadata_service_endpoint = http://metadata-a.invalid'}
+[profile ambient-b]
+${mode ? 'ec2_metadata_service_endpoint_mode = IPv6' : 'ec2_metadata_service_endpoint = http://metadata-b.invalid'}
+`,
+        'ambient-a',
+      );
+      expect(process.env.AWS_EC2_METADATA_SERVICE_ENDPOINT).toBeUndefined();
+      expect(process.env.AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE).toBeUndefined();
+      const provider = createProvider({ profile: 'role' });
+      await expectSignedRow(provider, 'ROLE_A');
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      await expectSignedRow(provider, 'ROLE_A');
+      expect(metadata).toHaveLength(3);
+      expect(stsCalls).toHaveLength(1);
+
+      // Both ambient profiles were parsed before the first call. Their STS
+      // policies are identical, and the first assumed role is still valid.
+      vi.stubEnv('AWS_PROFILE', 'ambient-b');
+      await expectSignedRow(provider, 'ROLE_B');
+      expect(metadata.map(({ options }) => options.hostname)).toEqual([
+        firstHost,
+        firstHost,
+        firstHost,
+        nextHost,
+        nextHost,
+        nextHost,
+      ]);
+      expect(stsCalls.map(({ request }) => request.headers.authorization)).toEqual([
+        expect.stringContaining('Credential=IMDS_A/'),
+        expect.stringContaining('Credential=IMDS_B/'),
+      ]);
+      expect(stsCalls[1].request.hostname).toBe(stsCalls[0].request.hostname);
+      expect(stsCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+      expect(metadata.every(({ destroy }) => destroy.mock.calls.length === 1)).toBe(true);
+    },
+  );
+
+  it('keeps initialization metadata results out of a previous ambient profile scope', async () => {
+    const metadata = metadataTransport({ 'metadata-a.invalid': 'A', 'metadata-b.invalid': 'B' });
+    await configure(
+      `[profile role]
+role_arn = arn:aws:iam::123456789012:role/MetadataRole
+credential_source = Ec2InstanceMetadata
+[profile ambient-a]
+ec2_metadata_service_endpoint = http://metadata-a.invalid
+[profile ambient-b]
+ec2_metadata_service_endpoint = http://metadata-b.invalid
+`,
+      'ambient-a',
+    );
+    const provider = createProvider({ profile: 'role' });
+    const captured = deferred<void>();
+    const resume = deferred<void>();
+    const getCredentials = provider.getCredentials.bind(provider);
+    const delegation = vi
+      .spyOn(provider, 'getCredentials')
+      .mockImplementationOnce(async (...args) => {
+        captured.resolve();
+        await resume.promise;
+        return getCredentials(...args);
+      });
+    const first = provider.callApi('metadata initialization');
+    try {
+      await captured.promise;
+      expect(metadata).toHaveLength(0);
+      vi.stubEnv('AWS_PROFILE', 'ambient-b');
+      resume.resolve();
+      expect(await first).toMatchObject({ output: 'offline response' });
+      // Keep the actual later SDK result; the fix must reject future retention,
+      // not rewrite the credential profile or pretend resolution was atomic.
+      expect(sageCalls[0].request.headers.authorization).toContain('Credential=ROLE_B/');
+      expect(metadata.map(({ options }) => options.hostname)).toEqual([
+        'metadata-b.invalid',
+        'metadata-b.invalid',
+        'metadata-b.invalid',
+      ]);
+      vi.stubEnv('AWS_PROFILE', 'ambient-a');
+      await expectSignedRow(provider, 'ROLE_A');
+      expect(metadata.slice(3).map(({ options }) => options.hostname)).toEqual([
+        'metadata-a.invalid',
+        'metadata-a.invalid',
+        'metadata-a.invalid',
+      ]);
+      expect(stsCalls.map(({ request }) => request.headers.authorization)).toEqual([
+        expect.stringContaining('Credential=IMDS_B/'),
+        expect.stringContaining('Credential=IMDS_A/'),
+      ]);
+    } finally {
+      resume.resolve();
+      await first;
+      delegation.mockRestore();
+    }
+    expect(metadata.every(({ destroy }) => destroy.mock.calls.length === 1)).toBe(true);
+    expect(stsCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+  });
+
+  it('keeps metadata v1 disabling owned by the explicit credential profile', async () => {
+    const metadata = metadataTransport({ 'metadata-a.invalid': 'A' }, 403);
+    await configure(
+      `[profile role]
+role_arn = arn:aws:iam::123456789012:role/MetadataRole
+credential_source = Ec2InstanceMetadata
+ec2_metadata_v1_disabled = true
+[profile ambient-a]
+ec2_metadata_service_endpoint = http://metadata-a.invalid
+ec2_metadata_v1_disabled = false
+`,
+      'ambient-a',
+    );
+    const result = await createProvider({ profile: 'role' }).callApi('blocked v1 fallback');
+    expect(result.error).toContain('AWS EC2 Metadata v1 fallback has been blocked');
+    expect(result.error).toContain('config file profile');
+    expect(metadata).toHaveLength(1);
+    expect(metadata[0].options.path).toBe('/latest/api/token');
+    expect(metadata[0].destroy).toHaveBeenCalledOnce();
+    expect(stsCalls).toHaveLength(0);
+    expect(sageCalls).toHaveLength(0);
+  });
+
   it.each([
     ['AWS_ACCESS_KEY_ID', 'SHADOWED'],
     ['AWS_SECRET_ACCESS_KEY', 'shadowed-secret'],
@@ -862,6 +1064,66 @@ sts =
       }
     },
   );
+
+  it('coalesces passive refresh across consecutive public calls with unchanged scope', async () => {
+    await configure();
+    const provider = createProvider();
+    await expectSignedRow(provider, 'SSO_1');
+    vi.setSystemTime(startTime.getTime() + 56 * 60_000);
+    renewToken();
+    const passiveStarted = deferred<void>();
+    const duplicateStarted = deferred<void>();
+    const passive = deferred<ReturnType<typeof response>>();
+    const duplicate = deferred<ReturnType<typeof response>>();
+    const normalReply = ssoReply;
+    ssoReply = async (generation) => {
+      if (generation === 2) {
+        passiveStarted.resolve();
+        return passive.promise;
+      }
+      expect(generation, 'no extra authentication beyond the diagnosed duplicate').toBe(3);
+      duplicateStarted.resolve();
+      return duplicate.promise;
+    };
+    const controller = new AbortController();
+    let third: ReturnType<SageMakerCompletionProvider['callApi']> | undefined;
+    try {
+      await expectSignedRow(provider, 'SSO_1');
+      await passiveStarted.promise;
+      expect(ssoCalls).toHaveLength(2);
+      third = provider.callApi('consecutive cached row', undefined, {
+        abortSignal: controller.signal,
+      });
+      // A duplicate foreground request is observable without sleeping or
+      // letting the failing call wait for a test timeout.
+      const outcome = await Promise.race([
+        third.then(() => 'cached public completion'),
+        duplicateStarted.promise.then(() => 'duplicate foreground authentication'),
+      ]);
+      expect(outcome).toBe('cached public completion');
+      expect(await third).toMatchObject({ output: 'offline response' });
+      expect(sageCalls.at(-1)!.request.headers.authorization).toContain('Credential=SSO_1/');
+      expect(ssoCalls).toHaveLength(2);
+      expect(provider.sagemakerRuntime).toBeUndefined();
+
+      passive.resolve(await normalReply(2));
+      // Complete the buffered SDK response and its passive memoizer update.
+      // The next observation remains a public call, never a saved client getter.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expectSignedRow(provider, 'SSO_2');
+      expect(ssoCalls).toHaveLength(2);
+    } finally {
+      controller.abort(new Error('credential fixture finalizer'));
+      passive.resolve(await normalReply(2));
+      duplicate.resolve(await normalReply(3));
+      if (third) {
+        await Promise.allSettled([third]);
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+    expect(ssoCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+  });
 
   it('does not reuse an implicit SSO state populated after a passive token-read pause', async () => {
     await configure();

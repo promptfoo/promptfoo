@@ -19,6 +19,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderCleanupContext,
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
@@ -204,6 +205,7 @@ function profileCredentialInputs(
         'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE',
       ],
       Ec2InstanceMetadata: [
+        'AWS_PROFILE',
         'AWS_EC2_METADATA_SERVICE_ENDPOINT',
         'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
         'AWS_EC2_METADATA_V1_DISABLED',
@@ -298,6 +300,7 @@ interface RuntimeCredentials {
   scope: CredentialScope;
   provider: RuntimeConfigAwsCredentialIdentityProvider;
   reusable: boolean;
+  passiveRefreshPossible?: boolean;
 }
 
 interface RuntimeInitialization {
@@ -646,6 +649,19 @@ abstract class SageMakerGenericProvider {
       this.runtimeDefaultsStates.delete(runtimeRegion);
     }
     this.assertRuntimeGeneration(generation);
+    for (const credentials of [
+      this.#retainedCredentials,
+      ...this.#runtimeInitializations.map((candidate) => candidate.credentials),
+    ]) {
+      if (credentials?.passiveRefreshPossible && !sameCredentialScope(credentials.scope, scope)) {
+        // A background SDK refresh can read inputs after its foreground call.
+        // Retain coalescing within one scope, but not across an observed change.
+        credentials.reusable = false;
+        if (this.#retainedCredentials === credentials) {
+          this.#retainedCredentials = undefined;
+        }
+      }
+    }
     let entry = this.#runtimeInitializations.find(
       (candidate) =>
         candidate.credentials?.reusable !== false &&
@@ -732,17 +748,16 @@ abstract class SageMakerGenericProvider {
                 }
               };
               const initiallyMatched = await inputsMatch();
-              let passiveRefreshPossible = false;
               try {
                 const resolved = await credentialProvider(options);
                 // The default chain may return cached credentials while refreshing
                 // in the background. Its later input reads outlive this guard.
-                passiveRefreshPossible =
+                credentialState.passiveRefreshPossible ||=
                   !(options && 'forceRefresh' in options && options.forceRefresh) &&
                   !!credentialsTreatedAsExpired?.(resolved);
                 return resolved;
               } finally {
-                if (passiveRefreshPossible || !initiallyMatched || !(await inputsMatch())) {
+                if (!initiallyMatched || !(await inputsMatch())) {
                   // A lazy chain may observe newer inputs. Keep active requests owned,
                   // but never reuse their client or credentials under the old scope.
                   credentialState.reusable = false;
@@ -859,7 +874,10 @@ abstract class SageMakerGenericProvider {
     }
   }
 
-  cleanup(): void {
+  cleanup(context?: ProviderCleanupContext): void {
+    if (context?.reason === 'evaluation-complete' && this.activeRequests.size > 0) {
+      return;
+    }
     this.runtimeGeneration++;
     for (const controller of this.activeRequests) {
       controller.abort(new Error('SageMaker provider was shut down during the request'));

@@ -992,7 +992,7 @@ export async function doEval(
         // Another watch run may start while an earlier provider's cleanup awaits.
         if (!activeProviderRuns.has(provider)) {
           try {
-            await provider.cleanup?.();
+            await provider.cleanup?.({ reason: 'evaluation-complete' });
           } catch (error) {
             logger.warn('Provider cleanup failed after evaluation.', { error });
           }
