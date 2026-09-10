@@ -7,7 +7,10 @@ import {
 } from '../../../src/providers/openai/billing';
 
 describe('OpenAI billing helpers', () => {
-  it('prices chat-latest image input tokens at its published input rates', () => {
+  it.each([
+    { cached_tokens: 40, cached_tokens_details: { image_tokens: 40 } },
+    { cached_tokens: 140 },
+  ])('prices chat-latest image inputs with cache details %j', (cacheDetails) => {
     expect(
       calculateOpenAIUsageCost(
         'chat-latest',
@@ -18,12 +21,14 @@ describe('OpenAI billing helpers', () => {
           input_tokens_details: {
             text_tokens: 100,
             image_tokens: 100,
-            cached_tokens: 40,
-            cached_tokens_details: { image_tokens: 40 },
+            ...cacheDetails,
           },
         },
       ),
-    ).toBeCloseTo((100 * 5 + 60 * 5 + 40 * 0.5 + 10 * 30) / 1e6, 10);
+    ).toBeCloseTo(
+      ((200 - cacheDetails.cached_tokens) * 5 + cacheDetails.cached_tokens * 0.5 + 10 * 30) / 1e6,
+      10,
+    );
   });
 
   it('applies custom input costs to text-priced chat-latest image tokens', () => {

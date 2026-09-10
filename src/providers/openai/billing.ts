@@ -794,9 +794,6 @@ function getModelRates(
 
   return {
     text: discountedText,
-    ...(modelName === 'chat-latest'
-      ? { image: { input: discountedText.input, cachedInput: discountedText.cachedInput } }
-      : {}),
     ...(model?.cost?.audioInput || model?.cost?.audioOutput
       ? {
           audio: {
@@ -1044,14 +1041,12 @@ export function calculateOpenAIUsageCost(
       output: config.audioOutputCost ?? config.audioCost,
     },
   );
-  const imageInputCost =
-    modelName === 'chat-latest' ? (config.inputCost ?? config.cost) : undefined;
   const imageCost = calculateModalCost(
     rates.image,
     usage.imageInputTokens,
     cachedInput.imageInputTokens,
     usage.imageOutputTokens,
-    { input: imageInputCost, cachedInput: imageInputCost },
+    {},
   );
 
   return textCost + audioCost + imageCost;
