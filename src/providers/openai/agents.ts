@@ -129,7 +129,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       ]);
 
       const configuredAgent = cloneAgentPreservingHooks(agent, {
-        tools: mergeArrays(agent.tools, tools),
+        tools:
+          mergeArrays(agent.tools, tools) ??
+          (agent.hasExplicitToolConfig() ? agent.tools : undefined),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
         outputGuardrails: mergeArrays(agent.outputGuardrails, outputGuardrails),
@@ -577,7 +579,8 @@ function applyExecutionOverrides(
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
       handoffs: [],
-      tools: source.tools,
+      // clone() spreads the source, so undefined must explicitly preserve unconfigured tools.
+      tools: source.tools.length > 0 || source.hasExplicitToolConfig() ? source.tools : undefined,
     });
     clonedAgents.set(source, cloned);
     cloned.handoffs = source.handoffs.map((candidate) => {

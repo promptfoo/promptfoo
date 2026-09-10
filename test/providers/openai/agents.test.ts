@@ -39,6 +39,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     handoffOutputTypeWarningEnabled?: boolean;
     outputType?: unknown;
     tools: any[];
+    private toolsExplicitlyConfigured: boolean;
     handoffs: any[];
     inputGuardrails: any[];
     outputGuardrails: any[];
@@ -57,6 +58,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
       this.handoffOutputTypeWarningEnabled = config.handoffOutputTypeWarningEnabled;
       this.outputType = config.outputType;
       this.tools = config.tools ?? [];
+      this.toolsExplicitlyConfigured = config.tools !== undefined;
       this.handoffs = config.handoffs ?? [];
       this.inputGuardrails = config.inputGuardrails ?? [];
       this.outputGuardrails = config.outputGuardrails ?? [];
@@ -70,6 +72,10 @@ vi.mock('@openai/agents', async (importOriginal) => {
         ...this,
         ...config,
       });
+    }
+
+    hasExplicitToolConfig() {
+      return this.toolsExplicitlyConfigured;
     }
 
     asTool(options: Record<string, any> = {}) {
