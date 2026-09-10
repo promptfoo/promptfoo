@@ -946,6 +946,10 @@ describe('resolveAudioSource', () => {
     ).toBeNull();
   });
 
+  it('should not treat short identifiers as audio data', () => {
+    expect(resolveAudioSource({ data: 'audiodata', format: 'wav' })).toBeNull();
+  });
+
   it('should not treat plain text fallback content as base64 audio', () => {
     expect(resolveAudioSource(undefined, 'not actually audio data')).toBeNull();
   });

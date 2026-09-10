@@ -149,7 +149,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
 
     const placeholder = `[content omitted: ${oversized.length} characters]`;
     const largeCell = response.body.table.body[0].outputs[0];
-    expect(response.body.table.head.prompts[0].raw).toBe(oversized);
+    expect(response.body.table.head.prompts[0].raw).toBe(placeholder);
     expect(response.body.table.body[0].vars[0]).toBe(placeholder);
     expect(response.body.table.body[0].test.vars).toBeUndefined();
     expect(response.body.table.body[0].testIdx).toBe(0);

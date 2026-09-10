@@ -356,12 +356,14 @@ export function trimEvalTableForApi<T extends TableLike>(
   table: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
 ): T {
-  return {
-    ...table,
-    // Header prompts appear once per column and are used by the View prompt dialog.
-    head: table.head,
-    body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
-  } as T;
+  return trimForTable(
+    {
+      ...table,
+      head: trimForTable(table.head, maxStringLength),
+      body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
+    } as T,
+    maxStringLength,
+  );
 }
 
 export function trimEvalConfigForTableApi<T extends object>(

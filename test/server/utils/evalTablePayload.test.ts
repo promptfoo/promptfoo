@@ -79,7 +79,7 @@ describe('trimEvalTableForApi', () => {
     const trimmed = trimEvalTableForApi(table, { maxStringLength: 32 });
     const cell = trimmed.body[0].outputs[0];
 
-    expect(trimmed.head.prompts[0].raw).toBe(huge);
+    expect(trimmed.head.prompts[0].raw).toBe(`[content omitted: ${huge.length} characters]`);
     expect(trimmed.body[0].vars).toEqual([`[content omitted: ${huge.length} characters]`, 'small']);
     expect(trimmed.body[0].test.vars).toBeUndefined();
     expect(trimmed.body[0].test.assert).toEqual([{ type: 'contains' }]);

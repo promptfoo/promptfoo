@@ -558,6 +558,36 @@ describe('DownloadMenu', () => {
     expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output');
   });
 
+  it('exports a row when a later base prompt fails', async () => {
+    const config = { ...mockConfig, prompts: ['first', 'second'] };
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { vars: [], prompts: [{}, {}] },
+        body: [
+          {
+            test: { description: 'failed test' },
+            vars: [],
+            outputs: [
+              { id: 'passed-output', pass: true },
+              { id: 'failed-output', pass: false },
+            ],
+          },
+        ],
+      },
+      config,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({ config });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({ testCase: { description: 'failed test' } });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download Failed Tests'));
+
+    await waitFor(() =>
+      expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output'),
+    );
+  });
+
   it('does not substitute raw config tests when failed-test detail hydration fails', async () => {
     const fullConfig = {
       ...mockConfig,

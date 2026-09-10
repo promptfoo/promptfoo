@@ -1133,7 +1133,7 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
-  const displayPrompt = cellDetail?.prompt || output.prompt || (detailLoading ? 'Loading...' : '');
+  const displayPrompt = cellDetail?.prompt || output.prompt || '';
   const detailResponse = cellDetail?.response as ProviderResponse | undefined;
   const detailVariables = (cellDetail?.testCase?.vars as Vars | undefined) ?? output.testCase?.vars;
   const detailGradingResult = cellDetail?.gradingResult as GradingResult | undefined;
@@ -1292,7 +1292,7 @@ function renderOutputActions({
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
-              prompt={displayPrompt || detailError || ''}
+              prompt={displayPrompt}
               provider={output.provider}
               gradingResults={getDialogGradingResults(gradingResult)}
               output={cellDetail?.text || text}
@@ -1314,6 +1314,7 @@ function renderOutputActions({
               onReplay={replayEvaluation}
               fetchTraces={fetchTraces}
               cloudConfig={cloudConfig}
+              readOnly={!displayPrompt}
             />
           )}
         </>

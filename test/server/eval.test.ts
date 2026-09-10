@@ -195,8 +195,13 @@ describe('eval routes', () => {
       invariant(result.id, 'Result ID is required');
       const storedComponent = result.gradingResult?.componentResults?.[0];
       invariant(storedComponent, 'Stored grader component is required');
+      const storedResult = await EvalResult.findById(result.id);
+      invariant(storedResult?.gradingResult, 'Stored grading result is required');
+      storedResult.gradingResult.comment = 'full stored comment';
+      await storedResult.save();
 
       const payload = createManualRatingPayload(result, false);
+      payload.comment = '[content omitted: 120000 characters]';
       payload.componentResults[0] = {
         ...storedComponent,
         reason: '[content omitted: 120000 characters]',
@@ -206,6 +211,7 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(200);
       const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.comment).toBe('full stored comment');
       expect(updatedResult?.gradingResult?.componentResults?.[0]).toEqual(storedComponent);
       expect(updatedResult?.gradingResult?.componentResults?.[1]?.assertion?.type).toBe('human');
     });

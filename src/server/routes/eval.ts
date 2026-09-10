@@ -770,12 +770,17 @@ evalRouter.post(
           gradingResult.reason.startsWith('[content omitted:')
             ? stored.reason
             : gradingResult.reason;
+        const comment =
+          typeof gradingResult.comment === 'string' &&
+          gradingResult.comment.startsWith('[content omitted:')
+            ? stored.comment
+            : gradingResult.comment;
         gradingResult = {
           ...stored,
           pass: gradingResult.pass,
           score: gradingResult.score,
           reason,
-          comment: gradingResult.comment,
+          comment,
           componentResults: [
             ...(stored.componentResults ?? []).filter(
               (component) => component.assertion?.type !== HUMAN_ASSERTION_TYPE,

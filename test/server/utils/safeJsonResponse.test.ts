@@ -27,4 +27,10 @@ describe('stripOversizedStrings', () => {
 
     expect(JSON.stringify(stripOversizedStrings(value))).toContain('excessive nesting');
   });
+
+  it('bounds aggregate retained string content', () => {
+    expect(
+      stripOversizedStrings(['1234', '5678'], { maxStringLength: 10, maxTotalStringLength: 6 }),
+    ).toEqual(['1234', '[content omitted: 4 characters]']);
+  });
 });

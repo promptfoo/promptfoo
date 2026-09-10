@@ -4,6 +4,7 @@ const JSON_STRING_LENGTH_ERROR_RE =
   /Invalid string length|Cannot create a string longer than|ERR_STRING_TOO_LONG/i;
 
 export const DEFAULT_OVERSIZED_STRING_LIMIT = 100_000;
+export const DEFAULT_TOTAL_STRING_LIMIT = 10_000_000;
 
 export type OversizedStringStats = {
   oversizedStrings: number;
@@ -26,20 +27,27 @@ export function stripOversizedStrings<T>(
   value: T,
   {
     maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT,
+    maxTotalStringLength = DEFAULT_TOTAL_STRING_LIMIT,
     stats,
   }: {
     maxStringLength?: number;
+    maxTotalStringLength?: number;
     stats?: OversizedStringStats;
   } = {},
 ): T {
   const seen = new WeakSet<object>();
+  let totalStringLength = 0;
 
   function stripValue(current: unknown, depth = 0): unknown {
     if (depth > 512) {
       return '[content omitted: excessive nesting]';
     }
     if (typeof current === 'string') {
-      if (current.length <= maxStringLength) {
+      if (
+        current.length <= maxStringLength &&
+        totalStringLength + current.length <= maxTotalStringLength
+      ) {
+        totalStringLength += current.length;
         return current;
       }
       if (stats) {
