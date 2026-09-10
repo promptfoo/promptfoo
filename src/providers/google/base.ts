@@ -58,11 +58,13 @@ interface PendingFunctionCall {
   argsText: string;
 }
 
-const MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_DEPTH = 64;
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS = 10_000;
 
 function setPartialFunctionArg(
   args: Record<string, unknown>,
   partialArg: StreamedPartialArg,
+  budget: { arraySlots: number },
 ): boolean {
   const path = partialArg.jsonPath;
   if (!path || !/^\$(?:\.[\w$ -]+|\[\d+\]|\['[^'\\\]]*'\]|\["[^"\\\]]*"\])+$/.test(path)) {
@@ -74,11 +76,12 @@ function setPartialFunctionArg(
     (match) => (match[2] === undefined ? (match[1] ?? match[3] ?? match[4]) : Number(match[2])),
   );
   if (
+    segments.length > MAX_STREAMED_FUNCTION_ARG_DEPTH ||
     segments.some(
       (segment) =>
         ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
         (typeof segment === 'number' &&
-          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)),
+          (!Number.isSafeInteger(segment) || segment >= MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS)),
     )
   ) {
     return false;
@@ -98,20 +101,32 @@ function setPartialFunctionArg(
   }
 
   let current: Record<string | number, unknown> = args;
-  for (let index = 0; index < segments.length - 1; index++) {
+  for (let index = 0; index < segments.length; index++) {
     const segment = segments[index];
-    const nextSegment = segments[index + 1];
+    if (Array.isArray(current)) {
+      // Reject special properties such as length and quoted indices that bypass numeric validation.
+      if (typeof segment !== 'number') {
+        return false;
+      }
+      // JSON.stringify materializes sparse holes. Bound expansion across the entire response.
+      const addedSlots = Math.max(0, segment + 1 - current.length);
+      if (budget.arraySlots + addedSlots > MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS) {
+        return false;
+      }
+      budget.arraySlots += addedSlots;
+    }
     const existing = current[segment];
+    if (index === segments.length - 1) {
+      current[segment] =
+        typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
+      return true;
+    }
     if (!existing || typeof existing !== 'object') {
-      current[segment] = typeof nextSegment === 'number' ? [] : {};
+      current[segment] = typeof segments[index + 1] === 'number' ? [] : {};
     }
     current = current[segment] as Record<string | number, unknown>;
   }
 
-  const lastSegment = segments[segments.length - 1];
-  const existing = current[lastSegment];
-  current[lastSegment] =
-    typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
   return true;
 }
 
@@ -162,6 +177,7 @@ function finalizeStreamedFunctionCall(
 function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
   const completed: StreamedFunctionCall[] = [];
   const pendingById = new Map<string, PendingFunctionCall>();
+  const budget = { arraySlots: 0 };
   let pendingUnnamed: PendingFunctionCall | undefined;
 
   for (const part of parts) {
@@ -190,7 +206,7 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
       mergeStreamedFunctionArgs(pending, functionCall.args);
     }
     for (const partialArg of functionCall.partialArgs ?? []) {
-      if (!setPartialFunctionArg(pending.args, partialArg)) {
+      if (!setPartialFunctionArg(pending.args, partialArg, budget)) {
         return undefined;
       }
     }
@@ -643,7 +659,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         : output;
     }
 
-    const preparedCalls: Array<{ functionName: string; args: string }> = [];
+    const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
       if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
@@ -654,7 +670,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           typeof functionCall.args === 'string'
             ? JSON.parse(functionCall.args)
             : (functionCall.args ?? {});
-        preparedCalls.push({ functionName, args: JSON.stringify(args) });
+        preparedCalls.push({ functionName, args: JSON.stringify(args), callId: functionCall.id });
       } catch {
         return output;
       }
@@ -665,9 +681,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     const results = [];
-    for (const { functionName, args } of preparedCalls) {
+    for (const { functionName, args, callId } of preparedCalls) {
       try {
-        results.push(await this.executeFunctionCallback(functionName, args, config));
+        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch {
         // executeFunctionCallback already logs the error. Preserve the original
         // model output when a callback cannot be executed.
