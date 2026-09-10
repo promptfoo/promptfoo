@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  applyRuntimeTransforms,
-  RUNTIME_TRANSFORM_TOKEN_USAGE_KEY,
-} from '../../../src/redteam/shared/runtimeTransform';
+import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
@@ -98,6 +95,39 @@ describe('runtimeTransform', () => {
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
     });
 
+    it('preserves auxiliary model usage without persisting internal accounting metadata', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            vars: { ...testCase.vars, input: 'transformed' },
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: {
+                total: 18,
+                prompt: 12,
+                completion: 6,
+                numRequests: 2,
+                completionDetails: { reasoning: 3 },
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms('hello', 'input', ['tracked'], [trackedStrategy]);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 2,
+        completionDetails: { reasoning: 3 },
+      });
+      expect(result.metadata).not.toHaveProperty('runtimeTokenUsage');
+    });
+
     it('should apply multiple transform layers in order', async () => {
       // First base64, then the second strategy would transform the base64 result
       // But for this test, let's just verify both are called
@@ -112,136 +142,6 @@ describe('runtimeTransform', () => {
 
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
       expect(mockSecondStrategy.action).toHaveBeenCalledTimes(1);
-    });
-
-    it('should preserve auxiliary layer usage without exposing the private carrier metadata', async () => {
-      const tokenStrategy: Strategy = {
-        id: 'token-layer',
-        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-          testCases.map((tc) => ({
-            ...tc,
-            vars: {
-              ...tc.vars,
-              input: 'layered prompt',
-            },
-            metadata: {
-              ...tc.metadata,
-              [RUNTIME_TRANSFORM_TOKEN_USAGE_KEY]: {
-                total: 9,
-                prompt: 4,
-                completion: 5,
-                numRequests: 1,
-              },
-            },
-          })),
-        ),
-      };
-
-      const result = await applyRuntimeTransforms(
-        'hello',
-        'input',
-        ['token-layer'],
-        [tokenStrategy],
-      );
-
-      expect(result.tokenUsage).toMatchObject({
-        total: 9,
-        prompt: 4,
-        completion: 5,
-        numRequests: 0,
-      });
-      expect(result.metadata).not.toHaveProperty(RUNTIME_TRANSFORM_TOKEN_USAGE_KEY);
-    });
-
-    it('should preserve incremental providerTokenUsage from successful layers', async () => {
-      const firstTokenLayer: Strategy = {
-        id: 'first-token-layer',
-        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-          testCases.map((tc) => ({
-            ...tc,
-            metadata: {
-              ...tc.metadata,
-              providerTokenUsage: {
-                total: 5,
-                prompt: 3,
-                completion: 2,
-                numRequests: 1,
-              },
-            },
-          })),
-        ),
-      };
-      const secondTokenLayer: Strategy = {
-        id: 'second-token-layer',
-        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-          testCases.map((tc) => ({
-            ...tc,
-            metadata: {
-              ...tc.metadata,
-              providerTokenUsage: {
-                total: 12,
-                prompt: 7,
-                completion: 5,
-                numRequests: 2,
-              },
-            },
-          })),
-        ),
-      };
-
-      const result = await applyRuntimeTransforms(
-        'hello',
-        'input',
-        ['first-token-layer', 'second-token-layer'],
-        [firstTokenLayer, secondTokenLayer],
-      );
-
-      expect(result.tokenUsage).toMatchObject({
-        total: 12,
-        prompt: 7,
-        completion: 5,
-        numRequests: 0,
-      });
-      expect(result.metadata?.providerTokenUsage).toMatchObject({
-        total: 12,
-        prompt: 7,
-        completion: 5,
-        numRequests: 2,
-      });
-    });
-
-    it('keeps independent fan-out usage after subtracting the carrier ledger', async () => {
-      const firstLayer: Strategy = {
-        id: 'first',
-        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-          testCases.map((testCase) => ({
-            ...testCase,
-            metadata: { providerTokenUsage: { total: 5, prompt: 3, completion: 2 } },
-          })),
-        ),
-      };
-      const fanOutLayer: Strategy = {
-        id: 'fan-out',
-        action: vi.fn(async ([testCase]: TestCaseWithPlugin[]) => [
-          {
-            ...testCase,
-            metadata: { providerTokenUsage: { total: 12, prompt: 7, completion: 5 } },
-          },
-          {
-            ...testCase,
-            metadata: { providerTokenUsage: { total: 7, prompt: 4, completion: 3 } },
-          },
-        ]),
-      };
-
-      const result = await applyRuntimeTransforms(
-        'hello',
-        'input',
-        ['first', 'fan-out'],
-        [firstLayer, fanOutLayer],
-      );
-
-      expect(result.tokenUsage).toMatchObject({ total: 19, prompt: 11, completion: 8 });
     });
 
     it('should extract audio data from data URL', async () => {
@@ -348,34 +248,39 @@ describe('runtimeTransform', () => {
       expect(result.originalPrompt).toBe('hello');
     });
 
-    it('should preserve failed layer usage when a transform throws it', async () => {
-      const failingStrategy: Strategy = {
-        id: 'failing-with-usage',
-        action: vi.fn(async () => {
-          throw Object.assign(new Error('Transform failed'), {
-            tokenUsage: {
-              total: 11,
-              prompt: 7,
-              completion: 4,
-              numRequests: 1,
+    it('preserves prior model usage when a later transform fails', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
             },
-          });
+          })),
+        ),
+      };
+      const failingStrategy: Strategy = {
+        id: 'failing',
+        action: vi.fn(async () => {
+          throw new Error('Transform failed');
         }),
       };
 
       const result = await applyRuntimeTransforms(
         'hello',
         'input',
-        ['failing-with-usage'],
-        [failingStrategy],
+        ['tracked', 'failing'],
+        [trackedStrategy, failingStrategy],
       );
 
-      expect(result.error).toContain('Transform failing-with-usage failed');
+      expect(result.error).toContain('Transform failing failed');
       expect(result.tokenUsage).toMatchObject({
-        total: 11,
-        prompt: 7,
-        completion: 4,
-        numRequests: 0,
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 1,
       });
     });
 
@@ -391,12 +296,9 @@ describe('runtimeTransform', () => {
       };
 
       const strategies = [...mockStrategies, inspectingStrategy];
-      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies, {
-        originalTestCaseId: 'layer-row-1',
-      });
+      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies);
 
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
-      expect(capturedTestCase?.metadata?.originalTestCaseId).toBe('layer-row-1');
     });
 
     it('should handle different inject variable names', async () => {

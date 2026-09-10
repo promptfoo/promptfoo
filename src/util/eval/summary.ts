@@ -40,7 +40,7 @@ export interface EvalSummaryParams {
   /** Maximum concurrent API calls during evaluation */
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
-  tracker?: TokenUsageTracker;
+  tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
 }
@@ -49,6 +49,10 @@ type TokenUsageBreakdown = Pick<
   TokenUsage,
   'prompt' | 'completion' | 'total' | 'cached' | 'numRequests' | 'completionDetails'
 >;
+
+function getTokenUsageTotal(usage: TokenUsageBreakdown | undefined): number {
+  return usage?.total ?? (usage?.prompt ?? 0) + (usage?.completion ?? 0);
+}
 
 function getCompletionMessage({
   completionType,
@@ -163,25 +167,42 @@ function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] 
   return parts;
 }
 
+function getGradingUsageLine(assertions: TokenUsage['assertions']): string | undefined {
+  const total = getTokenUsageTotal(assertions);
+  if (!assertions || (total === 0 && (assertions.cached || 0) === 0)) {
+    return undefined;
+  }
+
+  const details = buildUsageDetails(assertions, total);
+  return `  ${chalk.gray('Grading:')} ${chalk.white(total.toLocaleString())} (${details.join(', ')})`;
+}
+
 function getTokenUsageLines(
   tokenUsage: TokenUsage,
   isRedteam: boolean,
-  tracker: TokenUsageTracker | undefined,
+  tracker: TokenUsageTracker,
 ): string[] {
-  const hasEvalTokens =
-    (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
-  const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
-  const hasProbeCount = isRedteam && tokenUsage.numRequests !== undefined;
+  const primaryTokens = getTokenUsageTotal(tokenUsage);
+  const gradingUsageLine = getGradingUsageLine(tokenUsage.assertions);
+  const hasGradingTokens = gradingUsageLine !== undefined;
+  const attackerTokens = getTokenUsageTotal(tokenUsage.attacker);
+  const generationTokens = getTokenUsageTotal(tokenUsage.generation);
+  const generationRequests = tokenUsage.generation?.numRequests ?? 0;
 
-  if (!hasEvalTokens && !hasGradingTokens && !hasProbeCount) {
+  if (
+    primaryTokens === 0 &&
+    !hasGradingTokens &&
+    attackerTokens === 0 &&
+    generationTokens === 0 &&
+    generationRequests === 0
+  ) {
     return [];
   }
 
-  const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
   const evalTokens = {
     prompt: tokenUsage.prompt || 0,
     completion: tokenUsage.completion || 0,
-    total: tokenUsage.total || combinedTotal,
+    total: primaryTokens,
     cached: tokenUsage.cached || 0,
     numRequests: tokenUsage.numRequests || 0,
     completionDetails: tokenUsage.completionDetails || {
@@ -191,49 +212,85 @@ function getTokenUsageLines(
     },
   };
 
-  const lines =
-    hasEvalTokens || hasGradingTokens
-      ? [
-          `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
-            (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
-          )}`,
-        ]
-      : [];
+  const lines = [
+    `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
+      (
+        evalTokens.total +
+        attackerTokens +
+        getTokenUsageTotal(tokenUsage.assertions) +
+        generationTokens
+      ).toLocaleString(),
+    )}`,
+  ];
 
-  if (hasProbeCount) {
+  if (isRedteam && tokenUsage.numRequests) {
     lines.push(
-      `  ${chalk.gray('Probes:')} ${chalk.white(evalTokens.numRequests.toLocaleString())}`,
+      `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
     );
   }
 
   if (evalTokens.total > 0) {
     const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+    const primaryUsageLabel = isRedteam ? 'Target' : 'Provider';
     lines.push(
-      `  ${chalk.gray(isRedteam ? 'Non-grading:' : 'Eval:')} ${chalk.white(
+      `  ${chalk.gray(`${primaryUsageLabel}:`)} ${chalk.white(
         evalTokens.total.toLocaleString(),
       )} (${evalParts.join(', ')})`,
     );
   }
 
-  if (tokenUsage.assertions?.total && tokenUsage.assertions.total > 0) {
-    const gradingParts = buildUsageDetails(tokenUsage.assertions, tokenUsage.assertions.total);
+  if (tokenUsage.generation && generationTokens > 0) {
+    const generationParts = buildUsageDetails(tokenUsage.generation, generationTokens);
     lines.push(
-      `  ${chalk.gray('Grading:')} ${chalk.white(
-        tokenUsage.assertions.total.toLocaleString(),
-      )} (${gradingParts.join(', ')})`,
+      `  ${chalk.gray('Generation:')} ${chalk.white(generationTokens.toLocaleString())} (${generationParts.join(', ')})`,
     );
+  } else if (generationRequests > 0) {
+    const requestLabel = generationRequests === 1 ? 'request' : 'requests';
+    lines.push(
+      `  ${chalk.gray('Generation:')} token usage unavailable (${generationRequests.toLocaleString()} ${requestLabel})`,
+    );
+  }
+
+  if (tokenUsage.attacker && attackerTokens > 0) {
+    const attackerParts = buildUsageDetails(tokenUsage.attacker, attackerTokens);
+    lines.push(
+      `  ${chalk.gray('Attacker:')} ${chalk.white(attackerTokens.toLocaleString())} (${attackerParts.join(', ')})`,
+    );
+  }
+
+  if (gradingUsageLine) {
+    lines.push(gradingUsageLine);
+  }
+
+  const incurredUsage = tokenUsage.incurredTokenUsage;
+  if (incurredUsage) {
+    const incurredTokens =
+      getTokenUsageTotal(incurredUsage) +
+      getTokenUsageTotal(incurredUsage.attacker) +
+      getTokenUsageTotal(incurredUsage.assertions) +
+      getTokenUsageTotal(incurredUsage.generation);
+    const evaluationTokens =
+      evalTokens.total +
+      attackerTokens +
+      getTokenUsageTotal(tokenUsage.assertions) +
+      generationTokens;
+    const cachedSavings = Math.max(evaluationTokens - incurredTokens, 0);
+
+    if (cachedSavings > 0) {
+      lines.push(
+        `${chalk.bold('Incurred Tokens:')} ${chalk.white.bold(incurredTokens.toLocaleString())}`,
+        `  ${chalk.gray('Cached Savings:')} ${chalk.white(cachedSavings.toLocaleString())}`,
+        `  ${chalk.gray('Actual Target Requests:')} ${chalk.white((incurredUsage.numRequests ?? 0).toLocaleString())}`,
+      );
+    }
   }
 
   lines.push(...getProviderUsageLines(tracker));
   return lines;
 }
 
-function getProviderUsageLines(tracker: TokenUsageTracker | undefined): string[] {
-  if (!tracker) {
-    return [];
-  }
-
-  const providerIds = tracker.getProviderIds() ?? [];
+function getProviderUsageLines(tracker: TokenUsageTracker): string[] {
+  const providerIds = tracker.getProviderIds();
   if (providerIds.length <= 1) {
     return [];
   }

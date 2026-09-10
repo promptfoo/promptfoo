@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { normalizeMatcherResponseTokenUsage, tryParse } from './shared';
+import { tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -76,17 +76,18 @@ export async function matchesSearchRubric(
 
   // Load the web search rubric prompt
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_WEB_SEARCH_PROMPT);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+  const templateVars = {
+    ...(vars || {}),
     output: tryParse(llmOutput),
     rubric,
-    ...(vars || {}),
-  });
+  };
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const resp = await callProviderWithContext(
     searchProvider,
     prompt,
     'search-rubric',
-    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    templateVars,
     providerCallContext,
   );
 
@@ -95,7 +96,7 @@ export async function matchesSearchRubric(
       pass: false,
       score: 0,
       reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
+      tokensUsed: resp.tokenUsage,
       assertion,
     };
   }
@@ -120,7 +121,7 @@ export async function matchesSearchRubric(
       pass,
       score,
       reason: result.reason || 'No reason provided',
-      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
+      tokensUsed: resp.tokenUsage,
       assertion,
       metadata: {
         searchResults: result.searchResults || [],
@@ -139,7 +140,7 @@ export async function matchesSearchRubric(
       pass,
       score: pass ? 1 : 0,
       reason: resp.output as string,
-      tokensUsed: normalizeMatcherResponseTokenUsage(resp),
+      tokensUsed: resp.tokenUsage,
       assertion,
     };
   }

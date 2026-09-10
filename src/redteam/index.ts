@@ -4,7 +4,6 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -12,6 +11,7 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -35,8 +35,9 @@ import {
   TELECOM_PLUGINS,
 } from './constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
-import { extractEntitiesWithMetadata } from './extraction/entities';
-import { extractSystemPurposeWithMetadata } from './extraction/purpose';
+import { extractEntities } from './extraction/entities';
+import { extractSystemPurpose } from './extraction/purpose';
+import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -53,21 +54,15 @@ import {
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
+import { pluginMatchesStrategyTargets } from './strategies/util';
 import {
-  attachProviderTokenUsage,
-  detachProviderTokenUsage,
-  getGenerationErrorTokenUsage,
-  mergeProviderTokenUsage,
-  pluginMatchesStrategyTargets,
-} from './strategies/util';
-import {
-  extractGoalFromPromptWithUsage,
+  extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
+import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
   Policy,
@@ -124,7 +119,6 @@ async function rematerializeStrategyInputVars(
   materializationIndex: number,
 ): Promise<{
   inputMaterialization: Record<string, unknown> | undefined;
-  providerTokenUsage: TokenUsage | undefined;
   vars: TestCase['vars'];
 }> {
   const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
@@ -137,7 +131,6 @@ async function rematerializeStrategyInputVars(
   if (!inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
     return {
       inputMaterialization,
-      providerTokenUsage: testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
       vars: testCase.vars,
     };
   }
@@ -154,7 +147,6 @@ async function rematerializeStrategyInputVars(
   if (alreadyMaterialized && !promptChangedSinceMaterialization) {
     return {
       inputMaterialization,
-      providerTokenUsage: testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
       vars: testCase.vars,
     };
   }
@@ -179,71 +171,17 @@ async function rematerializeStrategyInputVars(
             ...materializedVars.metadata,
           }
         : inputMaterialization,
-      providerTokenUsage: mergeProviderTokenUsage(
-        testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
-        materializedVars.tokenUsage,
-      ),
       vars: {
         ...testCase.vars,
         ...materializedVars.vars,
       },
     };
-  } catch (error) {
+  } catch {
     return {
       inputMaterialization,
-      providerTokenUsage: mergeProviderTokenUsage(
-        testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
-        getGenerationErrorTokenUsage(error),
-      ),
       vars: testCase.vars,
     };
   }
-}
-
-function rethrowLanguageAbortWithTokenUsage<
-  T extends { tests: TestCase[]; filteredTokenUsage?: TokenUsage },
->(results: PromiseSettledResult<T>[], previousTokenUsage: TokenUsage | undefined): void {
-  const abortResult = results.find(
-    (result) =>
-      result.status === 'rejected' &&
-      result.reason instanceof Error &&
-      result.reason.name === 'AbortError',
-  );
-  if (!abortResult || abortResult.status !== 'rejected') {
-    return;
-  }
-
-  let tokenUsage = previousTokenUsage;
-  for (const result of results) {
-    tokenUsage = mergeProviderTokenUsage(
-      tokenUsage,
-      result.status === 'fulfilled'
-        ? mergeProviderTokenUsage(
-            detachProviderTokenUsage(result.value.tests).tokenUsage,
-            result.value.filteredTokenUsage,
-          )
-        : getGenerationErrorTokenUsage(result.reason),
-    );
-  }
-  if (tokenUsage) {
-    Object.assign(abortResult.reason, { tokenUsage });
-  }
-  throw abortResult.reason;
-}
-
-function rethrowWithGenerationTokenUsage(
-  error: unknown,
-  previousTokenUsage: TokenUsage | undefined,
-): never {
-  const tokenUsage = mergeProviderTokenUsage(
-    previousTokenUsage,
-    getGenerationErrorTokenUsage(error),
-  );
-  if (tokenUsage) {
-    const errorCarrier = error && typeof error === 'object' ? error : new Error(String(error));
-    throw Object.assign(errorCarrier, { tokenUsage });
-  }
-  throw error;
 }
 
 export const MAX_MAX_CONCURRENCY = 20;
@@ -404,7 +342,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
       }
 
       if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+        config[key] = loadYaml(fs.readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.json')) {
         config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else {
@@ -570,25 +508,6 @@ function filterOversizedTestCases<T extends TestCase>(
   });
 }
 
-function filterPluginTestCasesPreservingUsage<T extends TestCase>(
-  testCases: T[],
-  injectVar: string,
-  sourceLabel: string,
-  maxCharsPerMessage?: number,
-): { testCases: T[]; filteredTokenUsage: TokenUsage | undefined } {
-  const { testCases: testCasesWithoutUsage, tokenUsage } = detachProviderTokenUsage(testCases);
-  const filteredTestCases = filterOversizedTestCases(
-    testCasesWithoutUsage,
-    injectVar,
-    sourceLabel,
-    maxCharsPerMessage,
-  );
-  return {
-    testCases: attachProviderTokenUsage(filteredTestCases, tokenUsage),
-    filteredTokenUsage: filteredTestCases.length === 0 ? tokenUsage : undefined,
-  };
-}
-
 /**
  * Adds comprehensive metadata to plugin test cases including language, plugin info, and severity.
  * @param test - The test case to add metadata to.
@@ -676,21 +595,18 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
-  provider: ApiProvider,
+  providerSelection: RedteamProviderSelection,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
+  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
-  tokenUsage: TokenUsage | undefined;
-  error: unknown;
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
-  let tokenUsage: TokenUsage | undefined;
-  let firstError: unknown;
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
@@ -755,56 +671,29 @@ async function applyStrategies(
       }
     }
 
-    let strategyTestCases: (TestCase | undefined)[];
-    try {
-      strategyTestCases = await strategyAction(
-        testCasesToProcess,
-        injectVar,
-        {
-          ...(strategy.config || {}),
-          ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-          // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
-          redteamProvider: cliState.config?.redteam?.provider,
-          excludeTargetOutputFromAgenticAttackGeneration,
-          ...remoteGenerationContextPayload(redteamGenerationContext),
-        },
-        strategy.id,
-      );
-    } catch (error) {
-      const errorTokenUsage = getGenerationErrorTokenUsage(error);
-      const emittedResultTokenUsage = detachProviderTokenUsage(newTestCases).tokenUsage;
-      const accumulatedTokenUsage = mergeProviderTokenUsage(tokenUsage, emittedResultTokenUsage);
-      if (error instanceof Error && error.name === 'AbortError') {
-        const abortTokenUsage = mergeProviderTokenUsage(accumulatedTokenUsage, errorTokenUsage);
-        if (abortTokenUsage) {
-          Object.assign(error, { tokenUsage: abortTokenUsage });
-        }
-        throw error;
-      }
-      if (!errorTokenUsage) {
-        if (accumulatedTokenUsage) {
-          const errorCarrier =
-            error && typeof error === 'object' ? error : new Error(String(error));
-          throw Object.assign(errorCarrier, { tokenUsage: accumulatedTokenUsage });
-        }
-        throw error;
-      }
-      firstError ??= error;
-      tokenUsage = mergeProviderTokenUsage(tokenUsage, errorTokenUsage);
-      logger.warn(`Strategy ${strategy.id} failed after reporting provider usage`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      strategyTestCases = [];
-    }
+    const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
+      testCasesToProcess,
+      injectVar,
+      {
+        ...(strategy.config || {}),
+        ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
+        excludeTargetOutputFromAgenticAttackGeneration,
+        ...remoteGenerationContextPayload(redteamGenerationContext),
+      },
+      strategy.id,
+      {
+        // Keep every local strategy phase on the provider already selected for this synthesis run.
+        // The source tells strategies whether the choice was explicit or an implicit default.
+        generationProviderSelection: providerSelection,
+        // Specialized local providers still need to contribute to generation usage totals.
+        wrapGenerationProvider,
+      },
+    );
 
     // Filter out null/undefined
-    const filteredStrategyTestCases = strategyTestCases.filter(
+    let resultTestCases = strategyTestCases.filter(
       (t): t is NonNullable<typeof t> => t !== null && t !== undefined,
     );
-    const { testCases: strategyTestCasesWithoutUsage, tokenUsage: emittedStrategyTokenUsage } =
-      detachProviderTokenUsage(filteredStrategyTestCases);
-    tokenUsage = mergeProviderTokenUsage(tokenUsage, emittedStrategyTokenUsage);
-    let resultTestCases = strategyTestCasesWithoutUsage;
 
     // Post-cap safety net for strategies that generate more outputs than inputs (1:N fan-out)
     if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit > 0) {
@@ -826,14 +715,13 @@ async function applyStrategies(
     newTestCases.push(
       ...(await Promise.all(
         resultTestCases.map(async (t, materializationIndex) => {
-          const { inputMaterialization, providerTokenUsage, vars } =
-            await rematerializeStrategyInputVars(
-              t,
-              injectVar,
-              provider,
-              purpose,
-              materializationIndex,
-            );
+          const { inputMaterialization, vars } = await rematerializeStrategyInputVars(
+            t,
+            injectVar,
+            providerSelection.provider,
+            purpose,
+            materializationIndex,
+          );
           const strategyConfig = {
             ...(strategy.config || {}),
             ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
@@ -855,9 +743,6 @@ async function applyStrategies(
               }),
               ...(inputMaterialization && {
                 inputMaterialization,
-              }),
-              ...(providerTokenUsage && {
-                providerTokenUsage,
               }),
               ...(Object.keys(strategyConfig).length > 0 && {
                 strategyConfig,
@@ -945,14 +830,7 @@ async function applyStrategies(
     }
   }
 
-  const { testCases: consolidatedTestCases, tokenUsage: rematerializationTokenUsage } =
-    detachProviderTokenUsage(newTestCases);
-  return {
-    testCases: consolidatedTestCases,
-    strategyResults,
-    tokenUsage: mergeProviderTokenUsage(tokenUsage, rematerializationTokenUsage),
-    error: firstError,
-  };
+  return { testCases: newTestCases, strategyResults };
 }
 
 /**
@@ -1108,6 +986,7 @@ export async function synthesize({
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: TokenUsage;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1196,9 +1075,24 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const redteamProvider = await redteamProviderManager.getProvider({
+  const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+  const redteamProvider = trackGenerationTokenUsage(
+    providerSelection.provider,
+    generationTokenUsage,
+  );
+  const trackedProviderSelection = {
+    ...providerSelection,
+    provider: redteamProvider,
+  };
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1452,45 +1346,24 @@ export async function synthesize({
   } else {
     logger.info('Extracting system purpose...');
   }
-  const purposeExtraction = purposeOverride
-    ? { result: purposeOverride }
-    : await extractSystemPurposeWithMetadata(redteamProvider, prompts, redteamGenerationContext);
-  const purpose = purposeExtraction.result;
+  const purpose =
+    purposeOverride ||
+    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
   } else {
     logger.info('Extracting entities...');
   }
-  const entityExtraction = Array.isArray(entitiesOverride)
-    ? { result: entitiesOverride }
-    : await extractEntitiesWithMetadata(redteamProvider, prompts, redteamGenerationContext).catch(
-        (error) => rethrowWithGenerationTokenUsage(error, purposeExtraction.tokenUsage),
-      );
-  const entities = entityExtraction.result;
-  const extractionTokenUsage = mergeProviderTokenUsage(
-    purposeExtraction.tokenUsage,
-    entityExtraction.tokenUsage,
-  );
+  const entities: string[] = Array.isArray(entitiesOverride)
+    ? entitiesOverride
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
 
   logger.debug(`System purpose: ${purpose}`);
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  let failedPluginError: unknown;
-  let failedPluginTokenUsage: TokenUsage | undefined;
-  let hasConcurrentPluginError = false;
-  let concurrentPluginError: unknown;
-  let additionalConcurrentErrorTokenUsage: TokenUsage | undefined;
-  const getAccumulatedPluginTokenUsage = () =>
-    mergeProviderTokenUsage(
-      extractionTokenUsage,
-      mergeProviderTokenUsage(
-        failedPluginTokenUsage,
-        detachProviderTokenUsage(testCases).tokenUsage,
-      ),
-    );
-  const processPlugin = async (plugin: (typeof plugins)[number]): Promise<void> => {
+  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1555,20 +1428,18 @@ export async function synthesize({
                 testGenerationInstructions,
               ),
             );
-            const { testCases: constrainedTests, filteredTokenUsage } =
-              filterPluginTestCasesPreservingUsage(
-                testsWithMetadata,
-                injectVar,
-                `Plugin ${plugin.id}`,
-                maxCharsPerMessage,
-              );
+            const constrainedTests = filterOversizedTestCases(
+              testsWithMetadata,
+              injectVar,
+              `Plugin ${plugin.id}`,
+              maxCharsPerMessage,
+            );
 
             return {
               lang: langKey,
               tests: constrainedTests,
               requested: plugin.numTests,
               generated: constrainedTests.length,
-              filteredTokenUsage,
             };
           }
 
@@ -1586,30 +1457,16 @@ export async function synthesize({
       });
 
       const languageResults = await Promise.allSettled(languagePromises);
-      rethrowLanguageAbortWithTokenUsage(languageResults, undefined);
 
       for (const [index, result] of languageResults.entries()) {
         if (result.status === 'fulfilled') {
-          const { filteredTokenUsage, lang, tests, requested, generated } = result.value;
+          const { lang, tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
-          if (filteredTokenUsage) {
-            failedPluginTokenUsage = mergeProviderTokenUsage(
-              failedPluginTokenUsage,
-              filteredTokenUsage,
-            );
-            failedPluginError ??= new Error(
-              `Plugin ${plugin.id} reported provider usage but produced no test cases after filtering`,
-            );
-          }
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
           const lang = languages[index];
-          const errorTokenUsage = getGenerationErrorTokenUsage(result.reason);
-          failedPluginTokenUsage = mergeProviderTokenUsage(failedPluginTokenUsage, errorTokenUsage);
-          if (errorTokenUsage) {
-            failedPluginError ??= result.reason;
-          }
+          // Handle rejected promise
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
@@ -1626,9 +1483,6 @@ export async function synthesize({
       } else {
         // Metadata already added in promise resolution above (including pluginId)
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
-        // Publish generated rows before goal extraction so concurrent cancellation retains their
-        // completed provider usage. Goal metadata mutates the same row objects in place.
-        testCases.push(...testCasesWithMetadata);
 
         // Extract goal for this plugin's tests (only needed for agentic strategies)
         if (needsGoalExtraction) {
@@ -1640,22 +1494,21 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPromptWithUsage(
+            const extractedGoal = await extractGoalFromPrompt(
               prompt,
               purpose,
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
-            (testCase.metadata as any).goal = extractedGoal.goal;
-            if (extractedGoal.tokenUsage) {
-              (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(
-                testCase.metadata.providerTokenUsage as TokenUsage | undefined,
-                extractedGoal.tokenUsage,
-              );
-            }
+
+            (testCase.metadata as any).goal = extractedGoal;
           }
         }
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithMetadata);
       }
 
       if (showProgressBar) {
@@ -1730,69 +1583,45 @@ export async function synthesize({
           const customTests = await customPlugin.generateTests(plugin.numTests, delay);
 
           // Add metadata to each test case
-          const { testCases: testCasesWithMetadata, filteredTokenUsage } =
-            filterPluginTestCasesPreservingUsage(
-              customTests.map((t) =>
-                addLanguageToPluginMetadata(
-                  t,
-                  lang,
-                  plugin,
-                  maxCharsPerMessage,
-                  testGenerationInstructions,
-                ),
+          const testCasesWithMetadata = filterOversizedTestCases(
+            customTests.map((t) =>
+              addLanguageToPluginMetadata(
+                t,
+                lang,
+                plugin,
+                maxCharsPerMessage,
+                testGenerationInstructions,
               ),
-              injectVar,
-              `Custom plugin ${plugin.id}`,
-              maxCharsPerMessage,
-            );
+            ),
+            injectVar,
+            `Custom plugin ${plugin.id}`,
+            maxCharsPerMessage,
+          );
 
           return {
             lang,
             tests: testCasesWithMetadata as TestCaseWithPlugin[],
             requested: plugin.numTests,
             generated: testCasesWithMetadata.length,
-            filteredTokenUsage,
           };
         });
 
         const languageResults = await Promise.allSettled(languagePromises);
-        rethrowLanguageAbortWithTokenUsage(languageResults, undefined);
 
         for (const [index, result] of languageResults.entries()) {
           if (result.status === 'fulfilled') {
-            const { filteredTokenUsage, lang, tests, requested, generated } = result.value;
+            const { lang, tests, requested, generated } = result.value;
 
             allCustomTests.push(...tests);
-            if (filteredTokenUsage) {
-              failedPluginTokenUsage = mergeProviderTokenUsage(
-                failedPluginTokenUsage,
-                filteredTokenUsage,
-              );
-              failedPluginError ??= new Error(
-                `Custom plugin ${plugin.id} reported provider usage but produced no test cases after filtering`,
-              );
-            }
             resultsPerLanguage[lang || 'default'] = { requested, generated };
           } else {
             const lang = languages[index];
-            const errorTokenUsage = getGenerationErrorTokenUsage(result.reason);
-            failedPluginTokenUsage = mergeProviderTokenUsage(
-              failedPluginTokenUsage,
-              errorTokenUsage,
-            );
-            if (errorTokenUsage) {
-              failedPluginError ??= result.reason;
-            }
             logger.warn(
               `[Language Processing] Error generating tests for custom plugin ${plugin.id}: ${result.reason}`,
             );
             resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
           }
         }
-
-        // Publish generated rows before goal extraction so concurrent cancellation retains their
-        // completed provider usage. Goal metadata mutates the same row objects in place.
-        testCases.push(...allCustomTests);
 
         // Extract goal for custom plugin's tests (only needed for agentic strategies)
         if (needsGoalExtraction) {
@@ -1804,22 +1633,21 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPromptWithUsage(
+            const extractedGoal = await extractGoalFromPrompt(
               prompt,
               purpose,
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
-            (testCase.metadata as any).goal = extractedGoal.goal;
-            if (extractedGoal.tokenUsage) {
-              (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(
-                testCase.metadata.providerTokenUsage as TokenUsage | undefined,
-                extractedGoal.tokenUsage,
-              );
-            }
+
+            (testCase.metadata as any).goal = extractedGoal;
           }
         }
+
+        // Add the results to main test cases array
+        testCases.push(...allCustomTests);
 
         logger.debug(`Added ${allCustomTests.length} custom test cases from ${plugin.id}`);
         const baseDisplayId = getPluginDisplayId(plugin);
@@ -1828,10 +1656,7 @@ export async function synthesize({
         if (definedLanguages.length > 1) {
           for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
             const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
-            pluginResults[displayId] = {
-              requested: result.requested,
-              generated: result.generated,
-            };
+            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
           }
         } else {
           pluginResults[baseDisplayId] = {
@@ -1842,14 +1667,6 @@ export async function synthesize({
 
         progressBar?.increment(getExpectedPluginTestCount(plugin, language));
       } catch (e) {
-        if (e instanceof Error && e.name === 'AbortError') {
-          throw e;
-        }
-        const errorTokenUsage = getGenerationErrorTokenUsage(e);
-        failedPluginTokenUsage = mergeProviderTokenUsage(failedPluginTokenUsage, errorTokenUsage);
-        if (errorTokenUsage) {
-          failedPluginError ??= e;
-        }
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         const displayId = getPluginDisplayId(plugin);
         pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
@@ -1860,45 +1677,10 @@ export async function synthesize({
       pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
-  };
-  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-    if (hasConcurrentPluginError) {
-      return;
-    }
-    try {
-      await processPlugin(plugin);
-    } catch (error) {
-      if (hasConcurrentPluginError) {
-        additionalConcurrentErrorTokenUsage = mergeProviderTokenUsage(
-          additionalConcurrentErrorTokenUsage,
-          getGenerationErrorTokenUsage(error),
-        );
-      } else {
-        hasConcurrentPluginError = true;
-        concurrentPluginError = error;
-      }
-    }
   });
-  if (hasConcurrentPluginError) {
-    rethrowWithGenerationTokenUsage(
-      concurrentPluginError,
-      mergeProviderTokenUsage(
-        getAccumulatedPluginTokenUsage(),
-        additionalConcurrentErrorTokenUsage,
-      ),
-    );
-  }
 
-  // Generation usage is shared request-level accounting. Remove it before strategy fan-out and
-  // attach it once after the final basic/strategy rows are combined.
-  const { testCases: pluginTestCases, tokenUsage: emittedPluginTokenUsage } =
-    detachProviderTokenUsage(testCases);
-  const pluginGenerationTokenUsage = mergeProviderTokenUsage(
-    emittedPluginTokenUsage,
-    failedPluginTokenUsage,
-  );
-  let failedStrategyTokenUsage: TokenUsage | undefined;
-  let failedStrategyError: unknown;
+  // After generating plugin test cases but before applying strategies:
+  const pluginTestCases = testCases;
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -1914,31 +1696,17 @@ export async function synthesize({
       targetIds: redteamGenerationContext.providerTargetIds,
       ...retryStrategy.config,
     };
-    const {
-      testCases: retryTestCases,
-      strategyResults: retryResults,
-      tokenUsage: retryTokenUsage,
-      error: retryError,
-    } = await applyStrategies(
+    const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
       pluginTestCases,
       [retryStrategy],
       injectVar,
-      redteamProvider,
+      trackedProviderSelection,
       purpose,
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
-    ).catch((error) =>
-      rethrowWithGenerationTokenUsage(
-        error,
-        mergeProviderTokenUsage(
-          pluginGenerationTokenUsage,
-          mergeProviderTokenUsage(failedStrategyTokenUsage, extractionTokenUsage),
-        ),
-      ),
+      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
     );
-    failedStrategyError ??= retryError;
-    failedStrategyTokenUsage = mergeProviderTokenUsage(failedStrategyTokenUsage, retryTokenUsage);
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
     // Update progress bar with retry strategy tests generated
@@ -1948,46 +1716,23 @@ export async function synthesize({
   }
 
   // Check for abort signal or apply non-basic strategies
-  try {
-    checkAbort();
-  } catch (error) {
-    rethrowWithGenerationTokenUsage(
-      error,
-      mergeProviderTokenUsage(
-        pluginGenerationTokenUsage,
-        mergeProviderTokenUsage(failedStrategyTokenUsage, extractionTokenUsage),
-      ),
-    );
-  }
+  checkAbort();
   const nonBasicStrategies = strategies.filter((s) => !['basic', 'retry'].includes(s.id));
   if (showProgressBar && nonBasicStrategies.length > 0) {
     progressBar?.update({ task: 'Applying strategies' });
   }
-  const {
-    testCases: strategyTestCases,
-    strategyResults: otherStrategyResults,
-    tokenUsage: strategyTokenUsage,
-    error: strategyError,
-  } = await applyStrategies(
-    pluginTestCases,
-    nonBasicStrategies,
-    injectVar,
-    redteamProvider,
-    purpose,
-    excludeTargetOutputFromAgenticAttackGeneration,
-    maxCharsPerMessage,
-    redteamGenerationContext,
-  ).catch((error) =>
-    rethrowWithGenerationTokenUsage(
-      error,
-      mergeProviderTokenUsage(
-        pluginGenerationTokenUsage,
-        mergeProviderTokenUsage(failedStrategyTokenUsage, extractionTokenUsage),
-      ),
-    ),
-  );
-  failedStrategyError ??= strategyError;
-  failedStrategyTokenUsage = mergeProviderTokenUsage(failedStrategyTokenUsage, strategyTokenUsage);
+  const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
+    await applyStrategies(
+      pluginTestCases,
+      nonBasicStrategies,
+      injectVar,
+      trackedProviderSelection,
+      purpose,
+      excludeTargetOutputFromAgenticAttackGeneration,
+      maxCharsPerMessage,
+      redteamGenerationContext,
+      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+    );
 
   Object.assign(strategyResults, otherStrategyResults);
   // Update progress bar with strategy tests generated
@@ -1996,43 +1741,10 @@ export async function synthesize({
   }
 
   // Combine test cases based on basic strategy setting
-  const combinedTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
-  const { testCases: consolidatedTestCases, tokenUsage: postStrategyTokenUsage } =
-    detachProviderTokenUsage(combinedTestCases);
-
-  const sharedGenerationTokenUsage = mergeProviderTokenUsage(
-    pluginGenerationTokenUsage,
-    mergeProviderTokenUsage(
-      postStrategyTokenUsage,
-      mergeProviderTokenUsage(failedStrategyTokenUsage, extractionTokenUsage),
-    ),
-  );
-  const terminalGenerationError =
-    failedStrategyError ??
-    failedPluginError ??
-    (failedStrategyTokenUsage
-      ? new Error('Redteam strategies reported provider usage but produced no test cases')
-      : sharedGenerationTokenUsage
-        ? new Error('Redteam generation reported provider usage but produced no test cases')
-        : undefined);
-  if (
-    consolidatedTestCases.length === 0 &&
-    terminalGenerationError !== null &&
-    typeof terminalGenerationError === 'object'
-  ) {
-    throw Object.assign(terminalGenerationError, { tokenUsage: sharedGenerationTokenUsage });
-  }
-  const finalTestCases = attachProviderTokenUsage(
-    consolidatedTestCases,
-    sharedGenerationTokenUsage,
-  );
+  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
   // Check for abort signal
-  try {
-    checkAbort();
-  } catch (error) {
-    rethrowWithGenerationTokenUsage(error, sharedGenerationTokenUsage);
-  }
+  checkAbort();
 
   progressBar?.update({ task: 'Done.' });
   progressBar?.stop();
@@ -2048,5 +1760,12 @@ export async function synthesize({
     .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
     .map(([pluginId, { requested }]) => ({ pluginId, requested }));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar, failedPlugins };
+  return {
+    purpose,
+    entities,
+    testCases: finalTestCases,
+    injectVar,
+    failedPlugins,
+    generationTokenUsage,
+  };
 }

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
+import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
@@ -115,13 +119,72 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
   });
 
   describe('Token Usage Tracking', () => {
-    it('should accumulate token usage from target provider', async () => {
-      mockFetchWithProxy.mockResolvedValue({
+    it('keeps remote attack generation separate from target tokens and probes', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({
           message: { role: 'assistant', content: 'injected content' },
-          tokenUsage: { prompt: 6, completion: 4, total: 10, numRequests: 1 },
+          tokenUsage: {
+            prompt: 20,
+            completion: 8,
+            total: 28,
+            completionDetails: { reasoning: 3 },
+          },
         }),
       });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'target response',
+        tokenUsage: { prompt: 5, completion: 4, total: 9, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 9,
+        numRequests: 1,
+        attacker: {
+          prompt: 20,
+          completion: 8,
+          total: 28,
+          numRequests: 1,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
+
+    it('retains fresh attacker tokens when the target response is reused from cache', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: { prompt: 20, completion: 8, total: 28, numRequests: 1 },
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'cached target response',
+        cached: true,
+        tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+      const normalizedUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(normalizedUsage, result);
+
+      expect(result.cached).toBe(true);
+      expect(normalizedUsage).toMatchObject({
+        total: 75,
+        cached: 75,
+        numRequests: 1,
+        attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          attacker: { total: 28, prompt: 20, completion: 8, numRequests: 1 },
+        },
+      });
+    });
+
+    it('should accumulate token usage from target provider', async () => {
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
         tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
@@ -135,9 +198,9 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       const result = await provider.callApi('test prompt', context);
 
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage?.prompt).toBe(56);
-      expect(result.tokenUsage?.completion).toBe(29);
-      expect(result.tokenUsage?.total).toBe(85);
+      expect(result.tokenUsage?.prompt).toBe(50);
+      expect(result.tokenUsage?.completion).toBe(25);
+      expect(result.tokenUsage?.total).toBe(75);
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
@@ -175,32 +238,6 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       // Should still have token usage object with numRequests counted
       expect(result.tokenUsage).toBeDefined();
       expect(result.tokenUsage?.numRequests).toBe(1);
-    });
-
-    it('should preserve attack-generation usage when the remote task returns no message', async () => {
-      mockFetchWithProxy.mockResolvedValue({
-        json: async () => ({
-          error: 'Warning',
-          message: 'Skipping generation',
-          tokenUsage: { prompt: 6, completion: 4, total: 10, numRequests: 1 },
-        }),
-      });
-
-      const provider = new AuthoritativeMarkupInjectionProvider({
-        injectVar: 'input',
-      });
-
-      const context = createMockContext(mockTargetProvider);
-      const result = await provider.callApi('test prompt', context);
-
-      expect(result.error).toContain('Invalid response from server');
-      expect(result.tokenUsage).toMatchObject({
-        prompt: 6,
-        completion: 4,
-        total: 10,
-        numRequests: 0,
-      });
-      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
     });
 
     it('should include metadata with redteamFinalPrompt', async () => {

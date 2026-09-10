@@ -123,27 +123,27 @@ describe('poison command', () => {
   });
 
   describe('generatePoisonedDocument', () => {
-    it.each([
-      'PROMPTFOO_DISABLE_REMOTE_GENERATION',
-      'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
-    ])('should not send document contents when %s is enabled', async (flag) => {
-      const restoreEnv = mockProcessEnv({
-        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
-        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
-        [flag]: 'true',
-      });
-      const fetchSpy = vi.spyOn(global, 'fetch');
+    it.each(['PROMPTFOO_DISABLE_REMOTE_GENERATION', 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'])(
+      'should not send document contents when %s is enabled',
+      async (flag) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+          PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+          [flag]: 'true',
+        });
+        const fetchSpy = vi.spyOn(global, 'fetch');
 
-      try {
-        await expect(generatePoisonedDocument('sensitive document')).rejects.toThrow(
-          'RAG poisoning requires remote generation, which has been explicitly disabled',
-        );
-        expect(fetchSpy).not.toHaveBeenCalled();
-      } finally {
-        fetchSpy.mockRestore();
-        restoreEnv();
-      }
-    });
+        try {
+          await expect(generatePoisonedDocument('sensitive document')).rejects.toThrow(
+            'RAG poisoning requires remote generation, which has been explicitly disabled',
+          );
+          expect(fetchSpy).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          restoreEnv();
+        }
+      },
+    );
 
     it('should call remote API and return response', async () => {
       const mockResponse = {
@@ -153,7 +153,6 @@ describe('poison command', () => {
             poisonedDocument: 'poisoned content',
             intendedResult: 'result',
             task: 'poison-document',
-            tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
           }),
         headers: new Headers(),
         redirected: false,
@@ -187,7 +186,6 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -236,7 +234,6 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -258,7 +255,6 @@ describe('poison command', () => {
         originalPath: 'test.txt',
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -273,7 +269,6 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -294,7 +289,6 @@ describe('poison command', () => {
       expect(result).toEqual({
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       });
     });
 
@@ -316,29 +310,29 @@ describe('poison command', () => {
   });
 
   describe('doPoisonDocuments', () => {
-    it.each([
-      'PROMPTFOO_DISABLE_REMOTE_GENERATION',
-      'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
-    ])('should fail before touching the filesystem when %s is enabled', async (flag) => {
-      const restoreEnv = mockProcessEnv({
-        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
-        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
-        [flag]: 'true',
-      });
-      const fetchSpy = vi.spyOn(global, 'fetch');
+    it.each(['PROMPTFOO_DISABLE_REMOTE_GENERATION', 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'])(
+      'should fail before touching the filesystem when %s is enabled',
+      async (flag) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+          PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+          [flag]: 'true',
+        });
+        const fetchSpy = vi.spyOn(global, 'fetch');
 
-      try {
-        await expect(doPoisonDocuments({ documents: ['sensitive document'] })).rejects.toThrow(
-          'RAG poisoning requires remote generation, which has been explicitly disabled',
-        );
-        expect(fs.mkdirSync).not.toHaveBeenCalled();
-        expect(fs.writeFileSync).not.toHaveBeenCalled();
-        expect(fetchSpy).not.toHaveBeenCalled();
-      } finally {
-        fetchSpy.mockRestore();
-        restoreEnv();
-      }
-    });
+        try {
+          await expect(doPoisonDocuments({ documents: ['sensitive document'] })).rejects.toThrow(
+            'RAG poisoning requires remote generation, which has been explicitly disabled',
+          );
+          expect(fs.mkdirSync).not.toHaveBeenCalled();
+          expect(fs.writeFileSync).not.toHaveBeenCalled();
+          expect(fetchSpy).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          restoreEnv();
+        }
+      },
+    );
 
     it('should process multiple documents', async () => {
       const options = {
@@ -371,7 +365,6 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {
@@ -390,10 +383,7 @@ describe('poison command', () => {
       await doPoisonDocuments(options);
 
       expect(fs.mkdirSync).toHaveBeenCalledWith('output-dir', { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        'output.yaml',
-        expect.stringContaining('tokenUsage:'),
-      );
+      expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', expect.any(String));
     });
 
     it('should handle directory input', async () => {
@@ -434,7 +424,6 @@ describe('poison command', () => {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
         task: 'poison-document',
-        tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
       };
 
       const mockResponse = {

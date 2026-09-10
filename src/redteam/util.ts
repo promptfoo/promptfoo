@@ -4,12 +4,13 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
+import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
+import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
-  materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
 import {
@@ -19,7 +20,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -79,13 +80,6 @@ export function extractVariablesFromJson(
     }
   }
   return extractedVars;
-}
-
-export function extractMaterializedVariablesFromJson(
-  parsed: Record<string, unknown>,
-  inputs: Inputs,
-): Record<string, string> {
-  return materializeInputVariables(extractVariablesFromJson(parsed, inputs), inputs);
 }
 
 export async function extractMaterializedVariablesFromJsonWithMetadata(
@@ -340,6 +334,7 @@ export function getShortPluginId(pluginId: string): string {
  * @param pluginId - Optional plugin ID to provide context about the attack type.
  * @param policy - Optional policy text for custom policy tests to improve intent extraction.
  * @param targetId - Optional cloud target database ID used by remote task handlers to resolve target-owned provider context.
+ * @param provider - Optional tracked generation provider used to account for the remote request.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
@@ -348,20 +343,11 @@ export async function extractGoalFromPrompt(
   pluginId?: string,
   policy?: string,
   targetId?: string,
+  provider?: ApiProvider,
 ): Promise<string | null> {
-  return (await extractGoalFromPromptWithUsage(prompt, purpose, pluginId, policy, targetId)).goal;
-}
-
-export async function extractGoalFromPromptWithUsage(
-  prompt: string,
-  purpose: string,
-  pluginId?: string,
-  policy?: string,
-  targetId?: string,
-): Promise<{ goal: string | null; tokenUsage?: TokenUsage }> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
-    return { goal: null };
+    return null;
   }
 
   // Skip goal extraction for dataset plugins since they use static datasets with pre-defined goals
@@ -369,7 +355,7 @@ export async function extractGoalFromPromptWithUsage(
     const shortPluginId = getShortPluginId(pluginId);
     if (DATASET_PLUGINS.includes(shortPluginId as any)) {
       logger.debug(`Skipping goal extraction for dataset plugin: ${shortPluginId}`);
-      return { goal: null };
+      return null;
     }
   }
 
@@ -390,11 +376,12 @@ export async function extractGoalFromPromptWithUsage(
 
   interface ExtractIntentResponse {
     intent?: string;
-    tokenUsage?: TokenUsage;
+    tokenUsage?: ProviderResponse['tokenUsage'];
   }
 
+  let responseRecorded = false;
   try {
-    const { data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
+    const { cached, data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -404,6 +391,11 @@ export async function extractGoalFromPromptWithUsage(
       getRequestTimeoutMs(),
     );
 
+    if (provider) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+      responseRecorded = true;
+    }
+
     logger.debug(
       `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
     );
@@ -412,27 +404,21 @@ export async function extractGoalFromPromptWithUsage(
       logger.warn(
         `Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}, Response Data: ${JSON.stringify(data)}`,
       );
-      return {
-        goal: null,
-        ...(data?.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
-      };
+      return null;
     }
 
     if (!data?.intent) {
       logger.warn(`No intent returned from extraction API. Response Data: ${JSON.stringify(data)}`);
-      return {
-        goal: null,
-        ...(data?.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
-      };
+      return null;
     }
 
-    return {
-      goal: data.intent,
-      ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
-    };
+    return data.intent;
   } catch (error) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+    }
     logger.warn(`Error extracting goal: ${error}`);
-    return { goal: null };
+    return null;
   }
 }
 

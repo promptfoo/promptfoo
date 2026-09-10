@@ -8,13 +8,16 @@ describe('InfoBox', () => {
     ['tip', 'bg-amber-50', 'border-amber-200', 'text-amber-700'],
     ['help', 'bg-purple-50', 'border-purple-200', 'text-purple-700'],
     ['subtle', 'bg-muted/30', 'border-border', 'text-muted-foreground'],
-  ] as const)('renders %s variant with correct styling', (variant, bgClass, borderClass, textClass) => {
-    render(<InfoBox variant={variant}>Test message</InfoBox>);
+  ] as const)(
+    'renders %s variant with correct styling',
+    (variant, bgClass, borderClass, textClass) => {
+      render(<InfoBox variant={variant}>Test message</InfoBox>);
 
-    const container = screen.getByText('Test message').closest('div')?.parentElement;
-    expect(container).toHaveClass(bgClass, borderClass, textClass);
-    expect(container?.querySelector('svg')).toBeInTheDocument();
-  });
+      const container = screen.getByText('Test message').closest('div')?.parentElement;
+      expect(container).toHaveClass(bgClass, borderClass, textClass);
+      expect(container?.querySelector('svg')).toBeInTheDocument();
+    },
+  );
 
   it('defaults to info variant when no variant is provided', () => {
     render(<InfoBox>Default message</InfoBox>);

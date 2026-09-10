@@ -2,6 +2,7 @@ import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
+import { accumulateAttackerTokenUsage } from '../../util/tokenUsageUtils';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -18,10 +19,6 @@ type Config = {
 export default class RedteamMischievousUserProvider extends SimulatedUser {
   // Cloud task:
   readonly taskId: string = REDTEAM_SIMULATED_USER_TASK_ID;
-
-  protected override shouldCountUserProviderRequests(): boolean {
-    return false;
-  }
 
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
@@ -45,6 +42,13 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
 
   id() {
     return PROVIDER_ID;
+  }
+
+  protected accumulateSimulatedUserTokenUsage(
+    tokenUsage: TokenUsage,
+    response: ProviderResponse,
+  ): void {
+    accumulateAttackerTokenUsage(tokenUsage, response);
   }
 
   serializeOutput(

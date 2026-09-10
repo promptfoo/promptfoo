@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -17,7 +17,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { AtomicTestCase, GradingResult, Vars } from '@promptfoo/types';
+import type { GradingResult, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
@@ -146,7 +146,6 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, unknown>;
-  testCase?: AtomicTestCase;
   /**
    * The actual prompt sent by the provider (if different from the rendered prompt).
    * Takes priority over metadata.redteamFinalPrompt for display purposes.
@@ -173,7 +172,6 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
-  testCase,
   providerPrompt,
   evaluationId,
   testCaseId,
@@ -198,16 +196,6 @@ export default function EvalOutputPromptDialog({
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
-  const mergedMetadata = useMemo(() => {
-    if (!metadata && !testCase?.metadata) {
-      return undefined;
-    }
-
-    return {
-      ...(testCase?.metadata ?? {}),
-      ...(metadata ?? {}),
-    };
-  }, [metadata, testCase?.metadata]);
 
   useEffect(() => {
     setCopied(false);
@@ -374,8 +362,8 @@ export default function EvalOutputPromptDialog({
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
-    mergedMetadata &&
-    Object.keys(mergedMetadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
+    metadata &&
+    Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
   const visibleTabs: string[] = ['prompt-output'];
   if (hasEvaluationData) {
@@ -546,7 +534,7 @@ export default function EvalOutputPromptDialog({
             {hasMetadata && (
               <TabsContent value="metadata" className="mt-0">
                 <MetadataPanel
-                  metadata={mergedMetadata}
+                  metadata={metadata}
                   expandedMetadata={expandedMetadata}
                   copiedFields={copiedFields}
                   onMetadataClick={handleMetadataClick}

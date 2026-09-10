@@ -6,38 +6,39 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { BaseTokenUsageSchema } from '../../types/shared';
 import invariant from '../../util/invariant';
 import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { recordGenerationTokenUsage } from '../generationTokenUsage';
+import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
-import type { ApiProvider, RemoteGenerationContext, TokenUsage } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiOptionsParams,
+  ProviderResponse,
+  RemoteGenerationContext,
+} from '../../types/index';
+import type { McpToolDefinition } from '../mcpToolCall';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
   result: z.union([z.string(), z.array(z.string())]),
-  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export type RedTeamTask = 'purpose' | 'entities';
-export type ExtractionResult<T> = {
-  result: T;
-  tokenUsage?: TokenUsage;
-};
 
-class ExtractionError extends Error {
-  constructor(
-    message: string,
-    public readonly tokenUsage?: TokenUsage,
-  ) {
-    super(message);
-    this.name = 'ExtractionError';
-  }
-}
-
-export function getExtractionErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  return error instanceof ExtractionError ? error.tokenUsage : undefined;
+interface PromptfooMcpMaterializationOptions {
+  intentValue?: unknown;
+  purpose?: string;
+  targetId?: string;
+  redteamGenerationContext?: RemoteGenerationContext;
+  tools: McpToolDefinition[];
+  value: unknown;
 }
 
 /**
@@ -46,6 +47,7 @@ export function getExtractionErrorTokenUsage(error: unknown): TokenUsage | undef
  * @param task - The type of task to perform ('purpose' or 'entities').
  * @param prompts - An array of prompts to process.
  * @param generationContext - Resolved target context for routing the remote task.
+ * @param provider - Optional tracked generation provider used to account for the remote request.
  * @returns A Promise that resolves to either a string or an array of strings, depending on the task.
  * @throws Will throw an error if the remote generation fails.
  *
@@ -59,19 +61,13 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
+  provider?: ApiProvider,
 ): Promise<string | string[]> {
-  return (await fetchRemoteGenerationWithMetadata(task, prompts, generationContext)).result;
-}
-
-export async function fetchRemoteGenerationWithMetadata(
-  task: RedTeamTask,
-  prompts: string[],
-  generationContext?: RemoteGenerationContext,
-): Promise<ExtractionResult<string | string[]>> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteGeneration should never be called when remote generation is disabled',
   );
+  let responseRecorded = false;
   try {
     const body = {
       task,
@@ -92,29 +88,87 @@ export async function fetchRemoteGenerationWithMetadata(
       'json',
     );
 
-    if (response.status !== 200) {
-      throw new ExtractionError(
-        `Remote extraction failed for task '${task}' with status ${response.status}`,
-        getErrorTokenUsage(response.data),
-      );
+    if (provider) {
+      recordGenerationTokenUsage(provider, {
+        tokenUsage: (response.data as { tokenUsage?: ProviderResponse['tokenUsage'] })?.tokenUsage,
+        cached: response.cached,
+      });
+      responseRecorded = true;
     }
 
-    const parsedResponse = RedTeamGenerationResponse.safeParse(response.data);
-    if (!parsedResponse.success) {
-      const tokenUsage = getErrorTokenUsage(response.data);
-      if (tokenUsage) {
-        throw new ExtractionError(parsedResponse.error.message, tokenUsage);
-      }
-      throw parsedResponse.error;
+    const parsedResponse = RedTeamGenerationResponse.parse(response.data);
+    return parsedResponse.result;
+  } catch (error) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+    }
+    logger.warn(`Error using remote generation for task '${task}': ${error}`);
+    throw error;
+  }
+}
+
+export async function materializeMcpToolCallRemote(
+  options: PromptfooMcpMaterializationOptions,
+  callApiOptions?: CallApiOptionsParams,
+): Promise<
+  { cached?: boolean; prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined
+> {
+  if (!shouldGenerateRemote()) {
+    return undefined;
+  }
+
+  const body = {
+    email: getUserEmail(),
+    jsonOnly: true,
+    mcpMaterializationContext: {
+      intentValue: options.intentValue,
+      purpose: options.purpose,
+      tools: options.tools,
+    },
+    preferSmallModel: false,
+    prompt: typeof options.value === 'string' ? options.value : JSON.stringify(options.value),
+    task: 'mcp-materialization',
+    version: VERSION,
+    ...remoteGenerationContextPayload(options.redteamGenerationContext ?? options.targetId),
+  };
+
+  try {
+    const response = await fetchWithCache<{
+      result?: unknown;
+      tokenUsage?: ProviderResponse['tokenUsage'];
+    }>(
+      getRemoteGenerationUrl(),
+      {
+        method: 'POST',
+        headers: getRemoteGenerationHeaders(),
+        body: JSON.stringify(body),
+        ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
+      },
+      getRequestTimeoutMs(),
+      'json',
+      true,
+    );
+
+    if (response.status !== 200) {
+      throw new Error(`API call failed with status ${response.status}: ${response.statusText}`);
+    }
+
+    const toolCall = normalizeMcpToolCall(response.data.result, options.tools);
+
+    if (!toolCall) {
+      throw new Error('Remote MCP materialization did not return a valid tool call');
     }
 
     return {
-      result: parsedResponse.data.result,
-      ...(parsedResponse.data.tokenUsage ? { tokenUsage: parsedResponse.data.tokenUsage } : {}),
+      cached: response.cached,
+      prompt: stringifyMcpToolCall(toolCall),
+      tokenUsage: response.data.tokenUsage,
     };
-  } catch (error) {
-    logger.warn(`Error using remote generation for task '${task}': ${error}`);
-    throw error;
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
+    throw new Error(`Remote MCP materialization failed: ${String(err)}`);
   }
 }
 
@@ -123,62 +177,21 @@ export async function callExtraction<T>(
   prompt: string,
   processOutput: (output: string) => T,
 ): Promise<T> {
-  return (await callExtractionWithMetadata(provider, prompt, processOutput)).result;
-}
-
-export async function callExtractionWithMetadata<T>(
-  provider: ApiProvider,
-  prompt: string,
-  processOutput: (output: string) => T,
-): Promise<ExtractionResult<T>> {
-  let response: Awaited<ReturnType<ApiProvider['callApi']>>;
-  try {
-    response = await provider.callApi(JSON.stringify([{ role: 'user', content: prompt }]));
-  } catch (error) {
-    const errorTokenUsage = getErrorTokenUsage(error);
-    throw new ExtractionError(
-      error instanceof Error ? error.message : String(error),
-      errorTokenUsage
-        ? {
-            ...errorTokenUsage,
-            ...(errorTokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
-          }
-        : { numRequests: 1 },
-    );
-  }
-
-  const { output, error, tokenUsage } = response;
-  const normalizedTokenUsage = tokenUsage
-    ? {
-        ...tokenUsage,
-        ...(tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
-      }
-    : { numRequests: 1 };
+  const { output, error } = await provider.callApi(
+    JSON.stringify([{ role: 'user', content: prompt }]),
+  );
 
   if (error) {
     logger.error(`Error in extraction: ${error}`);
-    throw new ExtractionError(`Failed to perform extraction: ${error}`, normalizedTokenUsage);
+    throw new Error(`Failed to perform extraction: ${error}`);
   }
 
   if (typeof output !== 'string') {
     logger.error(`Invalid output from extraction. Got: ${output}`);
-    throw new ExtractionError(
-      `Invalid extraction output: expected string, got: ${output}`,
-      normalizedTokenUsage,
-    );
+    throw new Error(`Invalid extraction output: expected string, got: ${output}`);
   }
 
-  try {
-    return {
-      result: processOutput(output),
-      tokenUsage: normalizedTokenUsage,
-    };
-  } catch (error) {
-    throw new ExtractionError(
-      error instanceof Error ? error.message : String(error),
-      normalizedTokenUsage,
-    );
-  }
+  return processOutput(output);
 }
 
 export function formatPrompts(prompts: string[]): string {

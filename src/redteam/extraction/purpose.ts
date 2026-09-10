@@ -1,13 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { neverGenerateRemote } from '../remoteGeneration';
-import {
-  callExtractionWithMetadata,
-  type ExtractionResult,
-  fetchRemoteGenerationWithMetadata,
-  formatPrompts,
-  getExtractionErrorTokenUsage,
-} from './util';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
@@ -19,40 +13,26 @@ export async function extractSystemPurpose(
   prompts: string[],
   generationContext?: RemoteGenerationContext,
 ): Promise<string> {
-  return (await extractSystemPurposeWithMetadata(provider, prompts, generationContext)).result;
-}
-
-export async function extractSystemPurposeWithMetadata(
-  provider: ApiProvider,
-  prompts: string[],
-  generationContext?: RemoteGenerationContext,
-): Promise<ExtractionResult<string>> {
   const onlyTemplatePrompt =
     prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
 
   if (prompts.length === 0 || onlyTemplatePrompt) {
     logger.debug('[purpose] No meaningful prompts provided, returning default purpose');
-    return { result: DEFAULT_PURPOSE };
+    return DEFAULT_PURPOSE;
   }
 
   if (!neverGenerateRemote()) {
     try {
-      const response = await fetchRemoteGenerationWithMetadata(
+      const result = await fetchRemoteGeneration(
         'purpose' as RedTeamTask,
         prompts,
         generationContext,
+        provider,
       );
-      return {
-        result: response.result as string,
-        ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),
-      };
+      return result as string;
     } catch (error) {
       logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
-      const tokenUsage = getExtractionErrorTokenUsage(error);
-      return {
-        result: '',
-        ...(tokenUsage ? { tokenUsage } : {}),
-      };
+      return '';
     }
   }
 
@@ -71,16 +51,12 @@ export async function extractSystemPurposeWithMetadata(
   `;
 
   try {
-    return await callExtractionWithMetadata(provider, prompt, (output: string) => {
+    return callExtraction(provider, prompt, (output: string) => {
       const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
       return match ? match[1].trim() : output.trim();
     });
   } catch (error) {
     logger.warn(`[purpose] Error using extracting purpose, returning empty string: ${error}`);
-    const tokenUsage = getExtractionErrorTokenUsage(error);
-    return {
-      result: '',
-      ...(tokenUsage ? { tokenUsage } : {}),
-    };
+    return '';
   }
 }

@@ -1,45 +1,28 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { mergeProviderTokenUsage } from './util';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
-
-class CitationGenerationError extends Error {
-  constructor(
-    message: string,
-    readonly tokenUsage: TokenUsage,
-  ) {
-    super(message);
-    this.name = 'CitationGenerationError';
-  }
-}
+import type { StrategyRuntimeContext } from './types';
 
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
     const concurrency = 10;
     const allResults: TestCase[] = [];
-    let deferredFailureMessage: string | undefined;
-    let deferredFailureTokenUsage: TokenUsage | undefined;
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
@@ -61,12 +44,11 @@ async function generateCitations(
 
       const payload = {
         task: 'citation',
-        testCases: [testCase],
-        injectVar,
         topic: testCase.vars[injectVar],
-        config,
+        ...(typeof config.useAcademic === 'boolean' && { useAcademic: config.useAcademic }),
+        ...(typeof config.useJournals === 'boolean' && { useJournals: config.useJournals }),
+        ...(typeof config.useBooks === 'boolean' && { useBooks: config.useBooks }),
         ...remoteGenerationContextPayload(config.targetId),
-        email: getUserEmail(),
       };
 
       interface CitationGenerationResponse {
@@ -77,33 +59,12 @@ async function generateCitations(
             content: string;
           };
         };
-        tokenUsage?: TokenUsage;
       }
 
-      let data: CitationGenerationResponse;
-      try {
-        ({ data } = await fetchWithCache<CitationGenerationResponse>(
-          getRemoteGenerationUrl(),
-          {
-            method: 'POST',
-            headers: getRemoteGenerationHeaders(),
-            body: JSON.stringify(payload),
-          },
-          getRequestTimeoutMs(),
-        ));
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw error;
-        }
-        logger.error(`Error in remote citation generation: ${error}`);
-        deferredFailureMessage ??= error instanceof Error ? error.message : String(error);
-        deferredFailureTokenUsage = mergeProviderTokenUsage(
-          deferredFailureTokenUsage,
-          getErrorTokenUsage(error),
-        );
-        progressBar?.increment(1);
-        return;
-      }
+      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(
+        payload,
+        runtimeContext,
+      );
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -113,13 +74,6 @@ async function generateCitations(
       if (data.error) {
         logger.error(`[Citation] Error in citation generation: ${data.error}`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
-        if (data.tokenUsage) {
-          deferredFailureMessage ??= data.error;
-          deferredFailureTokenUsage = mergeProviderTokenUsage(
-            deferredFailureTokenUsage,
-            data.tokenUsage,
-          );
-        }
         if (progressBar) {
           progressBar.increment(1);
         }
@@ -130,13 +84,6 @@ async function generateCitations(
       if (!data.result?.citation) {
         logger.error(`[Citation] Invalid response structure - missing citation data`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
-        if (data.tokenUsage) {
-          deferredFailureMessage ??= 'Citation generation returned invalid response structure';
-          deferredFailureTokenUsage = mergeProviderTokenUsage(
-            deferredFailureTokenUsage,
-            data.tokenUsage,
-          );
-        }
         if (progressBar) {
           progressBar.increment(1);
         }
@@ -158,21 +105,13 @@ async function generateCitations(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Citation`,
+          metric: assertion.metric ? `${assertion.metric}/Citation` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,
           strategyId: 'citation',
           originalText,
-          ...(data.tokenUsage
-            ? {
-                providerTokenUsage: mergeProviderTokenUsage(
-                  testCase.metadata?.providerTokenUsage,
-                  data.tokenUsage,
-                ),
-              }
-            : {}),
         },
       };
 
@@ -189,50 +128,12 @@ async function generateCitations(
       progressBar.stop();
     }
 
-    if (deferredFailureTokenUsage && allResults.length === 0) {
-      logger.error('[Citation] Token usage from failed citation generation', {
-        error: deferredFailureMessage ?? 'Citation generation failed',
-        tokenUsage: deferredFailureTokenUsage,
-      });
-      throw new CitationGenerationError(
-        deferredFailureMessage ?? 'Citation generation failed',
-        deferredFailureTokenUsage,
-      );
-    }
-
-    if (deferredFailureTokenUsage && allResults.length > 0) {
-      const firstResult = allResults[0];
-      if (!firstResult) {
-        return allResults;
-      }
-      const remainingResults = allResults.slice(1);
-      return [
-        {
-          ...firstResult,
-          metadata: {
-            ...firstResult.metadata,
-            providerTokenUsage: mergeProviderTokenUsage(
-              firstResult.metadata?.providerTokenUsage,
-              deferredFailureTokenUsage,
-            ),
-          },
-        },
-        ...remainingResults,
-      ];
-    }
-
     return allResults;
   } catch (error) {
     if (progressBar) {
       progressBar.stop();
     }
     logger.error(`Error in remote citation generation: ${error}`);
-    if (
-      error instanceof CitationGenerationError ||
-      (error instanceof Error && error.name === 'AbortError')
-    ) {
-      throw error;
-    }
     return [];
   }
 }
@@ -241,12 +142,13 @@ export async function addCitationTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Citation strategy'));
   }
 
-  const citationTestCases = await generateCitations(testCases, injectVar, config);
+  const citationTestCases = await generateCitations(testCases, injectVar, config, runtimeContext);
   if (citationTestCases.length === 0) {
     logger.warn('No citation test cases were generated');
   }

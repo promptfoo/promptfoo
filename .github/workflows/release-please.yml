@@ -72,7 +72,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
@@ -97,7 +97,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
@@ -132,7 +132,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: refs/tags/${{ inputs.tag_name }}
 
@@ -189,7 +189,9 @@ jobs:
     timeout-minutes: 15
     # Gate on `build` so root test failures block the mirror — code-scan-action
     # imports shared source from ../../src, so broken root code means broken action.
-    needs: [release-please, build]
+    # `publish-npm` is in `needs` for ordering only, not gating — see the
+    # npm-availability check below for the rationale.
+    needs: [release-please, build, publish-npm]
     permissions:
       contents: read
     env:
@@ -214,7 +216,7 @@ jobs:
           owner: promptfoo
           repositories: code-scan-action
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -223,6 +225,31 @@ jobs:
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
+
+      # The action's runtime install is pinned to this commit's root package.json
+      # version, inlined into dist/ at build time. Refuse to mirror a release whose
+      # pinned scanner version never reached npm (e.g. a failed publish-npm awaiting
+      # backfill) — otherwise every consumer scan fails at install time with ETARGET
+      # (no matching version found).
+      # The registry is the ground truth (a publish-npm job result would wrongly
+      # block a version that was backfilled later); `needs: publish-npm` guarantees
+      # a same-run publish has finished before this check runs, and the retries
+      # absorb registry read-after-write lag for a just-published version.
+      - name: Verify pinned promptfoo version is published to npm
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          for attempt in 1 2 3 4 5; do
+            if npm view "promptfoo@${version}" version; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 5 ]]; then
+              echo "promptfoo@${version} not visible on npm (attempt ${attempt}/5); retrying in 30s"
+              sleep 30
+            fi
+          done
+          echo "::error::promptfoo@${version} is not published to npm; the mirrored action would fail at install time"
+          exit 1
 
       # Install root deps first; code-scan-action imports shared source from ../../src
       - run: npm ci
@@ -238,6 +265,21 @@ jobs:
       - name: Build Code Scan Action
         working-directory: code-scan-action
         run: npm run build
+
+      # Companion to the npm-availability gate above: that step validates the version
+      # read from package.json, this one asserts the built bundle actually embeds the
+      # same pin — so a future refactor of the pin source in main.ts cannot desync
+      # the gate from what ships.
+      - name: Verify built dist embeds the published scanner pin
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          count="$(grep -Fc "\"${version}\"" code-scan-action/dist/index.js || true)"
+          echo "dist/index.js embeds \"${version}\" ${count} time(s)"
+          if [[ "$count" -eq 0 ]]; then
+            echo "::error::dist/index.js does not embed promptfoo@${version}; the runtime pin has desynced from the npm-availability gate"
+            exit 1
+          fi
 
       - name: Prepare mirror release payload
         env:
@@ -266,6 +308,18 @@ jobs:
             "version": "$CODE_SCAN_ACTION_VERSION"
           }
           JSON
+
+      # Hand the executable payload (dist/ plus the action.yml that selects the
+      # entrypoint) to attest-code-scan-action — see that job for why attestation
+      # is isolated from this one.
+      - name: Upload release payload for attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: code-scan-action-release-payload
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/code-scan-action-export/dist
+            ${{ runner.temp }}/code-scan-action-export/action.yml
 
       - name: Open mirror release PR
         env:
@@ -334,3 +388,36 @@ jobs:
           else
             gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
           fi
+
+  attest-code-scan-action:
+    # Signed build provenance for the exact bytes mirrored into
+    # promptfoo/code-scan-action — both the dist/ bundle and the action.yml that
+    # selects the entrypoint — so consumers can verify the committed artifacts came
+    # from this workflow without re-running the build:
+    #   gh attestation verify dist/index.js --repo promptfoo/promptfoo
+    #   gh attestation verify action.yml --repo promptfoo/promptfoo
+    # Kept as a separate job so id-token/attestations permissions are confined to
+    # steps that never install packages or execute repository code — a compromised
+    # dependency lifecycle script in the publish job must not be able to mint OIDC
+    # tokens or sign attestations as this repository. Default `needs` gating (run
+    # only when the publish job succeeded) is exactly the behavior wanted here.
+    needs: [publish-code-scan-action]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: code-scan-action-release-payload
+          path: ${{ runner.temp }}/code-scan-action-attest
+
+      - name: Attest build provenance for mirrored artifacts
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: |
+            ${{ runner.temp }}/code-scan-action-attest/dist/*
+            ${{ runner.temp }}/code-scan-action-attest/action.yml

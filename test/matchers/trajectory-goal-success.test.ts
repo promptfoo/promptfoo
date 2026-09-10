@@ -59,10 +59,8 @@ describe('matchesTrajectoryGoalSuccess', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
         },
-        numRequests: 1,
+        numRequests: 0,
       },
       metadata: {
         renderedGradingPrompt:

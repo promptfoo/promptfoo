@@ -11,13 +11,11 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
-import { mergeProviderTokenUsage } from '../../redteam/strategies/util';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
 import type { ConversationMessage } from '../../redteam/types';
-import type { TokenUsage } from '../../types/shared';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -25,16 +23,6 @@ export class RemoteGenerationDisabledError extends Error {
   constructor() {
     super('Remote generation is disabled. Enable remote generation to test multi-turn strategies.');
     this.name = 'RemoteGenerationDisabledError';
-  }
-}
-
-export class MultiTurnGenerationError extends Error {
-  constructor(
-    message: string,
-    public readonly tokenUsage?: TokenUsage,
-  ) {
-    super(message);
-    this.name = 'MultiTurnGenerationError';
   }
 }
 
@@ -134,6 +122,7 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
   'jailbreak:hydra': handleHydraStrategy,
+  'jailbreak:goblin': handleGoblinStrategy,
 };
 
 export async function generateMultiTurnPrompt(
@@ -256,45 +245,6 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
-function getNestedTokenUsage(
-  metadata: Record<string, unknown>,
-  key: 'goat' | 'hydra' | 'mischievousUser',
-): TokenUsage | undefined {
-  const nestedMetadata = metadata[key];
-  if (!nestedMetadata || typeof nestedMetadata !== 'object') {
-    return undefined;
-  }
-
-  return (nestedMetadata as { tokenUsage?: TokenUsage }).tokenUsage;
-}
-
-async function getRemoteTaskError(
-  response: Response,
-  taskName: string,
-): Promise<MultiTurnGenerationError> {
-  const responseText = await response.text();
-  let parsedBody: { error?: string; message?: string; tokenUsage?: TokenUsage } | undefined;
-  try {
-    parsedBody = JSON.parse(responseText) as {
-      error?: string;
-      message?: string;
-      tokenUsage?: TokenUsage;
-    };
-  } catch {
-    // Fall back to the raw response body below.
-  }
-
-  const detail =
-    parsedBody?.message ||
-    parsedBody?.error ||
-    (responseText ? responseText : `${response.status} ${response.statusText}`);
-
-  return new MultiTurnGenerationError(
-    `${taskName} task failed with status ${response.status}: ${detail}`,
-    parsedBody?.tokenUsage,
-  );
-}
-
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -325,7 +275,7 @@ async function handleGoatStrategy(
   );
 
   if (!response.ok) {
-    throw await getRemoteTaskError(response, 'GOAT');
+    throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
   }
 
   const data = await response.json();
@@ -333,10 +283,7 @@ async function handleGoatStrategy(
   const nextQuestion = attackerMessage?.content;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new MultiTurnGenerationError(
-      'GOAT task did not return a valid next question',
-      data?.tokenUsage,
-    );
+    throw new Error('GOAT task did not return a valid next question');
   }
 
   const done = nextQuestion.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -347,16 +294,9 @@ async function handleGoatStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      providerTokenUsage: mergeProviderTokenUsage(
-        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
-        data?.tokenUsage,
-      ),
       goat: {
         message: attackerMessage,
-        tokenUsage: mergeProviderTokenUsage(
-          getNestedTokenUsage(ctx.baseMetadata, 'goat'),
-          data?.tokenUsage,
-        ),
+        tokenUsage: data?.tokenUsage,
       },
     },
   };
@@ -389,7 +329,9 @@ async function handleMischievousUserStrategy(
   );
 
   if (!response.ok) {
-    throw await getRemoteTaskError(response, 'Mischievous User');
+    throw new Error(
+      `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
+    );
   }
 
   const data = await response.json();
@@ -402,10 +344,7 @@ async function handleMischievousUserStrategy(
         : '';
 
   if (!nextMessage) {
-    throw new MultiTurnGenerationError(
-      'Mischievous User task did not return a valid message',
-      data?.tokenUsage,
-    );
+    throw new Error('Mischievous User task did not return a valid message');
   }
 
   const done = nextMessage.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -417,15 +356,8 @@ async function handleMischievousUserStrategy(
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
       instructions,
-      providerTokenUsage: mergeProviderTokenUsage(
-        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
-        data?.tokenUsage,
-      ),
       mischievousUser: {
-        tokenUsage: mergeProviderTokenUsage(
-          getNestedTokenUsage(ctx.baseMetadata, 'mischievousUser'),
-          data?.tokenUsage,
-        ),
+        tokenUsage: data?.tokenUsage,
       },
     },
   };
@@ -433,6 +365,31 @@ async function handleMischievousUserStrategy(
 
 async function handleHydraStrategy(
   ctx: MultiTurnHandlerContext,
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  return handleHydraLikeStrategy(ctx, {
+    strategyName: 'Hydra',
+    metadataPrefix: 'hydra',
+    taskId: 'hydra-decision',
+  });
+}
+
+async function handleGoblinStrategy(
+  ctx: MultiTurnHandlerContext,
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  return handleHydraLikeStrategy(ctx, {
+    strategyName: 'Goblin',
+    metadataPrefix: 'goblin',
+    taskId: 'goblin-decision',
+  });
+}
+
+async function handleHydraLikeStrategy(
+  ctx: MultiTurnHandlerContext,
+  options: {
+    strategyName: 'Hydra' | 'Goblin';
+    metadataPrefix: 'hydra' | 'goblin';
+    taskId: 'hydra-decision' | 'goblin-decision';
+  },
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
   const turnNumber = ctx.turn + 1;
   const stateful =
@@ -445,9 +402,12 @@ async function handleHydraStrategy(
     ctx.generatedPrompt ||
     `${ctx.pluginId}-${ctx.strategyId}`;
 
-  const hydraTestRunId =
-    typeof ctx.baseMetadata['hydraTestRunId'] === 'string'
-      ? (ctx.baseMetadata['hydraTestRunId'] as string)
+  const testRunIdMetadataKey = `${options.metadataPrefix}TestRunId`;
+  const scanIdMetadataKey = `${options.metadataPrefix}ScanId`;
+
+  const testRunId =
+    typeof ctx.baseMetadata[testRunIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[testRunIdMetadataKey] as string)
       : sha256(
           JSON.stringify({
             pluginId: ctx.pluginId,
@@ -456,12 +416,12 @@ async function handleHydraStrategy(
           }),
         ).slice(0, 32);
 
-  const hydraScanId =
-    typeof ctx.baseMetadata['hydraScanId'] === 'string'
-      ? (ctx.baseMetadata['hydraScanId'] as string)
+  const scanId =
+    typeof ctx.baseMetadata[scanIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[scanIdMetadataKey] as string)
       : typeof ctx.baseMetadata['scanId'] === 'string'
         ? (ctx.baseMetadata['scanId'] as string)
-        : hydraTestRunId;
+        : testRunId;
 
   let modifiers: Record<string, string> | undefined;
   if (ctx.baseMetadata['modifiers'] && typeof ctx.baseMetadata['modifiers'] === 'object') {
@@ -474,9 +434,9 @@ async function handleHydraStrategy(
   }
 
   const innerRequest = {
-    task: 'hydra-decision',
-    testRunId: hydraTestRunId,
-    scanId: hydraScanId,
+    task: options.taskId,
+    testRunId,
+    scanId,
     turn: turnNumber,
     goal: ctx.effectiveGoal,
     purpose: ctx.purpose ?? undefined,
@@ -489,8 +449,8 @@ async function handleHydraStrategy(
     ),
   };
 
-  const hydraBody = {
-    task: 'hydra-decision',
+  const requestBody = {
+    task: options.taskId,
     prompt: JSON.stringify(innerRequest),
     jsonOnly: true,
     preferSmallModel: false,
@@ -503,13 +463,15 @@ async function handleHydraStrategy(
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(hydraBody),
+      body: JSON.stringify(requestBody),
     },
     getRequestTimeoutMs(),
   );
 
   if (!response.ok) {
-    throw await getRemoteTaskError(response, 'Hydra');
+    throw new Error(
+      `${options.strategyName} task failed with status ${response.status}: ${await response.text()}`,
+    );
   }
 
   const data = await response.json();
@@ -524,10 +486,7 @@ async function handleHydraStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new MultiTurnGenerationError(
-      'Hydra task did not return a valid next prompt',
-      data?.tokenUsage,
-    );
+    throw new Error(`${options.strategyName} task did not return a valid next prompt`);
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -538,18 +497,11 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      providerTokenUsage: mergeProviderTokenUsage(
-        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
-        data?.tokenUsage,
-      ),
-      hydra: {
-        testRunId: hydraTestRunId,
-        scanId: hydraScanId,
+      [options.metadataPrefix]: {
+        testRunId,
+        scanId,
         stateful,
-        tokenUsage: mergeProviderTokenUsage(
-          getNestedTokenUsage(ctx.baseMetadata, 'hydra'),
-          data?.tokenUsage,
-        ),
+        tokenUsage: data?.tokenUsage,
       },
     },
   };
@@ -604,7 +556,9 @@ async function handleCrescendoLikeStrategy(
   );
 
   if (!response.ok) {
-    throw await getRemoteTaskError(response, 'Crescendo');
+    throw new Error(
+      `Crescendo task failed with status ${response.status}: ${await response.text()}`,
+    );
   }
 
   const data = await response.json();
@@ -623,10 +577,7 @@ async function handleCrescendoLikeStrategy(
   const nextQuestion = parsedResult?.generatedQuestion;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new MultiTurnGenerationError(
-      'Crescendo task did not return a valid generated question',
-      data?.tokenUsage,
-    );
+    throw new Error('Crescendo task did not return a valid generated question');
   }
 
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;
@@ -639,10 +590,7 @@ async function handleCrescendoLikeStrategy(
       goal: ctx.effectiveGoal,
       rationaleBehindJailbreak: parsedResult?.rationaleBehindJailbreak,
       lastResponseSummary: parsedResult?.lastResponseSummary,
-      providerTokenUsage: mergeProviderTokenUsage(
-        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
-        data?.tokenUsage,
-      ),
+      providerTokenUsage: data?.tokenUsage,
     },
   };
 }

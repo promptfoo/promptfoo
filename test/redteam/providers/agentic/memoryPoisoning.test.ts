@@ -51,16 +51,10 @@ describe('MemoryPoisoningProvider', () => {
     ).rejects.toThrow('Expected purpose to be set');
   });
 
-  it('should preserve helper usage if scenario generation fails after the server spent tokens', async () => {
+  it('should throw error if scenario generation fails', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       statusText: 'Failed',
-      json: () =>
-        Promise.resolve({
-          error: 'Warning',
-          message: 'Skipping generation',
-          tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
-        }),
     } as Response);
 
     const context: CallApiContextParams = {
@@ -74,15 +68,9 @@ describe('MemoryPoisoningProvider', () => {
       },
     };
 
-    await expect(provider.callApi('test', context)).resolves.toMatchObject({
-      error: 'Failed to generate scenario: Failed',
-      tokenUsage: {
-        prompt: 7,
-        completion: 3,
-        total: 10,
-        numRequests: 0,
-      },
-    });
+    await expect(provider.callApi('test', context)).rejects.toThrow(
+      'Failed to generate scenario: Failed',
+    );
   });
 
   it('should execute memory poisoning flow successfully', async () => {
@@ -168,7 +156,6 @@ describe('MemoryPoisoningProvider', () => {
     const scenario = {
       memory: 'memory text',
       followUp: 'follow up text',
-      tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
     };
 
     mockFetch.mockResolvedValueOnce({
@@ -205,9 +192,34 @@ describe('MemoryPoisoningProvider', () => {
 
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBe(3);
-    expect(result.tokenUsage?.prompt).toBe(52); // 7+10+20+15
-    expect(result.tokenUsage?.completion).toBe(26); // 3+5+10+8
-    expect(result.tokenUsage?.total).toBe(78); // 10+15+30+23
+    expect(result.tokenUsage?.prompt).toBe(45); // 10+20+15
+    expect(result.tokenUsage?.completion).toBe(23); // 5+10+8
+    expect(result.tokenUsage?.total).toBe(68); // 15+30+23
+  });
+
+  it('records scenario generation as attacker usage without adding a target probe', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          memory: 'memory text',
+          followUp: 'follow up text',
+          tokenUsage: { prompt: 17, completion: 6, total: 23 },
+        }),
+    } as Response);
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    const result = await provider.callApi('attack', {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: { metadata: { purpose: 'test purpose' } },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      numRequests: 3,
+      attacker: { prompt: 17, completion: 6, total: 23, numRequests: 1 },
+    });
   });
 
   it('should handle errors during execution', async () => {

@@ -19,39 +19,6 @@ function isSingleTurnStrategy(strategyId: string | undefined): boolean {
   return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
 }
 
-function stripNestedTokenUsage<T>(value: T): T {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
-  }
-
-  const { tokenUsage: _tokenUsage, ...rest } = value as Record<string, unknown>;
-  return rest as T;
-}
-
-function stripHistoricalTokenUsageMetadata(
-  metadata: TestCase['metadata'] | undefined,
-): TestCase['metadata'] {
-  if (!metadata) {
-    return metadata;
-  }
-
-  const {
-    strategyConfig: _strategyConfig,
-    providerTokenUsage: _providerTokenUsage,
-    goat,
-    hydra,
-    mischievousUser,
-    ...restMetadata
-  } = metadata;
-
-  return {
-    ...restMetadata,
-    ...(goat ? { goat: stripNestedTokenUsage(goat) } : {}),
-    ...(hydra ? { hydra: stripNestedTokenUsage(hydra) } : {}),
-    ...(mischievousUser ? { mischievousUser: stripNestedTokenUsage(mischievousUser) } : {}),
-  };
-}
-
 /**
  * Transform a raw result (testCase + response) into a TestCase ready for retry
  * Handles redteamFinalPrompt extraction for single-turn strategies
@@ -62,7 +29,7 @@ function transformResult(
   evalId: string,
 ): TestCase | null {
   try {
-    const retryMetadata = stripHistoricalTokenUsageMetadata(testCase.metadata);
+    const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
     const strategyId = testCase.metadata?.strategyId;
 
     // For single-turn strategies, use the final attack prompt from the response
@@ -84,7 +51,7 @@ function transformResult(
       ...testCase,
       vars: finalVars,
       metadata: {
-        ...retryMetadata,
+        ...restMetadata,
         originalEvalId: evalId,
         strategyConfig: undefined,
       },

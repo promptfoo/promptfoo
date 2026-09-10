@@ -24,10 +24,10 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateTokenUsage,
   createEmptyTokenUsage,
-  getErrorTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
@@ -55,15 +55,16 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
-  mergeStoredGraderResultTokenUsage,
-  RedteamProviderError,
   redteamProviderManager,
+  runRedteamGrader,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -181,6 +182,7 @@ export function renderSystemPrompts(
  * @param targetResponse - The response to be evaluated.
  * @param previousBestResponse - The previous best response for comparison.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ * @param tokenUsage - Optional scan-local accumulator for the internal judge call.
  * @returns A promise that resolves to the evaluation score.
  */
 export async function evaluateResponse(
@@ -189,7 +191,8 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
-): Promise<{ score: number; explanation: string; tokenUsage?: TokenUsage }> {
+  tokenUsage?: TokenUsage,
+): Promise<{ score: number; explanation: string }> {
   const judgeBody = JSON.stringify([
     {
       role: 'system',
@@ -206,7 +209,7 @@ export async function evaluateResponse(
       `,
     },
   ]);
-  const judgeResp = await provider.callApi(judgeBody, {
+  const judgeResp = await callGradingProvider(provider, judgeBody, {
     prompt: {
       raw: judgeBody,
       label: 'judge',
@@ -214,16 +217,16 @@ export async function evaluateResponse(
     vars: {},
   });
   TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
+  if (tokenUsage) {
+    accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
+  }
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   }
   logger.debug('[IterativeTree] Judge response', { response: judgeResp });
   if (judgeResp.error) {
-    throw new RedteamProviderError(
-      `Error from redteam (judge) provider: ${judgeResp.error}`,
-      judgeResp.tokenUsage,
-    );
+    throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
   try {
     const parsed =
@@ -236,11 +239,7 @@ export async function evaluateResponse(
 
     if (parsed?.currentResponse?.rating === undefined) {
       logger.debug('[IterativeTree] Invalid judge response, using default score');
-      return {
-        score: 1,
-        explanation: 'Failed to parse judge response',
-        tokenUsage: judgeResp.tokenUsage,
-      };
+      return { score: 1, explanation: 'Failed to parse judge response' };
     }
 
     let currentScore = parsed.currentResponse.rating;
@@ -253,7 +252,6 @@ export async function evaluateResponse(
     return {
       score: currentScore,
       explanation: parsed?.currentResponse?.explanation,
-      tokenUsage: judgeResp.tokenUsage,
     };
   } catch (e) {
     // Re-throw abort errors to properly cancel the operation
@@ -261,11 +259,7 @@ export async function evaluateResponse(
       throw e;
     }
     logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
-    return {
-      score: 1,
-      explanation: 'Failed to parse judge response',
-      tokenUsage: judgeResp.tokenUsage,
-    };
+    return { score: 1, explanation: 'Failed to parse judge response' };
   }
 }
 
@@ -284,6 +278,7 @@ export async function getNewPrompt(
     pluginId?: string;
     purpose?: string;
   },
+  totalTokenUsage?: TokenUsage,
 ): Promise<{
   improvement: string;
   inputMaterialization?: Record<string, unknown>;
@@ -308,19 +303,20 @@ export async function getNewPrompt(
         })
       : {},
   });
+  if (totalTokenUsage) {
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
+  }
+  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
   logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
-  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamResp.error) {
-    throw new RedteamProviderError(
-      `Error from redteam provider: ${redteamResp.error}`,
-      redteamResp.tokenUsage,
-    );
+    throw Object.assign(new Error(`Error from redteam provider: ${redteamResp.error}`), {
+      tokenUsage: totalTokenUsage ?? redteamResp.tokenUsage,
+    });
   }
-
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
     try {
@@ -370,25 +366,6 @@ export async function getNewPrompt(
     materializedVars: redteamResp.materializedVars,
     tokenUsage: redteamResp.tokenUsage,
   };
-}
-
-function rethrowWithAccumulatedUsage(error: unknown, totalTokenUsage: TokenUsage): never {
-  const aggregateTokenUsage = createEmptyTokenUsage();
-  accumulateTokenUsage(aggregateTokenUsage, totalTokenUsage);
-  accumulateResponseTokenUsage(
-    aggregateTokenUsage,
-    { tokenUsage: getErrorTokenUsage(error) },
-    { countAsRequest: false },
-  );
-
-  if (error instanceof Error && error.name === 'AbortError') {
-    throw Object.assign(error, { tokenUsage: aggregateTokenUsage });
-  }
-
-  throw new RedteamProviderError(
-    error instanceof Error ? error.message : String(error),
-    aggregateTokenUsage,
-  );
 }
 
 /**
@@ -519,7 +496,12 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
-type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+type StopReason =
+  | 'MAX_ATTEMPTS'
+  | 'MAX_DEPTH'
+  | 'NO_IMPROVEMENT'
+  | 'GRADER_FAILED'
+  | 'ATTACKER_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -672,9 +654,9 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
-        let promptResult: Awaited<ReturnType<typeof getNewPrompt>>;
+        let attackPromptResult: Awaited<ReturnType<typeof getNewPrompt>>;
         try {
-          promptResult = await getNewPrompt(
+          attackPromptResult = await getNewPrompt(
             redteamProvider,
             [...redteamHistory, { role: 'assistant', content: node.prompt }],
             shouldGenerateRemote()
@@ -685,9 +667,34 @@ async function runRedteamConversation({
                   purpose: test?.metadata?.purpose as string | undefined,
                 }
               : undefined,
+            totalTokenUsage,
           );
         } catch (error) {
-          rethrowWithAccumulatedUsage(error, totalTokenUsage);
+          if (
+            !(error instanceof Error) ||
+            error.name === 'AbortError' ||
+            !('tokenUsage' in error)
+          ) {
+            throw error;
+          }
+
+          logger.error('[IterativeTree] Attacker request failed', { error });
+          return {
+            output: bestResponse,
+            prompt: bestNode.prompt,
+            error: error.message,
+            metadata: {
+              highestScore: maxScore,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              messages: treeOutputs as Record<string, any>[],
+              attempts,
+              redteamTreeHistory: treeOutputs,
+              stopReason: 'ATTACKER_ERROR',
+              storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
+            },
+            tokenUsage: totalTokenUsage,
+          };
         }
 
         let {
@@ -696,8 +703,7 @@ async function runRedteamConversation({
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
-          tokenUsage: redteamTokenUsage,
-        } = promptResult;
+        } = attackPromptResult;
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
@@ -706,13 +712,7 @@ async function runRedteamConversation({
         }
 
         attempts++;
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: redteamTokenUsage },
-          {
-            countAsRequest: false,
-          },
-        );
+
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         const extractedPrompt = extractPromptFromTags(newInjectVar);
         if (extractedPrompt) {
@@ -744,17 +744,14 @@ async function runRedteamConversation({
             {
               targetId,
               evaluationId: context?.evaluationId,
-              testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
-              originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
+              testCaseId: test?.metadata?.testCaseId as string | undefined,
               purpose: test?.metadata?.purpose as string | undefined,
               goal: test?.metadata?.goal as string | undefined,
             },
           );
-          accumulateResponseTokenUsage(
-            totalTokenUsage,
-            { tokenUsage: lastTransformResult.tokenUsage },
-            { countAsRequest: false },
-          );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           if (lastTransformResult.error) {
             logger.warn('[IterativeTree] Transform failed, skipping attempt', {
@@ -810,20 +807,14 @@ async function runRedteamConversation({
             try {
               // Use the original newInjectVar (before escaping) for parsing
               const parsed = JSON.parse(newInjectVar);
-              const localMaterializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
-                parsed,
-                inputs,
-                {
+              const { vars: localMaterializedVars } =
+                await extractMaterializedVariablesFromJsonWithMetadata(parsed, inputs, {
                   materializationIndex: attempts - 1,
                   pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
                   provider: redteamProvider,
                   purpose: test?.metadata?.purpose as string | undefined,
-                },
-              );
-              accumulateResponseTokenUsage(totalTokenUsage, localMaterializedVars, {
-                countAsRequest: false,
-              });
-              Object.assign(updatedVars, localMaterializedVars.vars);
+                });
+              Object.assign(updatedVars, localMaterializedVars);
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -886,25 +877,13 @@ async function runRedteamConversation({
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
-        let evaluationResult: Awaited<ReturnType<typeof evaluateResponse>>;
-        try {
-          evaluationResult = await evaluateResponse(
-            gradingProvider,
-            judgeSystemPrompt,
-            targetResponse.output,
-            bestResponse,
-            containsPenalizedPhrase,
-          );
-        } catch (error) {
-          rethrowWithAccumulatedUsage(error, totalTokenUsage);
-        }
-        const { score, explanation, tokenUsage: judgeTokenUsage } = evaluationResult;
-        accumulateResponseTokenUsage(
+        const { score, explanation } = await evaluateResponse(
+          gradingProvider,
+          judgeSystemPrompt,
+          targetResponse.output,
+          bestResponse,
+          containsPenalizedPhrase,
           totalTokenUsage,
-          { tokenUsage: judgeTokenUsage },
-          {
-            countAsRequest: false,
-          },
         );
 
         logger.debug(
@@ -1023,7 +1002,8 @@ async function runRedteamConversation({
               };
             }
 
-            const { grade, rubric } = await grader.getResult(
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
               newInjectVar,
               targetResponse.output,
               iterationTest,
@@ -1033,13 +1013,10 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = mergeStoredGraderResultTokenUsage(
-              {
-                ...grade,
-                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-              },
-              storedGraderResult,
-            );
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            });
             graderPassed = grade.pass;
           }
         }
@@ -1243,7 +1220,7 @@ async function runRedteamConversation({
           );
         }
       } else {
-        const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
+        const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
           parsed,
           inputs,
           {
@@ -1253,10 +1230,7 @@ async function runRedteamConversation({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
-        accumulateResponseTokenUsage(totalTokenUsage, materializedVars, {
-          countAsRequest: false,
-        });
-        Object.assign(finalUpdatedVars, materializedVars.vars);
+        Object.assign(finalUpdatedVars, materializedVars);
       }
     } catch {
       // If parsing fails, it's plain text - keep original vars

@@ -35,8 +35,6 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 3. **Final Output Only**: Only the last step's outputs become test cases
 4. **Pre-Evaluation**: All transforms are applied before sending to the target
 
-If multiple transform steps perform generation work before evaluation, their token usage is accumulated across the chain for the final layered test case.
-
 ### Mode 2: Agentic + Per-Turn Transforms
 
 When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
@@ -280,9 +278,9 @@ redteam:
           - base64 # Finally base64 encode
 ```
 
-### Injection Chain
+### Jailbreak Template Chain
 
-Combine prompt injection with encoding:
+Combine jailbreak templates with encoding:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -290,8 +288,8 @@ redteam:
     - id: layer
       config:
         steps:
-          - prompt-injection # Add injection payloads
-          - rot13 # Obfuscate the injection
+          - jailbreak-templates # Apply static jailbreak templates
+          - rot13 # Obfuscate the payload
 ```
 
 ### Custom Strategy Pipeline

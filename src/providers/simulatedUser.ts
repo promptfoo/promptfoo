@@ -1,7 +1,8 @@
-import logger from '../logger';
+import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -21,6 +22,16 @@ export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
+
+function providerOutputToString(output: unknown): string {
+  if (output == null) {
+    return '';
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return safeJsonStringify(output) ?? String(output);
+}
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
@@ -57,10 +68,6 @@ export class SimulatedUser implements ApiProvider {
    * Cloud tasks are used for each, the taskId needs to be explicitly defined/scoped.
    */
   readonly taskId: string = 'tau';
-
-  protected shouldCountUserProviderRequests(): boolean {
-    return true;
-  }
 
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
@@ -191,7 +198,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
+  ): Promise<{ messages: Message[]; response: ProviderResponse }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -207,16 +214,32 @@ export class SimulatedUser implements ApiProvider {
     if (response.error) {
       return {
         messages,
-        error: response.error,
-        tokenUsage: response.tokenUsage,
+        response,
       };
     }
 
-    logger.debug(`User: ${response.output}`);
+    const content = providerOutputToString(response.output);
+    logger.debug(`User: ${content}`);
     return {
-      messages: [...messages, { role: 'user', content: String(response.output || '') }],
-      tokenUsage: response.tokenUsage,
+      messages: [...messages, { role: 'user', content }],
+      response,
     };
+  }
+
+  /**
+   * Accumulate usage for the model that simulates the user. Red-team subclasses can
+   * override this hook to keep attack generation separate from target usage.
+   */
+  protected accumulateSimulatedUserTokenUsage(
+    tokenUsage: TokenUsage,
+    response: ProviderResponse,
+  ): void {
+    accumulateResponseTokenUsage(tokenUsage, response);
+  }
+
+  /** Preserve logical target usage while separately recording cache-missed requests. */
+  private accumulateTargetTokenUsage(tokenUsage: TokenUsage, response: ProviderResponse): void {
+    accumulateResponseTokenUsage(tokenUsage, response);
   }
 
   private async sendMessageToAgent(
@@ -259,7 +282,9 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
 
-    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
+    if (isDebugEnabled()) {
+      logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
+    }
     return response;
   }
 
@@ -312,7 +337,8 @@ export class SimulatedUser implements ApiProvider {
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
       agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
+
+      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -322,32 +348,29 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
     }
 
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
-      // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
+      // The simulated-user provider generates the next attack turn and may signal completion.
       const userResult = await this.sendMessageToUser(messages, userProvider);
-      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
-      accumulateResponseTokenUsage(
-        tokenUsage,
-        { tokenUsage: userTokenUsage },
-        { countAsRequest: this.shouldCountUserProviderRequests() },
-      );
+
+      this.accumulateSimulatedUserTokenUsage(tokenUsage, userResult.response);
 
       // Check for errors from remote generation disable
-      if (userResult.error) {
+      if (userResult.response.error) {
         return {
-          error: userResult.error,
+          error: userResult.response.error,
           tokenUsage,
         };
       }
 
+      const { messages: messagesToUser } = userResult;
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
-      // Check whether the judge has determined that the instruction goal is satisfied.
+      // Check whether the simulated user has determined that the instruction goal is satisfied.
       if (
         lastMessage.content &&
         typeof lastMessage.content === 'string' &&
@@ -364,7 +387,8 @@ export class SimulatedUser implements ApiProvider {
         targetProvider,
         context,
       );
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
+
+      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -374,7 +398,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
     }
 
     return this.serializeOutput(

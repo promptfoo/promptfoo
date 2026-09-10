@@ -11,14 +11,15 @@ import {
   providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   Inputs,
   PluginConfig,
   ProviderResponse,
@@ -33,38 +34,6 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
   targetId?: string;
   redteamGenerationContext?: RemoteGenerationContext;
-}
-
-async function getRemoteTaskErrorPayload(response: Response): Promise<{
-  errorMessage: string;
-  tokenUsage?: TokenUsage;
-}> {
-  const responseText = await response.text();
-  let errorPayload:
-    | {
-        error?: string;
-        message?: string;
-        tokenUsage?: TokenUsage;
-      }
-    | undefined;
-
-  try {
-    errorPayload = JSON.parse(responseText) as {
-      error?: string;
-      message?: string;
-      tokenUsage?: TokenUsage;
-    };
-  } catch {
-    // Fall back to the raw response body below.
-  }
-
-  return {
-    errorMessage:
-      errorPayload?.error ||
-      errorPayload?.message ||
-      `API call failed with status ${response.status}: ${responseText}`,
-    ...(errorPayload?.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
-  };
 }
 
 /**
@@ -146,11 +115,17 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        const errorPayload = await getRemoteTaskErrorPayload(response);
-        return {
-          error: `[HarmfulCompletionProvider] ${errorPayload.errorMessage}`,
-          ...(errorPayload.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
-        };
+        const body = await response.text();
+        const error = new Error(`API call failed with status ${response.status}: ${body}`);
+        try {
+          const parsed = JSON.parse(body) as { tokenUsage?: TokenUsage };
+          if (parsed.tokenUsage) {
+            Object.assign(error, { tokenUsage: parsed.tokenUsage });
+          }
+        } catch {
+          // Preserve the original error for non-JSON responses.
+        }
+        throw error;
       }
 
       const data = await response.json();
@@ -164,7 +139,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       return {
         output: validOutputs,
-        tokenUsage: data.tokenUsage,
+        ...(data.tokenUsage ? { tokenUsage: data.tokenUsage as TokenUsage } : {}),
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
@@ -172,8 +147,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         throw err;
       }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
+      const parsedTokenUsage =
+        err && typeof err === 'object' && 'tokenUsage' in err
+          ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
+          : undefined;
+      const tokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -197,6 +178,7 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
     | 'hydra-decision'
+    | 'goblin-decision'
     | 'voice-crescendo'
     | 'voice-crescendo-eval';
   /**
@@ -279,8 +261,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
-          error: data.error || 'LLM did not return a result, likely refusal',
-          tokenUsage: data.tokenUsage,
+          error: 'LLM did not return a result, likely refusal',
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
 
@@ -368,6 +350,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
           Learn more: ${docsUrl}
         `,
+        tokenUsage: { numRequests: 0 },
       };
     }
 
@@ -396,11 +379,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        const errorPayload = await getRemoteTaskErrorPayload(response);
-        return {
-          error: `API call error: ${errorPayload.errorMessage}`,
-          ...(errorPayload.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
-        };
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
       const data = (await response.json()) as {

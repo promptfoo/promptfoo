@@ -1,3 +1,4 @@
+import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
@@ -53,8 +54,13 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
+  const propagatedHeaders: Record<string, string> = {};
+  propagation.inject(context.active(), propagatedHeaders);
+
   return {
     'Content-Type': 'application/json',
+    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
+    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
     ...extraHeaders,
   };
 }
@@ -193,9 +199,11 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   if (envUrl) {
     return envUrl;
   }
+  // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
     return cloudConfig.getApiHost() + '/api/v1/task/harmful';
   }
+  // otherwise use the default
   return 'https://api.promptfoo.app/api/v1/task/harmful';
 }

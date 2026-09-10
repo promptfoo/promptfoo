@@ -19,6 +19,11 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -701,50 +706,96 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
-  testCount,
   isRedteam,
+  testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
-  testCount?: PromptSummaryMetric;
   isRedteam: boolean;
-}): React.ReactNode[] {
-  const totalTokens = metrics?.tokenUsage?.total ?? 0;
-  const gradingTokens = metrics?.tokenUsage?.assertions?.total ?? 0;
-  const filteredGradingTokens = filteredMetrics?.tokenUsage?.assertions?.total;
-  const rows: React.ReactNode[] = [];
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  testCount?: PromptSummaryMetric;
+}): React.ReactNode {
+  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
+  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
+
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
+    return null;
+  }
+
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
+    : undefined;
+  const filteredAttackerTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
+    : undefined;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
+    : undefined;
+  const filteredTokens =
+    filteredPrimaryTokens === undefined
+      ? undefined
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+    filteredTokens !== undefined && testCount?.filtered
+      ? filteredTokens / testCount.filtered
+      : undefined;
 
-  if (totalTokens) {
-    rows.push(
-      <div key="total-tokens">
-        <strong>{isRedteam ? 'Non-grading Tokens:' : 'Total Tokens:'}</strong>{' '}
-        {formatMetricValue(totalTokens)}
-        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-      </div>,
-      <div key="avg-tokens">
-        <strong>{isRedteam ? 'Avg Non-grading Tokens:' : 'Avg Tokens:'}</strong>{' '}
-        {formatMetricValue(totalAverage)}
-        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-      </div>,
-    );
-  }
-
-  if (isRedteam && gradingTokens) {
-    rows.push(
-      <div key="grading-tokens">
-        <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
-        {filteredGradingTokens
-          ? renderFilteredSuffix(formatMetricValue(filteredGradingTokens))
-          : null}
-      </div>,
-    );
-  }
-
-  return rows;
+  return (
+    <>
+      <div>
+        <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+        {filteredTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
+      </div>
+      <div>
+        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
+        {formatMetricValue(primaryTokens)}
+        {filteredPrimaryTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
+      </div>
+      {attackerTokens > 0 ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
+          {filteredAttackerTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
+        </div>
+      ) : null}
+      {gradingTokens > 0 ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+          {filteredGradingTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
+      ) : null}
+      <div>
+        <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+        {filteredAverage === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
+      </div>
+    </>
+  );
 }
 
 function renderLatencyMetric({
@@ -785,13 +836,7 @@ function renderLatencyMetric({
   );
 }
 
-function renderTokensPerSecondMetric({
-  metrics,
-  isRedteam,
-}: {
-  metrics: PromptMetrics['total'];
-  isRedteam: boolean;
-}): React.ReactNode {
+function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.ReactNode {
   if (!metrics?.totalLatencyMs || !metrics.tokenUsage?.completion) {
     return null;
   }
@@ -803,8 +848,7 @@ function renderTokensPerSecondMetric({
 
   return (
     <div>
-      <strong>{isRedteam ? 'Non-grading Tokens/Sec:' : 'Tokens/Sec:'}</strong>{' '}
-      {formatMetricValue(tokPerSec)}
+      <strong>Tokens/Sec:</strong> {formatMetricValue(tokPerSec)}
     </div>
   );
 }
@@ -1057,15 +1101,15 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
-        testCount: testCounts[idx],
         isRedteam,
+        testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
       })}
-      {renderTokensPerSecondMetric({ metrics, isRedteam })}
+      {renderTokensPerSecondMetric(metrics)}
     </div>
   );
 }
@@ -2206,6 +2250,7 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
@@ -2231,6 +2276,7 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    isRedteam,
     maxTextLength,
     metricTotals,
     numAsserts,

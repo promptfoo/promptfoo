@@ -33,18 +33,18 @@ describe('ContractPlugin', () => {
         {
           vars: { test_var: 'Another test prompt' },
           assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
-          metadata: expect.objectContaining({
+          metadata: {
             pluginId: 'contracts',
-            pluginConfig: {},
-          }),
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { test_var: 'Test prompt' },
           assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
-          metadata: expect.objectContaining({
+          metadata: {
             pluginId: 'contracts',
-            pluginConfig: {},
-          }),
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );

@@ -10,7 +10,11 @@ import {
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -35,13 +39,14 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
-  mergeStoredGraderResultTokenUsage,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -257,7 +262,7 @@ export async function runMetaAgentRedteam({
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
     // Agent coordination calls are internal and should not count as target probes.
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+    accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
@@ -312,7 +317,6 @@ export async function runMetaAgentRedteam({
         targetId,
         evaluationId: context?.evaluationId,
         testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
-        originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
         purpose: test?.metadata?.purpose as string | undefined,
         goal: test?.metadata?.goal as string | undefined,
       };
@@ -324,11 +328,9 @@ export async function runMetaAgentRedteam({
         Strategies,
         transformContext,
       );
-      accumulateResponseTokenUsage(
-        totalTokenUsage,
-        { tokenUsage: lastTransformResult.tokenUsage },
-        { countAsRequest: false },
-      );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[IterativeMeta] Transform failed, skipping iteration', {
@@ -403,9 +405,6 @@ export async function runMetaAgentRedteam({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
-        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
-          countAsRequest: false,
-        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -458,12 +457,13 @@ export async function runMetaAgentRedteam({
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
     let computedTraceSummary: string | undefined;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -472,6 +472,9 @@ export async function runMetaAgentRedteam({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {
@@ -599,7 +602,8 @@ export async function runMetaAgentRedteam({
           });
         }
 
-        const { grade, rubric } = await grader.getResult(
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
           attackPrompt,
           targetResponse.output,
           iterationTest,
@@ -613,8 +617,7 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = mergeStoredGraderResultTokenUsage(graderResult, storedGraderResult);
-        graderResult = storedGraderResult;
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

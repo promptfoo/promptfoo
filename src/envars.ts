@@ -20,6 +20,14 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores the legacy unguarded behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
   PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
@@ -58,6 +66,8 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
@@ -109,6 +119,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -242,6 +253,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -338,6 +352,9 @@ type EnvVars = {
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
+
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
 
   // Mistral
   MISTRAL_MAX_TOKENS?: string;

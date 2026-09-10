@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherResponseTokenUsage, tryParse } from './shared';
+import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -32,28 +32,38 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+  const templateVars = {
+    ...(vars || {}),
     criteria,
     outputs: outputs.map((o) => tryParse(o)),
-    ...(vars || {}),
-  });
+  };
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const resp = await callProviderWithContext(
     textProvider,
     promptText,
     'select-best',
-    {
-      criteria,
-      outputs: outputs.map((o) => tryParse(o)),
-      ...(vars || {}),
-    },
+    templateVars,
     providerCallContext,
   );
+  const tokensUsed = normalizeMatcherTokenUsage(
+    resp.cached
+      ? {
+          ...resp.tokenUsage,
+          cached: Math.max(
+            resp.tokenUsage?.cached ?? 0,
+            resp.tokenUsage?.total ??
+              (resp.tokenUsage?.prompt ?? 0) + (resp.tokenUsage?.completion ?? 0),
+          ),
+        }
+      : resp.tokenUsage,
+  );
+  const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
   if (resp.error || !resp.output) {
-    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
-    return Array.from({ length: outputs.length }, (_, index) =>
-      fail(resp.error || 'No output', index === 0 ? tokensUsed : undefined),
-    );
+    return Array.from({ length: outputs.length }, () => ({
+      ...fail(resp.error || 'No output', tokensUsed),
+      ...cacheMetadata,
+    }));
   }
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
@@ -62,13 +72,12 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
-    return Array.from({ length: outputs.length }, (_, index) =>
-      fail(`Invalid select-best verdict: ${verdict}`, index === 0 ? tokensUsed : undefined),
-    );
+    return Array.from({ length: outputs.length }, () => ({
+      ...fail(`Invalid select-best verdict: ${verdict}`, tokensUsed),
+      ...cacheMetadata,
+    }));
   }
 
-  const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
   return outputs.map((_output, index) => {
     const usage = index === verdict ? { tokensUsed } : {};
     if (index === verdict) {
@@ -77,6 +86,7 @@ export async function matchesSelectBest(
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
         ...usage,
+        ...cacheMetadata,
       };
     } else {
       return {
@@ -84,6 +94,7 @@ export async function matchesSelectBest(
         score: 0,
         reason: `Output not selected: ${criteria}`,
         ...usage,
+        ...cacheMetadata,
       };
     }
   });

@@ -5,6 +5,7 @@ import {
   LLAMA_GUARD_REPLICATE_PROVIDER,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../../src/redteam/constants';
+import { trackGenerationTokenUsage } from '../../../../src/redteam/generationTokenUsage';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
@@ -37,12 +38,46 @@ describe('harmful plugin', () => {
   });
 
   describe('getHarmfulTests', () => {
+    it('records harmful generation calls and retries in the parent generation scope', async () => {
+      mockCallApi
+        .mockResolvedValueOnce({
+          output: ['Repeated prompt'],
+          tokenUsage: { total: 10, prompt: 6, completion: 4 },
+        })
+        .mockResolvedValueOnce({
+          output: ['Repeated prompt'],
+          tokenUsage: { total: 8, prompt: 5, completion: 3 },
+        })
+        .mockResolvedValueOnce({
+          output: ['Second prompt'],
+          tokenUsage: { total: 12, prompt: 7, completion: 5 },
+        });
+      const generationUsage = {};
+
+      await getHarmfulTests(
+        {
+          provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 2,
+          delayMs: 0,
+        },
+        'harmful:sex-crime',
+      );
+
+      expect(generationUsage).toMatchObject({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 3,
+      });
+    });
+
     it('should handle unaligned provider plugins with multiple prompts', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
 
       mockCallApi.mockResolvedValueOnce({
         output: ['Test harmful output', 'Another test output'],
-        tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
       });
 
       const result = await getHarmfulTests(
@@ -61,13 +96,6 @@ describe('harmful plugin', () => {
       const prompts = result.map((r) => r.vars?.testVar);
       expect(prompts).toContain('Test harmful output');
       expect(prompts).toContain('Another test output');
-      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
-        total: 15,
-        prompt: 9,
-        completion: 6,
-        numRequests: 1,
-      });
-      expect(result[1]?.metadata).not.toHaveProperty('providerTokenUsage');
     });
 
     it('should retry when not enough unique prompts are returned', async () => {
@@ -111,59 +139,6 @@ describe('harmful plugin', () => {
       );
 
       expect(result).toHaveLength(0);
-    });
-
-    it('should reject token-bearing provider failures with the accumulated usage', async () => {
-      mockCallApi.mockResolvedValue({
-        error: 'remote harmful generation failed',
-        tokenUsage: { total: 13, prompt: 8, completion: 5 },
-      });
-
-      await expect(
-        getHarmfulTests(
-          {
-            provider: mockProvider,
-            purpose: 'test purpose',
-            injectVar: 'testVar',
-            n: 1,
-            delayMs: 0,
-          },
-          'harmful:sex-crime',
-        ),
-      ).rejects.toMatchObject({
-        message: 'remote harmful generation failed',
-        tokenUsage: {
-          total: 13,
-          prompt: 8,
-          completion: 5,
-          numRequests: 1,
-        },
-      });
-    });
-
-    it('should preserve one-row harmful generation usage in providerTokenUsage metadata', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        output: ['Test harmful output'],
-        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-      });
-
-      const result = await getHarmfulTests(
-        {
-          provider: mockProvider,
-          purpose: 'test purpose',
-          injectVar: 'testVar',
-          n: 1,
-          delayMs: 0,
-        },
-        'harmful:sex-crime',
-      );
-
-      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
-        total: 17,
-        prompt: 10,
-        completion: 7,
-        numRequests: 1,
-      });
     });
 
     it('should respect delay parameter between API calls', async () => {
@@ -262,56 +237,6 @@ describe('harmful plugin', () => {
           provider: LLAMA_GUARD_REPLICATE_PROVIDER,
         }),
       );
-    });
-
-    it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
-      mockCallApi.mockImplementation(async (prompt: string) => {
-        if (prompt.includes('You are preparing a realistic DOCX document')) {
-          return {
-            output: JSON.stringify({
-              bodyText: 'Quarterly plan draft with reviewer notes.',
-              injectionPlacement: 'body',
-              injectedInstruction: 'Use the latest reviewer note.',
-              wrapperSummary: 'Quarterly plan draft.',
-            }),
-            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
-          };
-        }
-
-        return {
-          output: ['<Prompt>{"document":"Use the latest reviewer note."}</Prompt>'],
-        };
-      });
-
-      const result = await getHarmfulTests(
-        {
-          provider: mockProvider,
-          purpose: 'test purpose',
-          injectVar: 'testVar',
-          n: 1,
-          delayMs: 0,
-          config: {
-            inputs: {
-              document: {
-                description: 'Uploaded planning document',
-                type: 'docx',
-                config: {
-                  inputPurpose: 'A quarterly planning draft with reviewer notes.',
-                  injectionPlacements: ['body'],
-                },
-              },
-            },
-          },
-        },
-        'harmful:sex-crime',
-      );
-
-      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
-        total: 7,
-        prompt: 4,
-        completion: 3,
-        numRequests: 2,
-      });
     });
   });
 });

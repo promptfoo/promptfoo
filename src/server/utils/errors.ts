@@ -52,11 +52,7 @@ function serializeError(value: unknown, depth: number, seen: Set<unknown>): unkn
  * and land in Express's default error handler — leaving the client with
  * an empty 500 and no JSON body.
  */
-function safeRespond(
-  res: Response,
-  status: number,
-  body: { error: string; details?: unknown } & Record<string, unknown>,
-) {
+function safeRespond(res: Response, status: number, body: { error: string; details?: unknown }) {
   let parsed: unknown;
   try {
     parsed = ErrorResponseSchema.parse(body);
@@ -73,21 +69,20 @@ function safeRespond(
  * Send a standardized error response.
  *
  * The wire shape is `{ error: string }` (with optional `details`/
- * `suggestion`/`success` permitted by `ErrorResponseSchema.passthrough()`).
- * `internalError` is logged but never returned to the client. Endpoint-specific
- * fields must already be safe for the public wire response.
+ * `suggestion`/`success` permitted by `ErrorResponseSchema.passthrough()`,
+ * but this helper only emits `error`). `internalError` is logged but
+ * never returned to the client.
  */
 export function sendError(
   res: Response,
   status: number,
   publicMessage: string,
   internalError?: unknown,
-  additionalFields: Record<string, unknown> = {},
 ): void {
   if (internalError !== undefined) {
     logger.error(publicMessage, toLogContext(internalError));
   }
-  safeRespond(res, status, { error: publicMessage, ...additionalFields });
+  safeRespond(res, status, { error: publicMessage });
 }
 
 /**

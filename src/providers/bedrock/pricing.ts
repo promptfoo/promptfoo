@@ -1,19 +1,57 @@
 import {
-  CLAUDE_5_REGIONAL_PREMIUM,
+  CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeOpus5Model,
+  isClaudeRegionalPremiumModel,
+  isClaudeSonnet5Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex';
 };
 
-type BedrockPricing = { input: number; output: number };
+type BedrockPricing = {
+  input: number;
+  output: number;
+  /**
+   * Rates that replace `input`/`output` once total input tokens reach `threshold`.
+   * Cache rates are derived from the tier's input rate, matching how AWS prices the
+   * `-cache-read/-cache-write-...-long-context-...` meters.
+   */
+  longContext?: { threshold: number; input: number; output: number };
+};
 
-/** Bedrock model pricing per 1M tokens. */
+/**
+ * Amazon Nova bills prompt-cache reads at 25% of the model's input rate and cache writes at
+ * $0.00. Confirmed for every Nova model AWS publishes a cache meter for (Micro, Lite, Pro,
+ * Premier, 2.0 Lite) from the AWS Price List API on 2026-09-01 — the ratio is exactly 0.25 in
+ * each case, and every `-cache-write-input-token-count` meter is zero.
+ *
+ * Claude has its own (different) cache economics and is handled by `calculateCacheInputCost`.
+ * Models with no published cache meter keep the previous behaviour of ignoring cache tokens.
+ */
+const NOVA_CACHE_READ_RATIO = 0.25;
+
+function isNovaPromptCachingModel(normalizedModelId: string): boolean {
+  return normalizedModelId.includes('amazon.nova-');
+}
+
+/**
+ * Bedrock model pricing per 1M tokens.
+ *
+ * Rates are the plain us-east-1 on-demand meters from the AWS Price List API
+ * (`aws pricing get-products --service-code AmazonBedrock`), which is the authority — the
+ * `-batch`, `-custom-model`, `-flex`, `-priority` and `-cross-region-global` meters carry
+ * different rates and must not be used here. Last reconciled 2026-09-01.
+ */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
+  'anthropic.claude-fable-5-1': { input: 10, output: 50 },
+  'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
+  // Claude Opus 5 (same list rates as Opus 4.8; full 1M context bills at the standard rate)
+  'anthropic.claude-opus-5': { input: 5, output: 25 },
   // Claude Opus 4.8
   'anthropic.claude-opus-4-8': { input: 5, output: 25 },
   // Claude Opus 4.7
@@ -24,8 +62,24 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 4/4.5
-  'anthropic.claude-sonnet-4': { input: 3, output: 15 },
+  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
+  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
+  // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
+  // on `includes()`, and AWS publishes long-context meters only for Sonnet 4 itself. 4.5 and
+  // 4.6 bill their full context flat, so they must not inherit Sonnet 4's surcharge — add an
+  // explicit entry here for any future 4.x release for the same reason.
+  'anthropic.claude-sonnet-4-6': { input: 3, output: 15 },
+  'anthropic.claude-sonnet-4-5': { input: 3, output: 15 },
+  // Claude Sonnet 4 is the only Bedrock Claude model with published long-context meters
+  // (verified 2026-09-01 in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1):
+  // above 200K input tokens input doubles to $6 and output is 1.5x at $22.50. The matching
+  // `-cache-read/-cache-write-...-long-context-...` meters are 10% and 1.25x of the tier's
+  // input rate, which falls out of deriving the cache rates from it.
+  'anthropic.claude-sonnet-4': {
+    input: 3,
+    output: 15,
+    longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
   // Claude 3.x
@@ -38,24 +92,25 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-micro': { input: 0.035, output: 0.14 },
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
-  'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
+  'amazon.nova-premier': { input: 2.5, output: 12.5 },
+  // Amazon Nova 2 (reasoning models). The cross-region global profile is cheaper
+  // ($0.30/$2.50); this is the plain us-east-1 on-demand rate.
+  'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
-  'amazon.titan-text-express': { input: 0.8, output: 1.6 },
+  'amazon.titan-text-express': { input: 0.2, output: 0.6 },
   'amazon.titan-text-premier': { input: 0.5, output: 1.5 },
   // Meta Llama
   'meta.llama3-1-8b': { input: 0.22, output: 0.22 },
-  'meta.llama3-1-70b': { input: 0.99, output: 0.99 },
+  'meta.llama3-1-70b': { input: 0.72, output: 0.72 },
   'meta.llama3-1-405b': { input: 5.32, output: 16 },
   'meta.llama3-2-1b': { input: 0.1, output: 0.1 },
   'meta.llama3-2-3b': { input: 0.15, output: 0.15 },
-  'meta.llama3-2-11b': { input: 0.35, output: 0.35 },
-  'meta.llama3-2-90b': { input: 2.0, output: 2.0 },
-  'meta.llama3-3-70b': { input: 0.99, output: 0.99 },
-  'meta.llama4-scout': { input: 0.17, output: 0.68 },
-  'meta.llama4-maverick': { input: 0.17, output: 0.68 },
+  'meta.llama3-2-11b': { input: 0.16, output: 0.16 },
+  'meta.llama3-2-90b': { input: 0.72, output: 0.72 },
+  'meta.llama3-3-70b': { input: 0.72, output: 0.72 },
+  'meta.llama4-scout': { input: 0.17, output: 0.66 },
+  'meta.llama4-maverick': { input: 0.24, output: 0.97 },
   'meta.llama4': { input: 1.0, output: 3.0 },
   // Mistral
   'mistral.mistral-7b': { input: 0.15, output: 0.2 },
@@ -73,9 +128,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
   'deepseek.r1': { input: 1.35, output: 5.4 },
   // Qwen
-  'qwen.qwen3-32b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-32b': { input: 0.15, output: 0.6 },
   'qwen.qwen3-235b': { input: 0.18, output: 0.54 },
-  'qwen.qwen3-coder-30b': { input: 0.2, output: 0.6 },
+  'qwen.qwen3-coder-30b': { input: 0.15, output: 0.6 },
   'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
   'qwen.qwen3': { input: 0.5, output: 1.5 },
   // Writer Palmyra
@@ -232,7 +287,7 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
   'minimax.minimax-m2': { input: 0.35, output: 1.41 },
   'kimi-k2.5': { input: 0.72, output: 3.6 },
   'kimi-k2-thinking': { input: 0.72, output: 3.0 },
-  'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
+  'nemotron-nano-12b-v2': { input: 0.23, output: 0.7 },
   'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
   'nemotron-nano': { input: 0.07, output: 0.27 },
   'nemotron-super': { input: 0.18, output: 0.78 },
@@ -267,14 +322,16 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
     'gemma-3-12b': { input: 0.11, output: 0.34 },
     'gemma-3-27b': { input: 0.27, output: 0.45 },
   },
+  // These are AWS's published ap-southeast-2 meters, not the US rate scaled by a regional
+  // uplift. Four entries had been derived that way and drifted from the real values.
   'ap-southeast-2': {
     'zai.glm-5': { input: 1.03, output: 3.3 },
-    'zai.glm-4.7-flash': { input: 0.0721, output: 0.412 },
-    'zai.glm-4.7': { input: 0.618, output: 2.266 },
+    'zai.glm-4.7-flash': { input: 0.07, output: 0.41 },
+    'zai.glm-4.7': { input: 0.62, output: 2.27 },
     'minimax.minimax-m2.5': { input: 0.31, output: 1.24 },
-    'minimax.minimax-m2.1': { input: 0.309, output: 1.236 },
+    'minimax.minimax-m2.1': { input: 0.31, output: 1.24 },
     'minimax.minimax-m2': { input: 0.309, output: 1.236 },
-    'kimi-k2.5': { input: 0.618, output: 3.09 },
+    'kimi-k2.5': { input: 0.62, output: 3.09 },
     'kimi-k2-thinking': { input: 0.618, output: 2.575 },
     'nemotron-nano-12b-v2': { input: 0.206, output: 0.618 },
     'nemotron-nano-3-30b': { input: 0.0618, output: 0.2472 },
@@ -374,32 +431,43 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  const isLongContextClaudeSonnet =
-    /anthropic\.claude-sonnet-4-(?:5|6)(?!\d)/.test(normalizedModelId) &&
-    promptTokens + cacheReadTokens + cacheWriteTokens > 200_000;
-  const pricing = isLongContextClaudeSonnet
-    ? { input: 6, output: 22.5 }
-    : getBedrockPricing(normalizedModelId, region);
+  const pricing = getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
   }
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
-  // premium. The model ID may be a bare `global.` profile or an
-  // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
+  // premium for Claude 4.5+ models. The model ID may be a bare `global.` profile
+  // or an inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
-      ? CLAUDE_5_REGIONAL_PREMIUM
+    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
+      ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =
     serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
   const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
-  const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
+  // Long-context tiers are billed on total input size, which for Anthropic means the uncached
+  // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
+  const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
+  const tier =
+    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
+      ? pricing.longContext
+      : pricing;
+
+  const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
-    ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
-    : promptTokens * inputRate;
-  const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
+    ? calculateCacheInputCost(
+        inputRate,
+        promptTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        normalizedModelId,
+      )
+    : isNovaPromptCachingModel(normalizedModelId)
+      ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
+      : promptTokens * inputRate;
+  const outputCost = (completionTokens / 1_000_000) * tier.output * pricingMultiplier;
   return inputCost + outputCost;
 }
 
@@ -410,6 +478,10 @@ export function calculateBedrockCost(
  * stale or refer to different variants. Before this shared calculator existed, InvokeModel only
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
+ *
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
+ * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
+ * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,
@@ -422,6 +494,8 @@ export function calculateBedrockInvokeModelCost(
   const normalizedModelId = modelId.toLowerCase();
   if (
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeOpus5Model(normalizedModelId) &&
+    !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
     return undefined;

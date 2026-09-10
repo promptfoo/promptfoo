@@ -11,13 +11,12 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
+import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
-  normalizeMatcherResponseTokenUsage,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -64,7 +63,7 @@ export async function matchesAnswerRelevance(
       { answer: parsedOutput },
       providerCallContext,
     );
-    accumulateResponseTokenUsage(tokensUsed, resp);
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
     }
@@ -81,8 +80,14 @@ export async function matchesAnswerRelevance(
     `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
-  const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
-  accumulateResponseTokenUsage(tokensUsed, inputEmbeddingResp);
+  const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
+  const inputEmbeddingResp = await callGradingProvider(
+    embeddingProvider,
+    'answer-relevance.embedding',
+    () => callEmbeddingApi(input),
+    { callContext: providerCallContext, operationName: 'embeddings' },
+  );
+  accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
@@ -92,8 +97,13 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await embeddingProvider.callEmbeddingApi(question);
-    accumulateResponseTokenUsage(tokensUsed, resp);
+    const resp = await callGradingProvider(
+      embeddingProvider,
+      'answer-relevance.embedding',
+      () => callEmbeddingApi(question),
+      { callContext: providerCallContext, operationName: 'embeddings' },
+    );
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -152,9 +162,9 @@ export async function matchesContextRecall(
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    ...(vars || {}),
     context: contextString,
     groundTruth,
-    ...(vars || {}),
   });
 
   const resp = await callProviderWithContext(
@@ -162,14 +172,14 @@ export async function matchesContextRecall(
     promptText,
     'context-recall',
     {
+      ...(vars || {}),
       context: contextString,
       groundTruth,
-      ...(vars || {}),
     },
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -221,7 +231,7 @@ export async function matchesContextRecall(
     reason: pass
       ? `Recall ${score.toFixed(2)} is >= ${threshold}`
       : `Recall ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: normalizeMatcherResponseTokenUsage(resp),
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata,
   };
 }
@@ -259,7 +269,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -314,7 +324,7 @@ export async function matchesContextRelevance(
     reason: pass
       ? `Context relevance ${score.toFixed(2)} is >= ${threshold}`
       : `Context relevance ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: normalizeMatcherResponseTokenUsage(resp),
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata,
   };
 }
@@ -353,9 +363,9 @@ export async function matchesContextFaithfulness(
   const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
+    ...(vars || {}),
     question: query,
     answer: tryParse(output),
-    ...(vars || {}),
   });
 
   let resp = await callProviderWithContext(
@@ -363,13 +373,13 @@ export async function matchesContextFaithfulness(
     promptText,
     'context-faithfulness-longform',
     {
+      ...(vars || {}),
       question: query,
       answer: tryParse(output),
-      ...(vars || {}),
     },
     providerCallContext,
   );
-  accumulateResponseTokenUsage(tokensUsed, resp);
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }
@@ -380,9 +390,9 @@ export async function matchesContextFaithfulness(
 
   const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
+    ...(vars || {}),
     context: contextString,
     statements,
-    ...(vars || {}),
   });
 
   resp = await callProviderWithContext(
@@ -390,13 +400,13 @@ export async function matchesContextFaithfulness(
     promptText,
     'context-faithfulness-nli',
     {
+      ...(vars || {}),
       context: contextString,
       statements,
-      ...(vars || {}),
     },
     providerCallContext,
   );
-  accumulateResponseTokenUsage(tokensUsed, resp);
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }
@@ -412,14 +422,18 @@ export async function matchesContextFaithfulness(
       verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
       const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
       if (parsedVerdicts.length > 0) {
-        score =
-          1 - parsedVerdicts.filter((answer) => !answer.includes('yes')).length / statements.length;
+        const unsupportedVerdicts = parsedVerdicts.filter(
+          (answer) => !answer.includes('yes'),
+        ).length;
+        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
       }
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
       const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
       if (noVerdictCount + yesVerdictCount > 0) {
-        score = 1 - noVerdictCount / statements.length;
+        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
       }
     }
   }

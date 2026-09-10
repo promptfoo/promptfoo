@@ -1,10 +1,10 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
@@ -42,7 +42,9 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
+import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
   ADDITIONAL_STRATEGIES,
@@ -59,16 +61,11 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
-import {
-  attachProviderTokenUsage,
-  detachProviderTokenUsage,
-  getGenerationErrorTokenUsage,
-  mergeProviderTokenUsage,
-} from '../strategies/util';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, TokenUsage, UnifiedConfig } from '../../types/index';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
   PolicyObject,
@@ -273,19 +270,6 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
-function rethrowWithGenerationTokenUsage(
-  error: unknown,
-  previousTokenUsage: TokenUsage | undefined,
-): never {
-  const errorTokenUsage = getGenerationErrorTokenUsage(error);
-  const tokenUsage = mergeProviderTokenUsage(previousTokenUsage, errorTokenUsage);
-  if (tokenUsage) {
-    const errorCarrier = error && typeof error === 'object' ? error : new Error(String(error));
-    throw Object.assign(errorCarrier, { tokenUsage });
-  }
-  throw error;
-}
-
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
@@ -346,7 +330,7 @@ async function doGenerateRedteamInternal(
     configPath &&
     (await pathExists(configPath))
   ) {
-    const redteamContent = yaml.load(
+    const redteamContent = loadYaml(
       await fs.readFile(outputPath, 'utf8'),
     ) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
@@ -439,8 +423,7 @@ async function doGenerateRedteamInternal(
     return null;
   }
 
-  // Validate email for remote generation. Purpose extraction remains remote unless it is
-  // explicitly disabled, even when other generation work can run locally.
+  // Validate email for remote generation
   if (!neverGenerateRemote()) {
     let hasValidEmail = false;
     while (!hasValidEmail) {
@@ -679,24 +662,6 @@ async function doGenerateRedteamInternal(
     );
   }
 
-  /**
-   * Clean up the provider after generation or writing finishes so MCP servers release resources.
-   */
-  const cleanupProvider = async (): Promise<void> => {
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
-  };
-
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
@@ -704,6 +669,13 @@ async function doGenerateRedteamInternal(
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
 
   if (contexts && contexts.length > 0) {
     // Multi-context mode: generate tests for each context
@@ -712,7 +684,6 @@ async function doGenerateRedteamInternal(
     // Collect failed plugins across all contexts
     const allFailedPlugins: { pluginId: string; requested: number }[] = [];
     let firstContextPurpose: string | undefined;
-    let contextGenerationTokenUsage: TokenUsage | undefined;
 
     for (const context of contexts) {
       logger.info(`  Generating tests for context: ${context.id}`);
@@ -744,40 +715,30 @@ async function doGenerateRedteamInternal(
             showProgressBar: options.progressBar !== false,
             testGenerationInstructions: augmentedTestGenerationInstructions,
           } as SynthesizeOptions),
-      ).catch(async (error) => {
-        await cleanupProvider();
-        rethrowWithGenerationTokenUsage(error, contextGenerationTokenUsage);
-      });
+      );
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
+      accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
       firstContextPurpose ??= contextResult.purpose;
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const { testCases: contextTestCases, tokenUsage: contextTokenUsage } =
-        detachProviderTokenUsage(contextResult.testCases);
-      contextGenerationTokenUsage = mergeProviderTokenUsage(
-        contextGenerationTokenUsage,
-        contextTokenUsage,
-      );
-      const taggedTests = contextTestCases.map((test: any) => {
-        return {
-          ...test,
-          vars: {
-            ...test.vars,
-            ...(context.vars || {}),
-          },
-          metadata: {
-            ...test.metadata,
-            purpose: contextResult.purpose,
-            contextId: context.id,
-            contextVars: context.vars,
-          },
-        };
-      });
+      const taggedTests = contextResult.testCases.map((test: any) => ({
+        ...test,
+        vars: {
+          ...test.vars,
+          ...(context.vars || {}),
+        },
+        metadata: {
+          ...test.metadata,
+          purpose: contextResult.purpose,
+          contextId: context.id,
+          contextVars: context.vars,
+        },
+      }));
 
       redteamTests = redteamTests.concat(taggedTests);
 
@@ -789,7 +750,6 @@ async function doGenerateRedteamInternal(
         finalInjectVar = contextResult.injectVar;
       }
     }
-    redteamTests = attachProviderTokenUsage(redteamTests, contextGenerationTokenUsage);
 
     // Store failed plugins for handling after the try block starts
     failedPlugins = allFailedPlugins;
@@ -822,28 +782,42 @@ async function doGenerateRedteamInternal(
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: augmentedTestGenerationInstructions,
       } as SynthesizeOptions),
-    ).catch(async (error) => {
-      await cleanupProvider();
-      throw error;
-    });
+    );
 
     redteamTests = result.testCases;
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
+    accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
   }
+
+  /**
+   * Cleans up the provider after redteam generation completes.
+   * This should always be called before returning, since providers are
+   * re-initialized when running the red team. Cleanup is particularly
+   * important for MCP servers to release resources and prevent memory leaks.
+   */
+  const cleanupProvider = async (): Promise<void> => {
+    try {
+      logger.debug('Cleaning up provider');
+      const provider = testSuite.providers[0] as ApiProvider;
+      if (provider && typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+  };
 
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
   try {
     // Check for failed plugins - warn by default, throw with --strict
-    try {
-      handleFailedPlugins(failedPlugins, options.strict ?? false);
-    } catch (error) {
-      const { tokenUsage } = detachProviderTokenUsage(redteamTests);
-      rethrowWithGenerationTokenUsage(error, tokenUsage);
-    }
+    handleFailedPlugins(failedPlugins, options.strict ?? false);
 
     if (redteamTests.length === 0) {
       logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
@@ -864,6 +838,27 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
+    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
+    const generation = {
+      id: options.generationRunId ?? randomUUID(),
+      generatedAt: new Date().toISOString(),
+      ...(generationRequestCount > 0 ? { tokenUsage: generationTokenUsage } : {}),
+    };
+    if (generationRequestCount > 0) {
+      const hasReportedGenerationTokens =
+        (generationTokenUsage.total ?? 0) > 0 ||
+        (generationTokenUsage.prompt ?? 0) > 0 ||
+        (generationTokenUsage.completion ?? 0) > 0 ||
+        (generationTokenUsage.cached ?? 0) > 0;
+      logger.info(
+        hasReportedGenerationTokens
+          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
+              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
+              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
+              `${generationRequestCount.toLocaleString()} request(s)`
+          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
+      );
+    }
 
     let ret: Partial<UnifiedConfig> | undefined;
     if (options.output && options.output.endsWith('.burp')) {
@@ -886,33 +881,34 @@ async function doGenerateRedteamInternal(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
+        ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
-      const { providerTokenUsage: _existingProviderTokenUsage, ...existingDefaultMetadata } =
-        existingDefaultTest.metadata || {};
-      const { testCases: configTests, tokenUsage: generationTokenUsage } =
-        detachProviderTokenUsage(redteamTests);
+      const existingMetadata = { ...(existingYaml.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
         defaultTest: {
           ...existingDefaultTest,
           metadata: {
-            ...existingDefaultMetadata,
+            ...(existingDefaultTest?.metadata || {}),
             purpose,
             entities,
-            ...(generationTokenUsage ? { providerTokenUsage: generationTokenUsage } : {}),
           },
         },
-        tests: configTests,
+        tests: redteamTests,
         redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
         metadata: {
-          ...(existingYaml.metadata || {}),
+          ...existingMetadata,
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
+          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -948,7 +944,7 @@ async function doGenerateRedteamInternal(
       }
       printBorder();
     } else if (options.write && configPath) {
-      const existingConfig = yaml.load(
+      const existingConfig = loadYaml(
         await fs.readFile(configPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
       const existingTests = existingConfig.tests;
@@ -960,36 +956,29 @@ async function doGenerateRedteamInternal(
       }
       const existingConfigDefaultTest =
         typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
-      const { providerTokenUsage: existingDefaultTokenUsage, ...existingDefaultMetadata } =
-        existingConfigDefaultTest.metadata || {};
-      const { testCases: existingTestsWithoutUsage, tokenUsage: existingTestTokenUsage } =
-        detachProviderTokenUsage(testsArray);
-      const { testCases: redteamTestsWithoutUsage, tokenUsage: generationTokenUsage } =
-        detachProviderTokenUsage(redteamTests);
-      const persistedGenerationTokenUsage = mergeProviderTokenUsage(
-        getGenerationErrorTokenUsage({ tokenUsage: existingDefaultTokenUsage }),
-        mergeProviderTokenUsage(existingTestTokenUsage, generationTokenUsage),
-      );
       existingConfig.defaultTest = {
         ...existingConfigDefaultTest,
         metadata: {
-          ...existingDefaultMetadata,
+          ...(existingConfigDefaultTest?.metadata || {}),
           purpose,
           entities,
-          ...(persistedGenerationTokenUsage
-            ? { providerTokenUsage: persistedGenerationTokenUsage }
-            : {}),
         },
       };
       if (options.description) {
         existingConfig.description = options.description;
       }
-      existingConfig.tests = [...existingTestsWithoutUsage, ...redteamTestsWithoutUsage];
+      existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+      const existingMetadata = { ...(existingConfig.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       // Add the config hash to metadata
       existingConfig.metadata = {
-        ...(existingConfig.metadata || {}),
+        ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
+        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        generation,
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1030,6 +1019,10 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          metadata: {
+            ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
+            generation,
+          },
           tests: redteamTests,
         },
         'redteam.yaml',

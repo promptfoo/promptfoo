@@ -19,6 +19,11 @@ vi.mock('../../../../src/logger', () => ({
 }));
 
 vi.mock('../../../../src/redteam/providers/shared', () => ({
+  callGradingProvider: vi.fn((provider, prompt, context, options) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options),
+  ),
   redteamProviderManager: {
     getProvider: vi.fn(),
     getGradingProvider: vi.fn(),
@@ -196,6 +201,112 @@ describe('VoiceCrescendoProvider', () => {
     expect(mockedSleep).not.toHaveBeenCalled();
   });
 
+  it('keeps voice grading usage separate from target and attacker usage', async () => {
+    const gradingProvider = createMockProvider({
+      id: 'mock-grading-provider',
+      response: createProviderResponse({
+        output: JSON.stringify({
+          objectiveAchieved: true,
+          confidence: 0.9,
+          reason: 'objective achieved',
+          partialSuccess: false,
+        }),
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      }),
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(gradingProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 30,
+      prompt: 20,
+      completion: 10,
+      numRequests: 1,
+      attacker: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      assertions: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+    });
+  });
+
+  it('does not recharge cached voice grading responses that retain historical usage', async () => {
+    const gradingProvider = createMockProvider({
+      id: 'mock-grading-provider',
+      response: {
+        output: JSON.stringify({
+          objectiveAchieved: true,
+          confidence: 0.9,
+          reason: 'cached objective evaluation',
+          partialSuccess: false,
+        }),
+        cached: true,
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      },
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(gradingProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 30,
+      numRequests: 1,
+      attacker: { total: 15, numRequests: 1 },
+      assertions: { total: 19, prompt: 12, completion: 7, cached: 19, numRequests: 1 },
+      incurredTokenUsage: {
+        total: 30,
+        numRequests: 1,
+        attacker: { total: 15, numRequests: 1 },
+        assertions: { total: 0, numRequests: 0 },
+      },
+    });
+  });
+
+  it('retains failed voice-attacker usage without creating a target probe', async () => {
+    mockRedteamProvider.callApi.mockResolvedValue({
+      error: 'voice attack failed after inference',
+      tokenUsage: { total: 16, prompt: 10, completion: 6, numRequests: 1 },
+    });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      numRequests: 0,
+      attacker: { total: 16, prompt: 10, completion: 6, numRequests: 1 },
+    });
+    expect(getTargetResponse).not.toHaveBeenCalled();
+  });
+
   it('should track token usage even when audio generation fails', async () => {
     const { textToAudio } = await import('../../../../src/redteam/strategies/simpleAudio');
     vi.mocked(textToAudio).mockRejectedValue(new Error('Audio generation failed'));
@@ -224,208 +335,6 @@ describe('VoiceCrescendoProvider', () => {
     // Should still have token usage from successful calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBe(1);
-  });
-
-  it('should preserve attacker usage when voice prompt generation throws', async () => {
-    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(
-      createMockProvider({
-        id: 'mock-provider',
-        callApi: vi.fn().mockRejectedValue(
-          Object.assign(new Error('provider refusal'), {
-            tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
-          }),
-        ),
-      }),
-    );
-
-    const provider = new VoiceCrescendoProvider({
-      injectVar: 'goal',
-      maxTurns: 1,
-      maxBacktracks: 0,
-      delayBetweenTurns: 0,
-    });
-
-    const result = await provider.callApi('Test goal', {
-      originalProvider: mockTargetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-    });
-
-    expect(result.tokenUsage).toMatchObject({
-      total: 15,
-      prompt: 10,
-      completion: 5,
-      numRequests: 0,
-    });
-    expect(result.metadata?.stopReason).toBe('Error');
-    expect(getTargetResponse).not.toHaveBeenCalled();
-  });
-
-  it('should preserve attacker usage when voice prompt JSON is malformed', async () => {
-    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(
-      createMockProvider({
-        id: 'mock-attacker',
-        callApi: vi.fn().mockResolvedValue({
-          output: 'raw voice prompt',
-          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
-        }),
-      }),
-    );
-    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
-      createMockProvider({
-        id: 'mock-grader',
-        callApi: vi.fn().mockResolvedValue({
-          output: JSON.stringify({
-            objectiveAchieved: false,
-            confidence: 0,
-            reason: 'not achieved',
-            partialSuccess: false,
-          }),
-          tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
-        }),
-      }),
-    );
-
-    const provider = new VoiceCrescendoProvider({
-      injectVar: 'goal',
-      maxTurns: 1,
-      delayBetweenTurns: 0,
-    });
-    const result = await provider.callApi('Test goal', {
-      originalProvider: mockTargetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-    });
-
-    expect(result.prompt).toBe('raw voice prompt');
-    expect(result.tokenUsage).toMatchObject({
-      total: 57,
-      prompt: 38,
-      completion: 19,
-      numRequests: 1,
-    });
-  });
-
-  it('should preserve scorer usage when evaluation throws', async () => {
-    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
-    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
-      createMockProvider({
-        id: 'mock-grader',
-        callApi: vi.fn().mockRejectedValue(
-          Object.assign(new Error('scorer failed'), {
-            tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
-          }),
-        ),
-      }),
-    );
-
-    const provider = new VoiceCrescendoProvider({
-      injectVar: 'goal',
-      maxTurns: 1,
-      delayBetweenTurns: 0,
-    });
-    const result = await provider.callApi('Test goal', {
-      originalProvider: mockTargetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-    });
-
-    expect(result.tokenUsage).toMatchObject({
-      total: 57,
-      prompt: 38,
-      completion: 19,
-      numRequests: 1,
-    });
-  });
-
-  it('should rethrow abort errors with accumulated usage without backtracking', async () => {
-    const abortError = Object.assign(new Error('cancelled'), {
-      name: 'AbortError',
-      tokenUsage: { prompt: 4, completion: 3, total: 7, numRequests: 1 },
-    });
-    const attacker = createMockProvider({
-      id: 'mock-attacker',
-      callApi: vi
-        .fn()
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            voicePrompt: 'First voice prompt',
-            emotionalTone: 'friendly',
-            escalationLevel: 'low',
-          }),
-          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
-        })
-        .mockRejectedValue(abortError),
-    });
-    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(attacker);
-    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
-      createMockProvider({
-        id: 'mock-grader',
-        response: {
-          output: JSON.stringify({
-            objectiveAchieved: false,
-            confidence: 0,
-            reason: 'not achieved',
-            partialSuccess: false,
-          }),
-          tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
-        },
-      }),
-    );
-
-    const provider = new VoiceCrescendoProvider({
-      injectVar: 'goal',
-      maxTurns: 2,
-      maxBacktracks: 3,
-      delayBetweenTurns: 0,
-    });
-
-    await expect(
-      provider.callApi('Test goal', {
-        originalProvider: mockTargetProvider,
-        vars: { goal: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-      }),
-    ).rejects.toBe(abortError);
-    expect(abortError.tokenUsage).toMatchObject({
-      total: 64,
-      prompt: 42,
-      completion: 22,
-      numRequests: 1,
-    });
-    expect(attacker.callApi).toHaveBeenCalledTimes(2);
-    expect(getTargetResponse).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not fall back to text when audio generation is aborted', async () => {
-    const { textToAudio } = await import('../../../../src/redteam/strategies/simpleAudio');
-    const abortError = Object.assign(new Error('cancelled'), {
-      name: 'AbortError',
-      tokenUsage: { prompt: 1, completion: 1, total: 2, numRequests: 1 },
-    });
-    vi.mocked(textToAudio).mockRejectedValue(abortError);
-
-    const provider = new VoiceCrescendoProvider({
-      injectVar: 'goal',
-      maxTurns: 1,
-      maxBacktracks: 3,
-      delayBetweenTurns: 0,
-    });
-
-    await expect(
-      provider.callApi('Test goal', {
-        originalProvider: mockTargetProvider,
-        vars: { goal: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-      }),
-    ).rejects.toBe(abortError);
-    expect(abortError.tokenUsage).toMatchObject({
-      total: 17,
-      prompt: 11,
-      completion: 6,
-      numRequests: 0,
-    });
-    expect(getTargetResponse).not.toHaveBeenCalled();
   });
 
   it('should include metadata with conversation history', async () => {

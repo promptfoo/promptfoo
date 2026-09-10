@@ -449,6 +449,25 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail not-is-json without a schema with a message that matches the assertion', async () => {
+    const output = '{"key":"value"}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to not be valid JSON',
+    });
+  });
+
   it('should pass when the is-json assertion passes with schema', async () => {
     const output = '{"latitude": 80.123, "longitude": -1}';
 
@@ -731,6 +750,7 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the is-sql assertion fails', async () => {
+    // "ORDERY" is intentionally invalid so the SQL assertion rejects the statement.
     const output = 'SELECT * FROM orders ORDERY BY order_date';
 
     const result: GradingResult = await runAssertion({
@@ -1098,7 +1118,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: containsJsonAssertionWithSchema,
+      assertion: { type: 'contains-json', value: isJsonAssertionWithSchemaYamlString.value },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -1270,6 +1290,25 @@ describe('runAssertion', () => {
       pass: true,
       score: 1,
       reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail not-contains-json without a schema with a message that matches the assertion', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to not contain valid JSON',
     });
   });
 
@@ -3876,6 +3915,42 @@ describe('runAssertion', () => {
       expect(result.metadata?.renderedAssertionValue).toContain(
         'Turn 3: Expected tool "execute_create"',
       );
+    });
+
+    it('should pass and store the rendered value for a complex contains template', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: `Did {{ agent_name }} select the expected tools across the conversation?
+{% for turn in turns %}{% if turn.expected_tool %}Turn {{ loop.index }}: Expected tool "{{ turn.expected_tool }}"
+{% endif %}{% endfor %}`,
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          agent_name: 'Virtual Assistant',
+          turns: [
+            { expected_tool: 'preview_create' },
+            { expected_tool: null },
+            { expected_tool: 'execute_create' },
+          ],
+        },
+      };
+
+      const expectedRenderedValue = `Did Virtual Assistant select the expected tools across the conversation?
+Turn 1: Expected tool "preview_create"
+Turn 3: Expected tool "execute_create"
+`;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: `Prefix\n${expectedRenderedValue}\nSuffix` },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe(expectedRenderedValue);
+      expect(result.pass).toBe(true);
     });
 
     it('should store rendered value for javascript assertions', async () => {

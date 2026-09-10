@@ -411,7 +411,6 @@ const RiskCategoryDrawer = ({
           }
           gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
           metadata={selectedTest?.result?.metadata}
-          testCase={selectedTest?.result?.testCase}
           providerPrompt={getActualPrompt(selectedTest?.result?.response, { formatted: true })}
         />
       </SheetContent>

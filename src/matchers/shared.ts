@@ -1,38 +1,35 @@
-import { createEmptyCompletionDetails } from '../util/tokenUsageUtils';
-
 import type { GradingResult, TokenUsage } from '../types/index';
 
 /**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
- * the existing completionDetails shape (passing through whatever the
- * provider returned, or undefined if not present).
+ * the existing completionDetails shape and any incurred usage reported by
+ * the provider.
  */
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
 ): TokenUsage {
-  return {
-    total: tokenUsage?.total || 0,
-    prompt: tokenUsage?.prompt || 0,
-    completion: tokenUsage?.completion || 0,
-    cached: tokenUsage?.cached || 0,
-    numRequests: tokenUsage?.numRequests || 0,
-    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
-  };
-}
+  const prompt = tokenUsage?.prompt ?? 0;
+  const completion = tokenUsage?.completion ?? 0;
+  const cached = tokenUsage?.cached ?? 0;
+  const componentTotal = prompt + completion;
+  const cachedResponse = tokenUsage?.numRequests === 0 && cached > 0 && componentTotal <= cached;
 
-/**
- * Normalize token usage from a provider response while preserving the shared
- * "response exists but numRequests is omitted" request-counting contract.
- */
-export function normalizeMatcherResponseTokenUsage(
-  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
-): TokenUsage {
-  const tokensUsed = normalizeMatcherTokenUsage(response?.tokenUsage);
-  if (response && response.tokenUsage?.numRequests === undefined) {
-    tokensUsed.numRequests = 1;
-  }
-  return tokensUsed;
+  return {
+    total: tokenUsage?.total ?? (cachedResponse ? 0 : componentTotal),
+    prompt,
+    completion,
+    cached,
+    numRequests: tokenUsage?.numRequests ?? 0,
+    completionDetails: tokenUsage?.completionDetails || {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+    ...(tokenUsage?.incurredTokenUsage && {
+      incurredTokenUsage: tokenUsage.incurredTokenUsage,
+    }),
+  };
 }
 
 export function fail(

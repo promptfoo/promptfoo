@@ -78,14 +78,13 @@ export const handleRedteam = async ({
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
-  const storedResult = providerResponse.metadata?.storedGraderResult;
-  const storedResultAssertionType = storedResult?.assertion?.type;
-  const storedResultMatchesAssertion =
-    storedResultAssertionType === undefined
-      ? Boolean(test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId))
-      : storedResultAssertionType === assertion.type;
+  if (
+    providerResponse.metadata?.storedGraderResult &&
+    test.metadata?.pluginId &&
+    assertion.type.includes(test.metadata.pluginId)
+  ) {
+    const storedResult = providerResponse.metadata.storedGraderResult;
 
-  if (storedResult && storedResultMatchesAssertion) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>

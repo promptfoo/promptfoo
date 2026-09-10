@@ -141,6 +141,57 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.total).toBe(103); // 15+18+30+40
     });
 
+    it('should stringify non-string agent outputs before adding them to message history', async () => {
+      const objectOutputProvider = createMockProvider({ id: 'object-output-agent' });
+      objectOutputProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: { event: 'party-plan', ideas: ['karaoke', 'cake'] },
+          tokenUsage: { numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'final response',
+          tokenUsage: { numRequests: 1 },
+        });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: objectOutputProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      const expectedOutput = '{"event":"party-plan","ideas":["karaoke","cake"]}';
+      expect(result.output).toContain(`Assistant: ${expectedOutput}`);
+      expect(result.output).not.toContain('[object Object]');
+
+      const secondTargetPrompt = vi.mocked(objectOutputProvider.callApi).mock.calls[1][0];
+      expect(JSON.parse(secondTargetPrompt)).toContainEqual({
+        role: 'assistant',
+        content: expectedOutput,
+      });
+    });
+
+    it('should stringify non-string simulated user outputs before adding them to message history', async () => {
+      mockUserProviderCallApi.mockResolvedValueOnce({
+        output: { reply: 'I like that idea', preference: 'outdoor' },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('User: {"reply":"I like that idea","preference":"outdoor"}');
+      expect(result.output).not.toContain('[object Object]');
+      expect(originalProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
+        ),
+        expect.anything(),
+      );
+    });
+
     it('should respect maxTurns configuration', async () => {
       const userWithMaxTurns = new SimulatedUser({
         config: {
@@ -1107,35 +1158,12 @@ describe('SimulatedUser', () => {
   });
 
   describe('error handling', () => {
-    it('should preserve simulated-user usage when the user provider returns an error', async () => {
-      mockUserProviderCallApi.mockResolvedValueOnce({
-        error: 'remote generation failed',
-        tokenUsage: { total: 15, prompt: 10, completion: 5 },
-      });
-
-      const result = await simulatedUser.callApi('test prompt', {
-        originalProvider,
-        vars: { instructions: 'test instructions' },
-        prompt: { raw: 'test', display: 'test', label: 'test' },
-      });
-
-      expect(result.error).toBe('remote generation failed');
-      expect(result.tokenUsage).toMatchObject({
-        total: 15,
-        prompt: 10,
-        completion: 5,
-        numRequests: 1,
-      });
-      expect(originalProvider.callApi).not.toHaveBeenCalled();
-    });
-
     it('should return error when agent provider returns error in main loop', async () => {
       const errorProvider = createMockProvider({
         id: 'error-agent',
         response: createProviderResponse({
           error: 'Model not found: invalid-model',
           output: undefined,
-          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1146,12 +1174,7 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Model not found: invalid-model');
-      expect(result.tokenUsage).toMatchObject({
-        total: 20,
-        prompt: 12,
-        completion: 8,
-        numRequests: 2,
-      });
+      expect(result.tokenUsage).toBeDefined();
     });
 
     it('should return error when agent provider returns error with initial messages ending in user', async () => {
@@ -1160,7 +1183,6 @@ describe('SimulatedUser', () => {
         response: createProviderResponse({
           error: 'API rate limit exceeded',
           output: undefined,
-          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1176,12 +1198,7 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('API rate limit exceeded');
-      expect(result.tokenUsage).toMatchObject({
-        total: 20,
-        prompt: 12,
-        completion: 8,
-        numRequests: 1,
-      });
+      expect(result.tokenUsage).toBeDefined();
     });
 
     it('should return error on first turn failure and not continue conversation', async () => {
@@ -1190,7 +1207,6 @@ describe('SimulatedUser', () => {
         response: createProviderResponse({
           error: 'Connection timeout',
           output: undefined,
-          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         }),
       });
 
@@ -1208,12 +1224,6 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Connection timeout');
-      expect(result.tokenUsage).toMatchObject({
-        total: 20,
-        prompt: 12,
-        completion: 8,
-        numRequests: 2,
-      });
       // Should only call once before returning error
       expect(errorProvider.callApi).toHaveBeenCalledTimes(1);
     });
@@ -1229,7 +1239,6 @@ describe('SimulatedUser', () => {
         .mockResolvedValueOnce({
           error: 'Rate limit exceeded',
           output: undefined,
-          tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
         });
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -1239,12 +1248,6 @@ describe('SimulatedUser', () => {
       });
 
       expect(result.error).toBe('Rate limit exceeded');
-      expect(result.tokenUsage).toMatchObject({
-        total: 20,
-        prompt: 12,
-        completion: 8,
-        numRequests: 4,
-      });
       expect(partialErrorProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });

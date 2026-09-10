@@ -7,31 +7,38 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  callGradingProvider,
+  callTargetProvider,
   createIterationContext,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
   type Message,
-  mergeStoredGraderResultTokenUsage,
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  runRedteamGrader,
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
+import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import type { ProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import type {
   ApiProvider,
   Assertion,
   AssertionSet,
   CallApiContextParams,
   CallApiOptionsParams,
-  GradingResult,
   Prompt,
 } from '../../../src/types/index';
 
@@ -105,6 +112,56 @@ function setCliStateConfig(config: typeof cliState.config) {
 }
 
 describe('shared redteam provider utilities', () => {
+  describe('accumulateUnblockingTokenUsage', () => {
+    it('attributes nested blocking-analysis usage to one grading task', () => {
+      const tokenUsage = {};
+
+      accumulateUnblockingTokenUsage(tokenUsage, {
+        attempted: true,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: {
+            total: 34,
+            prompt: 21,
+            completion: 13,
+            numRequests: 0,
+            completionDetails: { reasoning: 5 },
+          },
+        },
+      });
+
+      expect(tokenUsage).toMatchObject({
+        assertions: {
+          total: 34,
+          prompt: 21,
+          completion: 13,
+          numRequests: 1,
+          completionDetails: { reasoning: 5 },
+        },
+      });
+      expect(tokenUsage).not.toHaveProperty('attacker');
+      expect(tokenUsage).not.toHaveProperty('numRequests');
+    });
+
+    it('omits disabled unblocking tasks and keeps cached tasks out of incurred usage', () => {
+      const disabledUsage = {};
+      accumulateUnblockingTokenUsage(disabledUsage, { attempted: false });
+      expect(disabledUsage).toEqual({});
+
+      const cachedUsage = {};
+      accumulateUnblockingTokenUsage(cachedUsage, {
+        attempted: true,
+        cached: true,
+        tokenUsage: { total: 15, cached: 15, numRequests: 0 },
+      });
+      expect(cachedUsage).toMatchObject({
+        assertions: { total: 15, cached: 15, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+    });
+  });
+
   afterEach(() => {
     resetRedteamProviderLoader();
     vi.resetAllMocks();
@@ -124,6 +181,9 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
+    // clearProvider() intentionally keeps the rate limit registry, so reset it
+    // here to keep provider-wrapping state from leaking across shuffled tests.
+    redteamProviderManager.setRateLimitRegistry(undefined);
     resetRedteamProviderLoader();
 
     // Reset cliState to default
@@ -309,6 +369,172 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Preloads regular and jsonOnly caches
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(1, ['test-provider']);
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: mockProvider,
+        source: 'cache',
+        persistableId: 'test-provider',
+      });
+    });
+
+    it('does not expose runtime provider instances as cached provider specs', async () => {
+      const runtimeProvider = createMockProvider({ id: 'runtime-provider' });
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+
+      await redteamProviderManager.setProvider(runtimeProvider);
+
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: runtimeProvider,
+        source: 'cache',
+        persistableId: undefined,
+      });
+    });
+
+    it('returns the defaultTest provider selection when it wins resolution', async () => {
+      setCliStateConfig({ defaultTest: { options: { provider: 'default-test-provider' } } });
+      mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
+
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: mockApiProvider,
+        source: 'explicit',
+        persistableId: 'default-test-provider',
+      });
+    });
+
+    it('reports fallback and default selections distinctly', async () => {
+      const fallbackProvider = createMockProvider({ id: 'fallback-provider' });
+      mockedLoadApiProviders.mockResolvedValue([fallbackProvider]);
+
+      expect(
+        await redteamProviderManager.getProviderSelection({
+          fallbackProvider: 'fallback-provider',
+        }),
+      ).toMatchObject({
+        provider: fallbackProvider,
+        source: 'fallback',
+        persistableId: 'fallback-provider',
+      });
+
+      redteamProviderManager.clearProvider();
+      setCliStateConfig({ redteam: { provider: undefined } });
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        source: 'default',
+        persistableId: undefined,
+      });
+    });
+
+    it('does not replace a working cache when preloading a new variant fails', async () => {
+      const oldProvider = createMockProvider({ id: 'old-provider' });
+      const newProvider = createMockProvider({ id: 'new-provider' });
+      mockedLoadApiProviders
+        .mockResolvedValueOnce([oldProvider])
+        .mockResolvedValueOnce([oldProvider])
+        .mockResolvedValueOnce([newProvider])
+        .mockRejectedValueOnce(new Error('json-only load failed'));
+
+      await redteamProviderManager.setProvider('old-provider');
+      await expect(redteamProviderManager.setProvider('new-provider')).rejects.toThrow(
+        'json-only load failed',
+      );
+
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: oldProvider,
+        source: 'cache',
+        persistableId: 'old-provider',
+      });
+    });
+
+    it('loads the built-in default without consulting stale cliState', async () => {
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+
+      const provider = await redteamProviderManager.getDefaultProvider({
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
+
+      expect(provider.id()).toBe(`openai:${ATTACKER_MODEL_SMALL}`);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+      expect(mockOpenAiInstances[0].config.response_format).toEqual({ type: 'json_object' });
+    });
+
+    it('ignores stale cliState while preserving the built-in default selection', async () => {
+      setCliStateConfig({
+        redteam: { provider: 'stale-provider' },
+        defaultTest: { provider: 'stale-default-test-provider' },
+      });
+
+      const selection = await redteamProviderManager.getProviderSelection({
+        ignoreCliState: true,
+      });
+
+      expect(selection.source).toBe('default');
+      expect(selection.persistableId).toBeUndefined();
+      expect(selection.provider.id()).toBe(`openai:${ATTACKER_MODEL}`);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('keeps the cache ahead of ignoreCliState preview defaults', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const selection = await redteamProviderManager.getProviderSelection({
+        ignoreCliState: true,
+      });
+
+      expect(selection).toMatchObject({
+        provider: cachedProvider,
+        source: 'cache',
+        persistableId: 'cached-provider',
+      });
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
+    });
+
+    it('prefers an explicit provider over cached providers', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      const explicitProvider = createMockProvider({ id: 'explicit-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const result = await redteamProviderManager.getProvider({
+        provider: explicitProvider,
+        jsonOnly: true,
+      });
+
+      expect(result).toBe(explicitProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
+    });
+
+    it('prefers cached providers over request-scoped fallback providers', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const result = await redteamProviderManager.getProvider({
+        fallbackProvider: 'fallback-provider',
+      });
+
+      expect(result).toBe(cachedProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses a request-scoped fallback before stale cliState config', async () => {
+      const fallbackProvider = createMockProvider({ id: 'fallback-provider' });
+      mockedLoadApiProviders.mockResolvedValue([fallbackProvider]);
+      setCliStateConfig({
+        redteam: {
+          provider: 'stale-provider',
+        },
+      });
+
+      const result = await redteamProviderManager.getProvider({
+        fallbackProvider: 'fallback-provider',
+      });
+
+      expect(result).toBe(fallbackProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['fallback-provider']);
     });
 
     describe('getGradingProvider', () => {
@@ -433,6 +659,33 @@ describe('shared redteam provider utilities', () => {
         expect(got.id()).toContain('openai:');
         expect(mockOpenAiInstances.length).toBe(1);
       });
+
+      it('wraps the defaultTest fallback provider with the configured rate limit registry', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider = createMockProvider({ id: 'defaultTest-wrapped-provider' });
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+        redteamProviderManager.setRateLimitRegistry(registry);
+
+        setCliStateConfig({
+          redteam: {
+            provider: undefined,
+          },
+          defaultTest: {
+            options: {
+              provider: 'defaultTest-provider',
+            },
+          },
+        });
+
+        const got = await redteamProviderManager.getProvider({});
+
+        // The defaultTest fallback path must apply rate limiting like every other return path.
+        expect(isRateLimitWrapped(got)).toBe(true);
+        expect(got.id()).toBe('defaultTest-wrapped-provider');
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['defaultTest-provider']);
+      });
     });
 
     it('handles thrown errors in getTargetResponse', async () => {
@@ -446,24 +699,6 @@ describe('shared redteam provider utilities', () => {
         output: '',
         error: 'Network error',
         tokenUsage: { numRequests: 1 },
-      });
-    });
-
-    it('preserves token usage carried by thrown target errors', async () => {
-      const mockProvider = createMockProvider({
-        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(
-          Object.assign(new Error('Billed target error'), {
-            tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
-          }),
-        ),
-      });
-
-      const result = await getTargetResponse(mockProvider, 'test prompt');
-
-      expect(result).toEqual({
-        output: '',
-        error: 'Billed target error',
-        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
       });
     });
 
@@ -523,96 +758,6 @@ describe('shared redteam provider utilities', () => {
           temperature: TEMPERATURE,
           response_format: { type: 'json_object' },
         });
-      });
-    });
-  });
-
-  describe('mergeStoredGraderResultTokenUsage', () => {
-    it('preserves the latest grader result while accumulating all prior grader token usage', () => {
-      const previousResult: GradingResult = {
-        pass: false,
-        score: 0,
-        reason: 'first judge',
-        tokensUsed: {
-          total: 10,
-          prompt: 6,
-          completion: 4,
-          numRequests: 1,
-          completionDetails: {
-            reasoning: 2,
-          },
-        },
-      };
-      const latestResult: GradingResult = {
-        pass: true,
-        score: 1,
-        reason: 'latest judge',
-        tokensUsed: {
-          total: 20,
-          prompt: 12,
-          completion: 8,
-          numRequests: 2,
-          completionDetails: {
-            reasoning: 3,
-            cacheReadInputTokens: 5,
-          },
-        },
-      };
-
-      expect(mergeStoredGraderResultTokenUsage(latestResult, previousResult)).toEqual({
-        ...latestResult,
-        tokensUsed: {
-          total: 30,
-          prompt: 18,
-          completion: 12,
-          cached: 0,
-          numRequests: 3,
-          completionDetails: {
-            reasoning: 5,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-            cacheReadInputTokens: 5,
-            cacheCreationInputTokens: 0,
-          },
-          assertions: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            numRequests: 0,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-              cacheReadInputTokens: 0,
-              cacheCreationInputTokens: 0,
-            },
-          },
-        },
-      });
-    });
-
-    it('infers one request per grader result when counts are omitted', () => {
-      const previousResult: GradingResult = {
-        pass: false,
-        score: 0,
-        reason: 'first judge',
-        tokensUsed: { total: 10, prompt: 6, completion: 4 },
-      };
-      const latestResult: GradingResult = {
-        pass: true,
-        score: 1,
-        reason: 'latest judge',
-        tokensUsed: { total: 20, prompt: 12, completion: 8 },
-      };
-
-      expect(
-        mergeStoredGraderResultTokenUsage(latestResult, previousResult).tokensUsed,
-      ).toMatchObject({
-        total: 30,
-        prompt: 18,
-        completion: 12,
-        numRequests: 2,
       });
     });
   });
@@ -810,6 +955,54 @@ describe('shared redteam provider utilities', () => {
       await getTargetResponse(mockProvider, 'test prompt', context, options);
 
       expect(mockCallApi).toHaveBeenCalledWith('test prompt', context, options);
+    });
+
+    it('traces target calls and forwards the target span traceparent', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const mockProvider = createMockProvider({ response: { output: 'test response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => getTargetResponse(mockProvider, 'test prompt', context),
+      );
+
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider: mockProvider, callContext: context },
+        expect.any(Function),
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith(
+        'test prompt',
+        { ...context, traceparent },
+        undefined,
+      );
+    });
+
+    it('keeps direct strategy target calls unmodified when tracing is disabled', async () => {
+      const response = { output: 'test response', metadata: { strategy: 'goat' } };
+      const mockProvider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callTargetProvider(mockProvider, 'test prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith('test prompt', context, options);
     });
 
     it('stringifies non-string output', async () => {
@@ -1142,52 +1335,56 @@ describe('shared redteam provider utilities', () => {
       );
     });
 
-    it('returns token usage when unblocking analysis runs', async () => {
+    it('preserves analysis usage when no blocking question is found', async () => {
       mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
       mockedCheckServerFeatureSupport.mockResolvedValue(true);
-      const callApiSpy = vi
+      const callApi = vi
         .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
         .mockResolvedValue({
           output: { isBlocking: false },
-          tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
         });
 
-      const result = await tryUnblocking({
-        messages: [],
-        lastResponse: 'No blocking question here',
-        goal: 'test-goal',
-        purpose: 'test-purpose',
-      });
+      try {
+        const result = await tryUnblocking({
+          messages: [],
+          lastResponse: 'No additional questions.',
+          goal: 'test-goal',
+        });
 
-      expect(result).toEqual({
-        success: false,
-        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
-      });
-      callApiSpy.mockRestore();
+        expect(result).toMatchObject({
+          success: false,
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
+        });
+      } finally {
+        callApi.mockRestore();
+      }
     });
 
-    it('preserves billed token usage when unblocking analysis rejects', async () => {
+    it('preserves analysis usage when the unblocking provider returns an error', async () => {
       mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
       mockedCheckServerFeatureSupport.mockResolvedValue(true);
-      const error = Object.assign(new Error('analysis request failed'), {
-        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
-      });
-      const callApiSpy = vi
+      const callApi = vi
         .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
-        .mockRejectedValue(error);
+        .mockResolvedValue({
+          error: 'analysis failed after inference',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
 
-      const result = await tryUnblocking({
-        messages: [],
-        lastResponse: 'Can you confirm this request?',
-        goal: 'test-goal',
-        purpose: 'test-purpose',
-      });
+      try {
+        const result = await tryUnblocking({
+          messages: [],
+          lastResponse: 'What industry are you in?',
+          goal: 'test-goal',
+        });
 
-      expect(result).toEqual({
-        success: false,
-        tokenUsage: error.tokenUsage,
-      });
-      callApiSpy.mockRestore();
+        expect(result).toMatchObject({
+          success: false,
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+      } finally {
+        callApi.mockRestore();
+      }
     });
   });
 
@@ -1231,6 +1428,360 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('callGradingProvider', () => {
+    it('preserves the provider request when tracing is disabled', async () => {
+      const response = { output: 'judge response' };
+      const provider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'judge' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callGradingProvider(provider, 'judge prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', context, options);
+    });
+
+    it('places direct judge calls beneath grader and grader-provider spans', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'refusal' },
+        vars: {},
+        evaluationId: 'eval-123',
+        testIdx: 4,
+      };
+      const options: CallApiOptionsParams = {};
+      const graderSpan = vi.fn();
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          testIndex: 9,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'judge prompt', context, options),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'refusal',
+        evalId: 'eval-123',
+        testIndex: 4,
+      });
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider, callContext: context, role: 'grader' },
+        expect.any(Function),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        'judge prompt',
+        { ...context, traceparent },
+        options,
+      );
+    });
+
+    it('uses the evaluation test index when no provider context was supplied', async () => {
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const graderSpan = vi.fn();
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () => callGradingProvider(provider, 'judge prompt'),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'judge',
+        evalId: undefined,
+        testIndex: 7,
+      });
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', undefined);
+    });
+  });
+
+  describe('runRedteamGrader', () => {
+    it('instruments graders that override the base implementation', async () => {
+      const grade = { pass: false, score: 0, reason: 'unsafe' };
+      const getResult = vi.fn().mockResolvedValue({ grade, rubric: 'custom rubric' });
+      const grader = { id: 'custom-override', getResult } as unknown as RedteamGraderBase;
+      const graderSpan = vi.fn();
+      const test = {
+        metadata: { evaluationId: 'eval-123' },
+        vars: { userInput: 'normal evaluation variable' },
+      };
+
+      const result = await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (options, invoke) => {
+            graderSpan(options, invoke);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () =>
+          runRedteamGrader(grader, 'attack prompt', 'target output', test, undefined, undefined),
+      );
+
+      expect(result).toEqual({ grade, rubric: 'custom rubric' });
+      expect(graderSpan).toHaveBeenCalledWith(
+        { graderId: 'custom-override', evalId: 'eval-123', testIndex: 7 },
+        expect.any(Function),
+      );
+      expect(getResult).toHaveBeenCalledWith(
+        'attack prompt',
+        'target output',
+        test,
+        undefined,
+        undefined,
+      );
+    });
+  });
+
+  describe('accumulateGraderResult', () => {
+    it('retains the latest verdict while summing every turn and completion detail', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first turn was safe',
+        tokensUsed: {
+          total: 100,
+          prompt: 70,
+          completion: 30,
+          cached: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 12, cacheCreationInputTokens: 20 },
+        },
+      };
+      const second = {
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 200,
+          prompt: 150,
+          completion: 50,
+          cached: 15,
+          numRequests: 2,
+          completionDetails: { reasoning: 18, cacheCreationInputTokens: 25 },
+        },
+      };
+
+      expect(accumulateGraderResult(first, second)).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 300,
+          prompt: 220,
+          completion: 80,
+          cached: 25,
+          numRequests: 2,
+          completionDetails: { reasoning: 30, cacheCreationInputTokens: 45 },
+        },
+      });
+      expect(first.tokensUsed.completionDetails).toEqual({
+        reasoning: 12,
+        cacheCreationInputTokens: 20,
+      });
+    });
+
+    it('retains prior usage when the final verdict did not require a model call', () => {
+      const previous = {
+        pass: true,
+        score: 1,
+        reason: 'graded by a model',
+        tokensUsed: { total: 75, prompt: 50, completion: 25, numRequests: 1 },
+      };
+      const current = { pass: false, score: 0, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(previous, current)).toMatchObject({
+        ...current,
+        tokensUsed: previous.tokensUsed,
+      });
+    });
+
+    it('infers request counts when accumulating legacy grader responses', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'safe',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+      const second = {
+        ...first,
+        reason: 'still safe',
+        tokensUsed: { total: 30, prompt: 20, completion: 10 },
+      };
+
+      expect(accumulateGraderResult(first, second).tokensUsed).toMatchObject({
+        total: 75,
+        prompt: 50,
+        completion: 25,
+        numRequests: 2,
+      });
+    });
+
+    it('counts one grading task when its first result includes multiple model calls', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'grading task passed',
+        tokensUsed: {
+          total: 75,
+          prompt: 50,
+          completion: 25,
+          numRequests: 4,
+          completionDetails: { reasoning: 8 },
+        },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
+    it('counts the first legacy grading task when its usage omits the request count', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'legacy grading task passed',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
+    it('counts every fresh grading turn when matcher normalization sets requests to zero', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first grading task',
+        tokensUsed: { total: 30, prompt: 20, completion: 10, numRequests: 0 },
+      };
+      const second = {
+        pass: true,
+        score: 1,
+        reason: 'second grading task',
+        tokensUsed: { total: 45, prompt: 30, completion: 15, numRequests: 0 },
+      };
+      const third = {
+        pass: false,
+        score: 0,
+        reason: 'third grading task',
+        tokensUsed: { total: 25, prompt: 15, completion: 10, numRequests: 0 },
+      };
+
+      const result = accumulateGraderResult(accumulateGraderResult(first, second), third);
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 65,
+        completion: 35,
+        numRequests: 3,
+      });
+    });
+
+    it('keeps cached grading turns at zero requests while counting fresh turns', () => {
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        tokensUsed: { total: 35, cached: 35, numRequests: 0 },
+      };
+      const fresh = {
+        pass: false,
+        score: 0,
+        reason: 'fresh grading task',
+        tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 0 },
+      };
+
+      expect(accumulateGraderResult(cached, fresh).tokensUsed).toMatchObject({
+        total: 20,
+        cached: 35,
+        numRequests: 1,
+      });
+    });
+
+    it('does not recharge cached grader responses that retain original request and token counts', () => {
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, prompt: 20, completion: 15, numRequests: 1 },
+      };
+
+      expect(accumulateGraderResult(undefined, cached).tokensUsed).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 35,
+        numRequests: 0,
+      });
+    });
+
+    it('preserves fresh grading usage before and after a cached middle turn', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first fresh grading task',
+        tokensUsed: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+      };
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, cached: 35, numRequests: 0 },
+      };
+      const last = {
+        pass: false,
+        score: 0,
+        reason: 'last fresh grading task',
+        tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
+      };
+
+      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 60,
+        prompt: 40,
+        completion: 20,
+        cached: 35,
+        numRequests: 2,
+      });
+    });
+
+    it('leaves entirely deterministic grading results unchanged', () => {
+      const result = { pass: true, score: 1, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(undefined, result)).toBe(result);
     });
   });
 

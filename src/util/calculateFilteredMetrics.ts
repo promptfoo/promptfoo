@@ -42,6 +42,212 @@ export interface FilteredMetricsOptions {
  */
 const MAX_RESULTS_FOR_METRICS = 50000;
 
+function jsonUsageNumber(column: SQL, usagePath: string, field: string): SQL {
+  return sql`COALESCE(CAST(json_extract(${column}, ${`${usagePath}.${field}`}) AS INTEGER), 0)`;
+}
+
+function jsonUsageTotal(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
+  const explicitTotal = sql`CAST(json_extract(${column}, ${`${usagePath}.total`}) AS INTEGER)`;
+  const prompt = jsonUsageNumber(column, usagePath, 'prompt');
+  const completion = jsonUsageNumber(column, usagePath, 'completion');
+  const cached = jsonUsageNumber(column, usagePath, 'cached');
+  const requests = sql`CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER)`;
+  const explicitlyCached = cachedResponsePath
+    ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
+    : sql`0`;
+
+  return sql`CASE
+    WHEN ${explicitlyCached} THEN
+      CASE
+        WHEN COALESCE(${explicitTotal}, 0) > 0 THEN ${explicitTotal}
+        WHEN ${cached} > 0 THEN ${cached}
+        ELSE ${prompt} + ${completion}
+      END
+    WHEN ${explicitTotal} IS NOT NULL THEN ${explicitTotal}
+    WHEN ${requests} = 0 AND ${cached} > 0 AND (${prompt} + ${completion}) <= ${cached} THEN 0
+    ELSE ${prompt} + ${completion}
+  END`;
+}
+
+function jsonUsageRequests(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
+  const explicitlyCached = cachedResponsePath
+    ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
+    : sql`0`;
+  return sql`CASE
+    WHEN json_extract(${column}, ${usagePath}) IS NULL THEN 0
+    WHEN ${explicitlyCached} THEN
+      MAX(COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1), 1)
+    ELSE COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1)
+  END`;
+}
+
+function jsonUsageCached(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
+  const cached = jsonUsageNumber(column, usagePath, 'cached');
+  if (!cachedResponsePath) {
+    return cached;
+  }
+
+  const reportedTotal = sql`COALESCE(
+    CAST(json_extract(${column}, ${`${usagePath}.total`}) AS INTEGER),
+    ${jsonUsageNumber(column, usagePath, 'prompt')} + ${jsonUsageNumber(column, usagePath, 'completion')}
+  )`;
+  return sql`CASE
+    WHEN COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1 THEN
+      CASE WHEN ${cached} > 0 THEN ${cached} ELSE ${reportedTotal} END
+    ELSE ${cached}
+  END`;
+}
+
+type TokenUsageField = 'total' | 'prompt' | 'completion' | 'cached' | 'numRequests';
+
+interface FilteredBasicMetricsRow {
+  prompt_idx: number;
+  total_count: number;
+  pass_count: number;
+  fail_count: number;
+  error_count: number;
+  total_score: number;
+  total_latency: number;
+  total_cost: number;
+  total_tokens: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  cached_tokens: number | null;
+  num_requests_with_tokens: number;
+  attacker_total_tokens: number | null;
+  attacker_prompt_tokens: number | null;
+  attacker_completion_tokens: number | null;
+  attacker_cached_tokens: number | null;
+  attacker_num_requests: number | null;
+  grading_total_tokens: number | null;
+  grading_prompt_tokens: number | null;
+  grading_completion_tokens: number | null;
+  grading_cached_tokens: number | null;
+  grading_num_requests: number | null;
+  generation_total_tokens: number | null;
+  generation_prompt_tokens: number | null;
+  generation_completion_tokens: number | null;
+  generation_cached_tokens: number | null;
+  generation_num_requests: number | null;
+  has_incurred_usage: number;
+  incurred_total_tokens: number | null;
+  incurred_prompt_tokens: number | null;
+  incurred_completion_tokens: number | null;
+  incurred_cached_tokens: number | null;
+  incurred_num_requests: number | null;
+  incurred_attacker_total_tokens: number | null;
+  incurred_attacker_prompt_tokens: number | null;
+  incurred_attacker_completion_tokens: number | null;
+  incurred_attacker_cached_tokens: number | null;
+  incurred_attacker_num_requests: number | null;
+  incurred_grading_total_tokens: number | null;
+  incurred_grading_prompt_tokens: number | null;
+  incurred_grading_completion_tokens: number | null;
+  incurred_grading_cached_tokens: number | null;
+  incurred_grading_num_requests: number | null;
+}
+
+function jsonUsageField(
+  column: SQL,
+  usagePath: string,
+  field: TokenUsageField,
+  cachedResponsePath?: string,
+): SQL {
+  switch (field) {
+    case 'total':
+      return jsonUsageTotal(column, usagePath, cachedResponsePath);
+    case 'numRequests':
+      return jsonUsageRequests(column, usagePath, cachedResponsePath);
+    case 'cached':
+      return jsonUsageCached(column, usagePath, cachedResponsePath);
+    default:
+      return jsonUsageNumber(column, usagePath, field);
+  }
+}
+
+function jsonIncurredUsageField(
+  column: SQL,
+  logicalPath: string,
+  incurredPath: string,
+  field: TokenUsageField,
+  options?: { cachedResponsePath?: string; parentIncurredPath?: string },
+): SQL {
+  const logicalUsage = jsonUsageField(column, logicalPath, field, options?.cachedResponsePath);
+  const incurredUsage = jsonUsageField(column, incurredPath, field);
+  const parentHasIncurredUsage = options?.parentIncurredPath
+    ? sql`json_extract(${column}, ${options.parentIncurredPath}) IS NOT NULL`
+    : sql`0`;
+  const explicitlyCached = options?.cachedResponsePath
+    ? sql`COALESCE(json_extract(${column}, ${options.cachedResponsePath}), 0) = 1`
+    : sql`0`;
+
+  return sql`CASE
+    WHEN json_extract(${column}, ${incurredPath}) IS NOT NULL THEN ${incurredUsage}
+    WHEN ${parentHasIncurredUsage} OR ${explicitlyCached} THEN 0
+    ELSE ${logicalUsage}
+  END`;
+}
+
+function getIncurredTokenUsage(
+  row: FilteredBasicMetricsRow,
+): NonNullable<PromptMetrics['tokenUsage']['incurredTokenUsage']> {
+  return {
+    total: row.incurred_total_tokens || 0,
+    prompt: row.incurred_prompt_tokens || 0,
+    completion: row.incurred_completion_tokens || 0,
+    cached: row.incurred_cached_tokens || 0,
+    numRequests: row.incurred_num_requests || 0,
+    attacker: {
+      total: row.incurred_attacker_total_tokens || 0,
+      prompt: row.incurred_attacker_prompt_tokens || 0,
+      completion: row.incurred_attacker_completion_tokens || 0,
+      cached: row.incurred_attacker_cached_tokens || 0,
+      numRequests: row.incurred_attacker_num_requests || 0,
+    },
+    assertions: {
+      total: row.incurred_grading_total_tokens || 0,
+      prompt: row.incurred_grading_prompt_tokens || 0,
+      completion: row.incurred_grading_completion_tokens || 0,
+      cached: row.incurred_grading_cached_tokens || 0,
+      numRequests: row.incurred_grading_num_requests || 0,
+    },
+  };
+}
+
+function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tokenUsage'] {
+  return {
+    total: row.total_tokens || 0,
+    prompt: row.prompt_tokens || 0,
+    completion: row.completion_tokens || 0,
+    cached: row.cached_tokens || 0,
+    numRequests: row.num_requests_with_tokens || 0,
+    attacker: {
+      total: row.attacker_total_tokens || 0,
+      prompt: row.attacker_prompt_tokens || 0,
+      completion: row.attacker_completion_tokens || 0,
+      cached: row.attacker_cached_tokens || 0,
+      numRequests: row.attacker_num_requests || 0,
+    },
+    assertions: {
+      total: row.grading_total_tokens || 0,
+      prompt: row.grading_prompt_tokens || 0,
+      completion: row.grading_completion_tokens || 0,
+      cached: row.grading_cached_tokens || 0,
+      numRequests: row.grading_num_requests || 0,
+    },
+    generation: {
+      total: row.generation_total_tokens || 0,
+      prompt: row.generation_prompt_tokens || 0,
+      completion: row.generation_completion_tokens || 0,
+      cached: row.generation_cached_tokens || 0,
+      numRequests: row.generation_num_requests || 0,
+    },
+    ...(row.has_incurred_usage > 0 && {
+      incurredTokenUsage: getIncurredTokenUsage(row),
+    }),
+  };
+}
+
 /**
  * Calculates metrics for filtered results using optimized SQL aggregation.
  * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
@@ -114,7 +320,37 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
-  const generationCarrierSql = sql`generation_usage_rank = 1`;
+  const response = sql`response`;
+  const gradingResult = sql`grading_result`;
+  const targetPath = '$.tokenUsage';
+  const incurredTargetPath = '$.tokenUsage.incurredTokenUsage';
+  const attackerPath = '$.tokenUsage.attacker';
+  const incurredAttackerPath = '$.tokenUsage.incurredTokenUsage.attacker';
+  const internalGradingPath = '$.tokenUsage.assertions';
+  const incurredInternalGradingPath = '$.tokenUsage.incurredTokenUsage.assertions';
+  const gradingPath = '$.tokensUsed';
+  const incurredGradingPath = '$.tokensUsed.incurredTokenUsage';
+  const gradingCachePath = '$.metadata.cachedResponse';
+  const responseCachePath = '$.cached';
+  const generationPath = '$.metadata.providerTokenUsage';
+  const incurredTargetUsage = (field: TokenUsageField) =>
+    jsonIncurredUsageField(response, targetPath, incurredTargetPath, field, {
+      cachedResponsePath: responseCachePath,
+    });
+  const incurredAttackerUsage = (field: TokenUsageField) =>
+    jsonIncurredUsageField(response, attackerPath, incurredAttackerPath, field, {
+      cachedResponsePath: responseCachePath,
+      parentIncurredPath: incurredTargetPath,
+    });
+  const incurredInternalGradingUsage = (field: TokenUsageField) =>
+    jsonIncurredUsageField(response, internalGradingPath, incurredInternalGradingPath, field, {
+      cachedResponsePath: responseCachePath,
+      parentIncurredPath: incurredTargetPath,
+    });
+  const incurredGradingUsage = (field: TokenUsageField) =>
+    jsonIncurredUsageField(gradingResult, gradingPath, incurredGradingPath, field, {
+      cachedResponsePath: gradingCachePath,
+    });
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
   const basicMetricsQuery = sql`
@@ -124,7 +360,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
         ROW_NUMBER() OVER (
           PARTITION BY eval_id
           ORDER BY
-            CASE WHEN json_extract(test_case, '$.metadata.providerTokenUsage') IS NULL THEN 1 ELSE 0 END,
+            CASE WHEN json_extract(test_case, ${generationPath}) IS NULL THEN 1 ELSE 0 END,
             prompt_idx,
             test_idx
         ) AS generation_usage_rank
@@ -140,75 +376,83 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
-      -- Target usage lives on the response; generation usage is carried on the first test.
-      -- Count it once on the canonical first result, without inflating redteam probes.
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.total') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.total') AS INTEGER), 0) ELSE 0 END) as total_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.prompt') AS INTEGER), 0) ELSE 0 END) as prompt_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completion') AS INTEGER), 0) ELSE 0 END) as completion_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.cached') AS INTEGER), 0) ELSE 0 END) as cached_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.reasoning') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.reasoning') AS INTEGER), 0) ELSE 0 END) as completion_details_reasoning,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.acceptedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_accepted_prediction,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.rejectedPrediction') AS INTEGER), 0) ELSE 0 END) as completion_details_rejected_prediction,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheReadInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_read_input_tokens,
-      SUM(COALESCE(CAST(json_extract(response, '$.tokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) + CASE WHEN ${generationCarrierSql} THEN COALESCE(CAST(json_extract(test_case, '$.metadata.providerTokenUsage.completionDetails.cacheCreationInputTokens') AS INTEGER), 0) ELSE 0 END) as completion_details_cache_creation_input_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.total') AS INTEGER)) as assertion_total_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.prompt') AS INTEGER)) as assertion_prompt_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completion') AS INTEGER)) as assertion_completion_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.cached') AS INTEGER)) as assertion_cached_tokens,
+      -- Token usage aggregation (token usage is inside response JSON)
+      SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
+      SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
+      SUM(${jsonUsageNumber(response, targetPath, 'completion')}) as completion_tokens,
+      SUM(${jsonUsageCached(response, targetPath)}) as cached_tokens,
+      SUM(${jsonUsageRequests(response, targetPath)}) as num_requests_with_tokens,
+      SUM(${jsonUsageTotal(response, attackerPath)}) as attacker_total_tokens,
+      SUM(${jsonUsageNumber(response, attackerPath, 'prompt')}) as attacker_prompt_tokens,
+      SUM(${jsonUsageNumber(response, attackerPath, 'completion')}) as attacker_completion_tokens,
+      SUM(${jsonUsageCached(response, attackerPath)}) as attacker_cached_tokens,
+      SUM(${jsonUsageRequests(response, attackerPath)}) as attacker_num_requests,
+      SUM(
+        ${jsonUsageTotal(response, internalGradingPath)} +
+        ${jsonUsageTotal(gradingResult, gradingPath, gradingCachePath)}
+      ) as grading_total_tokens,
+      SUM(
+        ${jsonUsageNumber(response, internalGradingPath, 'prompt')} +
+        ${jsonUsageNumber(gradingResult, gradingPath, 'prompt')}
+      ) as grading_prompt_tokens,
+      SUM(
+        ${jsonUsageNumber(response, internalGradingPath, 'completion')} +
+        ${jsonUsageNumber(gradingResult, gradingPath, 'completion')}
+      ) as grading_completion_tokens,
+      SUM(
+        ${jsonUsageCached(response, internalGradingPath)} +
+        ${jsonUsageCached(gradingResult, gradingPath, gradingCachePath)}
+      ) as grading_cached_tokens,
+      SUM(
+        ${jsonUsageRequests(response, internalGradingPath)} +
+        ${jsonUsageRequests(gradingResult, gradingPath, gradingCachePath)}
+      ) as grading_num_requests,
+      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageTotal(sql`test_case`, generationPath)} ELSE 0 END) as generation_total_tokens,
+      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageNumber(sql`test_case`, generationPath, 'prompt')} ELSE 0 END) as generation_prompt_tokens,
+      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageNumber(sql`test_case`, generationPath, 'completion')} ELSE 0 END) as generation_completion_tokens,
+      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageCached(sql`test_case`, generationPath)} ELSE 0 END) as generation_cached_tokens,
+      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageRequests(sql`test_case`, generationPath)} ELSE 0 END) as generation_num_requests,
       SUM(
         CASE
-          WHEN grading_result IS NOT NULL
-          THEN COALESCE(CAST(json_extract(grading_result, '$.tokensUsed.numRequests') AS INTEGER), 1)
+          WHEN json_extract(response, ${incurredTargetPath}) IS NOT NULL
+            OR json_extract(grading_result, ${incurredGradingPath}) IS NOT NULL
+            OR COALESCE(json_extract(response, ${responseCachePath}), 0) = 1
+            OR COALESCE(json_extract(grading_result, ${gradingCachePath}), 0) = 1
+          THEN 1
           ELSE 0
         END
-      ) as assertion_num_requests,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.reasoning') AS INTEGER)) as assertion_completion_details_reasoning,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.acceptedPrediction') AS INTEGER)) as assertion_completion_details_accepted_prediction,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.rejectedPrediction') AS INTEGER)) as assertion_completion_details_rejected_prediction,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.cacheReadInputTokens') AS INTEGER)) as assertion_completion_details_cache_read_input_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.cacheCreationInputTokens') AS INTEGER)) as assertion_completion_details_cache_creation_input_tokens,
+      ) as has_incurred_usage,
+      SUM(${incurredTargetUsage('total')}) as incurred_total_tokens,
+      SUM(${incurredTargetUsage('prompt')}) as incurred_prompt_tokens,
+      SUM(${incurredTargetUsage('completion')}) as incurred_completion_tokens,
+      SUM(${incurredTargetUsage('cached')}) as incurred_cached_tokens,
+      SUM(${incurredTargetUsage('numRequests')}) as incurred_num_requests,
+      SUM(${incurredAttackerUsage('total')}) as incurred_attacker_total_tokens,
+      SUM(${incurredAttackerUsage('prompt')}) as incurred_attacker_prompt_tokens,
+      SUM(${incurredAttackerUsage('completion')}) as incurred_attacker_completion_tokens,
+      SUM(${incurredAttackerUsage('cached')}) as incurred_attacker_cached_tokens,
+      SUM(${incurredAttackerUsage('numRequests')}) as incurred_attacker_num_requests,
       SUM(
-        CASE
-          WHEN response IS NOT NULL
-          THEN COALESCE(CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER), 1)
-          ELSE 0
-        END
-      ) as num_requests
+        ${incurredInternalGradingUsage('total')} + ${incurredGradingUsage('total')}
+      ) as incurred_grading_total_tokens,
+      SUM(
+        ${incurredInternalGradingUsage('prompt')} + ${incurredGradingUsage('prompt')}
+      ) as incurred_grading_prompt_tokens,
+      SUM(
+        ${incurredInternalGradingUsage('completion')} + ${incurredGradingUsage('completion')}
+      ) as incurred_grading_completion_tokens,
+      SUM(
+        ${incurredInternalGradingUsage('cached')} + ${incurredGradingUsage('cached')}
+      ) as incurred_grading_cached_tokens,
+      SUM(
+        ${incurredInternalGradingUsage('numRequests')} + ${incurredGradingUsage('numRequests')}
+      ) as incurred_grading_num_requests
     FROM filtered_results
     GROUP BY prompt_idx
     ORDER BY prompt_idx
   `;
 
-  const basicResults = (await db.all(basicMetricsQuery)) as Array<{
-    prompt_idx: number;
-    total_count: number;
-    pass_count: number;
-    fail_count: number;
-    error_count: number;
-    total_score: number;
-    total_latency: number;
-    total_cost: number;
-    total_tokens: number | null;
-    prompt_tokens: number | null;
-    completion_tokens: number | null;
-    cached_tokens: number | null;
-    completion_details_reasoning: number | null;
-    completion_details_accepted_prediction: number | null;
-    completion_details_rejected_prediction: number | null;
-    completion_details_cache_read_input_tokens: number | null;
-    completion_details_cache_creation_input_tokens: number | null;
-    assertion_total_tokens: number | null;
-    assertion_prompt_tokens: number | null;
-    assertion_completion_tokens: number | null;
-    assertion_cached_tokens: number | null;
-    assertion_num_requests: number | null;
-    assertion_completion_details_reasoning: number | null;
-    assertion_completion_details_accepted_prediction: number | null;
-    assertion_completion_details_rejected_prediction: number | null;
-    assertion_completion_details_cache_read_input_tokens: number | null;
-    assertion_completion_details_cache_creation_input_tokens: number | null;
-    num_requests: number | null;
-  }>;
+  const basicResults = (await db.all(basicMetricsQuery)) as FilteredBasicMetricsRow[];
 
   // Populate basic metrics
   for (const row of basicResults) {
@@ -225,35 +469,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
-      tokenUsage: {
-        total: row.total_tokens || 0,
-        prompt: row.prompt_tokens || 0,
-        completion: row.completion_tokens || 0,
-        cached: row.cached_tokens || 0,
-        numRequests: row.num_requests || 0,
-        completionDetails: {
-          reasoning: row.completion_details_reasoning || 0,
-          acceptedPrediction: row.completion_details_accepted_prediction || 0,
-          rejectedPrediction: row.completion_details_rejected_prediction || 0,
-          cacheReadInputTokens: row.completion_details_cache_read_input_tokens || 0,
-          cacheCreationInputTokens: row.completion_details_cache_creation_input_tokens || 0,
-        },
-        assertions: {
-          total: row.assertion_total_tokens || 0,
-          prompt: row.assertion_prompt_tokens || 0,
-          completion: row.assertion_completion_tokens || 0,
-          cached: row.assertion_cached_tokens || 0,
-          numRequests: row.assertion_num_requests || 0,
-          completionDetails: {
-            reasoning: row.assertion_completion_details_reasoning || 0,
-            acceptedPrediction: row.assertion_completion_details_accepted_prediction || 0,
-            rejectedPrediction: row.assertion_completion_details_rejected_prediction || 0,
-            cacheReadInputTokens: row.assertion_completion_details_cache_read_input_tokens || 0,
-            cacheCreationInputTokens:
-              row.assertion_completion_details_cache_creation_input_tokens || 0,
-          },
-        },
-      },
+      tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},
       namedScoreWeights: {},
@@ -440,27 +656,6 @@ function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
       completion: 0,
       cached: 0,
       numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
-        },
-      },
     },
     namedScores: {},
     namedScoresCount: {},

@@ -4,10 +4,13 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { createWebPageTaskError, WebPageTaskError } from '../shared/webPageTaskError';
 import { getTargetResponse } from './shared';
 
 import type {
@@ -160,7 +163,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     );
 
     if (!response.ok) {
-      throw await createWebPageTaskError(response, 'create web page');
+      const errorText = await response.text();
+      throw new Error(`Failed to create web page: ${response.status} ${errorText}`);
     }
 
     return response.json();
@@ -231,9 +235,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       (typeof injectVarValue === 'string' ? injectVarValue : undefined);
     const purpose = context?.test?.metadata?.purpose as string | undefined;
     const testCaseId =
-      (context?.test?.metadata?.testCaseId as string) ||
-      (context?.test?.metadata?.originalTestCaseId as string) ||
-      `scan-${this.config.scanId}`;
+      (context?.test?.metadata?.testCaseId as string) || `scan-${this.config.scanId}`;
     // Strip "eval-" prefix from evalId for cleaner URLs
     const evalId = context?.evaluationId?.replace(/^eval-/, '');
 
@@ -262,12 +264,13 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     let webFetchActuallyUsed = false;
     let fetchAttempts = 0;
 
-    let attackError: string | undefined;
     try {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
       const webPage = await this.createWebPage(testCaseId, prompt, evalId, goal, purpose);
-      accumulateResponseTokenUsage(totalTokenUsage, webPage, { countAsRequest: false });
+      if (webPage.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: webPage.tokenUsage });
+      }
       webPageUuid = webPage.uuid;
       webPageUrl = webPage.fullUrl;
 
@@ -356,17 +359,9 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         logger.debug('[IndirectWebPwn] Operation aborted');
         throw error;
       }
-      if (error instanceof WebPageTaskError) {
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: error.tokenUsage },
-          { countAsRequest: false },
-        );
-      }
       logger.error('[IndirectWebPwn] Error during attack', {
         error: error instanceof Error ? error.message : String(error),
       });
-      attackError = error instanceof Error ? error.message : String(error);
       stopReason = 'Error';
     }
 
@@ -393,7 +388,6 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         fetchAttempts,
       },
       tokenUsage: totalTokenUsage,
-      ...(attackError ? { error: attackError } : {}),
     };
   }
 }

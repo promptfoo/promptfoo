@@ -50,7 +50,7 @@ describe('Matcher Token Tracking', () => {
       expect(result.tokensUsed?.cached).toBe(0);
     });
 
-    it('should infer one request when a grader response omits numRequests', async () => {
+    it('should default numRequests to 0 when not provided', async () => {
       const mockProvider = await loadApiProvider('echo');
       const mockCallApi = vi.fn().mockResolvedValue({
         output: JSON.stringify({
@@ -78,7 +78,7 @@ describe('Matcher Token Tracking', () => {
       );
 
       expect(result.tokensUsed).toBeDefined();
-      expect(result.tokensUsed?.numRequests).toBe(1);
+      expect(result.tokensUsed?.numRequests).toBe(0);
     });
   });
 

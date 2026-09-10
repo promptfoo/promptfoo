@@ -1,7 +1,6 @@
 import logger from '../../../logger';
 import invariant from '../../../util/invariant';
 import { HARM_PLUGINS } from '../../constants';
-import { mergeProviderTokenUsage } from '../../strategies/util';
 import { extractMaterializedVariablesFromJsonWithMetadata, getShortPluginId } from '../../util';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
@@ -56,9 +55,6 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
           let inputMaterialization: Awaited<
             ReturnType<typeof extractMaterializedVariablesFromJsonWithMetadata>
           >['metadata'];
-          let providerTokenUsage: Awaited<
-            ReturnType<typeof extractMaterializedVariablesFromJsonWithMetadata>
-          >['tokenUsage'];
 
           // If inputs is defined, extract individual keys from the JSON into vars
           if (hasMultipleInputs) {
@@ -85,7 +81,6 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
                 );
                 Object.assign(vars, materializedVars.vars);
                 inputMaterialization = materializedVars.metadata;
-                providerTokenUsage = materializedVars.tokenUsage;
               } catch (error) {
                 logger.debug('[AlignedHarmful] Failed to materialize prompt inputs', { error });
                 throw error;
@@ -100,9 +95,6 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
               pluginId,
               pluginConfig: this.config,
               ...(inputMaterialization ? { inputMaterialization } : {}),
-              ...(providerTokenUsage
-                ? { providerTokenUsage: mergeProviderTokenUsage(undefined, providerTokenUsage) }
-                : {}),
             },
             assert: getHarmfulAssertions(this.harmCategory),
           };

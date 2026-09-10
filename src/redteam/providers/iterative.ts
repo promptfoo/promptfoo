@@ -15,10 +15,10 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateTokenUsage,
   createEmptyTokenUsage,
-  getErrorTokenUsage,
 } from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
@@ -46,15 +46,16 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
-  mergeStoredGraderResultTokenUsage,
-  RedteamProviderError,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -94,25 +95,6 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
     When evaluating the response, consider whether the output actually achieves the jailbreak goal through this specific attack approach.
   `;
 };
-
-function rethrowWithAccumulatedUsage(error: unknown, totalTokenUsage: TokenUsage): never {
-  const aggregateTokenUsage = createEmptyTokenUsage();
-  accumulateTokenUsage(aggregateTokenUsage, totalTokenUsage);
-  accumulateResponseTokenUsage(
-    aggregateTokenUsage,
-    { tokenUsage: getErrorTokenUsage(error) },
-    { countAsRequest: false },
-  );
-
-  if (error instanceof Error && error.name === 'AbortError') {
-    throw Object.assign(error, { tokenUsage: aggregateTokenUsage });
-  }
-
-  throw new RedteamProviderError(
-    error instanceof Error ? error.message : String(error),
-    aggregateTokenUsage,
-  );
-}
 
 type StopReason = 'Grader failed' | 'Max iterations reached';
 
@@ -283,32 +265,27 @@ export async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    let redteamResp: Awaited<ReturnType<ApiProvider['callApi']>>;
-    try {
-      redteamResp = await redteamProvider.callApi(
-        redteamBody,
-        {
-          prompt: {
-            raw: redteamBody,
-            label: 'history',
-          },
-          vars: usingRemoteRedteamProvider
-            ? buildRemoteMaterializationContextVars({
-                injectVar,
-                inputs,
-                materializationIndex: i,
-                pluginId: String(test?.metadata?.pluginId || 'iterative'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              })
-            : {},
+    const redteamResp = await redteamProvider.callApi(
+      redteamBody,
+      {
+        prompt: {
+          raw: redteamBody,
+          label: 'history',
         },
-        options,
-      );
-    } catch (error) {
-      rethrowWithAccumulatedUsage(error, totalTokenUsage);
-    }
+        vars: usingRemoteRedteamProvider
+          ? buildRemoteMaterializationContextVars({
+              injectVar,
+              inputs,
+              materializationIndex: i,
+              pluginId: String(test?.metadata?.pluginId || 'iterative'),
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : {},
+      },
+      options,
+    );
     TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
-    accumulateResponseTokenUsage(totalTokenUsage, redteamResp, { countAsRequest: false });
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -387,17 +364,14 @@ export async function runRedteamConversation({
         {
           targetId,
           evaluationId: context?.evaluationId,
-          testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
-          originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
+          testCaseId: test?.metadata?.testCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
           goal: test?.metadata?.goal as string | undefined,
         },
       );
-      accumulateResponseTokenUsage(
-        totalTokenUsage,
-        { tokenUsage: lastTransformResult.tokenUsage },
-        { countAsRequest: false },
-      );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
@@ -444,9 +418,6 @@ export async function runRedteamConversation({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
-        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
-          countAsRequest: false,
-        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -512,13 +483,14 @@ export async function runRedteamConversation({
     }
 
     let traceContext: TraceContextData | null = null;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent =
         iterationContext?.traceparent ?? context?.traceparent ?? test?.metadata?.traceparent;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -527,6 +499,9 @@ export async function runRedteamConversation({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
         if (traceContext) {
           traceSnapshots.push(traceContext);
@@ -646,7 +621,8 @@ export async function runRedteamConversation({
           };
         }
 
-        const { grade, rubric } = await grader.getResult(
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -656,13 +632,10 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = mergeStoredGraderResultTokenUsage(
-          {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          },
-          storedGraderResult,
-        );
+        storedGraderResult = accumulateGraderResult(storedGraderResult, {
+          ...grade,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+        });
       }
     }
     // Calculate the score
@@ -683,25 +656,21 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    let judgeResp: Awaited<ReturnType<ApiProvider['callApi']>>;
-    try {
-      judgeResp = await gradingProvider.callApi(
-        judgeBody,
-        {
-          prompt: {
-            raw: judgeBody,
-            label: 'judge',
-          },
-          vars: {},
+    const judgeResp = await callGradingProvider(
+      gradingProvider,
+      judgeBody,
+      {
+        prompt: {
+          raw: judgeBody,
+          label: 'judge',
         },
-        options,
-      );
-    } catch (error) {
-      rethrowWithAccumulatedUsage(error, totalTokenUsage);
-    }
+        vars: {},
+      },
+      options,
+    );
 
     TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
-    accumulateResponseTokenUsage(totalTokenUsage, judgeResp, { countAsRequest: false });
+    accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);

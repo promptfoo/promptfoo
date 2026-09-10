@@ -51,7 +51,6 @@ const defaultResultsViewSettings = {
 
 const defaultTableStoreState = {
   shouldHighlightSearchText: false,
-  config: undefined as { redteam?: Record<string, unknown> } | undefined,
 };
 
 const mockResultsViewSettings = {
@@ -181,6 +180,24 @@ describe('EvalOutputCell', () => {
     timers?.restore();
     timers = undefined;
   });
+
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
 
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
@@ -1029,86 +1046,6 @@ describe('EvalOutputCell', () => {
     const cachedSuffix = screen.getByText('(cached)');
     expect(cachedSuffix).toBeInTheDocument();
     expect(cachedSuffix).toHaveClass('italic');
-  });
-
-  it('labels red-team token stats explicitly', () => {
-    mockTableStoreState.config = { redteam: {} };
-
-    const propsWithStandardTokens: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        tokenUsage: {
-          prompt: 11,
-          completion: 22,
-          total: 33,
-        },
-        response: {
-          output: 'response',
-          tokenUsage: { prompt: 2, completion: 3, total: 5 },
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
-
-    expect(screen.getByText('Probes:')).toBeInTheDocument();
-    expect(screen.getByText('Non-grading tokens:')).toBeInTheDocument();
-    expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
-    expect(screen.getByText('30')).toBeInTheDocument();
-  });
-
-  it('shows zero probes for a red-team provider error without usage data', () => {
-    mockTableStoreState.config = { redteam: {} };
-
-    const propsWithProviderError: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        error: 'Provider request failed',
-        failureReason: ResultFailureReason.ERROR,
-        tokenUsage: {},
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithProviderError} />);
-
-    expect(screen.getByText('Probes:').parentElement).toHaveTextContent('Probes: 0');
-  });
-
-  it('shows grading tokens from grading results for red-team rows', () => {
-    mockTableStoreState.config = { redteam: {} };
-
-    const propsWithGradingTokens: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        tokenUsage: {
-          prompt: 11,
-          completion: 22,
-          total: 33,
-          assertions: {
-            total: 0,
-          },
-        },
-        gradingResult: {
-          ...defaultProps.output.gradingResult,
-          pass: defaultProps.output.gradingResult?.pass ?? true,
-          score: defaultProps.output.gradingResult?.score ?? 0.8,
-          reason: defaultProps.output.gradingResult?.reason ?? 'Test reason',
-          tokensUsed: {
-            prompt: 4,
-            completion: 3,
-            total: 7,
-          },
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithGradingTokens} />);
-
-    expect(screen.getByText('Grading tokens:')).toBeInTheDocument();
-    expect(screen.getByText('7')).toBeInTheDocument();
   });
 
   it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {
@@ -2440,6 +2377,10 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
   });
 
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });
@@ -2474,8 +2415,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

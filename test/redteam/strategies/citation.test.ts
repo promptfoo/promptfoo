@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -10,7 +11,7 @@ import {
 } from '../../../src/redteam/remoteGeneration';
 import { addCitationTestCases } from '../../../src/redteam/strategies/citation';
 
-import type { TestCase } from '../../../src/types/index';
+import type { ApiProvider, TestCase, TokenUsage } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
@@ -77,7 +78,6 @@ describe('citation strategy', () => {
             content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
           },
         },
-        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
       },
       cached: false,
       status: 200,
@@ -94,12 +94,6 @@ describe('citation strategy', () => {
       type: 'Journal Article',
       content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
     });
-    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
-      total: 17,
-      prompt: 10,
-      completion: 7,
-      numRequests: 1,
-    });
     expect(result[0]?.assert?.[0].metric).toBe('test-metric/Citation');
 
     expect(mockFetchWithCache).toHaveBeenCalledWith(
@@ -111,10 +105,7 @@ describe('citation strategy', () => {
         },
         body: JSON.stringify({
           task: 'citation',
-          testCases: [testCases[0]],
-          injectVar: 'prompt',
           topic: 'original prompt',
-          config: {},
           email: 'test@example.com',
         }),
       },
@@ -122,18 +113,18 @@ describe('citation strategy', () => {
     );
   });
 
-  it('should preserve prior generation usage when layered after another strategy', async () => {
+  it('adds remote citation usage to the request-scoped generation provider', async () => {
+    const usage: TokenUsage = {};
+    const provider: ApiProvider = {
+      id: () => 'generation-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
+    };
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         result: {
-          topic: 'test topic',
-          key: 'test key',
-          citation: {
-            type: 'Journal Article',
-            content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
-          },
+          citation: { type: 'Journal Article', content: 'Tracked citation' },
         },
-        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        tokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
       },
       cached: false,
       status: 200,
@@ -141,25 +132,74 @@ describe('citation strategy', () => {
     });
 
     const result = await addCitationTestCases(
-      [
-        {
-          ...testCases[0],
-          metadata: {
-            providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
-          },
-        },
-      ],
+      testCases,
       'prompt',
       {},
+      {
+        generationProviderSelection: {
+          provider: trackGenerationTokenUsage(provider, usage),
+          source: 'default',
+        },
+      },
     );
 
-    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
-      total: 22,
-      prompt: 13,
-      completion: 9,
-      cached: 0,
-      numRequests: 2,
+    expect(result).toHaveLength(1);
+    expect(usage).toMatchObject({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
+  });
+
+  it('forwards targetId without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      targetId: 'cloud-target-123',
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({ targetId: 'cloud-target-123' });
+    expect(body).not.toContain('CANARY');
+    expect(body).not.toContain('secret');
+  });
+
+  it('forwards supported citation options without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+    });
+    expect(body).not.toContain('secret');
   });
 
   it('should throw error when remote generation is disabled', async () => {
@@ -189,110 +229,6 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
-  it('should propagate one-row API error usage when no citation can be generated', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
-        error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
-        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
-      },
-      cached: false,
-      status: 500,
-      statusText: 'Error',
-    });
-
-    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
-      message: 'Validation error: Required at "result.topic"; Required at "result.citation"',
-      tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
-    });
-    expect(logger.error).toHaveBeenCalledWith(
-      '[Citation] Token usage from failed citation generation',
-      {
-        error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
-        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
-      },
-    );
-  });
-
-  it('should preserve multi-row API error usage on the surviving citation result', async () => {
-    mockFetchWithCache
-      .mockResolvedValueOnce({
-        data: {
-          error: 'remote citation failed',
-          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
-        },
-        cached: false,
-        status: 500,
-        statusText: 'Error',
-      })
-      .mockResolvedValueOnce({
-        data: {
-          result: {
-            citation: {
-              type: 'Article',
-              content: 'Secondary citation',
-            },
-          },
-          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-    const result = await addCitationTestCases(
-      [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
-      'prompt',
-      {},
-    );
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
-      total: 30,
-      prompt: 18,
-      completion: 12,
-      cached: 0,
-      numRequests: 2,
-    });
-  });
-
-  it('should preserve completed results and usage when another fetch throws', async () => {
-    mockFetchWithCache
-      .mockResolvedValueOnce({
-        data: {
-          result: {
-            citation: {
-              type: 'Article',
-              content: 'Surviving citation',
-            },
-          },
-          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      })
-      .mockRejectedValueOnce(
-        Object.assign(new Error('citation fetch failed'), {
-          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
-        }),
-      );
-
-    const result = await addCitationTestCases(
-      [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
-      'prompt',
-      {},
-    );
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
-      total: 30,
-      prompt: 18,
-      completion: 12,
-      cached: 0,
-      numRequests: 2,
-    });
-  });
-
   it('should handle invalid response structure gracefully', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
@@ -313,32 +249,6 @@ describe('citation strategy', () => {
       '[Citation] Invalid response structure - missing citation data',
     );
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
-  });
-
-  it('should propagate invalid response usage when no citation can be generated', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
-        result: {
-          topic: 'test topic',
-        },
-        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-
-    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
-      message: 'Citation generation returned invalid response structure',
-      tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
-    });
-    expect(logger.error).toHaveBeenCalledWith(
-      '[Citation] Token usage from failed citation generation',
-      {
-        error: 'Citation generation returned invalid response structure',
-        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
-      },
-    );
   });
 
   it('should handle network errors gracefully', async () => {

@@ -13,17 +13,11 @@ import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
-import { BaseTokenUsageSchema } from '../../types/shared';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-  getErrorTokenUsage,
-} from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -33,7 +27,6 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getCloudTargetIdFromProviders } from '../remoteGenerationContextFromProviders';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
 
 // ========================================================
 // Schemas
@@ -71,7 +64,6 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
-  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -80,7 +72,6 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
   error: z.string().optional(),
-  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const ArgsSchema = z
@@ -163,7 +154,6 @@ export function normalizeTargetPurposeDiscoveryResult(
     limitations: isNullLike(result.limitations) ? null : result.limitations,
     user: isNullLike(result.user) ? null : result.user,
     tools: cleanTools(result.tools),
-    ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
   };
 }
 
@@ -175,29 +165,19 @@ function extractStringField(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-async function getRemoteResponseErrorDetail(
-  response: Response,
-): Promise<{ detail: string; tokenUsage?: TokenUsage }> {
+async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
   const rawText = (await response.text()).trim();
   const fallback = rawText || response.statusText || 'Unknown error';
   if (!rawText) {
-    return { detail: fallback };
+    return fallback;
   }
   try {
-    const parsed = JSON.parse(rawText) as {
-      message?: unknown;
-      error?: unknown;
-      tokenUsage?: unknown;
-    } | null;
+    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
     const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
-    const tokenUsage = BaseTokenUsageSchema.safeParse(parsed?.tokenUsage);
-    return {
-      detail: detail ?? fallback,
-      ...(tokenUsage.success ? { tokenUsage: tokenUsage.data } : {}),
-    };
+    return detail ?? fallback;
   } catch {
     // Not JSON — fall through to raw text.
-    return { detail: fallback };
+    return fallback;
   }
 }
 
@@ -220,13 +200,10 @@ function getRemoteErrorHint(status: number): string | undefined {
 }
 
 async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
-  const { detail, tokenUsage } = await getRemoteResponseErrorDetail(response);
+  const detail = await getRemoteResponseErrorDetail(response);
   const hint = getRemoteErrorHint(response.status);
   const base = `Remote server returned HTTP ${response.status}: ${detail}`;
-  return Object.assign(
-    new Error(hint ? `${base}\n${hint}` : base),
-    tokenUsage ? { tokenUsage } : {},
-  );
+  return new Error(hint ? `${base}\n${hint}` : base);
 }
 
 /**
@@ -268,15 +245,6 @@ export async function doTargetPurposeDiscovery(
     currentQuestionIndex: 0,
     answers: [],
   });
-  const tokenUsage = createEmptyTokenUsage();
-  let hasTokenUsage = false;
-  const trackTokenUsage = (response: { tokenUsage?: Partial<TokenUsage> } | undefined) => {
-    if (!response) {
-      return;
-    }
-    accumulateResponseTokenUsage(tokenUsage, response);
-    hasTokenUsage = true;
-  };
   let turn = 0;
 
   try {
@@ -321,12 +289,6 @@ export async function doTargetPurposeDiscovery(
         question = data.question;
         discoveryResult = data.purpose;
         state = data.state;
-        if (data.tokenUsage || !data.purpose?.tokenUsage) {
-          trackTokenUsage(data);
-        }
-        if (data.purpose?.tokenUsage) {
-          trackTokenUsage({ tokenUsage: data.purpose.tokenUsage });
-        }
 
         if (data.error) {
           const errorMessage = `Error from remote server: ${data.error}`;
@@ -352,7 +314,6 @@ export async function doTargetPurposeDiscovery(
             vars: { sessionId },
             bustCache: true,
           });
-          trackTokenUsage(targetResponse);
 
           if (targetResponse.error) {
             const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -384,27 +345,7 @@ export async function doTargetPurposeDiscovery(
       }
     }
 
-    if (!discoveryResult) {
-      return undefined;
-    }
-
-    const normalizedResult = normalizeTargetPurposeDiscoveryResult(discoveryResult);
-    return {
-      ...normalizedResult,
-      ...(hasTokenUsage ? { tokenUsage } : {}),
-    };
-  } catch (error) {
-    const errorTokenUsage = getErrorTokenUsage(error);
-    if (errorTokenUsage) {
-      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: errorTokenUsage });
-      hasTokenUsage = true;
-    }
-    if (hasTokenUsage) {
-      throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
-        tokenUsage,
-      });
-    }
-    throw error;
+    return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
   } finally {
     pbar?.stop();
   }

@@ -5,35 +5,20 @@ import { callProviderWithContext, getAndCheckProvider } from '../../matchers/pro
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
-import {
-  accumulateResponseTokenUsage,
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 
-import type { AssertionParams, GradingResult, TokenUsage } from '../../types/index';
+import type { AssertionParams, GradingResult } from '../../types/index';
 import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
-
-function hasRecordedTokenUsage(tokenUsage: TokenUsage): boolean {
-  const basicCounts = [
-    tokenUsage.total,
-    tokenUsage.prompt,
-    tokenUsage.completion,
-    tokenUsage.cached,
-    tokenUsage.numRequests,
-  ];
-  return (
-    basicCounts.some((count) => (count ?? 0) > 0) ||
-    Object.values(tokenUsage.completionDetails ?? {}).some((count) => (count ?? 0) > 0)
-  );
-}
+// DeepEval's default pass threshold for the conversation relevancy metric.
+const DEFAULT_THRESHOLD = 0.5;
 
 export const handleConversationRelevance = async ({
   assertion,
+  inverse,
   outputString,
   prompt,
   providerCallContext,
@@ -56,7 +41,7 @@ export const handleConversationRelevance = async ({
     ];
   }
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
-  const threshold = assertion.threshold || 0;
+  const threshold = assertion.threshold ?? DEFAULT_THRESHOLD;
   let relevantCount = 0;
   let totalWindows = 0;
   const irrelevancies: string[] = [];
@@ -74,6 +59,18 @@ export const handleConversationRelevance = async ({
       providerCallContext,
     );
 
+    if (result.tokensUsed) {
+      accumulateTokenUsage(tokensUsed, result.tokensUsed);
+    }
+
+    if (result.metadata?.graderError === true) {
+      return {
+        ...result,
+        assertion,
+        tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+      };
+    }
+
     if (result.pass) {
       relevantCount++;
     } else if (
@@ -83,16 +80,11 @@ export const handleConversationRelevance = async ({
       irrelevancies.push(result.reason);
     }
 
-    // Accumulate token usage
-    if (result.tokensUsed) {
-      accumulateTokenUsage(tokensUsed, result.tokensUsed);
-    }
-
     totalWindows++;
   }
 
   const score = totalWindows > 0 ? relevantCount / totalWindows : 0;
-  const pass = score >= threshold - Number.EPSILON;
+  const pass = score >= threshold - Number.EPSILON !== inverse;
 
   // Generate a comprehensive reason if there are irrelevancies
   let reason: string;
@@ -130,7 +122,9 @@ export const handleConversationRelevance = async ({
       }
 
       // Add token usage from reason generation
-      accumulateResponseTokenUsage(tokensUsed, resp);
+      if (resp.tokenUsage) {
+        accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+      }
     } else {
       reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
     }
@@ -141,8 +135,8 @@ export const handleConversationRelevance = async ({
   return {
     assertion,
     pass,
-    score,
+    score: inverse ? 1 - score : score,
     reason,
-    tokensUsed: hasRecordedTokenUsage(tokensUsed) ? tokensUsed : undefined,
+    tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
   };
 };

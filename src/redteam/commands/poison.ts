@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -16,8 +16,6 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import type { Command } from 'commander';
-
-import type { TokenUsage } from '../../types/index';
 
 interface PoisonOptions {
   documents: string[];
@@ -33,7 +31,6 @@ interface PoisonResponse {
   intendedResult: string;
   task: string;
   originalPath?: string;
-  tokenUsage?: TokenUsage;
 }
 
 type FilePath = string;
@@ -137,7 +134,6 @@ export async function poisonDocument(
       originalPath: result.originalPath,
       poisonedDocument: result.poisonedDocument,
       intendedResult: result.intendedResult,
-      ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
     };
   } catch (error) {
     throw new Error(`Failed to poison ${doc.docLike}: ${error}`);

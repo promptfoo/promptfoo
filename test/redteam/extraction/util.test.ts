@@ -5,11 +5,11 @@ import logger from '../../../src/logger';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import {
   callExtraction,
-  callExtractionWithMetadata,
   fetchRemoteGeneration,
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -122,6 +122,77 @@ describe('fetchRemoteGeneration', () => {
       getRequestTimeoutMs(),
       'json',
     );
+  });
+
+  it('records token usage from uncached remote extraction requests', async () => {
+    const tokenUsage = { total: 18, prompt: 12, completion: 6 };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', result: 'Tracked purpose', tokenUsage },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(fetchRemoteGeneration('purpose', ['prompt'], undefined, provider)).resolves.toBe(
+      'Tracked purpose',
+    );
+
+    expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
+  });
+
+  it('preserves cached remote extraction usage without incurring it again', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'entities',
+        result: ['cached entity'],
+        tokenUsage: { total: 18, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: true,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await fetchRemoteGeneration('entities', ['prompt'], undefined, provider);
+
+    expect(generationUsage).toMatchObject({
+      total: 18,
+      cached: 18,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
+  });
+
+  it('counts failed remote extraction requests without token usage', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('extraction timed out'));
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(fetchRemoteGeneration('purpose', ['prompt'], undefined, provider)).rejects.toThrow(
+      'extraction timed out',
+    );
+
+    expect(generationUsage).toMatchObject({ total: 0, numRequests: 1 });
+  });
+
+  it('does not count an invalid remote extraction response twice', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', tokenUsage: { total: 12 } },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const generationUsage = {};
+    const provider = trackGenerationTokenUsage(createMockProvider(), generationUsage);
+
+    await expect(
+      fetchRemoteGeneration('purpose', ['prompt'], undefined, provider),
+    ).rejects.toThrow();
+
+    expect(generationUsage).toMatchObject({ total: 12, numRequests: 1 });
   });
 
   it('should include the resolved cloud target in the remote generation payload', async () => {
@@ -306,64 +377,6 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: undefined',
       );
-    });
-  });
-
-  describe('callExtractionWithMetadata', () => {
-    it('should count a provider response without usage as one request', async () => {
-      vi.mocked(provider.callApi).mockResolvedValue({ output: 'test output' });
-
-      await expect(
-        callExtractionWithMetadata(provider, 'test prompt', (output) => output.toUpperCase()),
-      ).resolves.toEqual({
-        result: 'TEST OUTPUT',
-        tokenUsage: { numRequests: 1 },
-      });
-    });
-
-    it('should preserve token usage on provider errors', async () => {
-      vi.mocked(provider.callApi).mockResolvedValue({
-        error: 'API error',
-        tokenUsage: { total: 12, prompt: 7, completion: 5 },
-      });
-
-      await expect(
-        callExtractionWithMetadata(provider, 'test prompt', vi.fn()),
-      ).rejects.toMatchObject({
-        message: 'Failed to perform extraction: API error',
-        tokenUsage: { total: 12, prompt: 7, completion: 5, numRequests: 1 },
-      });
-    });
-
-    it('should preserve token usage when the provider throws', async () => {
-      vi.mocked(provider.callApi).mockRejectedValue(
-        Object.assign(new Error('Provider threw'), {
-          tokenUsage: { total: 9, prompt: 6, completion: 3 },
-        }),
-      );
-
-      await expect(
-        callExtractionWithMetadata(provider, 'test prompt', vi.fn()),
-      ).rejects.toMatchObject({
-        message: 'Provider threw',
-        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
-      });
-    });
-
-    it('should preserve response usage when output processing throws', async () => {
-      vi.mocked(provider.callApi).mockResolvedValue({
-        output: 'malformed output',
-        tokenUsage: { total: 8, prompt: 5, completion: 3 },
-      });
-
-      await expect(
-        callExtractionWithMetadata(provider, 'test prompt', () => {
-          throw new Error('Parser failed');
-        }),
-      ).rejects.toMatchObject({
-        message: 'Parser failed',
-        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
-      });
     });
   });
 

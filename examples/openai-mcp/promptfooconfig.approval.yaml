@@ -8,22 +8,25 @@ prompts:
 
 providers:
   # Provider with approval required (default behavior)
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     label: 'With Approval Required'
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           # require_approval is not specified, so approval is required by default
       max_output_tokens: 1000
-      temperature: 0.2
       instructions: 'You are a research assistant. When approval is required for MCP tools, explain what you would do if the tool were approved.'
 
   # Provider with selective approval
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     label: 'Selective Approval'
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
@@ -33,20 +36,20 @@ providers:
               tool_names: ['read_wiki_structure']
           # ask_question will still require approval, but read_wiki_structure won't
       max_output_tokens: 1000
-      temperature: 0.2
       instructions: 'You are a research assistant. Use the available tools to gather information.'
 
   # Provider with no approval required
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     label: 'No Approval Required'
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
       max_output_tokens: 1000
-      temperature: 0.2
       instructions: 'You are a research assistant. Use the available MCP tools to search for information.'
 
 tests:

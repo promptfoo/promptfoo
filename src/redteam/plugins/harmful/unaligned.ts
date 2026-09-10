@@ -3,8 +3,7 @@ import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { attachProviderTokenUsage } from '../../strategies/util';
+import { trackAdditionalGenerationProvider } from '../../generationTokenUsage';
 import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
@@ -12,7 +11,7 @@ import {
 import { createTestCase } from './common';
 
 import type { PluginActionParams, TestCase } from '../../../types/index';
-import type { Inputs, TokenUsage } from '../../../types/shared';
+import type { Inputs } from '../../../types/shared';
 import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 
 /**
@@ -28,14 +27,12 @@ async function processPromptForInputs(
   materializationIndex: number,
 ): Promise<{
   additionalMetadata?: Record<string, unknown>;
-  additionalProviderTokenUsage?: TokenUsage;
   additionalVars: Record<string, string>;
   processedPrompt: string;
 }> {
   let processedPrompt = prompt.trim();
   const additionalVars: Record<string, string> = {};
   let additionalMetadata: Record<string, unknown> | undefined;
-  let additionalProviderTokenUsage: TokenUsage | undefined;
 
   // Extract content from <Prompt> tags if present
   const extractedPrompt = extractPromptFromTags(processedPrompt);
@@ -67,7 +64,6 @@ async function processPromptForInputs(
         );
         Object.assign(additionalVars, materializedVars.vars);
         additionalMetadata = materializedVars.metadata;
-        additionalProviderTokenUsage = materializedVars.tokenUsage;
       } catch (error) {
         logger.debug('[Harmful] Failed to materialize prompt inputs', { error });
         throw error;
@@ -75,31 +71,27 @@ async function processPromptForInputs(
     }
   }
 
-  return { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage };
+  return { processedPrompt, additionalVars, additionalMetadata };
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
+  { provider, purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
-  const unalignedProvider = new PromptfooHarmfulCompletionProvider({
-    purpose,
-    n: Math.min(n, maxHarmfulTests),
-    harmCategory: plugin,
-    config,
-    targetId,
-  });
-  const generationTokenUsage = createEmptyTokenUsage();
-  let hasGenerationTokenUsage = false;
+  const unalignedProvider = trackAdditionalGenerationProvider(
+    new PromptfooHarmfulCompletionProvider({
+      purpose,
+      n: Math.min(n, maxHarmfulTests),
+      harmCategory: plugin,
+      config,
+      targetId,
+    }),
+    provider,
+  );
 
   const generatePrompts = async (): Promise<string[]> => {
     const result = await unalignedProvider.callApi('');
-    accumulateResponseTokenUsage(generationTokenUsage, result);
-    hasGenerationTokenUsage = true;
-    if (result.error && (!result.output || result.output.length === 0) && result.tokenUsage) {
-      throw Object.assign(new Error(result.error), { tokenUsage: generationTokenUsage });
-    }
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);
@@ -110,19 +102,17 @@ export async function getHarmfulTests(
   };
   const allPrompts = await retryWithDeduplication(generatePrompts, n);
   const inputs = config?.inputs as Inputs | undefined;
-  const sampledPrompts = sampleArray(allPrompts, n);
 
-  const testCases = await Promise.all(
-    sampledPrompts.map(async (prompt, materializationIndex) => {
-      const { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage } =
-        await processPromptForInputs(
-          prompt,
-          inputs,
-          plugin,
-          unalignedProvider,
-          purpose,
-          materializationIndex,
-        );
+  return Promise.all(
+    sampleArray(allPrompts, n).map(async (prompt, materializationIndex) => {
+      const { processedPrompt, additionalVars, additionalMetadata } = await processPromptForInputs(
+        prompt,
+        inputs,
+        plugin,
+        unalignedProvider,
+        purpose,
+        materializationIndex,
+      );
       const testCase = createTestCase(injectVar, processedPrompt, plugin);
 
       // Merge additional vars from JSON parsing
@@ -139,19 +129,8 @@ export async function getHarmfulTests(
           inputMaterialization: additionalMetadata,
         };
       }
-      if (additionalProviderTokenUsage) {
-        testCase.metadata = {
-          ...testCase.metadata,
-          providerTokenUsage: additionalProviderTokenUsage,
-        };
-      }
 
       return testCase;
     }),
-  );
-
-  return attachProviderTokenUsage(
-    testCases,
-    hasGenerationTokenUsage ? generationTokenUsage : undefined,
   );
 }
