@@ -384,7 +384,10 @@ abstract class SageMakerGenericProvider {
     return undefined;
   }
 
-  private async getCredentialScope(region: string): Promise<CredentialScope> {
+  private async getCredentialScope(
+    region: string,
+    smithyConfig: typeof import('@smithy/core/config'),
+  ): Promise<CredentialScope> {
     const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
     if (accessKeyId && secretAccessKey) {
       return { region, accessKeyId, secretAccessKey, sessionToken, environment: {} };
@@ -394,9 +397,7 @@ abstract class SageMakerGenericProvider {
     );
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
-      const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = await import(
-        '@smithy/core/config'
-      );
+      const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
       const profiles = await parseKnownFiles({
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE,
         configFilepath: environment.AWS_CONFIG_FILE,
@@ -457,7 +458,9 @@ abstract class SageMakerGenericProvider {
     return { region, profile, environment };
   }
 
-  private async getRuntimeEndpoint(): Promise<RuntimeEndpoint> {
+  private async getRuntimeEndpoint(
+    smithyConfig: typeof import('@smithy/core/config'),
+  ): Promise<RuntimeEndpoint> {
     const {
       booleanSelector,
       CONFIG_PREFIX_SEPARATOR,
@@ -465,7 +468,7 @@ abstract class SageMakerGenericProvider {
       NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS,
       NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
       SelectorType,
-    } = await import('@smithy/core/config');
+    } = smithyConfig;
     const useFipsEndpoint = await loadConfig(NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS)();
     const useDualstackEndpoint = await loadConfig(NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS)();
     // Match the runtime SDK's configured HTTP endpoint precedence. This is separate
@@ -513,9 +516,19 @@ abstract class SageMakerGenericProvider {
       return this.sagemakerRuntime;
     }
 
+    const importError = (cause: unknown): never => {
+      this.assertRuntimeGeneration(generation);
+      throw Object.assign(
+        new Error(
+          'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+        ),
+        { cause },
+      );
+    };
+    const smithyConfig = await import('@smithy/core/config').catch(importError);
     const runtimeRegion = region ?? this.getRegion();
-    const scope = await this.getCredentialScope(runtimeRegion);
-    const endpoint = await this.getRuntimeEndpoint();
+    const scope = await this.getCredentialScope(runtimeRegion, smithyConfig);
+    const endpoint = await this.getRuntimeEndpoint(smithyConfig);
     this.assertRuntimeGeneration(generation);
     const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
     let retry = this.runtimeRetryStates.get(runtimeRegion);
@@ -547,24 +560,13 @@ abstract class SageMakerGenericProvider {
         retry: retryState,
         defaults: defaultsState,
         promise: (async () => {
-          const importError = (cause: unknown): never => {
-            this.assertRuntimeGeneration(generation);
-            throw Object.assign(
-              new Error(
-                'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-              ),
-              { cause },
-            );
-          };
           const { SageMakerRuntimeClient } = await import(
             '@aws-sdk/client-sagemaker-runtime'
           ).catch(importError);
           const { loadConfigsForDefaultMode } = await import('@smithy/core/client').catch(
             importError,
           );
-          const { resolveDefaultsModeConfig } = await import('@smithy/core/config').catch(
-            importError,
-          );
+          const { resolveDefaultsModeConfig } = smithyConfig;
           this.assertRuntimeGeneration(generation);
           if (
             this.#retainedCredentials &&
