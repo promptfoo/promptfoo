@@ -22,8 +22,9 @@ import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
-  calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
@@ -35,7 +36,9 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -131,7 +134,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         this.config.apiHost ||
         this.env?.VERTEX_API_HOST ||
         getEnvString('VERTEX_API_HOST') ||
-        (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+        getVertexApiHostForRegion(region)
       );
     } else {
       // AI Studio mode
@@ -351,6 +354,15 @@ export class GoogleProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      tools: passthroughTools,
+      ...passthrough
+    } = config.passthrough || {};
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
 
     const body: Record<string, any> = {
       contents,
@@ -361,6 +373,16 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
         ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
@@ -371,7 +393,27 @@ export class GoogleProvider extends GoogleGenericProvider {
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      // Normalize a single-object passthrough `tools` value to a one-element array and
+      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
+      // stays the array shape the Gemini API requires.
+      ...(requestPassthroughTools === undefined
+        ? {}
+        : {
+            tools: [
+              ...requestTools,
+              ...(Array.isArray(requestPassthroughTools)
+                ? requestPassthroughTools
+                : [requestPassthroughTools]),
+            ],
+          }),
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     // Handle response schema
     if (config.responseSchema) {
@@ -605,7 +647,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -615,10 +657,17 @@ export class GoogleProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
+            prompt:
+              lastData.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : lastData.usageMetadata.promptTokenCount +
+                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -649,16 +698,19 @@ export class GoogleProvider extends GoogleGenericProvider {
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
-            config,
-            tokenUsage.prompt,
+            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
+            lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,
+            lastData.usageMetadata,
           );
+      const audio = normalizeGeminiAudio(output);
 
       const response: ProviderResponse = {
         output,
+        ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,
@@ -682,6 +734,7 @@ export class GoogleProvider extends GoogleGenericProvider {
                     : parsed.functionCall.args,
                 ),
                 config,
+                parsed.functionCall.id,
               );
               response.output = functionResult;
             }
@@ -701,5 +754,3 @@ export class GoogleProvider extends GoogleGenericProvider {
 
   // cleanup() is inherited from GoogleGenericProvider
 }
-
-export default GoogleProvider;

@@ -15,6 +15,34 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  *
  * Documentation: https://docs.nscale.com/
  */
+/**
+ * Config keys promptfoo consumes itself rather than forwarding to the model.
+ *
+ * `passthrough` is serialized verbatim into the request body, so anything spread
+ * into it is sent to Nscale as a model parameter. Spreading the whole user config
+ * put `apiKey` — the raw service token — into the JSON body, and diverted
+ * `headers` there too so custom headers never became HTTP headers.
+ *
+ * Mirrors `OpenAiSharedOptions` in `./openai/types`.
+ */
+const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
+  'apiKey',
+  'apiKeyEnvar',
+  'apiKeyRequired',
+  'useDefaultApiKey',
+  'apiHost',
+  'apiBaseUrl',
+  'organization',
+  'headers',
+  'maxRetries',
+  'cost',
+  'inputCost',
+  'outputCost',
+  'audioCost',
+  'audioInputCost',
+  'audioOutputCost',
+]);
+
 export function createNscaleProvider(
   providerPath: string,
   options: {
@@ -27,24 +55,44 @@ export function createNscaleProvider(
 
   const config = options.config?.config || {};
 
-  // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
-  const getApiKey = () => {
-    return (
-      config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
+  // Split the user's config into settings promptfoo handles (auth, routing,
+  // headers, cost overrides) and genuine model parameters, so only the latter
+  // reach the request body.
+  const { passthrough: explicitPassthrough, ...configOptions } = config;
+  const providerLevelOptions: Record<string, any> = {};
+  const modelParameters: Record<string, any> = {};
+  for (const [key, value] of Object.entries(configOptions)) {
+    if (NSCALE_PROVIDER_LEVEL_OPTIONS.has(key)) {
+      providerLevelOptions[key] = value;
+    } else {
+      modelParameters[key] = value;
+    }
+  }
+
+  const getApiKeyEnvar = () => {
+    if (config.apiKeyEnvar) {
+      return config.apiKeyEnvar;
+    }
+    // Select a native namespace without copying its credential into config.
+    for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
+      if (options.env?.[envar] || getEnvString(envar)) {
+        return envar;
+      }
+    }
+    return 'NSCALE_SERVICE_TOKEN';
   };
 
   const nscaleConfig = {
     ...options,
     config: {
-      apiBaseUrl: 'https://inference.api.nscale.com/v1',
-      apiKey: getApiKey(),
+      ...providerLevelOptions,
+      apiKeyEnvar: getApiKeyEnvar(),
+      // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
+      // of silently ignoring it while still shipping it in the request body.
+      apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
       passthrough: {
-        ...config,
+        ...modelParameters,
+        ...explicitPassthrough,
       },
     },
   };
@@ -60,7 +108,7 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config as any, // Allow flexible config type for Nscale image options
+      config,
       id: options.id,
       env: options.env,
     });

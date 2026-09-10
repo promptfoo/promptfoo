@@ -1,91 +1,16 @@
-import Ajv from 'ajv';
-import addFormats from 'ajv-formats';
 import dedent from 'dedent';
 import logger from '../logger';
 import { extractJsonObjects } from '../util/json';
+import {
+  normalizeMcpToolCall,
+  parseMcpToolCall,
+  stringifyMcpToolCall,
+  validateMcpToolCall,
+} from './mcpToolCall';
 
 import type { MCPTool } from '../providers/mcp/types';
 import type { ApiProvider } from '../types/index';
-
-type McpToolCall = {
-  tool: string;
-  args: Record<string, unknown>;
-};
-
-const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
-const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
-
-const ajv = new Ajv({ allErrors: true, strictSchema: false });
-addFormats(ajv);
-
-function parseMcpToolCall(value: unknown, allowedToolNames: Set<string>): McpToolCall | undefined {
-  let parsed = value;
-
-  if (typeof value === 'string') {
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return undefined;
-    }
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return undefined;
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const toolName = TOOL_NAME_FIELDS.map((field) => record[field]).find(
-    (fieldValue): fieldValue is string =>
-      typeof fieldValue === 'string' && allowedToolNames.has(fieldValue),
-  );
-
-  if (!toolName) {
-    return undefined;
-  }
-
-  const rawArgs =
-    TOOL_ARGS_FIELDS.map((field) => record[field]).find(
-      (fieldValue) =>
-        typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue),
-    ) ?? {};
-
-  return {
-    tool: toolName,
-    args: rawArgs as Record<string, unknown>,
-  };
-}
-
-function validateMcpToolCall(
-  toolCall: McpToolCall | undefined,
-  toolByName: Map<string, MCPTool>,
-): boolean {
-  if (!toolCall) {
-    return false;
-  }
-
-  const tool = toolByName.get(toolCall.tool);
-  if (!tool) {
-    return false;
-  }
-
-  try {
-    return ajv.validate(tool.inputSchema ?? { type: 'object' }, toolCall.args) === true;
-  } catch (error) {
-    logger.warn(
-      `Failed to validate MCP tool call for ${tool.name}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return false;
-  }
-}
-
-function stringifyToolCall(toolCall: McpToolCall): string {
-  return JSON.stringify({
-    tool: toolCall.tool,
-    args: toolCall.args,
-  });
-}
+import type { McpToolCall } from './mcpToolCall';
 
 function getProviderOutputString(response: Awaited<ReturnType<ApiProvider['callApi']>>): string {
   if (Array.isArray(response.output)) {
@@ -172,14 +97,14 @@ export async function materializeMcpValue({
     return typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
   }
 
-  const allowedToolNames = new Set(tools.map((tool) => tool.name));
-  const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
-  const existingToolCall = parseMcpToolCall(value, allowedToolNames);
+  const existingToolCall = normalizeMcpToolCall(value, tools);
 
-  if (existingToolCall && validateMcpToolCall(existingToolCall, toolByName)) {
-    return stringifyToolCall(existingToolCall);
+  if (existingToolCall) {
+    return stringifyMcpToolCall(existingToolCall);
   }
 
+  const allowedToolNames = new Set(tools.map((tool) => tool.name));
+  const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
   const materializationIntentValue = intentValue ?? value;
   if (!provider) {
     throw new Error(
@@ -202,5 +127,5 @@ export async function materializeMcpValue({
     throw new Error(`Failed to materialize MCP value: ${JSON.stringify(value)}`);
   }
 
-  return stringifyToolCall(toolCall);
+  return stringifyMcpToolCall(toolCall);
 }

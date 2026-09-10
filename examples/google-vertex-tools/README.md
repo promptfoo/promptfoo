@@ -60,6 +60,8 @@ Uses external tool definitions and validates function calls without execution:
 - `promptfooconfig.yaml` - YAML configuration with external tools
 - `tools.json` - Function definitions for weather lookup
 
+The basic config selects `gemini-3.5-flash` on the `global` endpoint for the target and text grader. Its semantic assertion uses Vertex `text-embedding-005`; this cloud model is separate from the native Gemini embedding namespace.
+
 ### Function Callbacks (`promptfooconfig-callback.js`)
 
 Demonstrates actual function execution with local callbacks:
