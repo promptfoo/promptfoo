@@ -938,6 +938,36 @@ describe('WebSocketProvider', () => {
       }
     });
 
+    it('starts the first-message deadline when the stream connection opens', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+              { output: event.data },
+              true,
+            ],
+          },
+        });
+        const response = provider.callApi('slow handshake').then(
+          (value) => value,
+          (error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(90);
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        await vi.advanceTimersByTimeAsync(60);
+        expect(mockWs.close).not.toHaveBeenCalled();
+        mockWs.onmessage?.({ data: 'complete' } as WebSocket.MessageEvent);
+        await expect(response).resolves.toEqual({ output: 'complete' });
+        await vi.runAllTimersAsync();
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('keeps an active stream alive past the initial timeout', async () => {
       vi.useFakeTimers();
       try {

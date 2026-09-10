@@ -398,6 +398,9 @@ export class WebSocketProvider implements ApiProvider {
       };
 
       ws.onopen = () => {
+        if (streamResponse) {
+          resetTimeout();
+        }
         logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
