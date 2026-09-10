@@ -259,14 +259,16 @@ describe('CloudConfig', () => {
       hasActiveLicense: true,
     };
 
-    it('should validate token and update config on success', async () => {
-      const mockFetchResponse = {
+    function mockTokenResponse(response: typeof mockResponse) {
+      vi.mocked(fetchWithProxy).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockResponse),
-        text: () => Promise.resolve(JSON.stringify(mockResponse)),
-      } as Response;
+        json: () => Promise.resolve(response),
+        text: () => Promise.resolve(JSON.stringify(response)),
+      } as Response);
+    }
 
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+    it('should validate token and update config on success', async () => {
+      mockTokenResponse(mockResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -290,13 +292,7 @@ describe('CloudConfig', () => {
         hasActiveLicense: false,
         user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
       };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(noLicenseResponse),
-        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      mockTokenResponse(noLicenseResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
@@ -317,13 +313,7 @@ describe('CloudConfig', () => {
         hasActiveLicense: false,
         user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
       };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(grandfatheredResponse),
-        text: () => Promise.resolve(JSON.stringify(grandfatheredResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      mockTokenResponse(grandfatheredResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
@@ -347,13 +337,7 @@ describe('CloudConfig', () => {
           createdAt: new Date(SHARING_CUTOFF_DATE.getTime()),
         },
       };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(cutoffResponse),
-        text: () => Promise.resolve(JSON.stringify(cutoffResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      mockTokenResponse(cutoffResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
